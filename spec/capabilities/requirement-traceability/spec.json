@@ -1042,6 +1042,78 @@
       "requirement": "n25",
       "then": "a new candidate is raised",
       "when": "the operator resolves it as specification updated without rewording the requirement and scans again"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a flow task whose FR evidence was recorded at commit A, after which the task branch gained commit B (a master merge)",
+      "how_to_check": "acceptance drive on a scratch Hub (scripts/drive/), real Haiku turns: fails on master (lands A or is refused), passes after",
+      "key": "evidence-review-sends-work-back-only-for-what-ac-reanchor-lands",
+      "requirement": "evidence-review-sends-work-b-reviewer-reproduces-on-current-work",
+      "then": "the evidence's footprint names B and the landed work includes B's changes",
+      "when": "its reviewer accepts the evidence with a reproduction at B and approves"
+    },
+    {
+      "checked_by": "agent",
+      "given": "awaiting evidence at A on task T",
+      "how_to_check": "hub test over the decide route",
+      "key": "evidence-review-sends-work-back-only-f-ac-foreign-commit-refused",
+      "requirement": "evidence-review-sends-wo-reproduction-commit-belongs-to-the-task",
+      "then": "the acceptance is refused with a code naming the commit, and the evidence stays awaiting",
+      "when": "the reviewer accepts with a reproduction at a commit not on T's branch, or before A"
+    },
+    {
+      "checked_by": "agent",
+      "given": "evidence accepted with a reviewer reproduction and a corrected summary",
+      "how_to_check": "hub test over list_evidence; drive screenshot of the evidence view",
+      "key": "evidence-review-sends-work-back-only-for-w-ac-both-records-shown",
+      "requirement": "evidence-review-sends-work-back-only-for-what-author-record-kept",
+      "then": "both the author's and the reviewer's command, output and summary are returned, each attributed",
+      "when": "list_evidence and the app's evidence view read it"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a requirement whose evidence the operator rejected on task T",
+      "how_to_check": "hub test reproducing the F500 sequence",
+      "key": "evidence-review-sends-work-back-only-for-what-i-ac-f500-refusals",
+      "requirement": "evidence-review-sends-work-back-only-for-what-f500-stays-closed",
+      "then": "both are refused (reviewer_records_evidence stays), and the operator's rejection still blocks approval",
+      "when": "T's reviewer accepts other evidence for it with a reproduction, or records new evidence on T"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a requirement whose only evidence covers part of it",
+      "how_to_check": "hub test",
+      "key": "evidence-review-sends-work-back-only-for-what-i-ac-missing-piece",
+      "requirement": "evidence-review-sends-wor-missing-demonstration-still-sends-back",
+      "then": "both are refused, and the refusal tells the reviewer to send the task back naming the piece",
+      "when": "the reviewer accepts it with covers corrected to full, or records evidence for the rest"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an approved document whose first task is its acceptance drive",
+      "how_to_check": "hub test over the approve route",
+      "key": "evidence-review-sends-work-back-only-ac-no-baseline-no-approval",
+      "requirement": "evidence-review-sends-work-back-only-for-drive-baseline-required",
+      "then": "approval is refused with a code naming the missing baseline",
+      "when": "the drive task is approved with no accepted drive_baseline evidence"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a drive baseline listing one check that stopped at a 404 and one that passed on pre-build code",
+      "how_to_check": "acceptance drive on a scratch Hub with a deliberately broken drive",
+      "key": "evidence-review-sends-work-back-only-for-what-is-ac-bad-baseline",
+      "requirement": "evidence-review-send-unreached-or-passing-check-blocks-the-drive",
+      "then": "the drive task goes to revision_needed with both checks named, and dependent tasks have not started",
+      "when": "the drive's reviewer reviews it"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a build with one evidence-only send-back and one reviewer-verified acceptance",
+      "how_to_check": "hub test",
+      "key": "evidence-review-sends-work-back-only-for-what-is-wro-ac-reported",
+      "requirement": "evidence-review-sends-work-bac-evidence-only-send-backs-reported",
+      "then": "both numbers appear per task",
+      "when": "read_model_record and the build retrospective are read"
     }
   ],
   "algorithms": [
@@ -1138,10 +1210,18 @@
       "FR-73": "a642bd1e6700a73ee2a92cea2f87c838ec3d5481eb2ec6c1d46f202f283b64dd",
       "FR-74": "40ff9495c7b4d5bbe673e94e57da66c43199f3eda715840570c09e82be0dc2fd",
       "FR-75": "4b17a14d696ac919507a8b4b8df95908c47001f2adb852a4d5c1a5458d629e53",
+      "FR-76": "20b6987e7b0c7926e3db9a898c65383ff254b18fef0f766368eac62587b1272d",
+      "FR-77": "e1ca4ab47ddd8c2ef5ead82ad7a34a941e044a1d070d7d6e79fa4cd4d1ee1ac2",
+      "FR-78": "03bf3394d8c61f0eb30e6b315ec543d5839d8c5d5b3de4aec2a98f41efd787de",
+      "FR-79": "f43b73beee38f5db8cc788e41820fb540262ba2dbc9d3c94d8041496adba8e6b",
       "FR-8": "e320eebf6045fc12d206c38c7d6e54299432f7f6fe1c4948faddb267d400fea3",
+      "FR-80": "2731448fffe9ab85161f02d967ed94365d6dec9e024d703d30b5fe07474758cf",
+      "FR-81": "2525c6e3b673aab1e149439434b026b3578f196fc09d08002a718823669a45e4",
+      "FR-82": "b4e5663434b2af11a5df156728d275e5f5d10e8d15b3122cd3605b20dd6410f4",
+      "FR-83": "08af6d6fc9dde18deb150c4b2baeb699fa7fec58cf11453b451f264d71882db8",
       "FR-9": "da908b42a1d65c2b719f110fe3b3f6d9af59a64cde27ad8f1118a0164cdc9ee3"
     },
-    "high_water": 75,
+    "high_water": 83,
     "requirements": {
       "a-changed-implementation-raises-a-candidate-never-an-edit": "FR-11",
       "a-committed-turn-s-footprints-are-repointed-at-its-commit": "FR-55",
@@ -1173,6 +1253,14 @@
       "evidence-is-decided-only-after-the-run-that-recorded-it-has-": "FR-13",
       "evidence-is-footprinted-against-the-work-it-describes": "FR-52",
       "evidence-names-what-produced-it-and-what-it-was-produced-aga": "FR-9",
+      "evidence-review-send-unreached-or-passing-check-blocks-the-drive": "FR-82",
+      "evidence-review-sends-wo-reproduction-commit-belongs-to-the-task": "FR-77",
+      "evidence-review-sends-wor-missing-demonstration-still-sends-back": "FR-80",
+      "evidence-review-sends-work-b-reviewer-reproduces-on-current-work": "FR-76",
+      "evidence-review-sends-work-bac-evidence-only-send-backs-reported": "FR-83",
+      "evidence-review-sends-work-back-only-for-drive-baseline-required": "FR-81",
+      "evidence-review-sends-work-back-only-for-what-author-record-kept": "FR-78",
+      "evidence-review-sends-work-back-only-for-what-f500-stays-closed": "FR-79",
       "how-a-requirement-changed-and-what-proved-it-detail-history": "FR-70",
       "how-a-requirement-changed-and-what-proved-it-migration-safe": "FR-72",
       "how-a-requirement-changed-and-what-proved-it-story-view": "FR-71",
@@ -1720,6 +1808,62 @@
       "party": null,
       "rationale": "The gate follows coverage: partial-only is in_progress.",
       "statement": "Approval of a task built at the Gated level SHALL be refused while a requirement it serves has accepted current evidence that is partial only, with a remedy that names the partial evidence and asks for a piece with covers: full; at Reviewed it SHALL be reported and at Fast (and for a task outside any build) it SHALL stay silent, as for any in_progress requirement."
+    },
+    {
+      "key": "evidence-review-sends-work-b-reviewer-reproduces-on-current-work",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Today an evidence row recorded before the branch moved can only be fixed by sending the task back for the author to record it again: a full builder turn that changes no code.",
+      "statement": "A reviewer accepting awaiting evidence on the task it reviews may attach its own reproduction (command, output, commit). The accepted row then vouches for the reviewer's commit, and approving the task lands that commit's work, not the commit the author recorded at."
+    },
+    {
+      "key": "evidence-review-sends-wo-reproduction-commit-belongs-to-the-task",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Acceptance decides what lands; a reviewer must not be able to point a task at somebody else's work.",
+      "statement": "A reproduction commit must be on the task's own branch, and must be at or after the evidence's recorded commit. Otherwise the acceptance is refused with a code naming the commit."
+    },
+    {
+      "key": "evidence-review-sends-work-back-only-for-what-author-record-kept",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The operator reading the evidence must be able to tell what the builder claimed from what the reviewer saw.",
+      "statement": "When a reviewer accepts with a reproduction or corrects summary or covers, the evidence keeps the author's original summary, command, output and covers, and shows the reviewer's beside them, attributed to the reviewer and its run."
+    },
+    {
+      "key": "evidence-review-sends-work-back-only-for-what-f500-stays-closed",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "F500: a reviewer's own fresh evidence once lifted the operator's rejection and let the reviewer approve over it.",
+      "statement": "Reviewer-verified acceptance is refused for a requirement where the operator has rejected evidence on this task, and is refused to the agent that authored the evidence. A reviewer still cannot record a new awaiting evidence row on the task it reviews."
+    },
+    {
+      "key": "evidence-review-sends-wor-missing-demonstration-still-sends-back",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator, 2026-11-10: a gap in what was demonstrated goes back to the builder.",
+      "statement": "Where no recorded evidence demonstrates part of a requirement, the reviewer cannot accept that evidence as covering the whole requirement, and cannot record the missing piece. It sends the task back naming the missing piece."
+    },
+    {
+      "key": "evidence-review-sends-work-back-only-for-drive-baseline-required",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "A task that is a document's acceptance drive cannot be approved without accepted evidence of kind drive_baseline. That evidence lists, for each acceptance check the drive covers, whether the check was reached on the pre-build code and whether it failed at its own assertion. The refusal names the missing baseline."
+    },
+    {
+      "key": "evidence-review-send-unreached-or-passing-check-blocks-the-drive",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Of the rejected evidence on record, about a quarter were checks that could never pass, or passed against no-op code, and were found only after the whole build.",
+      "statement": "A drive baseline in which any covered check was not reached (it stopped at setup, a 404 or 409, or a crash), or passed on the pre-build code, is not accepted. The reviewer sends the drive task back naming each such check."
+    },
+    {
+      "key": "evidence-review-sends-work-bac-evidence-only-send-backs-reported",
+      "modal": "SHOULD",
+      "party": null,
+      "rationale": null,
+      "statement": "The model record and the build retrospective report evidence-only send-backs per task, and reviewer-verified acceptances per task, so the change's effect is visible against the 2026-11-10 baseline (Sonnet 33 evidence-only send-backs over 105 tasks)."
     }
   ],
   "schema_version": 1,

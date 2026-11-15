@@ -347,6 +347,14 @@
       "order": 460
     },
     {
+      "path": "spec/capabilities/project-dashboards/spec.json",
+      "title": "Project dashboards",
+      "kind": "capability",
+      "status": "current",
+      "parent": null,
+      "order": 2760
+    },
+    {
       "path": "spec/capabilities/project-environment-settings/spec.json",
       "title": "Project environment settings",
       "kind": "capability",
@@ -481,6 +489,14 @@
       "status": "current",
       "parent": "spec/areas/agents-and-execution.json",
       "order": 2480
+    },
+    {
+      "path": "spec/capabilities/task-board/spec.json",
+      "title": "Task board",
+      "kind": "capability",
+      "status": "current",
+      "parent": null,
+      "order": 2810
     },
     {
       "path": "spec/capabilities/task-dependencies/spec.json",
@@ -739,6 +755,14 @@
       "order": 1100
     },
     {
+      "path": "spec/changes/a-hand-started-task-reaches-review-and-merge/spec.json",
+      "title": "A hand-started task reaches review and merge",
+      "kind": "change-spec",
+      "status": "approved",
+      "parent": null,
+      "order": 2730
+    },
+    {
       "path": "spec/changes/a-held-successor-waits-for-continue/spec.json",
       "title": "A held successor waits for Continue",
       "kind": "change-spec",
@@ -926,7 +950,7 @@
       "path": "spec/changes/a-side-panel-worth-keeping-open-activity-changes-files-terminal-and-peers/spec.json",
       "title": "A side panel worth keeping open: activity, changes, files, terminal and peers",
       "kind": "roadmap",
-      "status": "exploring",
+      "status": "approved",
       "parent": null,
       "order": 2690
     },
@@ -1009,6 +1033,14 @@
       "status": "archived",
       "parent": null,
       "order": 1250
+    },
+    {
+      "path": "spec/changes/a-terminal-in-the-side-panel/spec.json",
+      "title": "A terminal in the side panel",
+      "kind": "change-spec",
+      "status": "approved",
+      "parent": null,
+      "order": 2770
     },
     {
       "path": "spec/changes/a-tester-drives-the-built-product-and-keeps-the-spec-true/spec.json",
@@ -1190,7 +1222,7 @@
       "path": "spec/changes/ask-any-agent-for-a-dashboard-and-get-one-that-stays/spec.json",
       "title": "Ask any agent for a dashboard and get one that stays",
       "kind": "change-spec",
-      "status": "exploring",
+      "status": "approved",
       "parent": null,
       "order": 1890
     },
@@ -1214,7 +1246,7 @@
       "path": "spec/changes/change-a-dashboard-by-asking/spec.json",
       "title": "Change a dashboard by asking",
       "kind": "change-spec",
-      "status": "exploring",
+      "status": "approved",
       "parent": null,
       "order": 1920
     },
@@ -1305,6 +1337,22 @@
       "status": "approved",
       "parent": null,
       "order": 2010
+    },
+    {
+      "path": "spec/changes/dashboards-load-with-the-brand-s-thread-instead-of-a-shimmer/spec.json",
+      "title": "Dashboards load with the brand's thread instead of a shimmer",
+      "kind": "change-spec",
+      "status": "approved",
+      "parent": null,
+      "order": 2800
+    },
+    {
+      "path": "spec/changes/dashboards-that-feel-alive-and-draw-right-the-first-time/spec.json",
+      "title": "Dashboards that feel alive and draw right the first time",
+      "kind": "change-spec",
+      "status": "approved",
+      "parent": null,
+      "order": 2750
     },
     {
       "path": "spec/changes/each-piece-of-evidence-is-judged-on-its-own/spec.json",
@@ -1726,7 +1774,7 @@
       "path": "spec/changes/task-card-and-story-redesign/spec.json",
       "title": "Task card and story redesign",
       "kind": "change-spec",
-      "status": "exploring",
+      "status": "approved",
       "parent": null,
       "order": 2630
     },
@@ -1955,12 +2003,36 @@
       "order": 1560
     },
     {
+      "path": "spec/changes/the-side-panel-s-changes-tab-shows-what-the-agent-changed/spec.json",
+      "title": "The side panel's Changes tab shows what the agent changed",
+      "kind": "change-spec",
+      "status": "approved",
+      "parent": null,
+      "order": 2710
+    },
+    {
+      "path": "spec/changes/the-side-panel-s-files-tab-browses-the-agent-s-worktree-or-the-project-root/spec.json",
+      "title": "The side panel's Files tab browses the agent's worktree or the project root",
+      "kind": "change-spec",
+      "status": "approved",
+      "parent": null,
+      "order": 2740
+    },
+    {
       "path": "spec/changes/the-side-panel-s-running-tab-builds-loops-and-jobs-and-what-needs-me/spec.json",
       "title": "The side panel's Running tab: builds, loops and jobs, and what needs me",
       "kind": "change-spec",
-      "status": "exploring",
+      "status": "approved",
       "parent": null,
       "order": 2700
+    },
+    {
+      "path": "spec/changes/the-side-panel-s-watch-tab-follows-another-agent-s-conversation-live/spec.json",
+      "title": "The side panel's Watch tab follows another agent's conversation live",
+      "kind": "change-spec",
+      "status": "approved",
+      "parent": null,
+      "order": 2780
     },
     {
       "path": "spec/changes/the-spec-header-redesigned/spec.json",
@@ -2043,6 +2115,14 @@
       "order": 1600
     },
     {
+      "path": "spec/changes/the-watch-tab-shows-what-the-agent-is-doing-with-colour-and-motion/spec.json",
+      "title": "The Watch tab shows what the agent is doing with colour and motion",
+      "kind": "change-spec",
+      "status": "approved",
+      "parent": null,
+      "order": 2790
+    },
+    {
       "path": "spec/changes/the-workspace-judge-reads-paths-not-patterns/spec.json",
       "title": "The Workspace judge reads paths, not patterns or provider drives",
       "kind": "change-spec",
@@ -2097,6 +2177,14 @@
       "status": "archived",
       "parent": null,
       "order": 1620
+    },
+    {
+      "path": "spec/changes/work-is-done-when-it-has-landed-on-master-not-when-it-is-approved/spec.json",
+      "title": "Work is done when it has landed on master, not when it is approved",
+      "kind": "change-spec",
+      "status": "approved",
+      "parent": null,
+      "order": 2720
     },
     {
       "path": "spec/changes/work-lands-through-pull-requests/spec.json",

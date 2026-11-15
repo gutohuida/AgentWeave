@@ -1,0 +1,366 @@
+{
+  "acceptance_criteria": [
+    {
+      "checked_by": "agent",
+      "given": "a fresh isolated Hub (`--profile`, not :8000) and a small git project with planner, builder and reviewer agents (Haiku)",
+      "how_to_check": "run the acceptance drive script `scripts/drive/quickstart_review_to_merge.py` against an isolated profile; it prints PASS/FAIL and the final task status, reviewer and main-branch log",
+      "key": "ac-drive",
+      "requirement": "the-quickstart-matches",
+      "then": "the task ends `approved` by the reviewer (not the operator), its evidence is accepted, and its commit is on the main branch, with no use of \"Land it\"",
+      "when": "the operator follows the quickstart: ask the planner, Check, Approve, start the builder from the card, and does nothing else"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a `completed` task authored by builder in a project with builder and reviewer",
+      "how_to_check": "component test on TaskCard plus a Hub test asserting the trigger's effect on the task",
+      "key": "ac-card-menu",
+      "requirement": "review-from-the-card",
+      "then": "it lists \"Review with reviewer\" and not builder; choosing it posts `/agent/trigger` with `review_task_id` and the task moves to `under_review` held by reviewer",
+      "when": "the card's start menu is opened"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a task with a declared checker, in no running build",
+      "how_to_check": "Hub test",
+      "key": "ac-auto-declared",
+      "requirement": "finished-work-finds-a-reviewer",
+      "then": "a review turn by the declared checker starts and the task is `under_review` held by it",
+      "when": "its builder completes it and the checks pass"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a task with no declared checker, in no running build, in a project with an idle agent other than the author",
+      "how_to_check": "Hub test",
+      "key": "ac-auto-picked",
+      "requirement": "finished-work-finds-a-reviewer",
+      "then": "a review turn by that other agent starts",
+      "when": "it completes and the checks pass"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a single-agent project",
+      "how_to_check": "Hub test asserting the stage/reason the task API returns",
+      "key": "ac-auto-none",
+      "requirement": "finished-work-finds-a-reviewer",
+      "then": "no review starts and the task shows that there is no agent other than the author to review it",
+      "when": "its only agent completes a task"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a review staffed without a declared checker",
+      "how_to_check": "Hub test on the story payload plus a component test",
+      "key": "ac-picked-visible",
+      "requirement": "a-picked-reviewer-is-visible",
+      "then": "it shows an entry naming the reviewer and saying nobody was declared",
+      "when": "the task's story is read"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a completed task with 4 evidence rows awaiting",
+      "how_to_check": "component test on TaskDetailDrawer",
+      "key": "ac-land-confirm",
+      "requirement": "land-it-says-it-skips-review",
+      "then": "a confirmation says it merges without review and that 4 pieces of evidence are unreviewed; Cancel leaves the task and branch untouched; Confirm lands it as today",
+      "when": "the operator presses \"Land it\""
+    },
+    {
+      "checked_by": "agent",
+      "given": "docs/getting-started/quickstart.md",
+      "how_to_check": "read the page; `mkdocs build --strict` passes",
+      "key": "ac-docs",
+      "requirement": "the-quickstart-matches",
+      "then": "they describe the review starting by itself (or \"Review with <agent>\" from the card) and approval merging, and mention \"Land it\" only as the operator's override",
+      "when": "steps 5–6 are read"
+    }
+  ],
+  "algorithms": [],
+  "already_built": {
+    "built": false,
+    "commits": [],
+    "note": ""
+  },
+  "aw_identity": {
+    "digests": {
+      "FR-1": "0cdc5b9c700df41de52d0b6ddccf610ff1da917943bd8eadf8844a23bba13c12",
+      "FR-2": "7fe16a827f3dd35bdabf6ddb8a2cc12427d87538deae4aa9d092a37a65184aaf",
+      "FR-3": "ddb9505a7a37f7e4ded724de204cafe0750b04256eb4211f8f684057945b715d",
+      "FR-4": "2c0564f3825d4a876a7f80d3599392a7d03726b84d84ec7f4c6d3b1d7340e533",
+      "FR-5": "34d86f1496419df322cb1672742379e9620da1383bfc29230bbd1ad7fde0d0ed"
+    },
+    "high_water": 5,
+    "requirements": {
+      "a-picked-reviewer-is-visible": "FR-3",
+      "finished-work-finds-a-reviewer": "FR-2",
+      "land-it-says-it-skips-review": "FR-4",
+      "review-from-the-card": "FR-1",
+      "the-quickstart-matches": "FR-5"
+    },
+    "retired": {}
+  },
+  "capabilities": {
+    "changes": [
+      "spec/capabilities/task-lifecycle-governance/spec.json",
+      "spec/capabilities/task-dependency-board/spec.json",
+      "spec/capabilities/approval-integration/spec.json"
+    ],
+    "creates": []
+  },
+  "delivery": {
+    "agent": "Developer",
+    "builder": "Developer",
+    "checker": "DeveloperSonnet2",
+    "cron": "*/10 * * * *",
+    "mode": "flow",
+    "reasons": {
+      "agent": "Developer knows the launch-prep context from AW-126/129/130.",
+      "builder": "Sonnet keeps quota low for Tier 1 work; the two UI tasks go to DeveloperSonnet2, who is already in the board/UI code for AW-127/128.",
+      "checker": "A different Sonnet agent checks each task; same pairing as the quick fixes.",
+      "cron": "Every ten minutes is enough for a handful of tasks.",
+      "mode": "Five small dependent tasks behind a drive gate fit a flow that reviews each one.",
+      "stop": "Stop once the five tasks are done."
+    },
+    "reviewer": null,
+    "stop_at": null,
+    "stop_when_queue_empties": true
+  },
+  "design": "",
+  "evidence": {
+    "checked": [
+      "Drove PyPI 2.1.0 on Windows through the quickstart on 2026-11-13 (isolated profile launch1113): task CTT-1 stayed `completed`; 'Start reviewer on this' produced a work turn; the move to under_review was refused naming review_task_id; only Land it merged (commit 7431a21 in the drive project)",
+      "hub/ui/src/api/tasks.ts:1074-1085 — start work triggers with task_id, never review_task_id",
+      "hub/hub/scheduler.py:2187 resolve_reviewer — the build's reviewer ladder this change reuses"
+    ],
+    "limits": [
+      "The drive ran the released 2.1.0, not master; the acceptance-drive task re-establishes the failure on master before anything is built",
+      "Where exactly a no-build completion should hand off to the ladder (transition service vs scheduler firing) was not traced; the builder decides"
+    ]
+  },
+  "hub": {
+    "builds": [
+      {
+        "budget_cap_usd": null,
+        "builder": "DeveloperOpus",
+        "builders": [
+          "DeveloperOpus"
+        ],
+        "checker": "QA",
+        "checkers": [],
+        "chosen_by": "operator",
+        "driver": "flow",
+        "ended_at": "2026-11-14T00:30:28.953133+00:00",
+        "id": "build-3ba272603b91",
+        "landing": "main",
+        "lead": null,
+        "level": "reviewed",
+        "pull_request": null,
+        "started_at": "2026-11-13T19:35:11.371013+00:00",
+        "state": "finished",
+        "stop_reason": null,
+        "tasks": {
+          "acceptance-drive": {
+            "builder": null,
+            "checker": null
+          },
+          "card-review-menu": {
+            "builder": null,
+            "checker": null
+          },
+          "land-confirm": {
+            "builder": null,
+            "checker": null
+          },
+          "quickstart-docs": {
+            "builder": null,
+            "checker": null
+          },
+          "review-on-completion": {
+            "builder": null,
+            "checker": null
+          },
+          "task-ac3278f3e53d": {
+            "builder": null,
+            "builder_default": true,
+            "checker": null
+          }
+        },
+        "window_end": null,
+        "window_start": null
+      }
+    ],
+    "phase": "approved",
+    "size": "small",
+    "step": "build"
+  },
+  "kind": "change-spec",
+  "lifecycle": "",
+  "open_questions": [],
+  "problem": "Found on 2026-11-13 by driving a clean PyPI 2.1.0 install through the quickstart (three Haiku agents on a two-file project). The planner, builder and reviewer all did good work, but the task never reached a reviewed merge:\n\n- \"Start reviewer on this\" on the **completed** card starts an ordinary work turn (`/agent/trigger` with `task_id`, `hub/ui/src/api/tasks.ts:1074-1085`), not a review (`review_task_id`). The task stays `completed`; the reviewer may not decide evidence or approve, and correctly does neither.\n- Asking the reviewer in its conversation ends the same way: it needs an evidence grant.\n- Dragging the card to Under review is refused with \"dispatch a different agent's review turn (POST /agent/trigger with review_task_id)\".\n- Only \"Land it\" merges — in one click, with no confirmation, while all four evidence rows are still awaiting.\n\nA build (flow) already staffs a reviewer for completed work (`scheduler.resolve_reviewer`, rungs 1–3), but the quickstart's path — approve, then start tasks by hand — has no build, so nothing routes the finished task to review. The product's headline promise (\"a different agent reviews it, and approving it merges it\") is not what a first-time user experiences.\n\nOperator decisions, 2026-11-13: (1) \"Start <agent> on this\" on finished work is a real review; (2) when nobody is named to review, the Hub picks someone other than the author and says so, rather than refusing; (3) \"Land it\" asks for confirmation and says it skips review.",
+  "requirements": [
+    {
+      "key": "review-from-the-card",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The label promised a review and delivered a work turn; the review turn is what lets a reviewer decide the evidence and approve.",
+      "statement": "On a task in `completed`, the card's start menu MUST offer each open agent other than the task's author as \"Review with <agent>\", and choosing one MUST start that agent's review turn on the task, moving it to `under_review` with that agent as its reviewer; the author MUST NOT be offered."
+    },
+    {
+      "key": "finished-work-finds-a-reviewer",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The operator chose \"pick someone and say so\" over refusing approval: a newcomer who skipped naming a checker still gets a review.",
+      "statement": "When a task that belongs to no running build reaches `completed` and its project checks pass, the Hub MUST start a review turn by the task's declared checker if one resolves, otherwise by an open agent other than the author chosen as a build would choose one; when none can be chosen, the task MUST show why (e.g. \"no agent other than the author to review this\") instead of waiting silently."
+    },
+    {
+      "key": "a-picked-reviewer-is-visible",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Choosing silently would read as if somebody had named that reviewer.",
+      "statement": "A review the Hub staffed without a declared checker MUST say so on the task's story, naming the reviewer and that nobody was declared."
+    },
+    {
+      "key": "land-it-says-it-skips-review",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "One click merged unreviewed work during the drive; the operator keeps the power, but knowingly.",
+      "statement": "\"Land it\" MUST ask for confirmation before merging, stating that it merges without a review and, when any of the task's evidence is still awaiting, how many pieces are unreviewed; cancelling MUST change nothing."
+    },
+    {
+      "key": "the-quickstart-matches",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The quickstart is the first thing a new user follows; it failed on 2026-11-13.",
+      "statement": "The quickstart's review-and-merge step MUST describe the path this change provides, and following it on a fresh install MUST end with the task approved by a reviewing agent and merged."
+    }
+  ],
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "The task card's start menu on a task in `completed`",
+      "Starting review of a completed task that belongs to no running build",
+      "The confirmation shown by \"Land it\"",
+      "The quickstart's review-and-merge step"
+    ],
+    "non_goals": [
+      "How a build (flow) staffs reviewers — it already does, and its ladder is reused, not changed",
+      "Evidence grants for agents, and who may decide evidence",
+      "The approval-gap wording and Check/Approve agreement (task AW-127)",
+      "First-run onboarding on an empty project (task AW-128)",
+      "Pull-request landing"
+    ]
+  },
+  "summary": "A task started by hand from the board, as the quickstart teaches, is reviewed by a different agent and merged on that agent's approval — without the operator having to discover \"Land it\". The card's start menu offers a review on finished work, a finished task with no build behind it gets a reviewer by itself, and \"Land it\" says plainly that it skips review.",
+  "tag": "review-to-merge",
+  "tasks": [
+    {
+      "builder": "Developer",
+      "builder_reason": "Developer already drives isolated-profile Hubs for AW-126/129 and knows the HUB_URL trap.",
+      "checker": "DeveloperSonnet2",
+      "checker_reason": "A different agent who can rerun the script and confirm it fails on master.",
+      "depends_on": [],
+      "description": "Write `scripts/drive/quickstart_review_to_merge.py`: on an isolated `--profile`/`--port` Hub (never :8000; unset HUB_URL and AW_* before starting it), create a tiny git project, three Haiku agents (planner/Spec Author, builder/Developer, reviewer/Code Reviewer), ask the planner for a one-function change, approve the spec over its gaps, start the builder from the card's endpoint, then wait — no further operator action — and report PASS only if the task ends approved by an agent other than the builder with its commit on main. Run it on master now and record that it FAILS (the task stops at `completed`).",
+      "files": [
+        "scripts/drive/quickstart_review_to_merge.py"
+      ],
+      "from": null,
+      "key": "acceptance-drive",
+      "requirements": [
+        "the-quickstart-matches"
+      ],
+      "reviewer": null,
+      "title": "Quickstart review-to-merge acceptance drive"
+    },
+    {
+      "builder": "Developer",
+      "builder_reason": "Backend Hub work on Sonnet, keeping Opus quota free; Developer owns the backend side of this change.",
+      "checker": "DeveloperSonnet2",
+      "checker_reason": "Checks it independently, and its own UI task relies on this behaviour.",
+      "depends_on": [
+        "acceptance-drive"
+      ],
+      "description": "When a task in no running build reaches `completed` and its checks pass, start a review turn using the existing reviewer ladder (`scheduler.resolve_reviewer`: declared checker, else an idle non-author agent, else surface why). Record on the task's story when the reviewer was picked rather than declared. Tests first for the three cases (declared, picked, none).",
+      "files": [
+        "hub/hub/scheduler.py",
+        "hub/hub/task_transition_service.py",
+        "hub/hub/review_turn.py",
+        "hub/tests"
+      ],
+      "from": null,
+      "key": "review-on-completion",
+      "requirements": [
+        "finished-work-finds-a-reviewer",
+        "a-picked-reviewer-is-visible"
+      ],
+      "reviewer": null,
+      "title": "Finished work finds a reviewer outside a build"
+    },
+    {
+      "builder": "DeveloperSonnet2",
+      "builder_reason": "Already in the board and UI code for AW-127/128; one builder owning all UI tasks keeps bundle refreshes from colliding.",
+      "checker": "Developer",
+      "checker_reason": "Not the author, and built the backend this menu calls.",
+      "depends_on": [
+        "acceptance-drive"
+      ],
+      "description": "On a `completed` card, the start menu lists \"Review with <agent>\" for every open agent except the author, and triggers with `review_task_id`. Component test first; Hub test that the trigger moves the task to `under_review`. Refresh the UI bundle (`make ui`).",
+      "files": [
+        "hub/ui/src/components/tasks/TaskCard.tsx",
+        "hub/ui/src/components/tasks/TaskCardCompact.tsx",
+        "hub/ui/src/api/tasks.ts",
+        "hub/hub/static/ui"
+      ],
+      "from": null,
+      "key": "card-review-menu",
+      "requirements": [
+        "review-from-the-card"
+      ],
+      "reviewer": null,
+      "title": "Review with <agent> from a completed card"
+    },
+    {
+      "builder": "DeveloperSonnet2",
+      "builder_reason": "Same UI owner as card-review-menu, so one agent refreshes the bundle in order.",
+      "checker": "Developer",
+      "checker_reason": "Not the author of the UI work.",
+      "depends_on": [
+        "acceptance-drive",
+        "card-review-menu"
+      ],
+      "description": "\"Land it\" opens a confirmation stating it merges without review and how many evidence pieces are still awaiting; Cancel changes nothing. Component test first. Refresh the UI bundle.",
+      "files": [
+        "hub/ui/src/components/tasks/TaskDetailDrawer.tsx",
+        "hub/hub/static/ui"
+      ],
+      "from": null,
+      "key": "land-confirm",
+      "requirements": [
+        "land-it-says-it-skips-review"
+      ],
+      "reviewer": null,
+      "title": "\"Land it\" confirms it skips review"
+    },
+    {
+      "builder": "Developer",
+      "builder_reason": "Wrote the acceptance drive and reruns it to close the change.",
+      "checker": "DeveloperSonnet2",
+      "checker_reason": "Built the UI half and can confirm the docs describe what it shows.",
+      "depends_on": [
+        "acceptance-drive",
+        "review-on-completion",
+        "card-review-menu",
+        "land-confirm"
+      ],
+      "description": "Update docs/getting-started/quickstart.md steps 5–6 to the path this change provides; then run the acceptance drive and record it passing.",
+      "files": [
+        "docs/getting-started/quickstart.md"
+      ],
+      "from": null,
+      "key": "quickstart-docs",
+      "requirements": [
+        "the-quickstart-matches"
+      ],
+      "reviewer": null,
+      "title": "Quickstart describes review-to-merge"
+    }
+  ],
+  "title": "A hand-started task reaches review and merge"
+}

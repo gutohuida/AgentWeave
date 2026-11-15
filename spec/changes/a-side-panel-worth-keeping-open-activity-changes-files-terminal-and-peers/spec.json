@@ -1,0 +1,98 @@
+{
+  "acceptance_criteria": [],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {},
+    "high_water": 0,
+    "requirements": {},
+    "retired": {}
+  },
+  "design": "Decisions taken with the operator on 2026-11-12:\n- Specs tab: untouched by this roadmap.\n- Loops is replaced by a tab covering builds, loops and scheduled jobs together, with what needs the operator first, and a filter (Now / Finished / All, and by kind). It is named **Running**, not Activity, because the project already has an Activity tab (the event digest, ledger, logs and traces), and two tabs with one name would be confusing. A mock of it exists (`hub/ui/mock`, route `#conversation/Architect/conv-9cdda4865e0b/running`) and is what slice 1 is specified from once the operator has looked at it.\n- The terminal can open in the conversation agent's worktree or in the project root, the operator choosing. A page reload ends the old shell and opens a fresh one (operator confirmed 2026-11-12). It is offered only when the Hub is reached from the same machine; Docker mode is not supported (the operator no longer uses it).\n- Another agent's conversation is watch-only, with a button that switches the main view to it (operator agreed 2026-11-12). Two composers side by side make it easy to send a message to the wrong agent, and talking to that agent is already one click away. A composer in the panel can be a later slice if watching proves not enough.\n- Order chosen by the Architect at the operator's invitation: the tab the operator called bad first, then the highest-value new view (changes), then files (which introduces the worktree-or-root choice the terminal reuses), then the terminal (the one hazardous slice, built on that choice), then the peer view.\n- Configuration stays out of the panel: settings are visited rarely and already have a page; the per-turn ones (model, permissions) belong to the composer.",
+  "evidence": {
+    "checked": [],
+    "limits": []
+  },
+  "hub": {
+    "phase": "approved",
+    "size": null,
+    "step": null
+  },
+  "kind": "roadmap",
+  "lifecycle": "",
+  "open_questions": [
+    {
+      "question": "Terminal on reload: does a page reload end the old shell and open a fresh one, or reconnect to the same shell?",
+      "resolved": true
+    }
+  ],
+  "problem": "The operator, 2026-11-12: the Specs tab is good and stays. The Loops tab \"doesn't tell me anything, it's ugly and does not match the UI overhaul\": it lists loops with one status badge and a count line, answering \"what state is each loop in\" rather than \"what is happening now and does anything need me\". It also misses most unattended work, which since the overhaul runs as spec builds and as scheduled jobs, neither of which it shows. The Files tab is \"so so\": it works (tree, search, read-only preview, Insert into composer) but is plain, and it lists only the project's registered directory (`GET /workspace/paths` resolves the project workspace root, `hub/hub/api/v1/workspace.py:30`), so the files an agent is changing in its own worktree cannot be seen there. And the panel lacks what other tools in the market put beside a chat: a terminal, and a view of what the agent changed. Vault note src-2a9cc1abc8e4 item 2 (\"explore further UI changes to the side panel\") is this roadmap.",
+  "requirements": [],
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "A Running tab replacing Loops: builds, loops and jobs, what each is doing now, what waits on the operator, and a filter",
+      "A Changes view of the conversation agent's branch: changed files and their diffs",
+      "Files tab polish, plus choosing between the agent's worktree and the project root",
+      "A terminal tab, local-only, opening in the agent's worktree or the project root",
+      "A read-only view of another agent's conversation in the panel"
+    ],
+    "non_goals": [
+      "Any change to the Specs tab",
+      "Agent or project configuration in the panel",
+      "Sending messages to another agent from the panel (watch only)",
+      "A terminal reachable from another machine, or in Docker mode",
+      "A terminal that survives a page reload",
+      "A browser preview of the project's app",
+      "A vault tab",
+      "Editing files from the panel"
+    ]
+  },
+  "slices": [
+    {
+      "builds_after": [],
+      "done": "With a build running, a loop stalled on a question and a job scheduled, the Running tab shows all three, the stalled one first, each saying what it is doing or waiting for, styled like the rest of the overhauled UI.",
+      "intent": "The operator opens one tab and sees every build, loop and scheduled job, what each is doing now, and anything waiting on them pinned at the top, filtered to now, finished or all; the Loops tab is gone.",
+      "key": "activity-tab",
+      "title": "Running: what is running and what needs me"
+    },
+    {
+      "builds_after": [
+        "activity-tab"
+      ],
+      "done": "After an agent edits two files in its worktree, the panel's Changes tab lists both and shows each diff, without the operator leaving the conversation.",
+      "intent": "Beside a conversation, the operator sees the files the agent has changed on its branch and reads each diff.",
+      "key": "changes-view",
+      "title": "Changes: what the agent changed"
+    },
+    {
+      "builds_after": [
+        "changes-view"
+      ],
+      "done": "The operator switches the Files tab to the agent's worktree, finds a file the agent just created there, and reads it highlighted.",
+      "intent": "The file browser matches the overhaul, renders code and Markdown readably, and can browse either the agent's worktree or the project root.",
+      "key": "files-polish",
+      "title": "Files: prettier, and the agent's worktree"
+    },
+    {
+      "builds_after": [
+        "files-polish"
+      ],
+      "done": "From the Hub's own machine the operator opens a terminal in the agent's worktree and runs a command; after a reload the old shell is gone and a new one opens; from another machine, or in Docker mode, no terminal is offered.",
+      "intent": "The operator opens a working terminal in the panel, in the agent's worktree or the project root, from the machine the Hub runs on; a reload starts a fresh one.",
+      "key": "terminal-tab",
+      "title": "A terminal in the panel"
+    },
+    {
+      "builds_after": [
+        "activity-tab"
+      ],
+      "done": "While talking to one agent, the operator opens a peer's conversation in the panel, watches its turn stream in, and can switch the main view to it in one click.",
+      "intent": "The operator follows another agent's conversation live in the panel while talking to this one.",
+      "key": "peer-conversation",
+      "title": "Watch another agent"
+    }
+  ],
+  "summary": "The conversation's side panel gets what every comparable tool has beside its chat: a view of what is running on its own and what needs the operator, the agent's changes as a diff, a better file browser that can look at the agent's worktree, a terminal, and a read-only view of another agent's conversation. The Specs tab is left as it is.",
+  "tasks": [],
+  "title": "A side panel worth keeping open: activity, changes, files, terminal and peers"
+}

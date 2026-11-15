@@ -1,0 +1,292 @@
+{
+  "acceptance_criteria": [
+    {
+      "checked_by": "agent",
+      "given": "a project with 3 exploring, 2 approved and 5 archived change documents",
+      "how_to_check": "UI component test fed the documents route's real answer, plus a drive on :8010",
+      "key": "ac-live-default",
+      "requirement": "live-by-default",
+      "then": "it lists the 5 that are not archived and says 5 finished are hidden",
+      "when": "the operator opens the specs list for the first time"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the list hiding finished documents",
+      "how_to_check": "UI component test",
+      "key": "ac-show-finished",
+      "requirement": "live-by-default",
+      "then": "the archived ones are listed, marked finished, and the choice is still on",
+      "when": "the operator shows finished documents and reloads"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an approved change document with tasks and evidence",
+      "how_to_check": "Hub test plus a drive on :8010",
+      "key": "ac-moved",
+      "requirement": "archive-folder",
+      "then": "its folder is under spec/changes/archive/, its tasks and evidence still name it, and read_spec_document by its old path returns it",
+      "when": "the operator archives it"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an archived document under spec/changes/archive/",
+      "how_to_check": "Hub test",
+      "key": "ac-unarchive",
+      "requirement": "archive-folder",
+      "then": "its folder is back under spec/changes/",
+      "when": "the operator restores it"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a project with archived documents still in spec/changes/",
+      "how_to_check": "Hub test over a fixture project; drive on a copy of this repository's spec/ on :8010",
+      "key": "ac-existing",
+      "requirement": "archive-existing",
+      "then": "every archived document is under spec/changes/archive/ and spec/index.json names the new paths",
+      "when": "the Hub starts after this ships"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an approved roadmap of two slices, one slice's change archived and the other's folded",
+      "how_to_check": "Hub test plus UI component test",
+      "key": "ac-roadmap-done",
+      "requirement": "roadmap-done",
+      "then": "the roadmap shows as done",
+      "when": "the operator opens the specs list"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the same roadmap with one slice that has no change document",
+      "how_to_check": "Hub test",
+      "key": "ac-roadmap-not-done",
+      "requirement": "roadmap-done",
+      "then": "the roadmap does not show as done",
+      "when": "the operator opens the specs list"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a change document last saved more than the limit ago and still exploring",
+      "how_to_check": "Hub test with a fake clock",
+      "key": "ac-stalled-exploring",
+      "requirement": "stalled-flags",
+      "then": "it is flagged stalled in exploring, with the date of its last save",
+      "when": "the operator opens the specs list"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a change document approved more than the limit ago with no tasks and no build",
+      "how_to_check": "Hub test with a fake clock",
+      "key": "ac-stalled-approved",
+      "requirement": "stalled-flags",
+      "then": "it is flagged approved with no tasks",
+      "when": "the operator opens the specs list"
+    }
+  ],
+  "algorithms": [],
+  "already_built": {
+    "built": false,
+    "commits": [],
+    "note": ""
+  },
+  "aw_identity": {
+    "digests": {
+      "FR-1": "4f0d143458a8c38806f145bd72bdfa78097dc85a3c1137ea55dc57229af1929b",
+      "FR-2": "03d10a43a3b774ebb2749134b928c520a2c7bdceada6da07bfb91b63bcf2f764",
+      "FR-3": "373f44c3da53947c411f6972f6ccef609dcda39af86989663c80a20f387013e2",
+      "FR-4": "8cd761ddd21aa1d4a8599df444df6e888c9fdb30313740cd9b64d7f278db06b2",
+      "FR-5": "7bf74bc8b7f86838c2e17320491a5a32a631381cbd5ee5b1293304336c90644b"
+    },
+    "high_water": 5,
+    "requirements": {
+      "archive-existing": "FR-3",
+      "archive-folder": "FR-2",
+      "live-by-default": "FR-1",
+      "roadmap-done": "FR-4",
+      "stalled-flags": "FR-5"
+    },
+    "retired": {}
+  },
+  "capabilities": {
+    "changes": [
+      "spec/capabilities/spec-corpus-map/spec.json",
+      "spec/capabilities/spec-roadmaps/spec.json"
+    ],
+    "creates": []
+  },
+  "delivery": {
+    "agent": "Developer",
+    "builder": "Developer",
+    "checker": "QA2",
+    "cron": "*/5 * * * *",
+    "mode": "flow",
+    "reasons": {
+      "agent": "Most of the work is read-side states and UI.",
+      "builder": "Sonnet for the states and list; the archive move names its own Opus builder.",
+      "checker": "QA2 drives the specs list on :8010.",
+      "cron": "Five minutes keeps it moving.",
+      "mode": "Three tasks, two of them independent, suit a flow that runs them in parallel.",
+      "stop": "Stop once the three tasks are done."
+    },
+    "reviewer": null,
+    "stop_at": null,
+    "stop_when_queue_empties": true
+  },
+  "design": "",
+  "evidence": {
+    "checked": [
+      "spec/changes/ on 2026-11-12: 195 documents, 152 archived (145 change, 7 roadmap), 25 exploring, 8 approved change documents, 10 approved roadmaps, all in one flat folder",
+      "62e1482: the specs list gained a 'Not archived' phase filter that hides archived documents and archived roadmap slices; not the default",
+      "spec_lifecycle.py:672: documents carry superseded_at, which roadmap-done can read as folded"
+    ],
+    "limits": [
+      "Not yet read: every place that resolves a document by path (index, evidence, tasks, folds), which archive-folder must keep working; the file list in task 'archive-move' is a guess until then",
+      "Not yet read: how the specs list's current filter state is stored, so whether live-by-default replaces or reuses the 'Not archived' filter"
+    ]
+  },
+  "hub": {
+    "phase": "exploring",
+    "size": null,
+    "step": "intake"
+  },
+  "kind": "change-spec",
+  "lifecycle": "",
+  "open_questions": [
+    {
+      "question": "Should archiving still move files into spec/changes/archive/ (decided 2026-10-08), or is hiding archived documents in the list enough? Moving is the larger, riskier part: it rewrites paths the Hub, evidence and git history refer to.",
+      "resolved": false
+    },
+    {
+      "question": "What is the stall limit: 10 days for both flags (the 2026-11-08 assessment's line), or different limits for exploring and for approved-with-no-tasks?",
+      "resolved": false
+    },
+    {
+      "question": "Who sees the stalled flags: only the specs list, or also the tidy agent, so it can propose ending them? And should a done roadmap be archived automatically, or only shown as done for the operator to archive?",
+      "resolved": false
+    }
+  ],
+  "problem": "On 2026-11-12, 152 of the 195 documents under spec/changes/ in this repository are archived (145 change documents, 7 roadmaps), all in one flat folder beside the 43 still in play. The specs list shows them together unless the operator picks the 'Not archived' phase filter added that morning (62e1482), so finding live work means reading past finished work. Roadmaps never end: 10 stay approved even when every slice is built. Documents also stall without anyone noticing: the 2026-11-08 assessment found 16 exploring for more than 10 days and 10 change documents approved that never got tasks. The archive subfolder decided on 2026-10-08 was never built.",
+  "requirements": [
+    {
+      "key": "live-by-default",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Three quarters of this repository's documents are finished; the default view should serve the work in play.",
+      "statement": "The specs list shows, by default, only documents that are not archived. It states how many finished documents it is hiding, and one action shows them, marked as finished. The choice is remembered per project."
+    },
+    {
+      "key": "archive-folder",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Decided 2026-10-08 and never built: someone browsing the folder or the repository should see live work without the finished. Ids, not paths, are the durable identity, so the move must not break references.",
+      "statement": "Archiving a document moves its files from spec/changes/<name>/ to spec/changes/archive/<name>/. Its id, requirement identifiers, history and every link to it by id keep working, and reading it by its old path still finds it."
+    },
+    {
+      "key": "archive-existing",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "Documents already archived when this ships are moved to the archive folder once, with the same guarantees as archive-folder."
+    },
+    {
+      "key": "roadmap-done",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "A roadmap reads as done once every slice has a change document and every one of those is folded (superseded) or archived. The list and the roadmap's page show it as done."
+    },
+    {
+      "key": "stalled-flags",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "A document is flagged as stalled when it has been exploring with no save for longer than the stall limit, or approved with no tasks and no build for longer than the stall limit. The flag says which, and since when."
+    }
+  ],
+  "roadmap": {
+    "document": "spec/changes/the-specs-stay-true-and-easy-to-work-with/spec.json",
+    "slice": "live-apart-from-finished"
+  },
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "What the specs list shows by default, and a way to see finished documents",
+      "Where an archived document's files live",
+      "A roadmap's done state",
+      "Flags for documents that have stalled"
+    ],
+    "non_goals": [
+      "Who may archive: archiving stays the operator's (the tidy agent marks superseded, the operator archives in a batch)",
+      "Deleting documents",
+      "Changing requirement identity or the document lifecycle phases",
+      "Search by subject (slice find-the-spec)",
+      "Capability documents, which are current behaviour and never finish"
+    ]
+  },
+  "summary": "The specs list shows only documents still in play unless the operator asks for finished ones. A roadmap reads as done once every slice's change is folded or archived. Documents stuck in exploring too long, or approved with no tasks, are flagged so the operator or the tidy agent can end them.",
+  "tasks": [
+    {
+      "builder": "DeveloperOpus2",
+      "builder_reason": "Moving files the Hub owns, with every path reference intact, is a live-data hazard on this repository's own spec/; Opus suits it.",
+      "checker": "QA",
+      "checker_reason": "QA drives it on a copy of this repository's spec/ on :8010 before it can touch real data.",
+      "depends_on": [],
+      "description": "Acceptance drive first. Move a document's files to spec/changes/archive/ on archive and back on restore, keep id and old-path lookups working, update spec/index.json, and move already-archived documents once at startup.",
+      "files": [
+        "hub/hub/spec_lifecycle.py",
+        "hub/hub/spec_documents.py",
+        "hub/hub/spec_index.py"
+      ],
+      "from": null,
+      "key": "archive-move",
+      "requirements": [
+        "archive-folder",
+        "archive-existing"
+      ],
+      "reviewer": null,
+      "title": "Archived documents move to the archive folder"
+    },
+    {
+      "builder": "Developer",
+      "builder_reason": "Read-side states derived from data the Hub already holds; Sonnet is enough.",
+      "checker": "QA2",
+      "checker_reason": "QA2 can drive the specs list with fixture documents on :8010.",
+      "depends_on": [],
+      "description": "Derive a roadmap's done state from its slices' changes, and the two stalled flags, and return them with the documents route.",
+      "files": [
+        "hub/hub/api/v1/spec_documents.py",
+        "hub/hub/spec_roadmaps.py"
+      ],
+      "from": null,
+      "key": "states",
+      "requirements": [
+        "roadmap-done",
+        "stalled-flags"
+      ],
+      "reviewer": null,
+      "title": "Roadmap done and stalled flags"
+    },
+    {
+      "builder": "Developer",
+      "builder_reason": "Same builder as 'states', whose answer this renders.",
+      "checker": "QA2",
+      "checker_reason": "Same checker: it drives the list end to end.",
+      "depends_on": [
+        "states"
+      ],
+      "description": "Hide archived documents by default with a count and a remembered show-finished action, and show roadmap done and stalled flags.",
+      "files": [
+        "hub/ui/src/components/specs"
+      ],
+      "from": null,
+      "key": "list",
+      "requirements": [
+        "live-by-default",
+        "roadmap-done",
+        "stalled-flags"
+      ],
+      "reviewer": null,
+      "title": "Specs list hides finished documents and shows the new states"
+    }
+  ],
+  "title": "Finished documents leave the live view"
+}

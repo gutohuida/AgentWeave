@@ -1,0 +1,457 @@
+{
+  "acceptance_criteria": [
+    {
+      "checked_by": "agent",
+      "given": "an agent with its own worktree holding a file that is not in the project root",
+      "how_to_check": "Browser drive on a Hub started from the checkout over a test database (never :8000): seed the worktree, open the conversation, switch, read the tree",
+      "key": "ac-switch",
+      "requirement": "location-switch",
+      "then": "the file is listed under Worktree and not under Project root, and the tab's header names the location shown each time",
+      "when": "the operator opens its Files tab and switches between Worktree and Project root"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an agent whose most recent turn worked a flow task in its task checkout",
+      "how_to_check": "Hub test seeding a task worktree and a run bound to it, comparing the Files and Changes routes' answers",
+      "key": "ac-task-checkout",
+      "requirement": "location-switch",
+      "then": "it lists the task checkout's files, the same checkout whose branch the Changes tab names",
+      "when": "its Files tab shows the checkout"
+    },
+    {
+      "checked_by": "agent",
+      "given": "two conversations whose agents both have worktrees",
+      "how_to_check": "Browser drive",
+      "key": "ac-default-and-remembered",
+      "requirement": "opens-on-checkout",
+      "then": "the first opened on Worktree before the switch and reopens on Project root after the reload, and the second opens on Worktree",
+      "when": "the operator opens the first's Files tab, switches it to Project root, reloads the page, then opens both conversations' Files tabs"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a read-only agent, and a writing agent whose worktree does not exist yet",
+      "how_to_check": "Hub test of the route's answers plus the browser drive",
+      "key": "ac-no-checkout",
+      "requirement": "no-checkout",
+      "then": "no switch is offered, the project root is shown, and a note says which case it is; no error code shows",
+      "when": "each one's Files tab opens"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a worktree with an untracked new file, an ignored file and a tracked file in a nested folder",
+      "how_to_check": "Hub test over a temporary repository; drive for the tree and find",
+      "key": "ac-uncommitted",
+      "requirement": "worktree-tree",
+      "then": "the new and the tracked files are in the tree, the ignored one is not, and find narrows to the nested file with its folder expanded",
+      "when": "the tab lists the worktree and the operator types part of the nested file's name into find"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an agent's worktree",
+      "how_to_check": "Hub tests at the file route, each failing before the fix",
+      "key": "ac-guards",
+      "requirement": "read-from-location",
+      "then": "each is refused and no content is returned",
+      "when": "the file route is asked for a path that is not listed there, a path reached through a link out of the worktree, another agent's checkout, and another project's agent"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a worktree holding a 2 MB text file and a binary file",
+      "how_to_check": "Hub test plus the drive",
+      "key": "ac-large-binary",
+      "requirement": "read-from-location",
+      "then": "each shows the same too-large and binary states the project-root preview shows",
+      "when": "each is opened from the tab"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an agent branch that added one file, modified one and deleted one since main",
+      "how_to_check": "Hub test comparing the two routes over a temporary repository; drive for the render",
+      "key": "ac-changed-only",
+      "requirement": "changed-marks",
+      "then": "exactly those three are shown, marked A, M and D, the deleted one struck through, and the set equals the Changes tab's Since main list",
+      "when": "the operator turns Changed only on"
+    },
+    {
+      "checked_by": "operator",
+      "given": "a Python file and a Markdown file in the worktree",
+      "how_to_check": "Browser drive screenshots in both themes, attached for the operator",
+      "key": "ac-preview-themes",
+      "requirement": "readable-preview",
+      "then": "the Python file is highlighted, the Markdown is rendered with its headings and lists, both are legible in both themes, and the tab names the path and 'worktree'",
+      "when": "each is opened, in the light theme and then the dark theme"
+    },
+    {
+      "checked_by": "agent",
+      "given": "README.md present in both the worktree and the project root with different content",
+      "how_to_check": "Browser drive",
+      "key": "ac-two-tabs",
+      "requirement": "readable-preview",
+      "then": "two tabs open, each labelled with its location and each showing its own content",
+      "when": "the operator opens it from each location"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a file opened from the worktree",
+      "how_to_check": "Browser drive reading the composer",
+      "key": "ac-insert",
+      "requirement": "insert-from-either",
+      "then": "the composer holds the file's path relative to the worktree",
+      "when": "the operator presses Insert into composer"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the tab open on the agent's worktree while its turn runs",
+      "how_to_check": "Browser drive with a real Haiku turn, timing from the turn's end event",
+      "key": "ac-live",
+      "requirement": "follows-the-agent",
+      "then": "the file appears in the tree, marked added, within 5 seconds with no reload",
+      "when": "the turn creates a file and ends"
+    }
+  ],
+  "algorithms": [],
+  "already_built": {
+    "built": false,
+    "commits": [],
+    "note": ""
+  },
+  "aw_identity": {
+    "digests": {
+      "FR-1": "35eb08733ff66b0d0336cf5671e28c0d14f45aa93de3a58a3833d37f0462cde2",
+      "FR-2": "cfe3ecfa7c09f7f61beb7b6b03db62a61fdb3e8976dec1497e88c74a4618c22f",
+      "FR-3": "84b882a0fd8cc4375b7eab99b3efca5acef7983e01ff6de41fda9b90af3b2cbb",
+      "FR-4": "c0cc41b9c26111be93f20c9609897010d65b2b49d74c5354ecf88ce20203881b",
+      "FR-5": "e6c3e10df091820818ab980854278ef709d83be431d7fde8a83f4baf59d96a6a",
+      "FR-6": "e256ab3a3ceee84a114b2dd956882be57d0583010bd1f1e61b52b11c09453cfb",
+      "FR-7": "5d3e1113a6fe345ff268aa1725ad8666e8c31ae0d6831e04ea6e3cbec05f3d60",
+      "FR-8": "447cc4eb0221fbd67cfb5781925af55317c0808c980fd3efe472a19347fb9979",
+      "FR-9": "11850137ea35c1d20065112a5712692b0708423843436e335aa9f9db0a167ed1"
+    },
+    "high_water": 9,
+    "requirements": {
+      "changed-marks": "FR-5",
+      "follows-the-agent": "FR-8",
+      "insert-from-either": "FR-7",
+      "location-switch": "FR-1",
+      "no-checkout": "FR-2",
+      "opens-on-checkout": "FR-9",
+      "read-from-location": "FR-4",
+      "readable-preview": "FR-6",
+      "worktree-tree": "FR-3"
+    },
+    "retired": {}
+  },
+  "capabilities": {
+    "changes": [
+      "spec/capabilities/conversation-side-panel/spec.json"
+    ],
+    "creates": []
+  },
+  "delivery": {
+    "agent": "Developer",
+    "builder": "Developer",
+    "checker": "QA",
+    "cron": "*/5 * * * *",
+    "mode": "flow",
+    "reasons": {
+      "agent": "Developer built the Changes route this reuses.",
+      "builder": "Read-only routes and wiring of existing components: Sonnet is enough.",
+      "checker": "QA checks guards and drives; QA2 authors the drive so it is not its own checker.",
+      "cron": "Flows' usual cadence.",
+      "mode": "A route change, wiring and a drive: a short unattended flow like the Changes slice.",
+      "stop": "Stop when its four tasks are done."
+    },
+    "reviewer": null,
+    "stop_at": null,
+    "stop_when_queue_empties": true
+  },
+  "design": "Tier 1: a read-only route parameter and UI wiring; no migration, no Hub-restart or live-data hazard.\n\nDecisions (operator-approved 2026-11-14 where marked, otherwise the author's):\n- The look is the approved mock (operator, 2026-11-14): hub/ui/mock route #conversation/Architect/conv-9cdda4865e0b/files, components FilesTab and LocationSwitch in hub/ui/src/components/panel.\n- Opens on the checkout and remembers the last choice per conversation (operator, 2026-11-14).\n- The checkout is resolved exactly as the Changes route resolves its branch (hub/hub/api/v1/changes.py:119-146, _resolve_target), so the two tabs can never disagree. The resolution is read-only: it uses the lookup that provisions nothing (worktrees.existing_worktree, hub/hub/worktrees.py:545), never resolve_agent_workspace, which creates a worktree as a side effect of browsing.\n- The worktree listing and read apply the root's rules and guards unchanged (hub/hub/workspace_paths.py:21-70, hub/hub/workspace_file.py): listing membership is the traversal guard, links out are refused, 1 MB limit, NUL-sniff binary. The agent is named by the conversation, never by a path in the request.\n- The changed marks come from the same computation as the Changes tab's Since main, not a second one.\n- The container follows ChangesTabContainer/ChangesTab; FilePreview is reused for highlighting and Markdown.\n- A file tab's identity includes its location, so the panel store's file: ids carry it.\n\nCURRENT  Files tab -> type a path -> project root file\nPROPOSED Files tab -> [Worktree | Project root] tree, A/M/D marks, Changed only -> file from that location",
+  "evidence": {
+    "checked": [
+      "FilesIndexTab mounted at hub/ui/src/components/agents/ConversationView.tsx:395-403; FilesTab and LocationSwitch in hub/ui/src/components/panel exist and are used only by hub/ui/mock/screens/SidePanel.tsx",
+      "Root-only routes: hub/hub/api/v1/workspace.py:30 and :46, guards in hub/hub/workspace_file.py (listing membership, resolve_relative symlink refusal, 1 MB aw_max_body_size, NUL sniff)",
+      "Changes route's checkout resolution: hub/hub/api/v1/changes.py:119-146; non-provisioning lookup worktrees.existing_worktree hub/hub/worktrees.py:545",
+      "FilePreview highlights ~26 languages and renders Markdown: hub/ui/src/components/spec/FilePreview.tsx"
+    ],
+    "limits": [
+      "The acceptance drive is proposed coverage, not yet written or run",
+      "Whether the panel store already persists per-conversation choices was not read",
+      "The 5-second budget mirrors the Changes tab's; not measured for the tree"
+    ]
+  },
+  "hub": {
+    "builds": [
+      {
+        "budget_cap_usd": null,
+        "builder": "Developer",
+        "builders": [
+          "QA2",
+          "Developer",
+          "DeveloperSonnet2"
+        ],
+        "checker": "QA",
+        "checkers": [],
+        "chosen_by": "operator",
+        "driver": "flow",
+        "ended_at": "2026-11-14T04:24:24.396597+00:00",
+        "id": "build-275c4f746111",
+        "landing": "main",
+        "lead": null,
+        "level": "reviewed",
+        "pull_request": null,
+        "started_at": "2026-11-14T01:18:45.609346+00:00",
+        "state": "finished",
+        "stop_reason": null,
+        "tasks": {
+          "acceptance-drive": {
+            "builder": "QA2",
+            "checker": "QA"
+          },
+          "run-acceptance-drive": {
+            "builder": "QA2",
+            "checker": "QA"
+          },
+          "task-228a5a6c4e5f": {
+            "builder": null,
+            "builder_default": true,
+            "checker": null
+          },
+          "task-9111494bcb9a": {
+            "builder": null,
+            "builder_default": true,
+            "checker": null
+          },
+          "task-ffe818378f09": {
+            "builder": null,
+            "builder_default": true,
+            "checker": null
+          },
+          "wire-files": {
+            "builder": "DeveloperSonnet2",
+            "checker": "QA2"
+          },
+          "worktree-routes": {
+            "builder": "Developer",
+            "checker": "QA"
+          }
+        },
+        "window_end": null,
+        "window_start": null
+      }
+    ],
+    "phase": "approved",
+    "size": "small",
+    "step": "build"
+  },
+  "kind": "change-spec",
+  "lifecycle": "",
+  "open_questions": [
+    {
+      "question": "Is the Files mock (mock.html#conversation/Architect/conv-9cdda4865e0b/files) the polish wanted? Answer (operator, 2026-11-14): approved.",
+      "resolved": true
+    },
+    {
+      "question": "Which location does the tab open on when the agent has a checkout? Answer (operator, 2026-11-14): the worktree, remembering the last choice per conversation.",
+      "resolved": true
+    }
+  ],
+  "problem": "The operator, 2026-11-12: the Files tab is \"so so\". Today it is a flat \"Search files by path\" box (hub/ui/src/components/spec/FilesIndexTab.tsx:26, mounted at hub/ui/src/components/agents/ConversationView.tsx:395-403) that lists nothing until you type. It lists only the project's registered directory: GET /workspace/paths and GET /workspace/file (hub/hub/api/v1/workspace.py:30, :46) resolve the project root and take no agent or checkout. So the files an agent is creating in its own worktree, which is where every writing agent works, cannot be seen from the panel. The Changes tab (slice changes-view, shipped 2026-11-13) shows the agent's diffs but not the whole files around them. A presentational tree with a Worktree/Project root switch, changed marks and a \"Changed only\" filter already exists, unwired (hub/ui/src/components/panel/FilesTab.tsx:28, LocationSwitch.tsx:7), shown in the mock at mock.html#conversation/Architect/conv-9cdda4865e0b/files, which the operator approved on 2026-11-14. The preview already highlights about 26 languages and renders Markdown (hub/ui/src/components/spec/FilePreview.tsx:4-45, :118).",
+  "requirements": [
+    {
+      "key": "location-switch",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Two tabs side by side that disagree on which checkout is 'the agent's' would show a diff of one tree and the files of another.",
+      "statement": "When the conversation's agent has a checkout of its own, the Files tab offers a switch between that checkout and the project root, and the tab names which one it is showing; the checkout is the one the Changes tab shows for the same conversation (the task checkout when the agent is working or last worked a task, otherwise the agent's own worktree)."
+    },
+    {
+      "key": "opens-on-checkout",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator, 2026-11-14: the checkout is where the agent is working, so it is the useful default; a choice made on purpose should stick.",
+      "statement": "When the agent has a checkout, the Files tab first opens on it; after the operator switches location, the tab reopens on the location last chosen for that conversation, including after a page reload, while other conversations keep their own choice."
+    },
+    {
+      "key": "no-checkout",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "When the agent has no checkout of its own (a read-only agent, or one whose worktree has not been created), the tab offers no switch, shows the project root, and says the agent works in the project directory or has no checkout yet; it never shows an empty tree or an error code for that reason."
+    },
+    {
+      "key": "worktree-tree",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "With the checkout chosen, the tab lists that checkout's files under the same rules as the project root (tracked files plus untracked files git does not ignore), as a collapsible tree with a find box, including a file the agent created and has not committed."
+    },
+    {
+      "key": "read-from-location",
+      "modal": "MUST",
+      "party": "consumer",
+      "rationale": "The worktree read must not become a way round the guards the root read already has.",
+      "statement": "Opening a file reads it from the location it was listed in; a request naming a path the chosen location does not list, a path escaping it through a link, or another project's or another agent's checkout is refused, and files over 1 MB and binary files are handled as the project-root preview handles them today."
+    },
+    {
+      "key": "changed-marks",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "In the checkout, every file the agent changed on its branch since main is marked added, modified or deleted (a deleted file still listed, struck through), and a Changed only switch narrows the tree to those files; the set equals the Changes tab's Since main list for the same conversation."
+    },
+    {
+      "key": "readable-preview",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "An opened code file shows syntax-highlighted and an opened Markdown file shows rendered, legibly in both the light and dark themes, and the file's tab names its path and whether it came from the checkout or the project root; the same path opened from both locations opens two distinct tabs."
+    },
+    {
+      "key": "insert-from-either",
+      "modal": "SHOULD",
+      "party": null,
+      "rationale": null,
+      "statement": "Insert into composer works for a file opened from either location and inserts its path relative to that location."
+    },
+    {
+      "key": "follows-the-agent",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "When a turn of the agent ends, an open Files tab showing its checkout lists any file that turn created, and updates its changed marks, within 5 seconds and without a reload."
+    }
+  ],
+  "roadmap": {
+    "document": "spec/changes/a-side-panel-worth-keeping-open-activity-changes-files-terminal-and-peers/spec.json",
+    "slice": "files-polish"
+  },
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "The Files tab shows a collapsible tree of the chosen location's files, with a find box, in the overhauled panel style of the approved mock",
+      "A switch between the conversation agent's checkout and the project root, the checkout chosen exactly as the Changes tab chooses its branch",
+      "Opening on the checkout, and remembering the operator's choice per conversation",
+      "Files the agent changed on that branch marked added, modified or deleted, and a Changed only filter",
+      "Opening a file from either location, highlighted or rendered, saying which location it came from",
+      "Insert into composer from either location",
+      "The tree following the agent: a file its turn created appears without a reload"
+    ],
+    "non_goals": [
+      "Any change to the Specs, Changes or Running tabs",
+      "Editing, creating, renaming or deleting files from the panel",
+      "Browsing another agent's checkout (the peer-conversation slice watches peers)",
+      "Browsing files git ignores, or files outside the chosen checkout",
+      "A picker across the agent's past task checkouts",
+      "The terminal (terminal-tab slice), which reuses this slice's location choice",
+      "Raising the 1 MB preview limit or previewing binary files"
+    ]
+  },
+  "summary": "The conversation side panel's Files tab becomes a browsable tree in the overhauled style, with a switch between the conversation agent's checkout and the project root. Files the agent changed are marked and can be filtered to, and opening a file shows it highlighted (code) or rendered (Markdown) in both themes. A file the agent created a moment ago in its worktree can be found and read without leaving the conversation.",
+  "tag": "files-tab",
+  "tasks": [
+    {
+      "builder": "QA2",
+      "builder_reason": "QA2 writes drives and builds nothing else here, so the drive is independent of the code.",
+      "checker": "QA",
+      "checker_reason": "QA checks QA2's drive and is not its author.",
+      "depends_on": [],
+      "description": "Write the browser drive and the Hub-test outline covering every criterion of this document against a Hub started from the checkout over a test database (never :8000; real agent turns bind Haiku), building on the Changes slice's drive helpers in scripts/drive. Record it failing before the build, naming the missing worktree location; the last task runs it green.",
+      "files": [
+        "scripts/drive/files_tab_drive.py"
+      ],
+      "from": null,
+      "key": "acceptance-drive",
+      "requirements": [
+        "location-switch",
+        "worktree-tree",
+        "follows-the-agent"
+      ],
+      "reviewer": null,
+      "title": "Acceptance drive, failing first"
+    },
+    {
+      "builder": "Developer",
+      "builder_reason": "Developer built the Changes route this reuses; read-only routes, Sonnet is enough.",
+      "checker": "QA",
+      "checker_reason": "QA reviews guards and runs the route tests; not the builder.",
+      "depends_on": [
+        "acceptance-drive"
+      ],
+      "description": "Let the workspace listing and file routes answer for a conversation's agent checkout as well as the project root: resolve the checkout read-only exactly as the Changes route does, apply the root's listing rules and read guards unchanged, say when there is no checkout and why, and answer each listed file's changed mark from the Changes route's Since main computation. Hub tests over temporary repositories for each criterion it carries, failing before the fix.",
+      "files": [
+        "hub/hub/api/v1/workspace.py",
+        "hub/hub/workspace_paths.py",
+        "hub/hub/workspace_file.py",
+        "hub/hub/api/v1/changes.py",
+        "hub/tests"
+      ],
+      "from": null,
+      "key": "worktree-routes",
+      "requirements": [
+        "location-switch",
+        "no-checkout",
+        "worktree-tree",
+        "read-from-location",
+        "changed-marks"
+      ],
+      "reviewer": null,
+      "title": "List and read the agent's checkout"
+    },
+    {
+      "builder": "DeveloperSonnet2",
+      "builder_reason": "UI wiring of existing components; DeveloperSonnet2 built the last two UI fixes and knows the bundle routine.",
+      "checker": "QA2",
+      "checker_reason": "QA2 drives both themes in a browser; not the builder.",
+      "depends_on": [
+        "worktree-routes"
+      ],
+      "description": "Replace FilesIndexTab in the panel with the existing FilesTab and LocationSwitch through a container fed by the routes; open on the checkout and remember the choice per conversation across reloads; carry the location in file tab ids and labels; reuse FilePreview for highlighting and Markdown in both themes; Insert into composer from either location; refresh on the stream's turn-end event. Rebuild and commit the UI bundle with the source.",
+      "files": [
+        "hub/ui/src/components/agents/ConversationView.tsx",
+        "hub/ui/src/components/panel",
+        "hub/ui/src/components/spec",
+        "hub/ui/src/store/panelTabsStore.ts",
+        "hub/ui/src/api/workspace.ts",
+        "hub/hub/static/ui"
+      ],
+      "from": null,
+      "key": "wire-files",
+      "requirements": [
+        "location-switch",
+        "opens-on-checkout",
+        "no-checkout",
+        "readable-preview",
+        "insert-from-either",
+        "follows-the-agent",
+        "changed-marks"
+      ],
+      "reviewer": null,
+      "title": "Wire the new Files tab"
+    },
+    {
+      "builder": "QA2",
+      "builder_reason": "The drive's author runs it and fixes only drive-side faults.",
+      "checker": "QA",
+      "checker_reason": "QA reads the recorded evidence; not the builder.",
+      "depends_on": [
+        "acceptance-drive",
+        "worktree-routes",
+        "wire-files"
+      ],
+      "description": "Run scripts/drive/files_tab_drive.py against the finished slice and record its evidence for every criterion, with the two theme screenshots for the operator. Fix only the drive; a failing criterion goes back to the task that built it.",
+      "files": [
+        "scripts/drive/files_tab_drive.py"
+      ],
+      "from": null,
+      "key": "run-acceptance-drive",
+      "requirements": [
+        "readable-preview",
+        "follows-the-agent",
+        "opens-on-checkout"
+      ],
+      "reviewer": null,
+      "title": "Run the acceptance drive green"
+    }
+  ],
+  "title": "The side panel's Files tab browses the agent's worktree or the project root"
+}

@@ -1,0 +1,342 @@
+{
+  "acceptance_criteria": [
+    {
+      "checked_by": "agent",
+      "given": "a flow-built document with two tasks on a disposable Hub, where the second task's work fails the project's checks on main",
+      "how_to_check": "e2e drive on a disposable Hub (never :8000/:8010): approve both, wait for the landing batch, read GET builds and the Running panel; fails on master today because the build reads finished after the second approval",
+      "key": "ac-drive",
+      "requirement": "build-finishes-when-landed",
+      "then": "the first task lands and counts as done, the second is sent back, the build is still running, the flow is still enabled, and the Running tab lists the build with the second task as sent back and its reason",
+      "when": "both tasks are approved and landing runs"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an approved task whose landing is queued",
+      "how_to_check": "hub test driving a task through approve then a landed landing, asserting done before and after",
+      "key": "ac-done",
+      "requirement": "done-is-landed",
+      "then": "it is not done; after its landing lands it is done",
+      "when": "its done state is read"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an approved task",
+      "how_to_check": "hub test: land a task, assert done and no new task_transition row; assert the status enum is unchanged",
+      "key": "ac-no-step",
+      "requirement": "no-new-step",
+      "then": "the task is done with no further transition, click or run, and the set of task statuses is unchanged",
+      "when": "its landing lands"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a build of three tasks: one landed, one approved and queued for landing, one in progress",
+      "how_to_check": "hub test on the builds list route",
+      "key": "ac-progress",
+      "requirement": "progress-counts-landed",
+      "then": "done is 1, landing is 1, total is 3",
+      "when": "its progress is read"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a flow set to stop when its queue empties, whose every task is approved but one has not landed",
+      "how_to_check": "hub scheduler test",
+      "key": "ac-flow",
+      "requirement": "flow-stops-when-landed",
+      "then": "it does not stop; once that task lands, the next firing stops it",
+      "when": "the flow fires"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a running build with an approved task sent back by landing",
+      "how_to_check": "UI test feeding the route's real payload order, plus the acceptance drive's screenshot",
+      "key": "ac-running",
+      "requirement": "running-shows-landing",
+      "then": "the build is listed and the task shows 'sent back' with the landing's reason",
+      "when": "the operator opens the Running tab"
+    },
+    {
+      "checked_by": "agent",
+      "given": "two approved tasks, one landed and one waiting to land",
+      "how_to_check": "UI component test",
+      "key": "ac-card",
+      "requirement": "board-card-shows-landing",
+      "then": "the cards read differently and the unlanded one names its landing state",
+      "when": "the board renders them"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a build stored as finished whose approved task has a not_landed landing",
+      "how_to_check": "hub test seeding the old state",
+      "key": "ac-old",
+      "requirement": "already-finished-builds",
+      "then": "the build reads running and appears in Running",
+      "when": "the Hub next evaluates it"
+    },
+    {
+      "checked_by": "agent",
+      "given": "one build landing as a pull request and one landing nowhere, each with an approved task",
+      "how_to_check": "hub test with the PR merge stubbed at the pull_requests seam",
+      "key": "ac-pr",
+      "requirement": "no-main-landing",
+      "then": "the PR task is done only after the merge; the lands-nowhere task is done at approval",
+      "when": "their done state is read before and after the PR merges"
+    }
+  ],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {
+      "FR-1": "c958851aed67369bfbeafbae1698c6050ed77fe22435944c37df0641d8ea0909",
+      "FR-2": "af805531fbc11cf773891776e89b3414dd1c17e04ea4d3d77fe5710dea6de4ef",
+      "FR-3": "a50eecf0828aa717a44ed8025644f22dddd8783f4d38c8871d564c26a6285720",
+      "FR-4": "55d90667db350c1cc4458c32930e37ca488e6fccdaa5754a0c93728f99a4bc13",
+      "FR-5": "0bf472f214d22dfb16ad8b7540fb6686399b0dbda43ebc5e7f51494e04581604",
+      "FR-6": "c3b8fae10327a6b669e0874f3099ceb6d65da58a686468560695da3aa3d7ba28",
+      "FR-7": "215c1ef4931b0158e5f88c721833a418e96f6ad7aa9678218909caa02f94a17d",
+      "FR-8": "83db274de30cfcca5a1e137b971e6d92408bbfc0a09592b47d7eddf0f80955c6",
+      "FR-9": "38181b82b34dfcd2bad657d6c1604da5edd0442e9b309628699cd05ce6506cf7"
+    },
+    "high_water": 9,
+    "requirements": {
+      "already-finished-builds": "FR-8",
+      "board-card-shows-landing": "FR-7",
+      "build-finishes-when-landed": "FR-3",
+      "done-is-landed": "FR-1",
+      "flow-stops-when-landed": "FR-5",
+      "no-main-landing": "FR-9",
+      "no-new-step": "FR-2",
+      "progress-counts-landed": "FR-4",
+      "running-shows-landing": "FR-6"
+    },
+    "retired": {}
+  },
+  "capabilities": {
+    "changes": [
+      "spec/capabilities/builds/spec.json",
+      "spec/capabilities/agent-flows/spec.json",
+      "spec/capabilities/task-lifecycle-governance/spec.json"
+    ],
+    "creates": []
+  },
+  "delivery": {
+    "agent": "DeveloperOpus",
+    "builder": "DeveloperOpus",
+    "builder_reason": "DeveloperOpus built AW-123 and AW-124 in the same scheduler and build code today.",
+    "checker": "QA",
+    "checker_reason": "QA reviewed the SPSCT landing failures and knows the landing seam.",
+    "cron": "*/5 * * * *",
+    "mode": "flow",
+    "reasons": {
+      "agent": "Same as builder.",
+      "builder": "DeveloperOpus built AW-123 and AW-124 in the same scheduler and build code today.",
+      "checker": "QA reviewed the SPSCT landing failures and knows the landing seam.",
+      "cron": "Every 5 minutes, the project's usual flow cadence.",
+      "mode": "Two chained tasks; a flow hands the UI task over when the core one is approved.",
+      "stop": "Stops once both tasks are done — under this change's own rule, once landed."
+    },
+    "reviewer": null,
+    "stop_at": null,
+    "stop_when_queue_empties": true
+  },
+  "design": "Decision: approval keeps its meaning (the reviewer's verdict that lets the work start landing); \"done\" is derived from approval plus the task's landing record reaching `landed` (landing_queue.LANDED, with landed_sha). No new task status and no extra step: the operator ruled out adding one.\n\nDecision: the change replaces the approval-as-finish checks rather than adding another patch beside them. The F1113 \"flow outlives its finished build\" special case becomes unnecessary once a build is not finished until its tasks land; the builder removes what is now dead rather than leaving it beside the new rule. AW-124 was dropped (operator, 2026-11-13) and is not to be re-merged.\n\nDecision: prerequisite gating is unchanged. A dependent task still starts when its prerequisite is approved and brings in the prerequisite's work, as today (\"Bring in prerequisite work\" commits). Waiting for landing there would serialise every chain behind the landing queue.\n\nDecision (operator, 2026-11-13): a build that lands as a pull request is done when the PR is merged; a build that lands nowhere is done at approval, since nothing will ever merge.",
+  "evidence": {
+    "checked": [
+      "hub/hub/builds.py:1206 finish_if_done finishes a build when every task is approved or rejected",
+      "hub/hub/builds.py:195 progress counts approved as done",
+      "hub/hub/task_transition_service.py:1500 TERMINAL_STATUSES = {approved, rejected}",
+      "hub/hub/landing_queue.py:65 LANDED / NOT_LANDED, :797 and :1866 landing rows record landed_sha",
+      "Task history of SPSCT-2 (task-a1cc854a9d3c): approved 10:56, sent back by landing 11:40",
+      "Task history of AW-124 (task-6f15e74f819c): approved 14:12, sent back by landing 14:41 (merge-needed)"
+    ],
+    "limits": [
+      "Not yet checked how the board UI and the spec coverage view read approval; the builder should grep for 'approved' consumers beyond TERMINAL_STATUSES",
+      "Whether every loose (no-build) task gets a landing row has not been verified (loose_close.py suggests yes)"
+    ]
+  },
+  "hub": {
+    "builds": [
+      {
+        "budget_cap_usd": null,
+        "builder": "DeveloperOpus",
+        "builders": [
+          "DeveloperOpus"
+        ],
+        "checker": "QA",
+        "checkers": [],
+        "chosen_by": "operator",
+        "driver": "flow",
+        "ended_at": "2026-11-13T17:52:49.879607+00:00",
+        "id": "build-8a117dca4783",
+        "landing": "main",
+        "lead": null,
+        "level": "reviewed",
+        "pull_request": null,
+        "started_at": "2026-11-13T15:33:01.351624+00:00",
+        "state": "finished",
+        "stop_reason": null,
+        "tasks": {
+          "core": {
+            "builder": "DeveloperOpus",
+            "checker": "QA"
+          },
+          "ui": {
+            "builder": "DeveloperOpus",
+            "checker": "QA"
+          }
+        },
+        "window_end": null,
+        "window_start": null
+      }
+    ],
+    "phase": "approved",
+    "size": "small",
+    "step": "build"
+  },
+  "kind": "change-spec",
+  "lifecycle": "",
+  "open_questions": [
+    {
+      "question": "Builds that do not land on main: is done = PR merged for pull-request builds, and done = approved for builds that land nowhere?",
+      "resolved": true
+    }
+  ],
+  "problem": "Today everything treats approval as the finish line. A build is marked finished when every task is approved or rejected (hub/hub/builds.py:1206 finish_if_done), its progress counts approved tasks as done (builds.py:195), and TERMINAL_STATUSES is {approved, rejected} (task_transition_service.py:1500). Landing — the project's checks on main, then the merge — runs afterwards and can still send work back.\n\nWhat that cost on 2026-11-13:\n- The Changes-tab build (SPSCT) was marked finished at 11:24 and left Running. At 11:40 its landing failed on main and sent SPSCT-2 back. The build looked done while it was broken, and the operator lost track of it.\n- AW-124 was approved at 14:12 and sent back by its landing at 14:41 (merge conflict). On the board it read as finished for half an hour.\n- The code has grown patches around the gap: the flow outliving its finished build (F1113, builds.py:1229 loop_has_open_work), and AW-124 (dropped by the operator in favour of this change), which tried to show a finished build in Running while its flow lives.\n\nThe operator (2026-11-13): \"Once it's merged and on master then we consider it done.\" There is no new step: landing is the final step, and it already exists.",
+  "requirements": [
+    {
+      "key": "done-is-landed",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Landing can still fail after approval (SPSCT-2 at 11:40, AW-124 at 14:41 on 2026-11-13); calling such work done hides it from the operator.",
+      "statement": "A task counts as done only when it is approved and its work has landed on the project's main branch; an approved task whose landing is queued, being checked, held, or sent back is not done."
+    },
+    {
+      "key": "no-new-step",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator, 2026-11-13: the landing is the final step and already exists.",
+      "statement": "Reaching done requires no action beyond what landing already does: no new task status, operator click or agent turn is introduced between a landing that lands and the task being done."
+    },
+    {
+      "key": "build-finishes-when-landed",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "A build is marked finished only when every one of its tasks is done or rejected; while any approved task in it has not landed, the build stays running."
+    },
+    {
+      "key": "progress-counts-landed",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "A build's progress counts as done only tasks that are done, and shows approved tasks that have not landed as a separate 'landing' count."
+    },
+    {
+      "key": "flow-stops-when-landed",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "A flow set to stop when its queue empties stops only once every one of its tasks is done or rejected; a landing that sends a task back finds the flow still running and the task is picked up by its next firing."
+    },
+    {
+      "key": "running-shows-landing",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "The Running tab lists a build until it is finished, and for each approved task that has not landed shows its landing state (waiting, being checked, held, or sent back with the reason the landing gave)."
+    },
+    {
+      "key": "board-card-shows-landing",
+      "modal": "SHOULD",
+      "party": null,
+      "rationale": null,
+      "statement": "A task card on the board distinguishes an approved task that has landed from one that has not, naming the landing state of the latter."
+    },
+    {
+      "key": "already-finished-builds",
+      "modal": "SHOULD",
+      "party": null,
+      "rationale": "Otherwise builds that finished under the old rule before the change keep hiding unlanded work.",
+      "statement": "A build already marked finished whose approved tasks include one that has not landed is shown as running again, without operator action, the first time the Hub evaluates it after this change ships."
+    },
+    {
+      "key": "no-main-landing",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator, 2026-11-13: a lands-nowhere build will never merge, so waiting for a merge would keep it running forever.",
+      "statement": "For a task in a build that lands as a pull request, done means the pull request was merged; for a task in a build that lands nowhere, done means approved."
+    }
+  ],
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "When a build is finished, and what its progress counts as done",
+      "When a flow whose stop condition is an emptied queue stops",
+      "What the Running tab lists, and the landing state it shows for each approved task",
+      "How a task card on the board shows an approved task that has not landed",
+      "Builds already marked finished whose approved tasks have not landed"
+    ],
+    "non_goals": [
+      "A new task status or a new step after landing: landing is the last step",
+      "Changing when a dependent task may start: it still starts on its prerequisite's approval",
+      "Changing what landing does: the checks it runs, how it batches, or how it sends work back",
+      "Changing who may approve, or what approval requires (evidence, review)",
+      "Deploying or restarting a Hub after the merge: \"on main\" is the finish line, not \"running somewhere\""
+    ]
+  },
+  "summary": "Approval stays the reviewer's verdict, but \"done\" moves to \"approved and landed on the project's main branch\". A build finishes, its flow stops, and its progress counts a task as done only once that task's landing reached main. Until then the build stays in Running and shows where each approved task is in landing.",
+  "tag": "done-is-landed",
+  "tasks": [
+    {
+      "builder": "DeveloperOpus",
+      "builder_reason": "DeveloperOpus built AW-123 in this scheduler and build-finish code today and knows the F1113 path it removes.",
+      "checker": "QA",
+      "checker_reason": "QA reviewed the SPSCT-2 landing send-backs today and knows how landing records reach main.",
+      "depends_on": [],
+      "description": "Write the acceptance drive (ac-drive) first and see it fail on master; then make done = approved and landed (PR merged for PR builds, approval for lands-nowhere builds) the rule for build finish, progress counts, flow stop and already-finished builds. Remove the approval-as-finish special cases this makes dead (F1113 flow-outlives-build). Hub tests for each criterion except the UI ones.",
+      "files": [
+        "hub/hub/builds.py",
+        "hub/hub/scheduler.py",
+        "hub/hub/landing_queue.py",
+        "hub/hub/task_transition_service.py",
+        "hub/tests/",
+        "scripts/drive/"
+      ],
+      "from": null,
+      "key": "core",
+      "requirements": [
+        "done-is-landed",
+        "no-new-step",
+        "build-finishes-when-landed",
+        "progress-counts-landed",
+        "flow-stops-when-landed",
+        "already-finished-builds",
+        "no-main-landing"
+      ],
+      "reviewer": null,
+      "title": "Done means landed: build, flow, progress"
+    },
+    {
+      "builder": "DeveloperOpus",
+      "builder_reason": "DeveloperOpus read runningModel.ts for AW-124 and builds on the core task's payload directly after it.",
+      "checker": "QA",
+      "checker_reason": "QA checks the core task, so it can verify the UI reads that payload in the order the route returns it.",
+      "depends_on": [
+        "core"
+      ],
+      "description": "The Running tab keeps a build until finished and shows each approved-not-landed task's landing state and send-back reason; board cards distinguish landed from waiting to land. Refresh the UI bundle (hub/ui/src and hub/hub/static/ui together).",
+      "files": [
+        "hub/ui/src/",
+        "hub/hub/static/ui/"
+      ],
+      "from": null,
+      "key": "ui",
+      "requirements": [
+        "running-shows-landing",
+        "board-card-shows-landing",
+        "progress-counts-landed"
+      ],
+      "reviewer": null,
+      "title": "Running tab and cards show landing state"
+    }
+  ],
+  "title": "Work is done when it has landed on master, not when it is approved"
+}

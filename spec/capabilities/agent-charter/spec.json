@@ -90,13 +90,6 @@
       "requirement": "a-charter-names-an-accountability-not-an-activity",
       "then": "each charter has a \"You Are Accountable For\" section, and none routes work, assigns tasks or selects models",
       "when": "it is examined"
-    },
-    {
-      "given": "a fresh project",
-      "key": "ac14",
-      "requirement": "the-starter-set-demonstrates-a-non-software-separation-of-du",
-      "then": "it states that acceptance is a separate step performed by a different holder that it may not perform",
-      "when": "the Underwriter charter is read"
     }
   ],
   "algorithms": [],
@@ -121,10 +114,11 @@
       "deleting-a-held-charter-is-refused-and-every-holder-it-names": "FR-15",
       "existing-role-guides-seed-initial-charters-once": "FR-9",
       "n1": "FR-16",
-      "seeded-charters-describe-only-what-the-runtime-provides": "FR-12",
-      "the-starter-set-demonstrates-a-non-software-separation-of-du": "FR-14"
+      "seeded-charters-describe-only-what-the-runtime-provides": "FR-12"
     },
-    "retired": {}
+    "retired": {
+      "the-starter-set-demonstrates-a-non-software-separation-of-du": "FR-14"
+    }
   },
   "design": "**Records, not files.** `Charter` rows replaced the fixed role-guide list (`runner-agent-charter-separation`, 2026-08-03). The bundled Markdown files are only a seed.\n\n**Seed once, by flag.** `Project.charters_seeded` makes seeding a one-time event per project, so deleting every charter does not bring the bundle back.\n\n**Starter set of nine.** Tech Lead, Developer, Code Reviewer, Verifier, Security Engineer, Guardian, Spec Author, and the Underwriter / Underwriting Approver pair, curated in 2026-08 from 21 role guides against the accountability test.\n\n**Deletion relies on archival.** The delete route queries holders without a lifecycle filter; that is correct only because archival clears `charter_id` (and migration 0105 cleared older archived agents).",
   "evidence": {
@@ -140,7 +134,6 @@
   },
   "hub": {
     "phase": "current",
-    "rigor": "sketch",
     "size": null,
     "step": null
   },
@@ -204,13 +197,6 @@
       "party": null,
       "rationale": "A charter asking a model to guarantee in prose what a service guarantees in code is an unenforced second authority.",
       "statement": "A seeded charter SHALL state what its holder is answerable for, not an activity, technology or phase; charters answerable for the same outcome SHALL be one charter with an operator-filled scope; and no seeded charter SHALL take on coordination the system performs in code."
-    },
-    {
-      "key": "the-starter-set-demonstrates-a-non-software-separation-of-du",
-      "modal": "SHALL",
-      "party": null,
-      "rationale": "In software one capable model can do every step, which makes charters look like topic labels; a real separation of duties shows a charter carrying a guarantee.",
-      "statement": "The starter set SHALL include at least one pair of charters from a non-software domain (today Underwriter and Underwriting Approver) whose separation is a control, each stating which step belongs to the other holder and that it may not perform it."
     }
   ],
   "schema_version": 1,

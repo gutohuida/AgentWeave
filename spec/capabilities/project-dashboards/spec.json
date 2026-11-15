@@ -1,0 +1,739 @@
+{
+  "acceptance_criteria": [
+    {
+      "checked_by": "agent",
+      "given": "a project with tasks and runs",
+      "how_to_check": "hub/tests/test_dashboard_query.py runs the count at the query-service seam and compares with a direct count; the acceptance drive repeats it through the agent tool run_dashboard_query",
+      "key": "ask-any-agent-for-a-dashboard-and-get-one-that-stay-ac-run-query",
+      "requirement": "ask-any-agent-for-a-dashboard-and-get-one-that-agent-runs-query",
+      "then": "it receives column names and rows matching a hand-written count over the same project",
+      "when": "an agent runs a query counting the project's tasks by status"
+    },
+    {
+      "checked_by": "agent",
+      "given": "two projects on one Hub, each with tasks",
+      "how_to_check": "hub/tests/test_dashboard_query.py seeds two projects and asserts every returned row is project A's for the three queries; the acceptance drive repeats it on the dedicated trial Hub with two real projects",
+      "key": "ask-any-agent-for-a-dashboard-and-get-one-that-s-ac-project-only",
+      "requirement": "ask-any-agent-for-a-dashboard-and-get-one-that-stay-project-only",
+      "then": "every row returned belongs to project A",
+      "when": "an agent in project A runs a query with no project filter over tasks, a join of tasks and runs, and a query over the projects list"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a project",
+      "how_to_check": "hub/tests/test_dashboard_query.py runs one hostile query per forbidden item (direct, aliased, via a join and via a subquery) and asserts refusal code not_queryable and no value; the acceptance drive repeats the direct ones",
+      "key": "ask-any-agent-for-a-dashboard-and-get-one-tha-ac-never-queryable",
+      "requirement": "ask-any-agent-for-a-dashboard-and-get-one-that-s-never-queryable",
+      "then": "each query is refused with a message naming what is not queryable, and no value of them is returned",
+      "when": "an agent queries the API keys, operator credentials, run tokens, trace exporter headers, the project directory or a run's workspace"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a project",
+      "how_to_check": "hub/tests/test_dashboard_query.py runs the five statements and compares row counts and schema before and after, asserting refusal code read_only; the acceptance drive repeats them through the agent tool",
+      "key": "ask-any-agent-for-a-dashboard-and-get-one-that-stay-ac-read-only",
+      "requirement": "ask-any-agent-for-a-dashboard-and-get-one-that-stays-read-only",
+      "then": "each is refused and the database is unchanged",
+      "when": "an agent runs an insert, an update, a delete, a table drop and an attach"
+    },
+    {
+      "checked_by": "agent",
+      "given": "agent output containing three occurrences of a marker string",
+      "how_to_check": "hub/tests/test_dashboard_query.py seeds agent output with three markers and counts by regex; the acceptance drive does it with a Haiku agent",
+      "key": "ask-any-agent-for-a-dashboard-and-get-one-that-stays-ac-regex",
+      "requirement": "ask-any-agent-for-a-dashboard-and-get-one-th-free-text-and-regex",
+      "then": "the count is three",
+      "when": "an agent counts agent output matching a regular expression for the marker"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a project with trace spans of tool calls",
+      "how_to_check": "hub/tests/test_dashboard_query.py seeds spans and compares both results with a direct count; the acceptance drive repeats it",
+      "key": "ask-any-agent-for-a-dashboard-and-get-one-that-stays-ac-traces",
+      "requirement": "ask-any-agent-for-a-dashboard-and-get-one-th-free-text-and-regex",
+      "then": "both return the project's spans",
+      "when": "an agent queries span count and total duration by tool name, and the text of tool arguments"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a query that runs longer than 10 seconds (a recursive CTE, which a read-only query permits)",
+      "how_to_check": "hub/tests/test_dashboard_query.py runs a deliberately slow query (limit shortened through aw_dashboard_query_timeout) and asserts error code timeout",
+      "key": "ask-any-agent-for-a-dashboard-and-get-one-that-stays-ac-timeout",
+      "requirement": "ask-any-agent-for-a-dashboard-and-get-one-that-sta-query-bounded",
+      "then": "it is stopped and answers an error saying it ran too long",
+      "when": "an agent or a panel runs it"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a query returning more than 10,000 rows",
+      "how_to_check": "hub/tests/test_dashboard_query.py generates 10,001+ rows and asserts row_count 10000 and truncated true",
+      "key": "ask-any-agent-for-a-dashboard-and-get-one-that-stays-ac-row-cap",
+      "requirement": "ask-any-agent-for-a-dashboard-and-get-one-that-sta-query-bounded",
+      "then": "10,000 rows come back with a note that the result was cut",
+      "when": "it runs"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a Hub started from the checkout over a copy of the operator's database taken with the SQLite backup API (never :8000 itself), with the Hub's lag probe on",
+      "how_to_check": "Acceptance drive: start a regex query over every trace span and a query that hits the time limit, issue GET /agents every 200 ms meanwhile, read the lag probe; print the regex query's time, the worst stall and the worst GET /agents time",
+      "key": "ask-any-agent-for-a-dashboard-and-get-one-that-sta-ac-responsive",
+      "requirement": "ask-any-agent-for-a-dashboard-and-get-one-t-hub-stays-responsive",
+      "then": "no event-loop stall exceeds 100 ms and every GET /agents answers within 500 ms",
+      "when": "both queries run"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the running Hub",
+      "how_to_check": "hub/tests/test_dashboard_query.py reads the reference, runs a select over every listed table and asserts none is refused and none of the forbidden names is listed; the acceptance drive repeats it against the running trial Hub",
+      "key": "ask-any-agent-for-a-dashboard-and-get-one-that-stay-ac-reference",
+      "requirement": "ask-any-agent-for-a-dashboard-and-get-one-that-s-query-reference",
+      "then": "no query is refused, and no table or column from the never-queryable list appears in it",
+      "when": "an agent reads the query reference and queries every table it lists"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a project registered before the Hub started, and a project created afterwards, and a note an agent has appended to",
+      "how_to_check": "Hub test: start the app over a database with an existing project, create a second, assert the note exists in both with both traps; append to it, restart, assert the appended text survives; assert the dashboard tools' guidance names the note",
+      "key": "ask-any-agent-for-a-dashboard-and-get-one-that-sta-ac-vault-note",
+      "requirement": "ask-any-agent-for-a-dashboard-and-get-one-th-data-notes-in-vault",
+      "then": "both projects hold the note with the two traps, the guidance names it, and the appended text is still there after a restart",
+      "when": "the Hub starts and an agent reads the dashboard tools' guidance"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an agent in a conversation",
+      "how_to_check": "hub/tests/test_dashboards.py saves and reads back at the store seam, including a panel whose query names a missing column (saved, not refused); the acceptance drive saves through a Haiku agent, restarts the trial Hub and lists the dashboard",
+      "key": "ask-any-agent-for-a-dashboard-and-get-one-that-stays-ac-save",
+      "requirement": "ask-any-agent-for-a-dashboard-and-get-one-that-st-save-dashboard",
+      "then": "the dashboard is listed with its name, the agent's name and the time, its panels are unchanged, and the panel with the broken query was saved",
+      "when": "it saves a dashboard with three panels, one with a broken query, and the Hub restarts"
+    },
+    {
+      "checked_by": "operator",
+      "given": "a dashboard with one panel of each chart kind",
+      "how_to_check": "hub/tests/test_dashboards.py asserts a save naming another kind is refused; a UI component test renders each kind from fixtures; the operator looks at one panel of each kind in both themes in the mock and on the trial Hub",
+      "key": "ask-any-agent-for-a-dashboard-and-get-one-that-st-ac-chart-kinds",
+      "requirement": "ask-any-agent-for-a-dashboard-and-get-one-that-stays-chart-kinds",
+      "then": "each panel draws with the app's colours and type, and a panel naming any other kind is refused when saved",
+      "when": "it is opened in the light and in the dark theme"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a table panel whose query returns a 2,000-character agent output line containing a marker value",
+      "how_to_check": "UI component test from fixtures plus the drive's browser step: the full text including the marker is in the rendered cell",
+      "key": "ask-any-agent-for-a-dashboard-and-get-one-that-st-ac-full-values",
+      "requirement": "ask-any-agent-for-a-dashboard-and-get-one-that-st-values-in-full",
+      "then": "the whole value, marker included, is shown or reachable in the cell without masking",
+      "when": "the dashboard is opened"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a saved dashboard and new runs recorded after it was last opened",
+      "how_to_check": "acceptance drive (browser step): record runs, open the dashboard, record another run, press Refresh, read the numbers and the fetched-at time",
+      "key": "ask-any-agent-for-a-dashboard-and-get-one-that-stays-ac-screen",
+      "requirement": "ask-any-agent-for-a-dashboard-and-get-one-that-dashboards-screen",
+      "then": "the numbers include the new runs each time and the fetched-at time moves",
+      "when": "the operator opens it from the Dashboards screen, then presses Refresh after another run"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a saved dashboard",
+      "how_to_check": "hub/tests/test_dashboards.py deletes via the route and lists via the route and the agent tool; the acceptance drive clicks Delete",
+      "key": "ask-any-agent-for-a-dashboard-and-get-one-that-stays-ac-delete",
+      "requirement": "ask-any-agent-for-a-dashboard-and-get-one-that-dashboards-screen",
+      "then": "it is gone from the list and from the agent's list",
+      "when": "the operator deletes it"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the acceptance-drive project with seeded specs, tasks, runs, usage and reviews",
+      "how_to_check": "acceptance drive: ask a Haiku agent for the dashboard, open it, and compare each panel's rows with the drive's hand-written reference queries",
+      "key": "ask-any-agent-for-a-dashboard-and-get-one-that-stays-ac-examples",
+      "requirement": "ask-any-agent-for-a-dashboard-and-get-one-that-dashboards-screen",
+      "then": "each panel's numbers equal the drive's hand-written reference query for the same question",
+      "when": "an agent is asked for a dashboard of cost per spec, QA send-backs per model, and the longest kinds of task, and the operator opens it"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a dashboard with a panel querying a column that does not exist, a line panel with no numeric column, and a working panel",
+      "how_to_check": "hub/tests/test_dashboards.py asserts the run route returns the error, the warning and the working panel's rows; a UI component test and the drive's browser step check what is drawn",
+      "key": "ask-any-agent-for-a-dashboard-and-get-one-that-st-ac-panel-error",
+      "requirement": "ask-any-agent-for-a-dashboard-and-get-one-that-stay-panel-errors",
+      "then": "the first shows the query's error, the second a warning saying why it cannot draw, and the third draws",
+      "when": "it is opened"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a project with a dashboard",
+      "how_to_check": "hub/tests/test_dashboards.py deletes the project through the deletion path and counts dashboard rows; the acceptance drive repeats it on the trial Hub",
+      "key": "ask-any-agent-for-a-dashboard-and-get-one-that-ac-project-delete",
+      "requirement": "ask-any-agent-for-a-dashboard-and-get-one-project-delete-removes",
+      "then": "no dashboard row of that project remains",
+      "when": "the project is deleted"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a saved dashboard with three panels",
+      "how_to_check": "scripts/drive/dashboard_edit_drive.py: seed a dashboard, ask a Haiku agent for the change, list dashboards before and after",
+      "key": "change-a-dashboard-by-asking-ac-edit-in-place",
+      "requirement": "change-a-dashboard-by-asking-edit-in-place",
+      "then": "the project still lists one such dashboard, with the same identifier, now with four panels, and the dashboard's edited-by and edited-at name that agent and time",
+      "when": "the operator asks an agent to add a fourth panel"
+    },
+    {
+      "checked_by": "agent",
+      "given": "two dashboards named differently",
+      "how_to_check": "drive: ask by name, compare both dashboards' versions before and after",
+      "key": "change-a-dashboard-by-asking-ac-by-name",
+      "requirement": "change-a-dashboard-by-asking-which-dashboard",
+      "then": "only the second changes",
+      "when": "the operator asks for a change naming the second"
+    },
+    {
+      "checked_by": "agent",
+      "given": "two dashboards whose names both match the request, or no match, or no name at all",
+      "how_to_check": "drive: ask ambiguously, assert the agent's reply asks and the dashboard list and versions are unchanged",
+      "key": "change-a-dashboard-by-asking-ac-ambiguous",
+      "requirement": "change-a-dashboard-by-asking-which-dashboard",
+      "then": "the agent asks which dashboard, and no dashboard changed and none was created",
+      "when": "the operator asks for a change"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a dashboard open on the screen",
+      "how_to_check": "browser drive on the dedicated trial Hub with a Haiku agent, checking which version moved",
+      "key": "change-a-dashboard-by-asking-ac-ask-to-change",
+      "requirement": "change-a-dashboard-by-asking-ask-to-change",
+      "then": "that agent's conversation opened with the dashboard's name and id in the composer, nothing was sent before the operator sent it, and after the turn that dashboard, and no other, changed",
+      "when": "the operator presses Ask to change, picks an agent, adds 'add a panel of runs per day' after the prefilled line and sends"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a dashboard of four panels",
+      "how_to_check": "drive and Hub test: compare the stored dashboard before and after field by field",
+      "key": "change-a-dashboard-by-asking-ac-keep-the-rest",
+      "requirement": "change-a-dashboard-by-asking-keep-the-rest",
+      "then": "the other three panels are identical to before (id, title, query, kind, position) and so are the name and description",
+      "when": "the operator asks to change one panel's chart kind"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a dashboard",
+      "how_to_check": "Hub test at the edit route, failing before the fix; drive repeats it through the agent tool",
+      "key": "change-a-dashboard-by-asking-ac-all-or-nothing",
+      "requirement": "change-a-dashboard-by-asking-edit-operations",
+      "then": "the first is refused naming operation 1, the second is refused as a taken name, and the dashboard (including its version) is unchanged both times",
+      "when": "an edit with a valid add-panel followed by a change to a chart kind outside the fixed set is submitted, and separately a rename to another dashboard's name"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an agent that read a dashboard at version 3, and another edit that made it version 4",
+      "how_to_check": "Hub test at the edit and save routes: two writes against the same base version",
+      "key": "change-a-dashboard-by-asking-ac-stale",
+      "requirement": "change-a-dashboard-by-asking-stale-edit",
+      "then": "both are refused as stale with the current dashboard, the version 4 content is intact, and an edit naming version 4 is then accepted",
+      "when": "the first agent submits its edit naming version 3, and separately a whole replace naming version 3"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a dashboard edited once",
+      "how_to_check": "browser drive on the dedicated trial Hub; Hub test for the undo route",
+      "key": "change-a-dashboard-by-asking-ac-undo",
+      "requirement": "change-a-dashboard-by-asking-undo-one-step",
+      "then": "the dashboard's panels equal those before the edit, its version number is higher than before, and Undo now restores the edited panels",
+      "when": "the operator presses Undo on the screen"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a dashboard never edited",
+      "how_to_check": "browser drive and component test",
+      "key": "change-a-dashboard-by-asking-ac-undo-none",
+      "requirement": "change-a-dashboard-by-asking-undo-one-step",
+      "then": "Undo is not offered",
+      "when": "the operator opens it"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an edited dashboard and a Hub restart",
+      "how_to_check": "drive: edit, restart the trial Hub, undo",
+      "key": "change-a-dashboard-by-asking-ac-undo-survives-restart",
+      "requirement": "change-a-dashboard-by-asking-undo-one-step",
+      "then": "the earlier version is restored",
+      "when": "the operator presses Undo"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a dashboard with one panel whose query names a column that does not exist and two working panels",
+      "how_to_check": "Hub test comparing the agent run route with the operator run route",
+      "key": "change-a-dashboard-by-asking-ac-run-for-agent",
+      "requirement": "change-a-dashboard-by-asking-repair-broken-panel",
+      "then": "it receives the broken panel's error and the other two panels' rows, matching what the screen's run shows",
+      "when": "an agent runs the dashboard"
+    },
+    {
+      "checked_by": "agent",
+      "given": "that dashboard",
+      "how_to_check": "drive: ask a Haiku agent to fix it, run the dashboard again and compare",
+      "key": "change-a-dashboard-by-asking-ac-repair",
+      "requirement": "change-a-dashboard-by-asking-repair-broken-panel",
+      "then": "the panel's query is changed, the panel draws on the next open, and the other two panels are unchanged",
+      "when": "the operator asks an agent to fix the broken panel"
+    },
+    {
+      "checked_by": "agent",
+      "given": "two projects each with a dashboard",
+      "how_to_check": "Hub test; drive repeats it with a second project",
+      "key": "change-a-dashboard-by-asking-ac-edit-boundary",
+      "requirement": "change-a-dashboard-by-asking-edit-validated-and-scoped",
+      "then": "the first is refused as not queryable and the rest as not found, and both dashboards are unchanged",
+      "when": "an agent in project A edits with a query naming credentials, and then names project B's dashboard to edit, undo and run"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an edited dashboard",
+      "how_to_check": "Hub test counting the kept-version rows after each deletion",
+      "key": "change-a-dashboard-by-asking-ac-history-delete",
+      "requirement": "change-a-dashboard-by-asking-history-removed-with-dashboard",
+      "then": "no row of its earlier version remains",
+      "when": "the dashboard is deleted, and separately when its project is deleted"
+    },
+    {
+      "checked_by": "operator",
+      "given": "a dashboard edited by an agent",
+      "how_to_check": "browser drive screenshot in both themes",
+      "key": "change-a-dashboard-by-asking-ac-edited-by",
+      "requirement": "change-a-dashboard-by-asking-edited-by-shown",
+      "then": "the screen shows that agent's name and the edit time",
+      "when": "the operator opens it"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a dashboard with a number, a bar, a stacked bar and a line panel",
+      "how_to_check": "Browser drive on a Hub started from the checkout over a test database (never :8000): sample the computed widths, the line's dash offset and the number element at 0.3 s and 1.5 s",
+      "key": "dashboards-that-feel-alive-and-draw-right-the-first-t-ac-draw-in",
+      "requirement": "dashboards-that-feel-alive-and-draw-right-the-first-time-draw-in",
+      "then": "at 0.3 s the panels are part-way in (bars narrower than final, the line partly drawn) and by 1.5 s every mark is at its final position, while the number's element read at any moment holds the final value",
+      "when": "the operator opens it"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an open dashboard whose data changes between runs",
+      "how_to_check": "Browser drive tagging the bar elements before the run and finding the same elements with new widths after",
+      "key": "dashboards-that-feel-alive-and-draw-right-the-fir-ac-values-move",
+      "requirement": "dashboards-that-feel-alive-and-draw-right-the-first-values-move",
+      "then": "during each run the charts are dimmed, and afterwards the same bar elements carry the new widths (they were not removed and re-created)",
+      "when": "the operator presses Refresh, and separately an agent saves the same dashboard with one value changed"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an open dashboard of four panels",
+      "how_to_check": "Browser drive with an agent save through the tool, reading each panel's state",
+      "key": "dashboards-that-feel-alive-and-draw-right-the-fi-ac-edit-visible",
+      "requirement": "dashboards-that-feel-alive-and-draw-right-the-first-edit-visible",
+      "then": "the removed panel is still on screen marked leaving within 100 ms and gone by 600 ms, the added panel is marked new, and on reopening the dashboard nothing is marked new",
+      "when": "an agent's save removes one panel and adds another"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a bar chart of four labels and a line of six points",
+      "how_to_check": "Browser drive in both themes, with screenshots for the operator",
+      "key": "dashboards-that-feel-alive-and-draw-right-the-first-t-ac-tooltip",
+      "requirement": "dashboards-that-feel-alive-and-draw-right-the-firs-hover-tooltip",
+      "then": "each time a tooltip names that label, series and value and the other marks are dimmed; after moving off there is no tooltip and nothing is dimmed",
+      "when": "the operator hovers the second bar, then a line point, then moves off"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a dashboard whose queries take a second",
+      "how_to_check": "Browser drive with a slowed run response",
+      "key": "dashboards-that-feel-alive-and-draw-right-the-first-ac-skeleton",
+      "requirement": "loading-placeholders",
+      "then": "placeholders show until the panels arrive, and none remain after",
+      "when": "the operator opens it"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a browser asking for reduced motion",
+      "how_to_check": "Browser drive with the reduced-motion preference emulated, reading getAnimations() on the screen",
+      "key": "dashboards-that-feel-alive-and-draw-right-the-ac-reduced-motion",
+      "requirement": "dashboards-that-feel-alive-and-draw-right-the-fir-reduced-motion",
+      "then": "no element has a running animation or transition, the figures show their final values at once, and the tooltip still shows",
+      "when": "the operator opens a dashboard, refreshes it and hovers a bar"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the agent tool list",
+      "how_to_check": "Hub test over the tools/list output",
+      "key": "dashboards-that-feel-alive-and-draw-right-the-first-ac-guidance",
+      "requirement": "dashboards-that-feel-alive-and-draw-right-the-fir-chart-guidance",
+      "then": "it names the kind for each of the five kinds of question and the four shaping rules",
+      "when": "the save tool's description is read"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a project with tasks and runs whose vault was seeded with the data note",
+      "how_to_check": "Hub test running each example through the query service and the drawing check",
+      "key": "dashboards-that-feel-alive-and-draw-right-the-f-ac-examples-draw",
+      "requirement": "dashboards-that-feel-alive-and-draw-right-the-fi-worked-examples",
+      "then": "every example returns rows and draws with no warning",
+      "when": "each worked example is run as a panel of its stated kind"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a seeded project and a Haiku agent",
+      "how_to_check": "Drive with a real Haiku turn, then the run route",
+      "key": "dashboards-that-feel-alive-and-draw-right-th-ac-first-time-right",
+      "requirement": "dashboards-that-feel-alive-and-draw-right-the-f-first-time-right",
+      "then": "the saved dashboard has panels of the five kinds and opening it shows no error and no drawing warning on any panel",
+      "when": "it is asked for 'a dashboard with this week's cost as one figure, cost per spec, send-backs per model by reason, runs per day, and the latest failed runs'"
+    }
+  ],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {
+      "FR-1": "b0803baac55f44c18b623be53f77b4997dd2e31f939a33d74ff9a8c60fc325e1",
+      "FR-10": "0ee90ef908d6ce5103cc51c07b138f33925ae86002b77cf0688325bfbe031966",
+      "FR-11": "c0f58de3c5c6f7d67df0438947379f8c5afbe8d38cb0df021bfd0be6b61d18d7",
+      "FR-12": "83a6a32938f7505d379e07686c55be3738a40ab635012ea325c27ebfe876d9bd",
+      "FR-13": "f453eafdffcb41054df830b5efdb786e7656f6ce92cac4823585260a07a82194",
+      "FR-14": "c2ad78e3a13682dc9c9bb5610cc6af4e9a20e3131b221f0411ce8227c988f2f6",
+      "FR-15": "a229b61221000e39ff54a3875cb1f996cdd220d4359a3442c0276ad1676105c9",
+      "FR-16": "2a9dfb51ad9fb18dfeed97528f06e8fa41ab802deb29af967daaaed674e8cc2c",
+      "FR-17": "bc8e670996b9e65b2e05ccee12f1a3d2f6ea0eb1fcf4fb3b412c0448a5f0a8e0",
+      "FR-18": "e5133af37e89a19e2b305e0a146951b32062b94aa8bdb749a5c0568619765df0",
+      "FR-19": "1b52fcb8128c8c76c80be66562c4fdd3ca559bb99cd324572cc8abf2727b0d51",
+      "FR-2": "1733f4bd9ee5b3f463786055856094b95bd2dddb8dc3c8d984b663d855bac5a1",
+      "FR-20": "c697dcb785a33e55487e3d8471b588a76b9165f29eb6f729ff58ef58c9776331",
+      "FR-21": "20b196fe1343531592ad65bdefc6825f7bfe89b7eb7e42edaacb2732f766d7aa",
+      "FR-22": "4b96343dbb2e82c025557dbbf89117fe4099ce5a806091b2669621a592cca96e",
+      "FR-23": "d357c05813f838d5979fba19d295831209d22085fcbbc2d847792470c7b426eb",
+      "FR-24": "ceebad5877612f961b085ac1dd9db2085f8c0b2dc541595c0df7d955c90a8c13",
+      "FR-25": "83cc00daa85e76fb2d6d514dfc7a865413229d4f80508700d801c0a980b5256f",
+      "FR-26": "f08394da91d8fa7a55286fa51ff10d68d11c88d951d5bc514fd4f7bac6c5fd2d",
+      "FR-27": "1cdda88247788580b6b8253d2d38b8daf652398eb28c60b29f48270ba49f0c8b",
+      "FR-28": "fd30426ca53d276c2da912b70114ec89df7a43e33c698b9e4ea31bf29462c8aa",
+      "FR-29": "5a47f0ccaa69c54d161d9bbebcde615864783b7f6e4484a499f74c17cfb741e5",
+      "FR-3": "e2f78e34150d6d5bcbc2112a66e8336bd5fcc04d64924dd941db37f7d37980f7",
+      "FR-30": "0af891377e1db84bb335b8fe442aa30aa744c1a23f8979c87a759bfa3c893be7",
+      "FR-31": "6cda79f63bd33799c7dffa3dc6363c885386a4cd49d1fc1f0e30b238bb7a6109",
+      "FR-32": "9d1a000d9a1986392ad8208d6d69a5cd9e6ec48de351f676344c158b4cb1371f",
+      "FR-33": "f7e636855b99803f3412ef26ae8a2ca9d0d310aade74d7744f9054f09aa37e23",
+      "FR-34": "da5bf02765bd8238f6303f98a3b8248a2add7f2e17bb8e64280238db1ef4a4e6",
+      "FR-35": "973c113b50d483d8af8778e8c758993c2bb096af662b6b0075ac1fce5d954faa",
+      "FR-4": "af7fa17dbfa2df761126c2b62007a860d461528a34e69f5b25df1a0b2d347684",
+      "FR-5": "2fe38cab527e030794f902e391f230fa5e563cd3b73be8a8dec699827d86bb79",
+      "FR-6": "b9b54ceddf51b1d5e9bc94e5554220ae39de29c59d8a66d90618c0ab95938666",
+      "FR-7": "6ab7f67a8ce02b3660f0a84983a1e7c89295e38700918362fa06b568447ceee7",
+      "FR-8": "cfe7ee96fedd84763fd9720d97a252e47108c29785eca497af1e80370c644b20",
+      "FR-9": "00ce2299ea9c198981a1a4d3dbb5d3a4ea8c61cface131ab88043a080885355b"
+    },
+    "high_water": 35,
+    "requirements": {
+      "ask-any-agent-for-a-dashboard-and-get-one-project-delete-removes": "FR-15",
+      "ask-any-agent-for-a-dashboard-and-get-one-t-hub-stays-responsive": "FR-7",
+      "ask-any-agent-for-a-dashboard-and-get-one-th-data-notes-in-vault": "FR-9",
+      "ask-any-agent-for-a-dashboard-and-get-one-th-free-text-and-regex": "FR-5",
+      "ask-any-agent-for-a-dashboard-and-get-one-that-agent-runs-query": "FR-1",
+      "ask-any-agent-for-a-dashboard-and-get-one-that-dashboards-screen": "FR-13",
+      "ask-any-agent-for-a-dashboard-and-get-one-that-s-never-queryable": "FR-3",
+      "ask-any-agent-for-a-dashboard-and-get-one-that-s-query-reference": "FR-8",
+      "ask-any-agent-for-a-dashboard-and-get-one-that-st-save-dashboard": "FR-10",
+      "ask-any-agent-for-a-dashboard-and-get-one-that-st-values-in-full": "FR-12",
+      "ask-any-agent-for-a-dashboard-and-get-one-that-sta-query-bounded": "FR-6",
+      "ask-any-agent-for-a-dashboard-and-get-one-that-stay-panel-errors": "FR-14",
+      "ask-any-agent-for-a-dashboard-and-get-one-that-stay-project-only": "FR-2",
+      "ask-any-agent-for-a-dashboard-and-get-one-that-stays-chart-kinds": "FR-11",
+      "ask-any-agent-for-a-dashboard-and-get-one-that-stays-read-only": "FR-4",
+      "change-a-dashboard-by-asking-ask-to-change": "FR-18",
+      "change-a-dashboard-by-asking-edit-in-place": "FR-16",
+      "change-a-dashboard-by-asking-edit-operations": "FR-20",
+      "change-a-dashboard-by-asking-edit-validated-and-scoped": "FR-24",
+      "change-a-dashboard-by-asking-edited-by-shown": "FR-26",
+      "change-a-dashboard-by-asking-history-removed-with-dashboard": "FR-25",
+      "change-a-dashboard-by-asking-keep-the-rest": "FR-19",
+      "change-a-dashboard-by-asking-repair-broken-panel": "FR-23",
+      "change-a-dashboard-by-asking-stale-edit": "FR-21",
+      "change-a-dashboard-by-asking-undo-one-step": "FR-22",
+      "change-a-dashboard-by-asking-which-dashboard": "FR-17",
+      "dashboards-that-feel-alive-and-draw-right-the-f-first-time-right": "FR-35",
+      "dashboards-that-feel-alive-and-draw-right-the-fi-worked-examples": "FR-34",
+      "dashboards-that-feel-alive-and-draw-right-the-fir-chart-guidance": "FR-33",
+      "dashboards-that-feel-alive-and-draw-right-the-fir-reduced-motion": "FR-32",
+      "dashboards-that-feel-alive-and-draw-right-the-firs-hover-tooltip": "FR-30",
+      "dashboards-that-feel-alive-and-draw-right-the-first-edit-visible": "FR-29",
+      "dashboards-that-feel-alive-and-draw-right-the-first-time-draw-in": "FR-27",
+      "dashboards-that-feel-alive-and-draw-right-the-first-values-move": "FR-28",
+      "loading-placeholders": "FR-31"
+    },
+    "retired": {}
+  },
+  "design": "",
+  "evidence": {
+    "checked": [],
+    "limits": []
+  },
+  "hub": {
+    "phase": "current",
+    "size": null,
+    "step": null
+  },
+  "kind": "capability",
+  "lifecycle": "",
+  "open_questions": [],
+  "problem": "",
+  "requirements": [
+    {
+      "key": "ask-any-agent-for-a-dashboard-and-get-one-that-agent-runs-query",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "An agent that cannot see what its query returns saves wrong numbers with confidence.",
+      "statement": "Any agent can run a read-only query over the current project's data and receive its columns and rows, so it can check a query's result before it saves a dashboard."
+    },
+    {
+      "key": "ask-any-agent-for-a-dashboard-and-get-one-that-stay-project-only",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "One database holds every project on the Hub; the roadmap is heading towards other users' projects.",
+      "statement": "A query never returns a row belonging to another project, whatever the query text says, including queries that omit a project filter, join tables, or read the list of projects."
+    },
+    {
+      "key": "ask-any-agent-for-a-dashboard-and-get-one-that-s-never-queryable",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "A query cannot read credentials (API keys, operator credentials, run tokens, the trace exporter's headers) or this machine's paths (the project directory, run workspaces, workspace fingerprints); a query naming them is refused with a message saying what is not queryable."
+    },
+    {
+      "key": "ask-any-agent-for-a-dashboard-and-get-one-that-stays-read-only",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "A query cannot change any data: an insert, update, delete, schema change or attach is refused and the data is unchanged."
+    },
+    {
+      "key": "ask-any-agent-for-a-dashboard-and-get-one-th-free-text-and-regex",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The operator wants to count leaks and occurrences of things in the conversations.",
+      "statement": "Free-text data is queryable — agent output, the traces' tool arguments and results, model messages and command lines, and message, queue and checkpoint text — and a query can match a regular expression against any text column."
+    },
+    {
+      "key": "ask-any-agent-for-a-dashboard-and-get-one-that-sta-query-bounded",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "A query that runs longer than 10 seconds is stopped and answers an error saying so, and a result over 10,000 rows is cut to 10,000 and says it was cut."
+    },
+    {
+      "key": "ask-any-agent-for-a-dashboard-and-get-one-t-hub-stays-responsive",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "On 2026-11-13 ordinary reads already take 1.5-3 s during builds on a 920 MB database; the heaviest read anyone will ask for must not add to that.",
+      "statement": "While dashboard queries run — including a regular-expression search over every trace span and a query stopped at the time limit — the Hub's event loop never stalls for more than 100 ms, and a GET /agents made meanwhile answers within 500 ms on a copy of the operator's database."
+    },
+    {
+      "key": "ask-any-agent-for-a-dashboard-and-get-one-that-s-query-reference",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "A hand-written description goes stale on the first migration.",
+      "statement": "The Hub provides agents a reference of everything a query can reach — each table and column, its type and a short meaning — generated from the running version, and nothing in it is refused when queried."
+    },
+    {
+      "key": "ask-any-agent-for-a-dashboard-and-get-one-th-data-notes-in-vault",
+      "modal": "SHOULD",
+      "party": null,
+      "rationale": null,
+      "statement": "Every project's vault holds a note on what the data means and its traps, present before any dashboard tool is first called — including in projects registered before this ships — and never overwritten once agents have added to it; the agent tools point agents to it, and it is seeded with the known traps (a send-back rejects every piece of evidence from that commit; cost per spec counts its tasks' building and reviewing runs)."
+    },
+    {
+      "key": "ask-any-agent-for-a-dashboard-and-get-one-that-st-save-dashboard",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "A Hub upgrade can break a saved query anyway, so a failing panel has to be handled on the screen regardless.",
+      "statement": "An agent can save a dashboard to the current project with a name, a description of the question it answers, and panels, each with a title, a query and a chart kind; the dashboard records which agent made it and when, and survives a Hub restart. Saving checks chart kinds and the never-queryable boundary but does not run the queries, so a panel whose query fails can be saved."
+    },
+    {
+      "key": "ask-any-agent-for-a-dashboard-and-get-one-that-stays-chart-kinds",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "A panel's chart kind is one of a fixed set — single number, table, bar, stacked bar and line — and every kind is drawn in the app's colours and type, readable in both light and dark themes."
+    },
+    {
+      "key": "ask-any-agent-for-a-dashboard-and-get-one-that-st-values-in-full",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator, 2026-11-13: the screen is local, and a masked leak cannot be found.",
+      "statement": "A table panel shows every value its query returns in full, free text included; no value is masked or redacted."
+    },
+    {
+      "key": "ask-any-agent-for-a-dashboard-and-get-one-that-dashboards-screen",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "The project has a Dashboards screen, reachable from the app's navigation, listing its dashboards with name, author and date; opening one runs all its queries and draws them, a Refresh button runs them again, and the dashboard shows when its data was last fetched. The operator can delete a dashboard there."
+    },
+    {
+      "key": "ask-any-agent-for-a-dashboard-and-get-one-that-stay-panel-errors",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "A panel whose query fails shows the error on that panel, and a panel whose result cannot be drawn as its chart kind (for example a line with no numeric column) shows a warning saying why; the other panels still draw."
+    },
+    {
+      "key": "ask-any-agent-for-a-dashboard-and-get-one-project-delete-removes",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "Deleting a project removes its dashboards."
+    },
+    {
+      "key": "change-a-dashboard-by-asking-edit-in-place",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "A second near-duplicate dashboard per request is the failure the roadmap slice exists to remove.",
+      "statement": "Asked to change an existing dashboard, an agent edits that saved dashboard: afterwards the project holds the same number of dashboards, the dashboard keeps its identity, and the Dashboards screen shows the change on the dashboard the operator already had."
+    },
+    {
+      "key": "change-a-dashboard-by-asking-which-dashboard",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Guessing between two dashboards edits the wrong one without anyone noticing.",
+      "statement": "The agent edits the dashboard the operator means: the one named in the request, or the one the operator's Ask to change named; when the name matches no dashboard, or several, or no dashboard is named, the agent says so and asks which, and changes nothing and creates nothing."
+    },
+    {
+      "key": "change-a-dashboard-by-asking-ask-to-change",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator, 2026-11-14: what the agent is told stays visible, rather than a hidden context the operator cannot see.",
+      "statement": "An open dashboard on the Dashboards screen offers Ask to change: the operator picks an agent, that agent's conversation opens, and its composer holds an editable line naming the dashboard's name and identifier, sent only when the operator sends it."
+    },
+    {
+      "key": "change-a-dashboard-by-asking-keep-the-rest",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The operator trusts a dashboard they have looked at; an edit that quietly rewrites other panels breaks that.",
+      "statement": "An edit changes only what was asked: every panel, query, title, chart kind, panel id, the order of panels, the name and description that the request did not mention are unchanged after the edit."
+    },
+    {
+      "key": "change-a-dashboard-by-asking-edit-operations",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "A half-applied edit leaves a dashboard nobody asked for.",
+      "statement": "The Hub applies an edit as a list of operations (add a panel, remove a panel, change a panel's title, query or chart kind, move a panel, rename or re-describe the dashboard); if any operation is refused, including a chart kind outside the fixed set, a panel that does not exist, or a name another dashboard of the project holds, no operation is applied and the refusal says which and why."
+    },
+    {
+      "key": "change-a-dashboard-by-asking-stale-edit",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "An agent works from what it read at the start of a long turn; the operator or another agent may have edited since.",
+      "statement": "An edit or a whole replace made against a version of the dashboard that is no longer the current one is refused with a message saying the dashboard changed and the current dashboard, and nothing is overwritten."
+    },
+    {
+      "key": "change-a-dashboard-by-asking-undo-one-step",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Asking for changes is only safe if a wrong one costs one click.",
+      "statement": "After an edit or a whole replace the Hub keeps the version it replaced, and the operator can restore it in one step from the Dashboards screen (and an agent can when asked); restoring is itself an edit, so it can be undone the same way; a dashboard with no earlier version offers nothing to restore."
+    },
+    {
+      "key": "change-a-dashboard-by-asking-repair-broken-panel",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Slice first-dashboard surfaces a broken panel but cannot mend it; this is the other half.",
+      "statement": "An agent can run a saved dashboard and receive, for each panel, its result or its error and drawing warning, exactly as the screen shows them; asked to fix a broken panel, it can correct that panel's query from its error, check the new result, and change only that panel, after which the panel draws."
+    },
+    {
+      "key": "change-a-dashboard-by-asking-edit-validated-and-scoped",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The edit path must not become a way round the query boundary.",
+      "statement": "An edit's queries are held to the same limits as slice first-dashboard's saves (current project only, read-only, never-queryable data refused), and an agent cannot edit, undo, run or read the kept version of a dashboard belonging to another project."
+    },
+    {
+      "key": "change-a-dashboard-by-asking-history-removed-with-dashboard",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "Deleting a dashboard, or the project it belongs to, removes its kept earlier version."
+    },
+    {
+      "key": "change-a-dashboard-by-asking-edited-by-shown",
+      "modal": "SHOULD",
+      "party": null,
+      "rationale": null,
+      "statement": "The Dashboards screen shows who last edited the dashboard and when, beside the author and date."
+    },
+    {
+      "key": "dashboards-that-feel-alive-and-draw-right-the-first-time-draw-in",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Tests, drives and screen readers read the page; a count-up must not make them read a wrong figure.",
+      "statement": "On opening a dashboard, its panels appear one after another, bars grow from their start, lines trace from left to right, points appear after their line, and a number counts up to its value, all within 1.5 seconds; throughout, the number's element holds its real value, and no figure read from the page is ever a mid-animation value."
+    },
+    {
+      "key": "dashboards-that-feel-alive-and-draw-right-the-first-values-move",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "When an open dashboard's queries run again (Refresh, or an agent saving that dashboard), its charts dim while the queries run and then bars, lines and points move to their new values rather than the panel being redrawn from empty."
+    },
+    {
+      "key": "dashboards-that-feel-alive-and-draw-right-the-first-edit-visible",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Shows the operator what an agent's change did without comparing before and after by eye.",
+      "statement": "When the open dashboard gains a panel, that panel is marked once as new as it appears; when it loses one, that panel fades out where it was before it is gone; on first opening a dashboard no panel is marked new."
+    },
+    {
+      "key": "dashboards-that-feel-alive-and-draw-right-the-firs-hover-tooltip",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "Hovering a bar segment or a line point shows a tooltip in the app's own style naming the point's label, its series and its value, and dims the other marks of that chart; leaving the mark removes both."
+    },
+    {
+      "key": "loading-placeholders",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "While a dashboard's queries first run, placeholders shaped like its panels (up to four) stand where the panels will be; the first carries the app's loading thread with the words 'Running its queries', the others are still, and nothing on the screen shimmers. The placeholders are gone once the run arrives, and are not shown when the run fails."
+    },
+    {
+      "key": "dashboards-that-feel-alive-and-draw-right-the-fir-reduced-motion",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "When the system asks for reduced motion, nothing on the Dashboards screen animates: panels, charts and numbers appear at their final state at once, and the tooltip and dimming still work."
+    },
+    {
+      "key": "dashboards-that-feel-alive-and-draw-right-the-fir-chart-guidance",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "The save tool's guidance tells an agent which kind suits which question (one figure: number; a ranking or comparison: bar; parts of a whole across labels: stacked bar; change over time: line; detail rows: table), and how to shape a query to read well: order rows as they should be drawn, keep bar charts to about 15 labels by taking the top ones, put time in order for a line, and alias columns to the readable names the legend and tooltip will show."
+    },
+    {
+      "key": "dashboards-that-feel-alive-and-draw-right-the-fi-worked-examples",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "An example that does not draw teaches the wrong thing; each is checked by running it.",
+      "statement": "The data note every project's vault is seeded with carries one worked example per chart kind, each a query over that project's own data and its kind, and each example draws with no warning on a project that has tasks and runs."
+    },
+    {
+      "key": "dashboards-that-feel-alive-and-draw-right-the-f-first-time-right",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "Asked in plain words for a dashboard needing each of the five kinds, an agent on the project's cheapest model produces a dashboard whose every panel draws with no error and no drawing warning on first opening."
+    }
+  ],
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [],
+    "non_goals": []
+  },
+  "summary": "",
+  "tasks": [],
+  "title": "Project dashboards"
+}

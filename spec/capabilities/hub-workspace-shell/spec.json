@@ -587,6 +587,78 @@
       "requirement": "the-apps-other-surfaces-make-sense-resizer-focus-is-visible",
       "then": "its line is drawn in the --ring colour; no inline style pins its background",
       "when": "it is focused with the keyboard in light and in dark mode"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a project opened on an existing folder with no git and no agents",
+      "how_to_check": "py -3.11 scripts/checks/setup_list_check.py (its own Hub on a temporary database, a scratch folder)",
+      "key": "a-project-says-what-it-still-needs-ac-fresh-folder",
+      "requirement": "a-project-says-what-it-still-needs-four-items",
+      "then": "the list shows the repository and agent items and nothing else",
+      "when": "its Overview is opened"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an agent whose model's coding agent is not on PATH",
+      "how_to_check": "setup_list_check.py with that CLI removed from the Hub's PATH",
+      "key": "a-project-says-what-it-still-needs-ac-cannot-run",
+      "requirement": "a-project-says-what-it-still-needs-four-items",
+      "then": "the can-run item names that agent and says its coding agent is not installed",
+      "when": "Overview is opened"
+    },
+    {
+      "checked_by": "agent",
+      "given": "each item shown",
+      "how_to_check": "setup_list_check.py clicks each item",
+      "key": "a-project-says-what-it-still-needs-ac-links",
+      "requirement": "a-project-says-what-it-still-needs-item-links",
+      "then": "the screen it names opens with the named field or action in view",
+      "when": "it is clicked"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a project with no git",
+      "how_to_check": "Hub test for the dismissal surviving a restart; setup_list_check.py for the three places",
+      "key": "a-project-says-what-it-still-needs-ac-dismiss",
+      "requirement": "a-project-says-what-it-still-needs-dismiss",
+      "then": "the item is gone from all three places across the restart and returns when shown again; the folder, agent and can-run items offer no dismiss",
+      "when": "Not for this project is chosen on the repository item, the Hub is restarted, then Show it again is chosen in Project settings"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a project with two items shown",
+      "how_to_check": "setup_list_check.py, comparing the count's box with the hover actions' boxes",
+      "key": "a-project-says-what-it-still-needs-ac-three-places",
+      "requirement": "a-project-says-what-it-still-needs-three-places",
+      "then": "the list is at the top of the first two and the rail row shows 2 beside the name, naming both on hover, with no hover action overlapping it; after resolving both, none of the three shows anything",
+      "when": "Overview, any Project settings section and the rail are looked at, the rail row hovered"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a project row created before this change with no agents",
+      "how_to_check": "Hub test on a project row created without any set-up state",
+      "key": "a-project-says-what-it-still-needs-ac-existing",
+      "requirement": "a-project-says-what-it-still-needs-all-projects",
+      "then": "that project carries the agent item",
+      "when": "the Hub with this change lists projects"
+    },
+    {
+      "checked_by": "agent",
+      "given": "Overview showing the agent item",
+      "how_to_check": "setup_list_check.py",
+      "key": "a-project-says-what-it-still-needs-ac-live",
+      "requirement": "a-project-says-what-it-still-needs-stays-current",
+      "then": "the item and the rail count disappear",
+      "when": "an agent is added without reloading"
+    },
+    {
+      "checked_by": "operator",
+      "given": "this repository registered in a Hub with its agents able to run",
+      "how_to_check": "operator opens this project after the build",
+      "key": "a-project-says-what-it-still-needs-ac-this-repo",
+      "requirement": "a-project-says-what-it-still-needs-this-repo-clean",
+      "then": "no list and no rail count are shown",
+      "when": "its Overview is opened"
     }
   ],
   "algorithms": [],
@@ -629,16 +701,30 @@
       "FR-40": "ba382fa8b1c3e5625697a7b42cb9e091203364e880c2de6a00ef3c27849476e0",
       "FR-41": "8ca8d43a7c70bcb4c107876109c0d5acb0025c6f5a1d64dd6908ffb7a63b9bef",
       "FR-42": "c2e9edf17d4d07fb3ac3a76169830b6c94a5e6e64e031ddd65e626ec69e318cb",
+      "FR-43": "b0a80880f80e22a16376c63db4fbff14cd227eff75b1925564a5f2a0a82d7b2e",
+      "FR-44": "b7363025dbea1b3e544c1ffe0163e1979b91e2a45645e96e3031cc83813a91f3",
+      "FR-45": "8ea853503871e1986f2b3e6bdb745cfae2153c13993824253d9eb5bae30d8d5c",
+      "FR-46": "5516522796894452fe3744ea2183a4951de0f1dbee8f3c2ea3a5ec1143c7105e",
+      "FR-47": "dea4b16c5db5b8e5266f2b5a24d8dfc85c130c8a05e41f9541e696d2cb7e1588",
+      "FR-48": "886bba05b05ce7255a6d3b53c45e9fbb05730a4cf49e53f2fc9d296a88b65b31",
+      "FR-49": "752747cc58c113afbd13efb9fa147e88749efbf32c9eb2ded748d8ef3012b3a3",
       "FR-5": "1bb948151f8ae106e732cd9258426d4f948132b741efac608c594cda44d4d766",
       "FR-6": "7c824bd6168c0ada0e9207b7461fb154ddc2b1d3f888f1a8af3414f2a8a2b09b",
       "FR-7": "bc516b6f71b61028b4e1eb98bd6606059c3860c9e4bb319f0c006c6df353e430",
       "FR-8": "826b87911a01569820cd47246928d2b19509a960b7faffc86cbfb5ecf6afc2bd",
       "FR-9": "a2ef8f77a1b1581d7d9c091ece09a0659a68025ee84e1186e36cfc0d10fcaf4b"
     },
-    "high_water": 42,
+    "high_water": 49,
     "requirements": {
       "a-command-palette-reaches-conversations-agents-documents-and": "FR-19",
       "a-project-s-location-is-displayed-as-structure-not-as-a-sent": "FR-6",
+      "a-project-says-what-it-still-needs-all-projects": "FR-47",
+      "a-project-says-what-it-still-needs-dismiss": "FR-45",
+      "a-project-says-what-it-still-needs-four-items": "FR-43",
+      "a-project-says-what-it-still-needs-item-links": "FR-44",
+      "a-project-says-what-it-still-needs-stays-current": "FR-48",
+      "a-project-says-what-it-still-needs-this-repo-clean": "FR-49",
+      "a-project-says-what-it-still-needs-three-places": "FR-46",
       "a-quiet-control-never-gains-an-outline-on-hover": "FR-5",
       "agent-creation-is-offered-where-agents-are-listed": "FR-18",
       "agent-identity-color-remains-project-consistent": "FR-24",
@@ -993,6 +1079,55 @@
       "party": null,
       "rationale": null,
       "statement": "A focused pane resizer (Resize navigation, Resize conversation) shows its line in the --ring colour in light and dark mode, and its hover colour applies too (F1032)."
+    },
+    {
+      "key": "a-project-says-what-it-still-needs-four-items",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Each is something without which work does not happen or is not isolated, and each is something the Hub can tell for itself. Checks and instructions were left out: a starting project may have no checks (operator, 2026-11-10), and the Hub cannot see the instruction files coding agents read on their own.",
+      "statement": "A project's set-up list holds exactly these items, each shown only while it is not met: its folder is found where it was bound; its folder is a git repository; it has at least one agent that is not archived; every agent that is not archived can run, meaning its model's coding agent is installed and logged in on this machine (one item per agent that cannot)."
+    },
+    {
+      "key": "a-project-says-what-it-still-needs-item-links",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "Each item opens what resolves it: a missing folder opens Project settings → Project at its 'Locate project' field; no repository opens the 'Make this a git repository' action; no agent opens adding an agent; an agent that cannot run names that agent and why (not installed, or not logged in), and opens its Running → Model."
+    },
+    {
+      "key": "a-project-says-what-it-still-needs-dismiss",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "A scratch folder may deliberately have no git, and an item that can never clear teaches the operator to ignore the mark. Without a folder, an agent, or an agent that runs, nothing works at all, so those cannot be waved away.",
+      "statement": "The operator can dismiss the git repository item for a project with 'Not for this project', after which it is not shown in any of the three places and the dismissal survives a Hub restart; a dismissed item is listed in Project settings → Project with a way to show it again. The folder, agent and can-run items cannot be dismissed."
+    },
+    {
+      "key": "a-project-says-what-it-still-needs-three-places",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator, 2026-11-10: the count first sat where the row's hover actions appear and was covered by them.",
+      "statement": "While any item is shown, the list appears at the top of the project's Overview and at the top of every Project settings section, and the project's row in the rail carries a count of the items left beside its name, naming them on hover, never covered by the row's hover actions; the row opens the project's Overview. When none is shown, none of the three appears."
+    },
+    {
+      "key": "a-project-says-what-it-still-needs-all-projects",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "The list is worked out for every project, including those created before this change, from the project's current state and nothing recorded at its creation."
+    },
+    {
+      "key": "a-project-says-what-it-still-needs-stays-current",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "An item disappears without a reload once what it names is resolved, in the same session it was resolved in: making the repository, adding an agent, choosing a model that can run, or locating the folder."
+    },
+    {
+      "key": "a-project-says-what-it-still-needs-this-repo-clean",
+      "modal": "SHOULD",
+      "party": null,
+      "rationale": null,
+      "statement": "A project with a found folder, a git repository, and only agents that can run shows no list and no count; this repository on the operator's Hub is such a project."
     }
   ],
   "schema_version": 1,

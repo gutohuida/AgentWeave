@@ -1,0 +1,406 @@
+{
+  "acceptance_criteria": [
+    {
+      "checked_by": "agent",
+      "given": "an agent whose last turn modified one file and added another in its checkout",
+      "how_to_check": "Browser drive on a Hub started from this checkout over a test database: seed the commits, open the conversation, read the tab",
+      "key": "ac-two-files",
+      "requirement": "lists-changed-files",
+      "then": "both files are listed with modified/added marks and correct +/- counts",
+      "when": "the operator opens the Changes tab in that agent's conversation"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the Changes tab listing a modified file",
+      "how_to_check": "Same drive: click the file, assert the diff lines and that the conversation pane is still visible",
+      "key": "ac-diff",
+      "requirement": "shows-diff",
+      "then": "its diff shows in the panel and the conversation stays on screen",
+      "when": "the operator selects it"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an agent branch with two turn snapshots, each changing a different file",
+      "how_to_check": "Hub test over a temporary repository, plus the browser drive",
+      "key": "ac-switch",
+      "requirement": "turn-or-branch",
+      "then": "Last turn lists only the second turn's file, Since main lists both, and the header names the branch and main",
+      "when": "the operator switches between Last turn and Since main"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an agent whose most recent turn worked a flow task on its task branch",
+      "how_to_check": "Hub test seeding a task worktree and a run bound to it",
+      "key": "ac-task-branch",
+      "requirement": "which-branch",
+      "then": "the tab shows the task branch's changes and names the task",
+      "when": "its Changes tab opens"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a running turn that has edited a file without committing",
+      "how_to_check": "Hub test with a running run and a dirty worktree; drive with a real Haiku turn",
+      "key": "ac-working-now",
+      "requirement": "working-now",
+      "then": "a working-now line names that file; after the turn ends the line is gone and the file is under Last turn",
+      "when": "the tab is open"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the tab open while an agent's turn runs",
+      "how_to_check": "Browser drive with a real Haiku turn, timing from the turn's end event",
+      "key": "ac-live",
+      "requirement": "follows-the-agent",
+      "then": "the turn's files appear within 5 seconds with no reload",
+      "when": "the turn ends"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an agent with no changes, and another with no checkout",
+      "how_to_check": "Hub tests of the route's answers plus the drive",
+      "key": "ac-empty",
+      "requirement": "empty-and-unavailable",
+      "then": "the first says nothing changed; the second says it has no checkout; neither shows an error code",
+      "when": "each one's tab opens"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the app opened from a non-local address",
+      "how_to_check": "UI test rendering the panel with a remote origin",
+      "key": "ac-remote",
+      "requirement": "offered-everywhere",
+      "then": "the Changes tab is offered alongside Files",
+      "when": "a conversation's side panel is shown"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a branch with 200 changed files, one binary and one with a 6,000-line diff",
+      "how_to_check": "Hub test for the route's timing and truncation; drive for the render",
+      "key": "ac-large",
+      "requirement": "large-diffs-stay-usable",
+      "then": "the list shows within 2 seconds, the binary has no body, and the big diff says it is truncated",
+      "when": "the tab opens and the big file is selected"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a listed file",
+      "how_to_check": "Browser drive",
+      "key": "ac-open-file",
+      "requirement": "open-file",
+      "then": "the Files tab opens on that file",
+      "when": "the operator chooses to open it"
+    }
+  ],
+  "algorithms": [],
+  "already_built": {
+    "built": false,
+    "commits": [],
+    "note": ""
+  },
+  "aw_identity": {
+    "digests": {
+      "FR-1": "f055ab6f2fc496139a5fb8c40457fad240bb3c1d7cc8e36efe77c5ae642de85d",
+      "FR-10": "afcead979ff4afbf653d835c3d1518b52d1eeec0f8a31fce50d35e14c6a01c0e",
+      "FR-2": "9db2e8043f8275a442516476b225ab606f77622848fea14a7ee6ddfe7249518e",
+      "FR-3": "0f5f7f7fa9a4263b4574faadcc264e1b5ccb9e80ec244999ae9d42df631699a3",
+      "FR-4": "376773c5b30a6182b2bc22158e3a73eae6e3fbd0f9c65bd710725a29075c7264",
+      "FR-5": "e41af6a2f7a2adc47fe5db9ce62d2146980835e2ce6ea19e89e4d95a8b98a7c3",
+      "FR-6": "b7dd3a8c568ed56c199e7bfa4c81bd5b99d4b5c8d4f390d0e37ee38891a5e9e5",
+      "FR-7": "7004c11e081d3f72e1552ef28de0734fbf313a4ed01bdcd16fdd5744181d0535",
+      "FR-8": "2379ae1ec325ee27b9bef36cc8b8bef8e1fdf7ae16d47de595d94919155d160a",
+      "FR-9": "8f8a85e3ab67424c2294e5d6df0ae7c59463779ffb23f522174f203ca4560421"
+    },
+    "high_water": 10,
+    "requirements": {
+      "empty-and-unavailable": "FR-5",
+      "follows-the-agent": "FR-4",
+      "large-diffs-stay-usable": "FR-6",
+      "lists-changed-files": "FR-1",
+      "offered-everywhere": "FR-10",
+      "open-file": "FR-7",
+      "shows-diff": "FR-2",
+      "turn-or-branch": "FR-3",
+      "which-branch": "FR-8",
+      "working-now": "FR-9"
+    },
+    "retired": {}
+  },
+  "capabilities": {
+    "changes": [
+      "spec/capabilities/conversation-side-panel/spec.json"
+    ],
+    "creates": []
+  },
+  "delivery": {
+    "agent": "Developer",
+    "builder": "Developer",
+    "checker": "QA",
+    "cron": "*/5 * * * *",
+    "mode": "flow",
+    "reasons": {
+      "agent": "Developer works the flow by default.",
+      "builder": "Wiring to an existing component and a read-only route: Sonnet is enough.",
+      "checker": "QA drives it in a browser; QA2 writes the drive so its author is not its checker.",
+      "cron": "Flows' usual cadence.",
+      "mode": "A route, wiring and a drive: a short unattended flow.",
+      "stop": "Stop when its three tasks are done."
+    },
+    "reviewer": null,
+    "stop_at": null,
+    "stop_when_queue_empties": true
+  },
+  "design": "",
+  "evidence": {
+    "checked": [
+      "hub/ui/src/components/panel/ChangesTab.tsx exists, mounted only in hub/ui/mock/screens/SidePanel.tsx",
+      "Panel tabs are declared in hub/ui/src/components/agents/ConversationView.tsx:337 (specs, files, running)",
+      "The only Hub diff route is GET /spec/evidence/{id}/diff (hub/hub/api/v1/spec.py:2365)",
+      "Turn snapshots are commits titled 'Auto-snapshot: <agent>'s turn' (git log on master)",
+      "Agent and task checkouts: worktree_path, task_worktree_path, task_branch_name in hub/hub/worktrees.py"
+    ],
+    "limits": [
+      "How the Hub knows the task a conversation's latest turn worked was not traced in code; the route task must find it (run-task binding).",
+      "The 2-second budget for large diffs is a proposal, not measured."
+    ]
+  },
+  "hub": {
+    "builds": [
+      {
+        "budget_cap_usd": null,
+        "builder": "Developer",
+        "builders": [
+          "QA2",
+          "Developer"
+        ],
+        "checker": "QA",
+        "checkers": [],
+        "chosen_by": "operator",
+        "driver": "flow",
+        "ended_at": "2026-11-13T11:24:51.399522+00:00",
+        "id": "build-1d732fd71e69",
+        "landing": "main",
+        "lead": null,
+        "level": "reviewed",
+        "pull_request": null,
+        "started_at": "2026-11-13T10:00:25.370170+00:00",
+        "state": "finished",
+        "stop_reason": null,
+        "tasks": {
+          "acceptance-drive": {
+            "builder": "QA2",
+            "checker": "QA"
+          },
+          "changes-route": {
+            "builder": "Developer",
+            "checker": "QA"
+          },
+          "wire-changes": {
+            "builder": "Developer",
+            "checker": "QA"
+          }
+        },
+        "window_end": null,
+        "window_start": null
+      }
+    ],
+    "phase": "approved",
+    "size": null,
+    "step": "build"
+  },
+  "kind": "change-spec",
+  "lifecycle": "",
+  "open_questions": [
+    {
+      "question": "Which branch does the tab show when the agent builds a flow task? Answer (operator, 2026-11-13): the task branch the agent is working, or last worked.",
+      "resolved": true
+    },
+    {
+      "question": "Does 'Last turn' include uncommitted edits while a turn runs? Answer (operator, 2026-11-13): the turn's snapshot, plus a 'working now' line naming uncommitted files while it runs.",
+      "resolved": true
+    },
+    {
+      "question": "Is the tab offered from another machine and in Docker mode? Answer (operator, 2026-11-13): yes, wherever Files is offered.",
+      "resolved": true
+    }
+  ],
+  "problem": "Today the only way to see what an agent changed is to ask it, open its worktree in an editor, or wait for a task's evidence or merge. The side panel roadmap (slice changes-view) puts the agent's changes beside the chat, as other agentic tools do. The component already exists, unwired: hub/ui/src/components/panel/ChangesTab.tsx is shown in the mock (hub/ui/mock/screens/SidePanel.tsx) with a \"Last turn\" and a \"Since main\" switch, built on the shared DiffView. The panel's tabs are declared in hub/ui/src/components/agents/ConversationView.tsx:337. No Hub route serves an agent's branch diff yet: the only diff route is evidence's (hub/hub/api/v1/spec.py:2365). The Hub already commits each turn's work as an \"Auto-snapshot: <agent>'s turn\" commit, so a turn has a natural boundary. A flow builder works on a task branch (task_branch_name, task_worktree_path in hub/hub/worktrees.py), not on its own agent branch (worktree_path).",
+  "requirements": [
+    {
+      "key": "lists-changed-files",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "With a conversation open, the side panel's Changes tab lists every file the conversation's agent changed on the branch it shows, each with its path, whether it was added, modified, deleted or renamed, and its count of added and removed lines."
+    },
+    {
+      "key": "shows-diff",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "Selecting a listed file shows its diff in the panel, without leaving the conversation."
+    },
+    {
+      "key": "turn-or-branch",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Last turn answers 'what did it just do'; since main answers 'what would land'.",
+      "statement": "The operator can switch the tab between 'Last turn' (what the agent's most recent finished turn committed) and 'Since main' (everything on the branch that main does not have), and the tab names the branch and the base it compares with."
+    },
+    {
+      "key": "which-branch",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "A flow builder's work sits on the task branch; its own branch would look empty.",
+      "statement": "When the agent is working a task on a task branch, or its most recent turn was on one, the tab shows that task branch and names the task; otherwise it shows the agent's own branch."
+    },
+    {
+      "key": "working-now",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "While one of the agent's turns is running, the tab shows a 'working now' line naming the files changed in its checkout but not yet committed; when the turn ends the line goes and those changes appear under Last turn."
+    },
+    {
+      "key": "follows-the-agent",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "When a turn of the agent ends, an open Changes tab shows that turn's changes within 5 seconds, without the operator reloading."
+    },
+    {
+      "key": "empty-and-unavailable",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "When the agent has changed nothing, the tab says so; when the agent has no checkout of its own, or its branch cannot be read, the tab says which, instead of showing an empty list or an error code."
+    },
+    {
+      "key": "offered-everywhere",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "The tab is offered wherever the Files tab is offered, including when the app is opened from another machine and when the Hub runs in Docker mode."
+    },
+    {
+      "key": "large-diffs-stay-usable",
+      "modal": "SHOULD",
+      "party": null,
+      "rationale": null,
+      "statement": "A change of 200 files, or a single file diff over 5,000 lines, opens the tab within 2 seconds; binary files are listed without a diff body, and a diff too large to show whole says so and shows its start."
+    },
+    {
+      "key": "open-file",
+      "modal": "SHOULD",
+      "party": null,
+      "rationale": null,
+      "statement": "From a changed file, the operator can open that file in the Files tab."
+    }
+  ],
+  "roadmap": {
+    "document": "spec/changes/a-side-panel-worth-keeping-open-activity-changes-files-terminal-and-peers/spec.json",
+    "slice": "changes-view"
+  },
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "A Changes tab in the conversation's side panel, beside Specs, Files and Running",
+      "The files the conversation's agent changed and each file's diff, for its last turn and for its whole branch since main",
+      "The task branch the agent is working, or last worked, when that is where its work is",
+      "A 'working now' line naming uncommitted files while a turn runs",
+      "Opening a changed file from the tab",
+      "Offered wherever the Files tab is offered, including from another machine and in Docker mode"
+    ],
+    "non_goals": [
+      "Editing, reverting or staging changes from the tab: it is read-only",
+      "Commenting on a diff line or sending a review from the tab",
+      "Diffs of agents other than the conversation's own (peer conversations are the peer-conversation slice)",
+      "The Files tab's worktree switch and highlighting (files-polish slice)",
+      "Merging or landing anything",
+      "A picker across all of the agent's past task branches"
+    ]
+  },
+  "summary": "Beside a conversation, the operator opens a Changes tab and sees which files the conversation's agent changed, with each file's diff. They can switch between what its last turn changed and everything on its branch since main. While a turn runs, a \"working now\" line names the files it has not committed yet. When the agent is building a flow task, the tab shows that task's branch. They never have to leave the conversation, open a terminal or ask the agent.",
+  "tag": "Changes tab",
+  "tasks": [
+    {
+      "builder": "QA2",
+      "builder_reason": "QA2 writes drives and builds nothing else here, so the drive is independent of the code.",
+      "checker": "QA",
+      "checker_reason": "QA checks QA2's drive and drives the finished slice.",
+      "depends_on": [],
+      "description": "Write the browser drive covering ac-two-files, ac-diff, ac-switch, ac-live, ac-empty and ac-open-file against a Hub started from the checkout over a test database (never :8000), record it failing before the build, and run it green at the end.",
+      "files": [
+        "scripts/drive"
+      ],
+      "from": null,
+      "key": "acceptance-drive",
+      "requirements": [
+        "lists-changed-files",
+        "shows-diff",
+        "turn-or-branch",
+        "follows-the-agent",
+        "empty-and-unavailable",
+        "open-file"
+      ],
+      "reviewer": null,
+      "title": "Acceptance drive, failing first"
+    },
+    {
+      "builder": "Developer",
+      "builder_reason": "A read-only route over git: Sonnet is enough.",
+      "checker": "QA",
+      "checker_reason": "QA reviews and runs the route's tests.",
+      "depends_on": [
+        "acceptance-drive"
+      ],
+      "description": "A Hub route answering, for a conversation's agent: which branch and base it shows (task branch when the agent works or last worked one), the changed files with status and line counts for last turn and since main, each file's patch (binary and oversized marked), and uncommitted files while a turn runs. All git work off the event loop. Hub tests over temporary repositories for each criterion it carries.",
+      "files": [
+        "hub/hub/api/v1",
+        "hub/hub/agent_changes.py",
+        "hub/tests"
+      ],
+      "from": null,
+      "key": "changes-route",
+      "requirements": [
+        "lists-changed-files",
+        "turn-or-branch",
+        "which-branch",
+        "working-now",
+        "empty-and-unavailable",
+        "large-diffs-stay-usable"
+      ],
+      "reviewer": null,
+      "title": "Changes route in the Hub"
+    },
+    {
+      "builder": "Developer",
+      "builder_reason": "Wiring an existing component: Sonnet is enough, and the same builder knows the route.",
+      "checker": "QA",
+      "checker_reason": "QA drives the tab in a browser.",
+      "depends_on": [
+        "acceptance-drive",
+        "changes-route"
+      ],
+      "description": "Add Changes to the conversation's panel tabs, feed ChangesTab from the route, refresh it on the stream's turn-end event, show the working-now line, the empty and unavailable states, and open a file in the Files tab. Offer it wherever Files is offered. Rebuild and commit the UI bundle with the source.",
+      "files": [
+        "hub/ui/src/components/agents/ConversationView.tsx",
+        "hub/ui/src/components/panel",
+        "hub/hub/static/ui"
+      ],
+      "from": null,
+      "key": "wire-changes",
+      "requirements": [
+        "shows-diff",
+        "follows-the-agent",
+        "working-now",
+        "empty-and-unavailable",
+        "offered-everywhere",
+        "open-file",
+        "large-diffs-stay-usable"
+      ],
+      "reviewer": null,
+      "title": "Wire the Changes tab"
+    }
+  ],
+  "title": "The side panel's Changes tab shows what the agent changed"
+}

@@ -1,0 +1,229 @@
+{
+  "acceptance_criteria": [
+    {
+      "checked_by": "agent",
+      "given": "the Watch tab rendered with a peer in each of the three states",
+      "how_to_check": "Component test in hub/ui/src/__tests__/ rendering WatchTab with each state and asserting the per-state marker, then a screenshot of the three states in the mock",
+      "key": "colour-per-state",
+      "requirement": "state-colour",
+      "then": "each state carries its own state attribute or class, and its mark's computed colour is green for working, amber for waiting for your answer and neutral for idle; idle and waiting differ",
+      "when": "its status line is read"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the same three renders",
+      "how_to_check": "Component test asserting the state attribute switches on rerender; CSS checked in panel-tabs.css for distinct keyframes or durations per state",
+      "key": "motion-per-state",
+      "requirement": "state-motion",
+      "then": "working and waiting have an animation, with different names or durations, and idle has none; re-rendering the same peer from working to waiting switches the animation",
+      "when": "the mark's animation is inspected"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the agent menu is opened with agents in different states",
+      "how_to_check": "Component test opening the menu",
+      "key": "menu-colour",
+      "requirement": "menu-matches",
+      "then": "each entry's state detail carries the same per-state marker as the status line",
+      "when": "the entries are read"
+    },
+    {
+      "checked_by": "agent",
+      "given": "prefers-reduced-motion is reduce",
+      "how_to_check": "Playwright page.emulateMedia({ reducedMotion: 'reduce' }) on the mock, or the global rule in index.css confirmed to cover the new selectors",
+      "key": "no-motion-when-reduced",
+      "requirement": "reduced-motion",
+      "then": "it is green and has no running animation",
+      "when": "the working mark is shown"
+    },
+    {
+      "checked_by": "operator",
+      "given": "the operator watches an agent that is working, then finishes, then asks a question",
+      "how_to_check": "Operator opens Watch on a live agent after the bundle lands",
+      "key": "operator-sees-it",
+      "requirement": "state-motion",
+      "then": "they can tell the three states apart at a glance",
+      "when": "they look at the Watch tab"
+    }
+  ],
+  "algorithms": [],
+  "already_built": {
+    "built": false,
+    "commits": [],
+    "note": ""
+  },
+  "aw_identity": {
+    "digests": {
+      "FR-1": "00570072209f275464f7c7215c439110b09f3832a97d9f5ba55654d40be7d61e",
+      "FR-2": "72662c8b81920ea6b893acfa8350715470deeda04c969f97b85362d424da62b3",
+      "FR-3": "38c468aa8ff641c85e610b0d721cccfaba348b8b04428f003c43182653d3f9f3",
+      "FR-4": "4fa5d71f8080bcab04cea51db41244b0f5aa111026b98fc9eb26f389b0a3e33b"
+    },
+    "high_water": 4,
+    "requirements": {
+      "menu-matches": "FR-3",
+      "reduced-motion": "FR-4",
+      "state-colour": "FR-1",
+      "state-motion": "FR-2"
+    },
+    "retired": {}
+  },
+  "capabilities": {
+    "changes": [
+      "spec/capabilities/conversation-side-panel/spec.json"
+    ],
+    "creates": []
+  },
+  "delivery": {
+    "agent": "Developer",
+    "builder": "Developer",
+    "checker": "QA2",
+    "cron": "*/5 * * * *",
+    "mode": "flow",
+    "reasons": {
+      "agent": "Developer built the Watch tab wiring.",
+      "builder": "Small UI change in files Developer just wrote.",
+      "checker": "QA2 ran the Watch drive and can confirm the states live.",
+      "cron": "Flows' usual cadence.",
+      "mode": "One task; a flow lands it with a check and no hand-holding.",
+      "stop": "Stops when its one task is done."
+    },
+    "reviewer": null,
+    "stop_at": null,
+    "stop_when_queue_empties": true
+  },
+  "design": "",
+  "evidence": {
+    "checked": [
+      "WatchTab.tsx:94-97 and panel-tabs.css:145-146: grey text plus a static green dot only when working",
+      "watchModel.ts:10-19: three states, waiting outranks working",
+      "WatchTabContainer.tsx:58: only `working: boolean` reaches the tab beside the state words",
+      "story.css:47-52 and index.css:2136: existing pulse cues to match"
+    ],
+    "limits": [
+      "Not yet seen how it looks; the operator's glance is the final check",
+      "Colour contrast of amber on the panel surface in light theme not measured"
+    ]
+  },
+  "hub": {
+    "builds": [
+      {
+        "budget_cap_usd": null,
+        "builder": "Developer",
+        "builders": [
+          "Developer"
+        ],
+        "checker": "QA2",
+        "checkers": [],
+        "chosen_by": "operator",
+        "driver": "flow",
+        "ended_at": "2026-11-15T15:58:22.022473+00:00",
+        "id": "build-8bdc4a15f09b",
+        "landing": "main",
+        "lead": null,
+        "level": "reviewed",
+        "pull_request": null,
+        "started_at": "2026-11-15T14:54:41.118888+00:00",
+        "state": "finished",
+        "stop_reason": null,
+        "tasks": {
+          "status-colour-and-motion": {
+            "builder": "Developer",
+            "checker": "QA2"
+          },
+          "task-0103658c09f4": {
+            "builder": null,
+            "builder_default": true,
+            "checker": null
+          }
+        },
+        "window_end": null,
+        "window_start": null
+      }
+    ],
+    "phase": "approved",
+    "size": "fix",
+    "step": "build"
+  },
+  "kind": "change-spec",
+  "lifecycle": "",
+  "open_questions": [],
+  "problem": "Operator, 2026-11-15, after testing the Watch tab: 'I can only see if an agent is working by the grey string, which is not very indicative of what's happening.' Grounding, master fa3fecb: WatchTab.tsx:94-97 draws the state as plain text in .aw-watch-status (panel-tabs.css:145, color var(--text-2)), preceded by .aw-watch-live, a 7px green dot with a static ring (panel-tabs.css:146), only when working. 'Waiting for your answer' (watchModel.ts:10-19), the state that most needs the operator, has no colour or mark at all, and idle and waiting look identical. The app already has liveness cues to match: the pulsing .aw-pill[data-live] / @keyframes aw-live (story.css:47-52) and task-live-pulse (index.css:2136), and a global prefers-reduced-motion rule (index.css ~2120).",
+  "requirements": [
+    {
+      "key": "state-colour",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator, 2026-11-15: grey text does not say what is happening. Waiting currently looks the same as idle, yet it is the one state that needs the operator.",
+      "statement": "The Watch tab's status line shows each state in its own colour with a mark beside it: working in the app's green, waiting for your answer in the app's amber, idle in a muted neutral. The three states cannot be confused with colour alone or with the text alone."
+    },
+    {
+      "key": "state-motion",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Motion is what says 'something is happening now' at a glance; a different rhythm for waiting keeps it from reading as work in progress.",
+      "statement": "While the watched agent is working, its mark pulses continuously; while it is waiting for your answer, its mark draws attention with a slower, distinct pulse; idle has no motion. When the state changes, the colour and motion change with it, without a reload."
+    },
+    {
+      "key": "menu-matches",
+      "modal": "SHOULD",
+      "party": null,
+      "rationale": null,
+      "statement": "The agent menu's entries show each agent's state in the same colour as the status line, so the operator can see who is working or waiting before choosing whom to watch."
+    },
+    {
+      "key": "reduced-motion",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Accessibility, and the app already honours it everywhere else (index.css's prefers-reduced-motion rule).",
+      "statement": "With the operating system's reduce-motion setting on, the marks keep their colours but do not pulse."
+    }
+  ],
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "The Watch tab's status line: a colour and a mark per state (working, waiting for your answer, idle)",
+      "Motion for working and waiting, none for idle",
+      "The agent menu's per-agent state detail using the same colours",
+      "Respecting reduced motion"
+    ],
+    "non_goals": [
+      "Any change to how the state is derived (watchModel.ts stays as it is)",
+      "Sounds, notifications or badges outside the Watch tab",
+      "Animating the watched conversation's timeline itself",
+      "New colour tokens: existing ones only",
+      "Any Hub route or migration"
+    ]
+  },
+  "summary": "The Watch tab's 'X is working / idle / waiting for your answer' line is grey text with, at most, a small static green dot. Each state gets its own colour, and working and waiting get motion, so the operator can tell at a glance, from across the screen, what the watched agent is doing.",
+  "tag": "watch-status-colour",
+  "tasks": [
+    {
+      "builder": "Developer",
+      "builder_reason": "Developer wired the Watch tab and knows these files; small Sonnet-sized UI change.",
+      "checker": "QA2",
+      "checker_reason": "QA2 wrote and ran the Watch drive and can see the states live.",
+      "depends_on": [],
+      "description": "Give WatchTab's status mark and text a per-state colour (green working, amber waiting, muted idle) and per-state motion (working pulse, slower distinct waiting pulse, idle still), matching the app's existing aw-live / task-live-pulse cues and existing tokens only; pass the state, not just `working`, from WatchTabContainer so the tab can tell waiting from idle; colour the agent menu's state detail the same way; make sure reduced motion stops the pulses; component tests for each criterion; refresh the mock screen and rebuild the committed UI bundle (hub/ui/src and hub/hub/static/ui together).",
+      "files": [
+        "hub/ui/src/components/panel/WatchTab.tsx",
+        "hub/ui/src/components/panel/WatchTabContainer.tsx",
+        "hub/ui/src/styles/panel-tabs.css",
+        "hub/ui/src/__tests__/",
+        "hub/ui/mock/",
+        "hub/hub/static/ui/"
+      ],
+      "from": null,
+      "key": "status-colour-and-motion",
+      "requirements": [
+        "state-colour",
+        "state-motion",
+        "menu-matches",
+        "reduced-motion"
+      ],
+      "reviewer": null,
+      "title": "Watch status colour and motion"
+    }
+  ],
+  "title": "The Watch tab shows what the agent is doing with colour and motion"
+}

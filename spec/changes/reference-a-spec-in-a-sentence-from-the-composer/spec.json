@@ -1,0 +1,372 @@
+{
+  "acceptance_criteria": [
+    {
+      "checked_by": "agent",
+      "given": "a project with at least two spec documents and workspace files",
+      "how_to_check": "Browser drive against the trial Hub (scripts/drive/d1112_spec_reference_box.py), plus a vitest test for the result grouping",
+      "key": "menu-has-both-groups",
+      "requirement": "at-lists-specs",
+      "then": "the menu shows a Specs group containing the document whose title contains 'head' and a Files group with matching paths; ArrowDown moves from the last spec into the first file; Escape closes the menu and leaves the text unchanged",
+      "when": "the operator types @head in a conversation's composer"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the @ menu is open with a spec active, after the text 'The spec '",
+      "how_to_check": "Browser drive: assert one box element with the title and the composer's text before and after it",
+      "key": "pick-makes-a-box",
+      "requirement": "picking-inserts-a-box",
+      "then": "the composer shows 'The spec ' followed by one box with the spec icon and the document's title, a space, and the cursor after it; no '@' remains",
+      "when": "the operator presses Enter"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the composer holds 'see ' then a box then 'now'",
+      "how_to_check": "Browser drive with real key presses",
+      "key": "backspace-removes-whole-box",
+      "requirement": "a-box-is-one-unit",
+      "then": "the first Backspace removes the entire box and nothing else; ArrowLeft moves the cursor from after the box to before it in one press",
+      "when": "the operator puts the cursor right after the box and presses Backspace once; then, with the box inserted again, presses ArrowLeft from after the box"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a conversation with the side panel's spec list showing, and some text in the composer",
+      "how_to_check": "Browser drive",
+      "key": "panel-insert-not-open",
+      "requirement": "insert-from-the-side-panel",
+      "then": "the first two actions each add one box for their spec at the cursor and focus the composer; the click opens that spec in the panel and adds no box",
+      "when": "the operator presses the insert action on a spec row, then presses the insert action in the header of a spec open in the panel, then clicks a spec row's title"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an empty composer",
+      "how_to_check": "Browser drive comparing the stored draft text from both routes",
+      "key": "visible-control-opens-menu",
+      "requirement": "the-menu-is-reachable-without-typing",
+      "then": "the composer holds the same box that typing @ and picking that spec produces",
+      "when": "the operator presses the composer's reference control and picks a spec"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a message 'The spec ' + box for document D + ' has issues' is sent",
+      "how_to_check": "Hub test or drive reading the timeline entry and the delivered prompt",
+      "key": "delivered-text",
+      "requirement": "the-agent-receives-kind-id-and-title",
+      "then": "it contains 'spec', D's id and D's title, does not contain any of D's requirement statements, and the reference text does not begin with @",
+      "when": "the delivered input is read from the Hub (the conversation's operator_input timeline entry and the prompt the runner receives)"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a draft containing two boxes and text between them",
+      "how_to_check": "Browser drive (reload) and vitest for the text form",
+      "key": "draft-and-copy",
+      "requirement": "the-text-survives-the-round-trip",
+      "then": "after reload the same two boxes and text are in the composer; the copied text is readable plain text naming both specs by title",
+      "when": "the operator reloads the page, then sends the message and copies it from the thread"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a sent message containing a box for document D",
+      "how_to_check": "Browser drive",
+      "key": "timeline-box-opens",
+      "requirement": "a-sent-box-opens-the-spec",
+      "then": "D opens in the side panel",
+      "when": "the operator clicks the box in the timeline"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a sent message with a box for document D and one for an id that is not in the project's document list",
+      "how_to_check": "vitest with the document list fixture in the order the documents route returns, plus a drive step renaming a trial document",
+      "key": "rename-and-missing",
+      "requirement": "a-renamed-or-missing-spec",
+      "then": "D's box shows its new title with the old title as its tooltip; the other box shows its send-time title muted, marked no longer available, and clicking it opens nothing",
+      "when": "D is renamed with rename_spec_document and the timeline is shown"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a trial-Hub agent bound to Haiku with the agentweave tools and a spec document D",
+      "how_to_check": "scripts/drive/d1112_spec_reference_agent_turn.py: drive a real turn on the trial Hub :8010 and read the run's trace",
+      "key": "real-agent-opens-it",
+      "requirement": "an-agent-acts-on-the-reference",
+      "then": "the agent's trace shows a read_spec_document call naming D's id or path, and its reply quotes D's first requirement",
+      "when": "the operator sends 'What is the first requirement of ' + box for D + '?' and the turn runs"
+    }
+  ],
+  "algorithms": [],
+  "already_built": {
+    "built": false,
+    "commits": [],
+    "note": ""
+  },
+  "aw_identity": {
+    "digests": {
+      "FR-1": "3e207a92acb6c060952c86244a08e29e6ce4e18eb56d5ffcda53364586216263",
+      "FR-10": "98c05ff90673cdd9b587b68730de69ee6ae414691978dd1a95c86c7dffc18a80",
+      "FR-2": "e32d00e989017f058dcb8a34062acab4b2ea41282a8206169fd649a0e1323743",
+      "FR-3": "28e63817598191701b7720073c9266c3551c6694ab4410bcf58a6a54d07e17ef",
+      "FR-4": "c51a1274889b4617f9647c57f89f6660c2aa8173e1ace542c3e8963df6744489",
+      "FR-5": "4bddd42a66ffec37d25389d98df4fd9bf1ec3e2f33a762072b68319304a5e433",
+      "FR-6": "dded4310bb8dca3b74ff459e2b1cf82394f63d2537fdbe7bff97457747a92373",
+      "FR-7": "2144ef433f9e4643f8e1114a061c0ee93a5cd1074db5f5fb8535a34563fddbe0",
+      "FR-8": "8b37c78356f55b31e785c57b541822053cac96b9e7c1356d0c38eb422e1ef1bf",
+      "FR-9": "557f996f042c6c457a79ecaad6b9404722cf73c9f82267eadd90727e6c8b5511"
+    },
+    "high_water": 10,
+    "requirements": {
+      "a-box-is-one-unit": "FR-3",
+      "a-renamed-or-missing-spec": "FR-9",
+      "a-sent-box-opens-the-spec": "FR-8",
+      "an-agent-acts-on-the-reference": "FR-10",
+      "at-lists-specs": "FR-1",
+      "insert-from-the-side-panel": "FR-4",
+      "picking-inserts-a-box": "FR-2",
+      "the-agent-receives-kind-id-and-title": "FR-6",
+      "the-menu-is-reachable-without-typing": "FR-5",
+      "the-text-survives-the-round-trip": "FR-7"
+    },
+    "retired": {}
+  },
+  "capabilities": {
+    "changes": [
+      "spec/capabilities/agent-composer/spec.json",
+      "spec/capabilities/conversation-side-panel/spec.json"
+    ],
+    "creates": []
+  },
+  "delivery": {
+    "agent": "Developer",
+    "builder": "Developer",
+    "checker": "QA",
+    "cron": "*/5 * * * *",
+    "mode": "flow",
+    "reasons": {
+      "agent": "The operator's rule (2026-10-24): an unattended flow is built by Developer.",
+      "builder": "Developer (Sonnet), per the same rule.",
+      "checker": "QA tests the drives and records the verdict, a different agent from the builder.",
+      "cron": "Every five minutes, the usual flow cadence.",
+      "mode": "Four chained tasks with drives that fail first, the shape a flow handles unattended.",
+      "stop": "Stop when the four tasks are done."
+    },
+    "reviewer": null,
+    "stop_at": null,
+    "stop_when_queue_empties": true
+  },
+  "design": "Flow:\n  type @ -> menu shows Specs and Files groups -> pick a spec -> a box [icon + title] replaces the typed @query\n  or: side panel spec row / open spec header -> insert icon -> box at the composer's cursor\n  send -> stored text carries kind, id, send-time title -> timeline renders the box with the current title -> click opens the spec in the side panel\n  agent receives the same text and opens the document with read_spec_document\n\nDecisions:\n- D1. The reference is stored and delivered as text, so history, drafts, copying and every runner keep working. Recommended form: `[spec: <title at send time>](<document id>)`, for example `[spec: The spec header, redesigned](spdoc-407caf5abcdb)`. It names the kind, so an agent knows which tool opens it, and it does not begin with `@` (the Claude CLI expands `@x` into a file attachment, F409; hub/hub/file_mentions.py). The builder may choose a different form only if it meets the same requirements.\n- D2. The id is the document id (`spdoc-...`), not the path: rename_spec_document changes the path, the id survives (the panel already keys spec tabs by id for this reason, hub/ui/src/store/panelTabsStore.ts).\n- D3. The box displays the document's current title, resolved from the project's document list; the send-time title in the text is the fallback and the tooltip.\n- D4. Files stay as they are in this slice: picking a file still inserts `@path` text. Making files boxes is slice `more-reference-kinds`.\n- D5. A box is one unit in the composer. The composer is a plain textarea today, which cannot draw a box; replacing it is the main build cost of this slice, and it must keep the composer's existing behaviour (triggers, menu keys, drafts, growth, /model).\n- D6. The browser drive for the UI tasks is one script, scripts/drive/d1112_spec_reference_box.py, extended by each UI task in order; the real agent turn is its own script, scripts/drive/d1112_spec_reference_agent_turn.py.",
+  "evidence": {
+    "checked": [
+      "hub/ui/src/lib/composerTrigger.ts and composerTriggerSources.ts: @ lists workspace paths only, $ lists .claude/skills, / offers only /model",
+      "hub/ui/src/components/agents/Composer.tsx: the composer is a textarea; the file tab's Insert into composer appends @path text (insertPathRequest)",
+      "hub/ui/src/store/panelTabsStore.ts: spec tabs are keyed by document id because paths change on rename",
+      "hub/hub/file_mentions.py: the Claude CLI expands @path into a file attachment, which is why the reference must not start with @",
+      "hub/ui/src/api/spec.ts useSpecDocuments: the project's document list the menu and the timeline can resolve titles from",
+      "spec/capabilities/agent-composer: the trigger, menu and draft requirements this change must keep"
+    ],
+    "limits": [
+      "Whether a Haiku agent opens the document from the text form alone is untested until task real-agent-turn runs",
+      "The cost of replacing the textarea is estimated from reading, not from a spike"
+    ]
+  },
+  "hub": {
+    "phase": "exploring",
+    "size": null,
+    "step": "intake"
+  },
+  "kind": "change-spec",
+  "lifecycle": "",
+  "open_questions": [],
+  "problem": "To talk about a spec in a conversation, the operator copies its name or contents into the composer (operator, 2026-11-12: \"Today I need to copy and paste the spec.\"). A copied title is ambiguous to the agent and goes stale on rename; copied contents bloat the prompt. The composer's `@` lists only files (hub/ui/src/lib/composerTriggerSources.ts), and what it inserts is loose text, not a unit the operator can see or delete as one. The operator asked that a reference \"still be a string but boxed\".",
+  "requirements": [
+    {
+      "key": "at-lists-specs",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "@ is the agreed trigger for references to things (operator, 2026-11-12); files must keep working while specs join them.",
+      "statement": "When the operator opens an @ trigger in the composer, the menu SHALL list the project's specification documents under a Specs heading as well as the workspace files under a Files heading, each filtered by case-insensitive substring of the typed query (a spec matching on its title or its path), and SHALL keep the existing arrow, Enter, Tab and Escape behaviour across both groups."
+    },
+    {
+      "key": "picking-inserts-a-box",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": null,
+      "statement": "Accepting a spec from the menu SHALL replace the typed @ and query with one reference shown as a box holding a spec icon and the document's title, followed by a space, with the cursor placed after it."
+    },
+    {
+      "key": "a-box-is-one-unit",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "The operator asked for a reference that is boxed, not loose text that can be half-deleted into a broken string.",
+      "statement": "In the composer a box SHALL behave as a single character: Backspace directly after it or Delete directly before it removes the whole box, the cursor cannot be placed inside it, and the left and right arrow keys move over it in one step."
+    },
+    {
+      "key": "insert-from-the-side-panel",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A click already means open; one gesture with two meanings leaves the operator unsure which will happen.",
+      "statement": "Each spec row in the side panel's spec list, and the header of a spec open in the side panel, SHALL offer an insert action distinct from opening it, which places a box for that spec at the composer's cursor (at the end when the composer has not been focused) and focuses the composer; clicking the spec itself SHALL still open it."
+    },
+    {
+      "key": "the-menu-is-reachable-without-typing",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "The operator did not know @ or $ existed (2026-11-12) although the placeholder names @.",
+      "statement": "The composer SHALL show a visible control that opens the same reference menu at the cursor, and accepting a result from it SHALL insert exactly what typing @ would."
+    },
+    {
+      "key": "the-agent-receives-kind-id-and-title",
+      "modal": "SHALL",
+      "party": "producer",
+      "rationale": "The id is unambiguous and survives renames; the agent reads the current version with its own tools; a leading @ makes the Claude CLI try to attach a file (F409).",
+      "statement": "The message delivered to the agent SHALL contain, for each box, readable text naming the kind (spec), the document's id and its title at send time, and MUST NOT contain the document's contents for it; that text MUST NOT begin with @."
+    },
+    {
+      "key": "the-text-survives-the-round-trip",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": null,
+      "statement": "A composer draft containing boxes SHALL be restored with the same boxes after navigation or reload, and the stored message SHALL read as plain text wherever it is shown as text, such as when copied from the thread."
+    },
+    {
+      "key": "a-sent-box-opens-the-spec",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": null,
+      "statement": "In the conversation timeline, the operator's sent message SHALL show each reference as the same box, displaying the document's current title, and activating the box SHALL open that document in the side panel."
+    },
+    {
+      "key": "a-renamed-or-missing-spec",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "An old message must not silently lose its subject.",
+      "statement": "When the referenced document has been renamed since sending, its box SHALL show the current title and offer the title at send time as its tooltip; when the document no longer exists in the project's document list, the box SHALL show the title at send time in a muted style, marked as no longer available, and SHALL NOT open anything."
+    },
+    {
+      "key": "an-agent-acts-on-the-reference",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": null,
+      "statement": "An agent that receives a message containing a spec box and no other naming of the document SHALL be able to open the referenced document by its id with the tools it already has, without instructions added for this purpose."
+    }
+  ],
+  "roadmap": {
+    "document": "spec/changes/a-better-prompting-experience-references-and-commands-in-the-composer/spec.json",
+    "slice": "boxed-spec-reference"
+  },
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "Specification documents (change specs, roadmaps, capabilities) as the only boxed reference kind",
+      "The @ menu, the insert action in the side panel's spec list and an open spec's header, and a visible control that opens the menu without typing",
+      "How the box looks and behaves in the composer and in the operator's sent messages",
+      "The text the agent receives"
+    ],
+    "non_goals": [
+      "Boxes for files, tasks, requirements, agents or vault entries (slice more-reference-kinds)",
+      "Rendering ids that agents write in replies as boxes (slice references-in-replies)",
+      "Turning pasted links or ids into boxes (slice paste-becomes-reference)",
+      "Moving skills from $ to / and new / commands (slice slash-commands)",
+      "Inlining a spec's contents into the prompt",
+      "Dragging a spec into the composer"
+    ]
+  },
+  "summary": "Typing @ in the composer lists the project's specification documents beside files. Picking one, or pressing the insert action beside a spec in the side panel, puts a boxed reference into the message: one unit showing the spec's title. The sent message shows the same box, which opens the spec, and the agent receives the spec's kind, id and title as plain text it can act on.",
+  "tasks": [
+    {
+      "builder": "Developer",
+      "checker": "QA",
+      "depends_on": [],
+      "description": "Acceptance drive first: scripts/drive/d1112_spec_reference_box.py covering menu-has-both-groups, pick-makes-a-box, backspace-removes-whole-box, visible-control-opens-menu and draft-and-copy, red on master. Then: add specs to the @ menu (from the project's document list), make the composer able to hold a box as one unit while keeping its existing triggers, menu keys, drafts, growth and /model, add the visible control that opens the menu, and define the reference's text form (design D1) in one place with vitest tests. Refresh the UI bundle (hub/hub/static/ui) with the source.",
+      "files": [
+        "hub/ui/src/components/agents/Composer.tsx",
+        "hub/ui/src/components/agents/ComposerTriggerMenu.tsx",
+        "hub/ui/src/lib/composerTrigger.ts",
+        "hub/ui/src/lib/composerTriggerSources.ts",
+        "hub/ui/src/lib/composerDrafts.ts",
+        "hub/ui/src/__tests__",
+        "hub/hub/static/ui",
+        "scripts/drive/d1112_spec_reference_box.py"
+      ],
+      "from": null,
+      "key": "box-in-the-composer",
+      "requirements": [
+        "at-lists-specs",
+        "picking-inserts-a-box",
+        "a-box-is-one-unit",
+        "the-menu-is-reachable-without-typing",
+        "the-agent-receives-kind-id-and-title",
+        "the-text-survives-the-round-trip"
+      ],
+      "reviewer": null,
+      "title": "Spec boxes in the composer"
+    },
+    {
+      "builder": "Developer",
+      "checker": "QA",
+      "depends_on": [
+        "box-in-the-composer"
+      ],
+      "description": "Extend scripts/drive/d1112_spec_reference_box.py with timeline-box-opens and rename-and-missing, red first. Render reference text in the operator's sent messages as the box with the current title from the project's document list; open the document in the side panel on activation; renamed shows the current title with the send-time title as tooltip; missing shows muted and opens nothing. Add a Hub-side check for delivered-text (the operator_input entry and the delivered prompt carry kind, id and title, no contents, no leading @). Refresh the UI bundle.",
+      "files": [
+        "hub/ui/src/components/agents/AgentTimeline.tsx",
+        "hub/ui/src/components/agents/MarkdownMessage.tsx",
+        "hub/ui/src/__tests__",
+        "hub/tests",
+        "hub/hub/static/ui",
+        "scripts/drive/d1112_spec_reference_box.py"
+      ],
+      "from": null,
+      "key": "box-in-the-timeline",
+      "requirements": [
+        "a-sent-box-opens-the-spec",
+        "a-renamed-or-missing-spec",
+        "the-agent-receives-kind-id-and-title"
+      ],
+      "reviewer": null,
+      "title": "Spec boxes in sent messages"
+    },
+    {
+      "builder": "Developer",
+      "checker": "QA",
+      "depends_on": [
+        "box-in-the-composer",
+        "box-in-the-timeline"
+      ],
+      "description": "Extend scripts/drive/d1112_spec_reference_box.py with panel-insert-not-open, red first. Add an insert action to each spec row of the side panel's spec list and to an open spec's header, distinct from opening; it places a box at the composer's cursor, or at the end if the composer was never focused, and focuses the composer. Generalise the existing file 'Insert into composer' request so files and specs share the path into the composer. Refresh the UI bundle.",
+      "files": [
+        "hub/ui/src/components/spec/SpecIndexTab.tsx",
+        "hub/ui/src/components/spec/SpecTree.tsx",
+        "hub/ui/src/components/spec/SpecDocumentHeader.tsx",
+        "hub/ui/src/components/agents/ConversationView.tsx",
+        "hub/ui/src/components/agents/AgentOutputPanel.tsx",
+        "hub/ui/src/components/agents/Composer.tsx",
+        "hub/ui/src/__tests__",
+        "hub/hub/static/ui",
+        "scripts/drive/d1112_spec_reference_box.py"
+      ],
+      "from": null,
+      "key": "insert-from-the-panel",
+      "requirements": [
+        "insert-from-the-side-panel"
+      ],
+      "reviewer": null,
+      "title": "Insert a spec from the side panel"
+    },
+    {
+      "builder": "Developer",
+      "checker": "QA",
+      "depends_on": [
+        "box-in-the-timeline"
+      ],
+      "description": "scripts/drive/d1112_spec_reference_agent_turn.py: on the trial Hub :8010 with an agent bound to Haiku, send a message whose only naming of a spec is a box, and confirm from the run's trace that the agent called read_spec_document for that document and quoted its first requirement. If it does not, adjust the reference's text form (design D1, in the module box-in-the-composer created) until it does, without adding instructions for it, and record the trace.",
+      "files": [
+        "scripts/drive/d1112_spec_reference_agent_turn.py"
+      ],
+      "from": null,
+      "key": "real-agent-turn",
+      "requirements": [
+        "an-agent-acts-on-the-reference"
+      ],
+      "reviewer": null,
+      "title": "A real agent opens the referenced spec"
+    }
+  ],
+  "title": "Reference a spec in a sentence from the composer"
+}

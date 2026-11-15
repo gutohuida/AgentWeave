@@ -272,6 +272,546 @@
       "requirement": "n1-closing-a-document-tab-does-not-detach-the-document",
       "then": "the document is shown in a tab without being attached to the conversation",
       "when": "the operator opens a document from it"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a browser that has the Loops tab open and visible in a project's side panel from before the change",
+      "how_to_check": "a UI test that seeds the per-project panel storage with a visible `loops` tab, renders the conversation view, and asserts the strip and plus menu",
+      "key": "the-side-panel-s-running-tab-builds-loops-and-jobs-an-ac-restore",
+      "requirement": "the-side-panel-s-running-tab-builds-loops-running-replaces-loops",
+      "then": "the panel shows Running in the Loops tab's strip position, visible, and no Loops tab or Loops launcher card exists anywhere in the panel",
+      "when": "the operator opens a conversation in that project after the change"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a project with a flow build, a lead-driven build, an ended build, a plain loop and a plain job (built from route-shaped fixtures in the order the routes return them)",
+      "how_to_check": "model test over route-ordered fixtures, plus the acceptance drive",
+      "key": "the-side-panel-s-running-tab-builds-loops-and-jobs-and-w-ac-once",
+      "requirement": "the-side-panel-s-running-tab-builds-loops-and-jo-every-item-once",
+      "then": "exactly five rows appear: the build's loop and the loop's job are not listed separately",
+      "when": "Running is shown with All selected"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a document whose build finished yesterday and another whose build was stopped early",
+      "how_to_check": "acceptance drive on the trial Hub",
+      "key": "the-side-panel-s-running-tab-builds-loops-and-jo-ac-ended-builds",
+      "requirement": "the-side-panel-s-running-tab-builds-loops-and-jo-every-item-once",
+      "then": "both appear, under Finished and Stopped early, with when they ended",
+      "when": "Finished is selected"
+    },
+    {
+      "checked_by": "agent",
+      "given": "one item in each group",
+      "how_to_check": "model and component test",
+      "key": "the-side-panel-s-running-tab-builds-loops-and-jobs-and-ac-order",
+      "requirement": "the-side-panel-s-running-tab-builds-loop-grouped-needs-you-first",
+      "then": "the group headings read, top to bottom: Needs you, Working now, Between steps, Scheduled, Paused, Finished, Stopped early, each with count 1",
+      "when": "All is selected"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a running build whose working agent has asked a blocking question",
+      "how_to_check": "acceptance drive on the trial Hub with a real agent turn that calls ask_user (Haiku)",
+      "key": "the-side-panel-s-running-tab-builds-loops-and-jobs-a-ac-question",
+      "requirement": "the-side-panel-s-running-tab-builds-loops-and-needs-you-says-why",
+      "then": "the build is under Needs you saying a question is waiting, and pressing Answer shows that question where it can be answered",
+      "when": "Running is shown"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a loop whose next firing the Hub would refuse",
+      "how_to_check": "model test plus acceptance drive",
+      "key": "the-side-panel-s-running-tab-builds-loops-and-jobs-and-ac-stall",
+      "requirement": "the-side-panel-s-running-tab-builds-loops-and-needs-you-says-why",
+      "then": "the loop is under Needs you showing the Hub's stall reason and a Look button that opens the loop's record",
+      "when": "Running is shown"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a build with seven tasks, three done, two agents working and a third next, $4.20 spent",
+      "how_to_check": "component test",
+      "key": "the-side-panel-s-running-tab-builds-loops-and-jobs-and-wh-ac-row",
+      "requirement": "the-side-panel-s-running-tab-builds-l-row-says-what-is-happening",
+      "then": "it reads the document's title, Build, started N ago, 3/7 tasks, $4.20, the two working agents with their tasks, and \"and 1 more\"",
+      "when": "its row is shown"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a paused job on the schedule `0 9 * * 1`",
+      "how_to_check": "component test asserting no text matching a cron or id pattern",
+      "key": "the-side-panel-s-running-tab-builds-loops-and-jobs-and-ac-words",
+      "requirement": "the-side-panel-s-running-tab-builds-loops-a-operators-words-only",
+      "then": "it reads \"On its own schedule, paused\" and no cron text or id appears anywhere in the tab",
+      "when": "its row is shown"
+    },
+    {
+      "checked_by": "agent",
+      "given": "items of every kind, some ended",
+      "how_to_check": "component test",
+      "key": "the-side-panel-s-running-tab-builds-loops-and-jobs-and-ac-filter",
+      "requirement": "the-side-panel-s-running-tab-builds-loops-and-jobs-and-w-filters",
+      "then": "only ended jobs show, the Now/Finished counts reflect the Jobs filter, and with none, the tab says nothing has finished",
+      "when": "the operator picks Finished and then Jobs"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a build row, a loop row and a job row",
+      "how_to_check": "UI test on the conversation view",
+      "key": "the-side-panel-s-running-tab-builds-loops-and-jobs-and-w-ac-open",
+      "requirement": "the-side-panel-s-running-tab-builds-loops-a-rows-open-their-item",
+      "then": "the build's document opens in the panel at its builds, the loop's detail tab opens, and the Jobs page opens",
+      "when": "each is selected"
+    },
+    {
+      "checked_by": "agent",
+      "given": "Running open beside a conversation while a build's flow fires",
+      "how_to_check": "acceptance drive on the trial Hub",
+      "key": "the-side-panel-s-running-tab-builds-loops-and-jobs-and-w-ac-live",
+      "requirement": "the-side-panel-s-running-tab-builds-loops-and-jobs-and-what-live",
+      "then": "the row's worker line and progress change without a reload",
+      "when": "an agent takes the next task"
+    },
+    {
+      "checked_by": "operator",
+      "given": "the built tab on the trial Hub with real items",
+      "how_to_check": "screenshots in both themes at 360px panel width, then the operator's look",
+      "key": "the-side-panel-s-running-tab-builds-loops-and-jobs-and-ac-looks",
+      "requirement": "the-side-panel-s-running-tab-builds-loops-matches-approved-mock",
+      "then": "it looks like the approved mock and nothing scrolls sideways",
+      "when": "the operator looks at it in dark and light at the panel's narrowest width"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an agent whose last turn modified one file and added another in its checkout",
+      "how_to_check": "Browser drive on a Hub started from this checkout over a test database: seed the commits, open the conversation, read the tab",
+      "key": "the-side-panel-s-changes-tab-shows-what-the-agent-c-ac-two-files",
+      "requirement": "the-side-panel-s-changes-tab-shows-what-the-lists-changed-files",
+      "then": "both files are listed with modified/added marks and correct +/- counts",
+      "when": "the operator opens the Changes tab in that agent's conversation"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the Changes tab listing a modified file",
+      "how_to_check": "Same drive: click the file, assert the diff lines and that the conversation pane is still visible",
+      "key": "the-side-panel-s-changes-tab-shows-what-the-agent-change-ac-diff",
+      "requirement": "the-side-panel-s-changes-tab-shows-what-the-agent-cha-shows-diff",
+      "then": "its diff shows in the panel and the conversation stays on screen",
+      "when": "the operator selects it"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an agent branch with two turn snapshots, each changing a different file",
+      "how_to_check": "Hub test over a temporary repository, plus the browser drive",
+      "key": "the-side-panel-s-changes-tab-shows-what-the-agent-chan-ac-switch",
+      "requirement": "the-side-panel-s-changes-tab-shows-what-the-agent-turn-or-branch",
+      "then": "Last turn lists only the second turn's file, Since main lists both, and the header names the branch and main",
+      "when": "the operator switches between Last turn and Since main"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an agent whose most recent turn worked a flow task on its task branch",
+      "how_to_check": "Hub test seeding a task worktree and a run bound to it",
+      "key": "the-side-panel-s-changes-tab-shows-what-the-agent-ac-task-branch",
+      "requirement": "the-side-panel-s-changes-tab-shows-what-the-agent-c-which-branch",
+      "then": "the tab shows the task branch's changes and names the task",
+      "when": "its Changes tab opens"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a running turn that has edited a file without committing",
+      "how_to_check": "Hub test with a running run and a dirty worktree; drive with a real Haiku turn",
+      "key": "the-side-panel-s-changes-tab-shows-what-the-agent-ac-working-now",
+      "requirement": "the-side-panel-s-changes-tab-shows-what-the-agent-ch-working-now",
+      "then": "a working-now line names that file; after the turn ends the line is gone and the file is under Last turn",
+      "when": "the tab is open"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the tab open while an agent's turn runs",
+      "how_to_check": "Browser drive with a real Haiku turn, timing from the turn's end event",
+      "key": "the-side-panel-s-changes-tab-shows-what-the-agent-change-ac-live",
+      "requirement": "the-side-panel-s-changes-tab-shows-what-the-ag-follows-the-agent",
+      "then": "the turn's files appear within 5 seconds with no reload",
+      "when": "the turn ends"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an agent with no changes, and another with no checkout",
+      "how_to_check": "Hub tests of the route's answers plus the drive",
+      "key": "the-side-panel-s-changes-tab-shows-what-the-agent-chang-ac-empty",
+      "requirement": "the-side-panel-s-changes-tab-shows-what-th-empty-and-unavailable",
+      "then": "the first says nothing changed; the second says it has no checkout; neither shows an error code",
+      "when": "each one's tab opens"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the app opened from a non-local address",
+      "how_to_check": "UI test rendering the panel with a remote origin",
+      "key": "the-side-panel-s-changes-tab-shows-what-the-agent-chan-ac-remote",
+      "requirement": "the-side-panel-s-changes-tab-shows-what-the-a-offered-everywhere",
+      "then": "the Changes tab is offered alongside Files",
+      "when": "a conversation's side panel is shown"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a branch with 200 changed files, one binary and one with a 6,000-line diff",
+      "how_to_check": "Hub test for the route's timing and truncation; drive for the render",
+      "key": "the-side-panel-s-changes-tab-shows-what-the-agent-chang-ac-large",
+      "requirement": "the-side-panel-s-changes-tab-shows-what-large-diffs-stay-usable",
+      "then": "the list shows within 2 seconds, the binary has no body, and the big diff says it is truncated",
+      "when": "the tab opens and the big file is selected"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a listed file",
+      "how_to_check": "Browser drive",
+      "key": "the-side-panel-s-changes-tab-shows-what-the-agent-c-ac-open-file",
+      "requirement": "the-side-panel-s-changes-tab-shows-what-the-agent-chan-open-file",
+      "then": "the Files tab opens on that file",
+      "when": "the operator chooses to open it"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an agent with its own worktree holding a file that is not in the project root",
+      "how_to_check": "Browser drive on a Hub started from the checkout over a test database (never :8000): seed the worktree, open the conversation, switch, read the tree",
+      "key": "the-side-panel-s-files-tab-browses-the-agent-s-worktre-ac-switch",
+      "requirement": "the-side-panel-s-files-tab-browses-the-agent-s-w-location-switch",
+      "then": "the file is listed under Worktree and not under Project root, and the tab's header names the location shown each time",
+      "when": "the operator opens its Files tab and switches between Worktree and Project root"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an agent whose most recent turn worked a flow task in its task checkout",
+      "how_to_check": "Hub test seeding a task worktree and a run bound to it, comparing the Files and Changes routes' answers",
+      "key": "the-side-panel-s-files-tab-browses-the-agent-s-ac-task-checkout",
+      "requirement": "the-side-panel-s-files-tab-browses-the-agent-s-w-location-switch",
+      "then": "it lists the task checkout's files, the same checkout whose branch the Changes tab names",
+      "when": "its Files tab shows the checkout"
+    },
+    {
+      "checked_by": "agent",
+      "given": "two conversations whose agents both have worktrees",
+      "how_to_check": "Browser drive",
+      "key": "the-side-panel-s-files-tab-browses-the-ac-default-and-remembered",
+      "requirement": "the-side-panel-s-files-tab-browses-the-agent-s-opens-on-checkout",
+      "then": "the first opened on Worktree before the switch and reopens on Project root after the reload, and the second opens on Worktree",
+      "when": "the operator opens the first's Files tab, switches it to Project root, reloads the page, then opens both conversations' Files tabs"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a read-only agent, and a writing agent whose worktree does not exist yet",
+      "how_to_check": "Hub test of the route's answers plus the browser drive",
+      "key": "the-side-panel-s-files-tab-browses-the-agent-s-wo-ac-no-checkout",
+      "requirement": "the-side-panel-s-files-tab-browses-the-agent-s-workt-no-checkout",
+      "then": "no switch is offered, the project root is shown, and a note says which case it is; no error code shows",
+      "when": "each one's Files tab opens"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a worktree with an untracked new file, an ignored file and a tracked file in a nested folder",
+      "how_to_check": "Hub test over a temporary repository; drive for the tree and find",
+      "key": "the-side-panel-s-files-tab-browses-the-agent-s-wo-ac-uncommitted",
+      "requirement": "the-side-panel-s-files-tab-browses-the-agent-s-wor-worktree-tree",
+      "then": "the new and the tracked files are in the tree, the ignored one is not, and find narrows to the nested file with its folder expanded",
+      "when": "the tab lists the worktree and the operator types part of the nested file's name into find"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an agent's worktree",
+      "how_to_check": "Hub tests at the file route, each failing before the fix",
+      "key": "the-side-panel-s-files-tab-browses-the-agent-s-worktre-ac-guards",
+      "requirement": "the-side-panel-s-files-tab-browses-the-agent-read-from-location",
+      "then": "each is refused and no content is returned",
+      "when": "the file route is asked for a path that is not listed there, a path reached through a link out of the worktree, another agent's checkout, and another project's agent"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a worktree holding a 2 MB text file and a binary file",
+      "how_to_check": "Hub test plus the drive",
+      "key": "the-side-panel-s-files-tab-browses-the-agent-s-w-ac-large-binary",
+      "requirement": "the-side-panel-s-files-tab-browses-the-agent-read-from-location",
+      "then": "each shows the same too-large and binary states the project-root preview shows",
+      "when": "each is opened from the tab"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an agent branch that added one file, modified one and deleted one since main",
+      "how_to_check": "Hub test comparing the two routes over a temporary repository; drive for the render",
+      "key": "the-side-panel-s-files-tab-browses-the-agent-s-w-ac-changed-only",
+      "requirement": "the-side-panel-s-files-tab-browses-the-agent-s-wor-changed-marks",
+      "then": "exactly those three are shown, marked A, M and D, the deleted one struck through, and the set equals the Changes tab's Since main list",
+      "when": "the operator turns Changed only on"
+    },
+    {
+      "checked_by": "operator",
+      "given": "a Python file and a Markdown file in the worktree",
+      "how_to_check": "Browser drive screenshots in both themes, attached for the operator",
+      "key": "the-side-panel-s-files-tab-browses-the-agent-s-ac-preview-themes",
+      "requirement": "the-side-panel-s-files-tab-browses-the-agent-s-readable-preview",
+      "then": "the Python file is highlighted, the Markdown is rendered with its headings and lists, both are legible in both themes, and the tab names the path and 'worktree'",
+      "when": "each is opened, in the light theme and then the dark theme"
+    },
+    {
+      "checked_by": "agent",
+      "given": "README.md present in both the worktree and the project root with different content",
+      "how_to_check": "Browser drive",
+      "key": "the-side-panel-s-files-tab-browses-the-agent-s-workt-ac-two-tabs",
+      "requirement": "the-side-panel-s-files-tab-browses-the-agent-s-readable-preview",
+      "then": "two tabs open, each labelled with its location and each showing its own content",
+      "when": "the operator opens it from each location"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a file opened from the worktree",
+      "how_to_check": "Browser drive reading the composer",
+      "key": "the-side-panel-s-files-tab-browses-the-agent-s-worktre-ac-insert",
+      "requirement": "the-side-panel-s-files-tab-browses-the-agent-insert-from-either",
+      "then": "the composer holds the file's path relative to the worktree",
+      "when": "the operator presses Insert into composer"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the tab open on the agent's worktree while its turn runs",
+      "how_to_check": "Browser drive with a real Haiku turn, timing from the turn's end event",
+      "key": "the-side-panel-s-files-tab-browses-the-agent-s-worktree-ac-live",
+      "requirement": "the-side-panel-s-files-tab-browses-the-agent-s-follows-the-agent",
+      "then": "the file appears in the tree, marked added, within 5 seconds with no reload",
+      "when": "the turn creates a file and ends"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a Hub listening on a non-loopback interface",
+      "how_to_check": "Acceptance drive on a test Hub (never :8000): requests from each source, then the process list",
+      "key": "a-terminal-in-the-side-panel-ac-remote-refused",
+      "requirement": "a-terminal-in-the-side-panel-local-only",
+      "then": "each is refused, no new process exists on the Hub's machine, and the tab opened from the other address shows the 'only on the computer AgentWeave runs on' message",
+      "when": "a shell is requested from another address, from a Docker bridge address (simulated), and from loopback without the operator's sign-in"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the operator signed in on the Hub's own computer",
+      "how_to_check": "Acceptance drive: connection attempts carrying a foreign Origin, then the process list",
+      "key": "a-terminal-in-the-side-panel-ac-other-site-refused",
+      "requirement": "a-terminal-in-the-side-panel-same-site-only",
+      "then": "both are refused and no process is started",
+      "when": "a page served from another origin tries to open and to attach to a shell"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a Hub started in Docker mode",
+      "how_to_check": "Hub test with Docker mode set",
+      "key": "a-terminal-in-the-side-panel-ac-docker",
+      "requirement": "a-terminal-in-the-side-panel-no-docker",
+      "then": "the tab says the terminal is not available in Docker mode and the request is refused",
+      "when": "the operator opens the Terminal tab and a shell is requested directly"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the Hub's computer",
+      "how_to_check": "Hub test with a faked set of installed shells and WSL distributions; drive on this Windows machine comparing the menu with what is installed and with wsl.exe's list",
+      "key": "a-terminal-in-the-side-panel-ac-detected",
+      "requirement": "a-terminal-in-the-side-panel-detected-shells",
+      "then": "it lists exactly the supported shells found installed, each WSL distribution included, and after the operator opens Git Bash once, Git Bash is listed first and marked next time",
+      "when": "the operator opens the new-shell menu"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a conversation with an agent that has a worktree, and a WSL distribution installed",
+      "how_to_check": "Acceptance drive in a browser",
+      "key": "a-terminal-in-the-side-panel-ac-where",
+      "requirement": "a-terminal-in-the-side-panel-opens-where-chosen",
+      "then": "each prints the directory its tab shows, the WSL one as /mnt/<drive>/...; for an agent with no worktree, the worktree choice is disabled with a reason",
+      "when": "the operator opens one shell in the worktree, one in the project root, and a WSL shell in the worktree, and prints the current directory in each"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an open shell",
+      "how_to_check": "Acceptance drive in a browser, with screenshots",
+      "key": "a-terminal-in-the-side-panel-ac-interactive",
+      "requirement": "a-terminal-in-the-side-panel-interactive",
+      "then": "the colour shows, the pager fills the shell and quits cleanly, and the shell reports the new width",
+      "when": "the operator runs a command printing coloured text, opens and quits a pager, and widens the panel"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a conversation with four open shells",
+      "how_to_check": "Hub test and drive",
+      "key": "a-terminal-in-the-side-panel-ac-cap",
+      "requirement": "a-terminal-in-the-side-panel-several-shells",
+      "then": "it is refused with a message naming the limit of four and the process count is unchanged",
+      "when": "the operator asks for a fifth"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a shell running a command that prints a line every second",
+      "how_to_check": "Acceptance drive in a browser",
+      "key": "a-terminal-in-the-side-panel-ac-keeps-running",
+      "requirement": "a-terminal-in-the-side-panel-keeps-running",
+      "then": "the shell is still running and shows the lines printed meanwhile",
+      "when": "the operator switches to another conversation for 20 seconds and comes back"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a shell that has started a long-running child process listening on a port",
+      "how_to_check": "Acceptance drive with the process list and a port probe, on Windows, once with PowerShell and once with a WSL shell",
+      "key": "a-terminal-in-the-side-panel-ac-ends",
+      "requirement": "a-terminal-in-the-side-panel-ends-cleanly",
+      "then": "each time the shell and its child are gone and the port is free, and after the reload the tab shows one fresh shell and none of the earlier ones; typing exit in a shell shows it ended with its exit code",
+      "when": "the operator closes the shell; then separately reloads the page; then separately the Hub is stopped"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a Hub started with its database location, an API key and an agent run credential in its environment",
+      "how_to_check": "Hub test spawning a shell and reading its environment; the WSL case in the drive",
+      "key": "a-terminal-in-the-side-panel-ac-env",
+      "requirement": "a-terminal-in-the-side-panel-clean-environment",
+      "then": "PATH is present in both and none of those variables is in either",
+      "when": "the operator lists the environment in a new PowerShell shell and in a new WSL shell"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a shell with output",
+      "how_to_check": "Component test and drive",
+      "key": "a-terminal-in-the-side-panel-ac-send",
+      "requirement": "a-terminal-in-the-side-panel-send-to-agent",
+      "then": "the composer holds those two lines, then the visible screen, each marked with the shell's name and directory, and nothing has been sent",
+      "when": "the operator selects two lines and presses Send to agent, then presses it again with nothing selected"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a conversation with two open shells, one of them ended, and another conversation with its own agent",
+      "how_to_check": "Hub test over the tool, and a real Haiku turn in the drive asking the agent what the shell shows",
+      "key": "a-terminal-in-the-side-panel-ac-agent-reads",
+      "requirement": "a-terminal-in-the-side-panel-agent-reads",
+      "then": "the first gets both shells with name, directory, running state and their last lines (at most 500 each); the second gets none of them; neither tool call can send input; the tab's footer says the agent can read these shells",
+      "when": "the conversation's agent calls the read tool, and the other conversation's agent calls it"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a conversation is open",
+      "how_to_check": "Browser drive on a trial Hub: open a conversation, add Watch from the panel's tab menu, assert [data-testid=watch-tab] is visible",
+      "key": "the-side-panel-s-watch-tab-follows-another-agent-watch-tab-opens",
+      "requirement": "the-side-panel-s-watch-tab-follows-another-agent-s-con-watch-tab",
+      "then": "the tab appears and shows an agent menu",
+      "when": "the operator adds the Watch tab to the side panel"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a project with agents A and B, A having two open conversations C1 and C2",
+      "how_to_check": "Component test over WatchTabContainer with fixtures in the order the conversations route returns, plus the drive",
+      "key": "the-side-panel-s-watch-tab-follows-anoth-menus-list-right-things",
+      "requirement": "the-side-panel-s-watch-tab-follows-another-ag-who-can-be-watched",
+      "then": "the agent menu lists A and B with their states, and A's conversation menu lists C1 and C2, newest activity first",
+      "when": "the operator opens the agent menu and then picks A"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the operator watching A's C2 from A's C1",
+      "how_to_check": "Component test with the main view's conversation equal to the watched one; drive step",
+      "key": "the-side-panel-s-watch-tab-follows-another-in-this-conversation",
+      "requirement": "the-side-panel-s-watch-tab-follows-another-agent-s-con-not-twice",
+      "then": "while the main view shows C2 the Watch tab draws no timeline, says the operator is in this conversation and offers C1; back in C1 it shows C2 again",
+      "when": "they switch the main view to C2, then back to C1"
+    },
+    {
+      "checked_by": "agent",
+      "given": "agent B running a turn in conversation C3 while its most recent other conversation is C4",
+      "how_to_check": "Component test for the three cases",
+      "key": "the-side-panel-s-watch-tab-follows-another-agent-default-running",
+      "requirement": "the-side-panel-s-watch-tab-follows-another-default-conversation",
+      "then": "C3 is shown; with B idle, its most recently active conversation is shown; an agent with none says it has no conversation yet",
+      "when": "the operator picks B"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the operator is watching B without having picked a conversation",
+      "how_to_check": "Component test driving running_conversation_id changes; drive with a real Haiku agent sent to a second conversation",
+      "key": "the-side-panel-s-watch-tab-follows-anoth-follows-until-hand-pick",
+      "requirement": "the-side-panel-s-watch-tab-follows-another-age-follows-the-agent",
+      "then": "the tab switches to it; after the operator picks a conversation by hand, a later turn elsewhere leaves the tab where it is",
+      "when": "B starts a turn in a different conversation"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the operator watching B's conversation from A's conversation",
+      "how_to_check": "Browser drive on a trial Hub with a real Haiku agent: watch, trigger B, assert new timeline entries appear in the tab before the run ends; assert no textarea or stop button inside [data-testid=watch-tab]",
+      "key": "the-side-panel-s-watch-tab-follows-another-agent-s-streams-live",
+      "requirement": "the-side-panel-s-watch-tab-follows-another-agent-live-read-only",
+      "then": "B's turn output appears in the Watch tab while it runs, with no reload, and the tab has no message box, answer, stop or queue control",
+      "when": "B is sent a message and runs a turn"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the operator watching B",
+      "how_to_check": "Component test over the state derivation with agent and question fixtures; drive step with a Haiku agent told to call ask_user",
+      "key": "the-side-panel-s-watch-tab-follows-another-agent-s-c-state-shown",
+      "requirement": "the-side-panel-s-watch-tab-follows-another-agent-s-c-agent-state",
+      "then": "the tab reads working, then waiting for your answer, then idle, each without a reload",
+      "when": "B is working, then asks the operator a question, then the question is answered and B goes idle"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the operator watching B's C3 from A's C1",
+      "how_to_check": "Browser drive: switch, reload, assert the watched agent and conversation; store test for the closed-conversation and deleted-agent fallbacks",
+      "key": "the-side-panel-s-watch-tab-follows-an-survives-switch-and-reload",
+      "requirement": "the-side-panel-s-watch-tab-follows-another-agent-s-co-remembered",
+      "then": "the Watch tab shows B and C3 in D1 and again after the reload; if C3 was closed meanwhile, B's default conversation is shown; if B was deleted, the tab asks which agent to watch",
+      "when": "they switch the main view to a different agent's conversation D1, then reload the page"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the operator watching B's C3 with an unsent draft in A's C1",
+      "how_to_check": "Browser drive: type a draft, press Talk to, assert the main view's conversation id, go back, assert the draft text",
+      "key": "the-side-panel-s-watch-tab-follows-another-agen-talk-to-switches",
+      "requirement": "the-side-panel-s-watch-tab-follows-another-agent-s-conve-talk-to",
+      "then": "the main view shows C3 with its composer, and returning to C1 shows the draft intact",
+      "when": "they press Talk to B"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the Watch tab rendered with a peer in each of the three states",
+      "how_to_check": "Component test in hub/ui/src/__tests__/ rendering WatchTab with each state and asserting the per-state marker, then a screenshot of the three states in the mock",
+      "key": "the-watch-tab-shows-what-the-agent-is-doing-wit-colour-per-state",
+      "requirement": "the-watch-tab-shows-what-the-agent-is-doing-with-co-state-colour",
+      "then": "each state carries its own state attribute or class, and its mark's computed colour is green for working, amber for waiting for your answer and neutral for idle; idle and waiting differ",
+      "when": "its status line is read"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the same three renders",
+      "how_to_check": "Component test asserting the state attribute switches on rerender; CSS checked in panel-tabs.css for distinct keyframes or durations per state",
+      "key": "the-watch-tab-shows-what-the-agent-is-doing-wit-motion-per-state",
+      "requirement": "the-watch-tab-shows-what-the-agent-is-doing-with-co-state-motion",
+      "then": "working and waiting have an animation, with different names or durations, and idle has none; re-rendering the same peer from working to waiting switches the animation",
+      "when": "the mark's animation is inspected"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the agent menu is opened with agents in different states",
+      "how_to_check": "Component test opening the menu",
+      "key": "the-watch-tab-shows-what-the-agent-is-doing-with-col-menu-colour",
+      "requirement": "the-watch-tab-shows-what-the-agent-is-doing-with-co-menu-matches",
+      "then": "each entry's state detail carries the same per-state marker as the status line",
+      "when": "the entries are read"
+    },
+    {
+      "checked_by": "agent",
+      "given": "prefers-reduced-motion is reduce",
+      "how_to_check": "Playwright page.emulateMedia({ reducedMotion: 'reduce' }) on the mock, or the global rule in index.css confirmed to cover the new selectors",
+      "key": "the-watch-tab-shows-what-the-agent-is-doi-no-motion-when-reduced",
+      "requirement": "the-watch-tab-shows-what-the-agent-is-doing-with-reduced-motion",
+      "then": "it is green and has no running animation",
+      "when": "the working mark is shown"
+    },
+    {
+      "checked_by": "operator",
+      "given": "the operator watches an agent that is working, then finishes, then asks a question",
+      "how_to_check": "Operator opens Watch on a live agent after the bundle lands",
+      "key": "the-watch-tab-shows-what-the-agent-is-doing-wit-operator-sees-it",
+      "requirement": "the-watch-tab-shows-what-the-agent-is-doing-with-co-state-motion",
+      "then": "they can tell the three states apart at a glance",
+      "when": "they look at the Watch tab"
     }
   ],
   "algorithms": [],
@@ -284,20 +824,86 @@
       "FR-13": "26bdaf4af3453ce1554e8417bb932b7a17488ad5e5fbe4f9c88df0189475c4ae",
       "FR-14": "70e1f514f7ac9773983e78304d26af91a73ab6f6962310850260ef08da459788",
       "FR-15": "eb1eeed8a3927a88ae6f3a64e227b91431f8f2186108248735f018dd71884690",
-      "FR-2": "8233fc40dd04dfe77f62e532fb0a3dce331a1d983a8e9fac18e44ee7abc73557",
+      "FR-16": "e90654e9c973a8b1b068d4e1c5a240c111aca023546bb82b38f87695411a0532",
+      "FR-17": "9d7136179d85ec36b7c58837eeb5a982589280719abb107d3b0c224063f388d1",
+      "FR-18": "f495a096683e28da367056b2f3372f002ec50ea3a109c2842a162bb03fff5916",
+      "FR-19": "1fdb52b458f6519da8ccb80685978e6a6ce49af723d8efefa5b943547de038ca",
+      "FR-2": "587cd831b0537fc5d760a9d86bfaf5f6baef91f266720af9221bca0a6fce69ec",
+      "FR-20": "d4fd23fd2a571350633ef314b49e410eafae6634a063b3d4bf8abe0ee1360833",
+      "FR-21": "b6d4a2da52fd6988ba4bdaa0ba08ff7b1ac076f6986ed25869a821400d3d2b74",
+      "FR-22": "fc059c66eca213ea5484b08c467b4c2865fd91b9a211d4cfe95196a41b6fe3e9",
+      "FR-23": "1d9b44e4cd95d248777f02d9a03542a1c0ccc9c0d9e85f6f9591c78feb49e328",
+      "FR-24": "bac6f5ba493443912250f52ec9907ff1c1a45b3d8321ee39297225b842f84e39",
+      "FR-25": "516732b8381de170a2a7efbb9d5f09098dc6a5f46b496645a96a686b1593d9a9",
+      "FR-26": "f055ab6f2fc496139a5fb8c40457fad240bb3c1d7cc8e36efe77c5ae642de85d",
+      "FR-27": "9db2e8043f8275a442516476b225ab606f77622848fea14a7ee6ddfe7249518e",
+      "FR-28": "0f5f7f7fa9a4263b4574faadcc264e1b5ccb9e80ec244999ae9d42df631699a3",
+      "FR-29": "2379ae1ec325ee27b9bef36cc8b8bef8e1fdf7ae16d47de595d94919155d160a",
       "FR-3": "4a6ece7d0030933ca535040f5015fc71b7c7e13065905e95528c9c29750e474b",
+      "FR-30": "8f8a85e3ab67424c2294e5d6df0ae7c59463779ffb23f522174f203ca4560421",
+      "FR-31": "376773c5b30a6182b2bc22158e3a73eae6e3fbd0f9c65bd710725a29075c7264",
+      "FR-32": "e41af6a2f7a2adc47fe5db9ce62d2146980835e2ce6ea19e89e4d95a8b98a7c3",
+      "FR-33": "afcead979ff4afbf653d835c3d1518b52d1eeec0f8a31fce50d35e14c6a01c0e",
+      "FR-34": "b7dd3a8c568ed56c199e7bfa4c81bd5b99d4b5c8d4f390d0e37ee38891a5e9e5",
+      "FR-35": "7004c11e081d3f72e1552ef28de0734fbf313a4ed01bdcd16fdd5744181d0535",
+      "FR-36": "35eb08733ff66b0d0336cf5671e28c0d14f45aa93de3a58a3833d37f0462cde2",
+      "FR-37": "11850137ea35c1d20065112a5712692b0708423843436e335aa9f9db0a167ed1",
+      "FR-38": "cfe3ecfa7c09f7f61beb7b6b03db62a61fdb3e8976dec1497e88c74a4618c22f",
+      "FR-39": "84b882a0fd8cc4375b7eab99b3efca5acef7983e01ff6de41fda9b90af3b2cbb",
       "FR-4": "5bbb33f576ce9da363064ae6f858298fe9f3c81d606c17748cb305894b2b5582",
+      "FR-40": "c0cc41b9c26111be93f20c9609897010d65b2b49d74c5354ecf88ce20203881b",
+      "FR-41": "e6c3e10df091820818ab980854278ef709d83be431d7fde8a83f4baf59d96a6a",
+      "FR-42": "e256ab3a3ceee84a114b2dd956882be57d0583010bd1f1e61b52b11c09453cfb",
+      "FR-43": "5d3e1113a6fe345ff268aa1725ad8666e8c31ae0d6831e04ea6e3cbec05f3d60",
+      "FR-44": "447cc4eb0221fbd67cfb5781925af55317c0808c980fd3efe472a19347fb9979",
+      "FR-45": "9d16e42574531a6351f0351c5101c5b0c9c32fd6a4bdb854178e0fa65d2f7db4",
+      "FR-46": "7665bbde3c6eb655ee9828ce665c5cf812239b642bfbe45eec4cef12a17aee5e",
+      "FR-47": "869f79223a4e0ffa89594d68aab14653f15e5db70e228ee6155c588bb97c0635",
+      "FR-48": "d9039c89529ee2aee81ffdbd7d815d57f7869ad2e85182f6072217a768d3291e",
+      "FR-49": "c15a2b0b44c1b9908f399f977395f64c27451d2272ac0ebcc99c1110f6df635b",
       "FR-5": "e88d1203e4769d9bd7cd15f59dad440d986e28771db101383d144609daeaaed4",
+      "FR-50": "dfcf10e81c7d7c20d3764e605f315fd716a9908c07917f9e01205052142821fb",
+      "FR-51": "3c1e29dcd9570b9cf3d13c5ddef5096e6b1035fd83964c11d60cefbf1f83874c",
+      "FR-52": "5bbccc90408af7275f63b39ffe2435e714dbe39df50a8d07cd2d6fcdcfe52239",
+      "FR-53": "9b804f3e9d76b50b1b2162ec634f2f3f7ae9183ff73542f9bb396baa1a03a1c2",
+      "FR-54": "405b16daf859292444fb0ddd9ab994cf6e2bca405615ddd299d861b2c121a80a",
+      "FR-55": "3fe14b47e534ef234440c909e0b44f19f880266bc0f01fc4fca5ba2e529f02b9",
+      "FR-56": "47b0772568150dd99114c882eecd75f8491c1b7fc6eed6016f5b78f2e4206e13",
+      "FR-57": "11add9e3143799d95d8c98b4383de7cf9b123631b7bce9ba98fe9a9cc088cde7",
+      "FR-58": "504736ea2db24326f473469222a6f0a010cf305b6c9516cfbef6e54f159b0a26",
+      "FR-59": "6fca3f3bb0747b754bbd21e8a4ef60337384a5447be6ca6cc39420af2de6ad2e",
       "FR-6": "82b4f80e38cdaf8ac79359a8bf8646a573d583594a7bead068244334232003b5",
+      "FR-60": "ccb806b5ce198f8fed8315e1eae58e8002c17a493db5fc331f4976d8b092a05a",
+      "FR-61": "c23d05b0fd9df5f9fc226aacdec6fb7907839038f1ef0bb23500495d4e4ce741",
+      "FR-62": "6922e4120955251eba0e2fdadecd0f81df11afd1b71f49d7c968bd32f5b1b196",
+      "FR-63": "2fc01c87a930b8e619f7576323c5a5abf6de114f751bdc64f0a316e5675c79b7",
+      "FR-64": "9928b846c8987a6123201f9f0ae25b6553a78355de1b515897c7b65216880269",
+      "FR-65": "8c8de93a79ff64d609f81a480bb6631318d4f2c5aba1c50a69c0d6aaf885438e",
+      "FR-66": "00570072209f275464f7c7215c439110b09f3832a97d9f5ba55654d40be7d61e",
+      "FR-67": "72662c8b81920ea6b893acfa8350715470deeda04c969f97b85362d424da62b3",
+      "FR-68": "38c468aa8ff641c85e610b0d721cccfaba348b8b04428f003c43182653d3f9f3",
+      "FR-69": "4fa5d71f8080bcab04cea51db41244b0f5aa111026b98fc9eb26f389b0a3e33b",
       "FR-7": "51c0090278a4dff40ed5eb70f88e7cdf4680cc19da9333fae471bd16f839b859",
       "FR-8": "f6ae099217d46545a092647181961657773cf229edd810c035d13b18b59cc58d",
       "FR-9": "181adb1723a26e765835fbd4a3eb825feb863b49d1ea8e4916c74a0c7ce8b807"
     },
-    "high_water": 15,
+    "high_water": 69,
     "requirements": {
       "a-conversation-hosts-one-panel-shell-showing-one-tab-at-a-ti": "FR-1",
       "a-detail-tab-is-keyed-by-its-item-s-durable-identifier-where": "FR-4",
       "a-file-can-be-inserted-into-the-composer-in-the-format-the-c": "FR-13",
+      "a-terminal-in-the-side-panel-agent-reads": "FR-56",
+      "a-terminal-in-the-side-panel-clean-environment": "FR-54",
+      "a-terminal-in-the-side-panel-detected-shells": "FR-48",
+      "a-terminal-in-the-side-panel-ends-cleanly": "FR-53",
+      "a-terminal-in-the-side-panel-interactive": "FR-50",
+      "a-terminal-in-the-side-panel-keeps-running": "FR-52",
+      "a-terminal-in-the-side-panel-local-only": "FR-45",
+      "a-terminal-in-the-side-panel-no-docker": "FR-47",
+      "a-terminal-in-the-side-panel-opens-where-chosen": "FR-49",
+      "a-terminal-in-the-side-panel-same-site-only": "FR-46",
+      "a-terminal-in-the-side-panel-send-to-agent": "FR-55",
+      "a-terminal-in-the-side-panel-several-shells": "FR-51",
       "an-index-tab-opens-a-keyed-detail-tab-for-the-item-selected-": "FR-3",
       "n1-closing-a-document-tab-does-not-detach-the-document": "FR-15",
       "opening-a-file-replaces-the-file-tree-tab": "FR-5",
@@ -309,7 +915,49 @@
       "the-file-tree-lists-the-project-s-workspace-and-opens-a-file": "FR-9",
       "the-panel-shell-resizes-and-overlays-using-the-same-rule-for": "FR-8",
       "the-plus-affordance-opens-a-tab-that-is-not-already-open": "FR-2",
-      "the-tab-strip-and-plus-affordance-are-fully-keyboard-operabl": "FR-14"
+      "the-side-panel-s-changes-tab-shows-what-large-diffs-stay-usable": "FR-34",
+      "the-side-panel-s-changes-tab-shows-what-th-empty-and-unavailable": "FR-32",
+      "the-side-panel-s-changes-tab-shows-what-the-a-offered-everywhere": "FR-33",
+      "the-side-panel-s-changes-tab-shows-what-the-ag-follows-the-agent": "FR-31",
+      "the-side-panel-s-changes-tab-shows-what-the-agent-c-which-branch": "FR-29",
+      "the-side-panel-s-changes-tab-shows-what-the-agent-ch-working-now": "FR-30",
+      "the-side-panel-s-changes-tab-shows-what-the-agent-cha-shows-diff": "FR-27",
+      "the-side-panel-s-changes-tab-shows-what-the-agent-chan-open-file": "FR-35",
+      "the-side-panel-s-changes-tab-shows-what-the-agent-turn-or-branch": "FR-28",
+      "the-side-panel-s-changes-tab-shows-what-the-lists-changed-files": "FR-26",
+      "the-side-panel-s-files-tab-browses-the-agent-insert-from-either": "FR-43",
+      "the-side-panel-s-files-tab-browses-the-agent-read-from-location": "FR-40",
+      "the-side-panel-s-files-tab-browses-the-agent-s-follows-the-agent": "FR-44",
+      "the-side-panel-s-files-tab-browses-the-agent-s-opens-on-checkout": "FR-37",
+      "the-side-panel-s-files-tab-browses-the-agent-s-readable-preview": "FR-42",
+      "the-side-panel-s-files-tab-browses-the-agent-s-w-location-switch": "FR-36",
+      "the-side-panel-s-files-tab-browses-the-agent-s-wor-changed-marks": "FR-41",
+      "the-side-panel-s-files-tab-browses-the-agent-s-wor-worktree-tree": "FR-39",
+      "the-side-panel-s-files-tab-browses-the-agent-s-workt-no-checkout": "FR-38",
+      "the-side-panel-s-running-tab-builds-l-row-says-what-is-happening": "FR-20",
+      "the-side-panel-s-running-tab-builds-loop-grouped-needs-you-first": "FR-18",
+      "the-side-panel-s-running-tab-builds-loops-a-operators-words-only": "FR-21",
+      "the-side-panel-s-running-tab-builds-loops-a-rows-open-their-item": "FR-23",
+      "the-side-panel-s-running-tab-builds-loops-and-jo-every-item-once": "FR-17",
+      "the-side-panel-s-running-tab-builds-loops-and-jobs-and-w-filters": "FR-22",
+      "the-side-panel-s-running-tab-builds-loops-and-jobs-and-what-live": "FR-24",
+      "the-side-panel-s-running-tab-builds-loops-and-needs-you-says-why": "FR-19",
+      "the-side-panel-s-running-tab-builds-loops-matches-approved-mock": "FR-25",
+      "the-side-panel-s-running-tab-builds-loops-running-replaces-loops": "FR-16",
+      "the-side-panel-s-watch-tab-follows-another-ag-who-can-be-watched": "FR-58",
+      "the-side-panel-s-watch-tab-follows-another-age-follows-the-agent": "FR-61",
+      "the-side-panel-s-watch-tab-follows-another-agent-live-read-only": "FR-62",
+      "the-side-panel-s-watch-tab-follows-another-agent-s-c-agent-state": "FR-63",
+      "the-side-panel-s-watch-tab-follows-another-agent-s-co-remembered": "FR-64",
+      "the-side-panel-s-watch-tab-follows-another-agent-s-con-not-twice": "FR-59",
+      "the-side-panel-s-watch-tab-follows-another-agent-s-con-watch-tab": "FR-57",
+      "the-side-panel-s-watch-tab-follows-another-agent-s-conve-talk-to": "FR-65",
+      "the-side-panel-s-watch-tab-follows-another-default-conversation": "FR-60",
+      "the-tab-strip-and-plus-affordance-are-fully-keyboard-operabl": "FR-14",
+      "the-watch-tab-shows-what-the-agent-is-doing-with-co-menu-matches": "FR-68",
+      "the-watch-tab-shows-what-the-agent-is-doing-with-co-state-colour": "FR-66",
+      "the-watch-tab-shows-what-the-agent-is-doing-with-co-state-motion": "FR-67",
+      "the-watch-tab-shows-what-the-agent-is-doing-with-reduced-motion": "FR-69"
     },
     "retired": {}
   },
@@ -328,7 +976,6 @@
   },
   "hub": {
     "phase": "current",
-    "rigor": "sketch",
     "size": null,
     "step": null
   },
@@ -349,7 +996,7 @@
       "modal": "SHALL",
       "party": null,
       "rationale": "Offering an already-open tab would read as \"open another\" when it cannot.",
-      "statement": "The shell SHALL offer a plus menu listing only the index tabs (Specs, Files, Loops) that are not already open, and SHALL hide it once all are open. Opening a tab that is already open, from any entry point, SHALL make that tab visible rather than open a second one."
+      "statement": "The shell SHALL offer a plus menu listing only the index tabs (Specs, Files, Changes, Terminal, Watch, Running) that are not already open, and SHALL hide it once all are open. Opening a tab that is already open, from any entry point, SHALL make that tab visible rather than open a second one."
     },
     {
       "key": "an-index-tab-opens-a-keyed-detail-tab-for-the-item-selected-",
@@ -441,6 +1088,384 @@
       "party": null,
       "rationale": "Tidying the reading pane is not an edit to what the agent is working on.",
       "statement": "Closing a specification document's tab, or opening a document from the Specs index, MUST NOT change which document the conversation has attached; attaching a document SHALL open or reveal its tab, and only the composer's stop-exploring control SHALL detach it (also closing the shell)."
+    },
+    {
+      "key": "the-side-panel-s-running-tab-builds-loops-running-replaces-loops",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The operator replaced Loops rather than adding beside it; a stale stored tab must not resurrect the old view or vanish silently.",
+      "statement": "The side panel SHALL offer a Running index tab wherever it offered Loops (tab strip, plus menu, empty-state launcher with a count of items that need the operator or are working), and MUST NOT offer Loops any more. A Loops tab persisted from before SHALL be restored as Running, in the same strip position and visibility."
+    },
+    {
+      "key": "the-side-panel-s-running-tab-builds-loops-and-jo-every-item-once",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "A build runs as a loop, and a loop is a job; showing all three layers would triple-count one piece of work.",
+      "statement": "Running SHALL list every build of every specification document in the project (whatever drives it, running or ended), every loop that is not a build's, and every scheduled job that is not a loop's, and MUST list each piece of work exactly once."
+    },
+    {
+      "key": "the-side-panel-s-running-tab-builds-loop-grouped-needs-you-first",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": null,
+      "statement": "Running SHALL group items in this order, leaving empty groups out: Needs you, Working now, Between steps, Scheduled, Paused, Finished, Stopped early; each group heading SHALL show its item count."
+    },
+    {
+      "key": "the-side-panel-s-running-tab-builds-loops-and-needs-you-says-why",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The operator's complaint was that the old tab did not say what needs them.",
+      "statement": "An item that has not ended SHALL be in Needs you when its work has an unanswered question or when the Hub would refuse its next firing. Its row SHALL say which, in one sentence (the stall reason as the Hub states it), and offer Answer for a question or Look for a refused firing. Answer SHALL take the operator to where that question can be answered, and Look to the item's own record."
+    },
+    {
+      "key": "the-side-panel-s-running-tab-builds-l-row-says-what-is-happening",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": null,
+      "statement": "Each row SHALL show the item's name, its kind (Build, Loop or Job), the one time that matters for its group in relative words (started, next, ended or last ran), tasks done out of total where the item has a queue, the amount spent where a build has spent any, and up to two agents each with what they are doing (building, checking, holding, next on, running) and on which task, followed by \"and N more\" when there are more; where nobody is working it, one status line instead (for a job, its schedule)."
+    },
+    {
+      "key": "the-side-panel-s-running-tab-builds-loops-a-operators-words-only",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "Running MUST NOT show raw ids, cron expressions or event names. A schedule the app cannot say in words SHALL read \"On its own schedule\", and an amount or time SHALL be formatted the way the rest of the app formats it."
+    },
+    {
+      "key": "the-side-panel-s-running-tab-builds-loops-and-jobs-and-w-filters",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": null,
+      "statement": "Running SHALL offer a Now / Finished / All filter, defaulting to Now (everything that has not ended), with each choice's count shown, and a filter by kind (Everything, Builds, Loops, Jobs) that narrows the list and the counts together; a filter that leaves nothing SHALL say so rather than show an empty box. A summary line above the filters SHALL count items that need the operator, are working, and are waiting."
+    },
+    {
+      "key": "the-side-panel-s-running-tab-builds-loops-a-rows-open-their-item",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": null,
+      "statement": "Selecting a row SHALL open the item: a build opens its specification document in the panel at its builds, a loop opens the loop's detail tab, and a job opens the Jobs page."
+    },
+    {
+      "key": "the-side-panel-s-running-tab-builds-loops-and-jobs-and-what-live",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": null,
+      "statement": "Running SHALL reflect a change in a build, loop, job or question (a task taken, a firing started or ended, a question asked or answered) without the operator reloading, as quickly as the panel's other live views do."
+    },
+    {
+      "key": "the-side-panel-s-running-tab-builds-loops-matches-approved-mock",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": null,
+      "statement": "Running SHALL render as the mock approved on 2026-11-12 does, in dark and light, at the panel's narrowest width without horizontal scrolling."
+    },
+    {
+      "key": "the-side-panel-s-changes-tab-shows-what-the-lists-changed-files",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "With a conversation open, the side panel's Changes tab lists every file the conversation's agent changed on the branch it shows, each with its path, whether it was added, modified, deleted or renamed, and its count of added and removed lines."
+    },
+    {
+      "key": "the-side-panel-s-changes-tab-shows-what-the-agent-cha-shows-diff",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "Selecting a listed file shows its diff in the panel, without leaving the conversation."
+    },
+    {
+      "key": "the-side-panel-s-changes-tab-shows-what-the-agent-turn-or-branch",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Last turn answers 'what did it just do'; since main answers 'what would land'.",
+      "statement": "The operator can switch the tab between 'Last turn' (what the agent's most recent finished turn committed) and 'Since main' (everything on the branch that main does not have), and the tab names the branch and the base it compares with."
+    },
+    {
+      "key": "the-side-panel-s-changes-tab-shows-what-the-agent-c-which-branch",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "A flow builder's work sits on the task branch; its own branch would look empty.",
+      "statement": "When the agent is working a task on a task branch, or its most recent turn was on one, the tab shows that task branch and names the task; otherwise it shows the agent's own branch."
+    },
+    {
+      "key": "the-side-panel-s-changes-tab-shows-what-the-agent-ch-working-now",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "While one of the agent's turns is running, the tab shows a 'working now' line naming the files changed in its checkout but not yet committed; when the turn ends the line goes and those changes appear under Last turn."
+    },
+    {
+      "key": "the-side-panel-s-changes-tab-shows-what-the-ag-follows-the-agent",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "When a turn of the agent ends, an open Changes tab shows that turn's changes within 5 seconds, without the operator reloading."
+    },
+    {
+      "key": "the-side-panel-s-changes-tab-shows-what-th-empty-and-unavailable",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "When the agent has changed nothing, the tab says so; when the agent has no checkout of its own, or its branch cannot be read, the tab says which, instead of showing an empty list or an error code."
+    },
+    {
+      "key": "the-side-panel-s-changes-tab-shows-what-the-a-offered-everywhere",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "The tab is offered wherever the Files tab is offered, including when the app is opened from another machine and when the Hub runs in Docker mode."
+    },
+    {
+      "key": "the-side-panel-s-changes-tab-shows-what-large-diffs-stay-usable",
+      "modal": "SHOULD",
+      "party": null,
+      "rationale": null,
+      "statement": "A change of 200 files, or a single file diff over 5,000 lines, opens the tab within 2 seconds; binary files are listed without a diff body, and a diff too large to show whole says so and shows its start."
+    },
+    {
+      "key": "the-side-panel-s-changes-tab-shows-what-the-agent-chan-open-file",
+      "modal": "SHOULD",
+      "party": null,
+      "rationale": null,
+      "statement": "From a changed file, the operator can open that file in the Files tab."
+    },
+    {
+      "key": "the-side-panel-s-files-tab-browses-the-agent-s-w-location-switch",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Two tabs side by side that disagree on which checkout is 'the agent's' would show a diff of one tree and the files of another.",
+      "statement": "When the conversation's agent has a checkout of its own, the Files tab offers a switch between that checkout and the project root, and the tab names which one it is showing; the checkout is the one the Changes tab shows for the same conversation (the task checkout when the agent is working or last worked a task, otherwise the agent's own worktree)."
+    },
+    {
+      "key": "the-side-panel-s-files-tab-browses-the-agent-s-opens-on-checkout",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator, 2026-11-14: the checkout is where the agent is working, so it is the useful default; a choice made on purpose should stick.",
+      "statement": "When the agent has a checkout, the Files tab first opens on it; after the operator switches location, the tab reopens on the location last chosen for that conversation, including after a page reload, while other conversations keep their own choice."
+    },
+    {
+      "key": "the-side-panel-s-files-tab-browses-the-agent-s-workt-no-checkout",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "When the agent has no checkout of its own (a read-only agent, or one whose worktree has not been created), the tab offers no switch, shows the project root, and says the agent works in the project directory or has no checkout yet; it never shows an empty tree or an error code for that reason."
+    },
+    {
+      "key": "the-side-panel-s-files-tab-browses-the-agent-s-wor-worktree-tree",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "With the checkout chosen, the tab lists that checkout's files under the same rules as the project root (tracked files plus untracked files git does not ignore), as a collapsible tree with a find box, including a file the agent created and has not committed."
+    },
+    {
+      "key": "the-side-panel-s-files-tab-browses-the-agent-read-from-location",
+      "modal": "MUST",
+      "party": "consumer",
+      "rationale": "The worktree read must not become a way round the guards the root read already has.",
+      "statement": "Opening a file reads it from the location it was listed in; a request naming a path the chosen location does not list, a path escaping it through a link, or another project's or another agent's checkout is refused, and files over 1 MB and binary files are handled as the project-root preview handles them today."
+    },
+    {
+      "key": "the-side-panel-s-files-tab-browses-the-agent-s-wor-changed-marks",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "In the checkout, every file the agent changed on its branch since main is marked added, modified or deleted (a deleted file still listed, struck through), and a Changed only switch narrows the tree to those files; the set equals the Changes tab's Since main list for the same conversation."
+    },
+    {
+      "key": "the-side-panel-s-files-tab-browses-the-agent-s-readable-preview",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "An opened code file shows syntax-highlighted and an opened Markdown file shows rendered, legibly in both the light and dark themes, and the file's tab names its path and whether it came from the checkout or the project root; the same path opened from both locations opens two distinct tabs."
+    },
+    {
+      "key": "the-side-panel-s-files-tab-browses-the-agent-insert-from-either",
+      "modal": "SHOULD",
+      "party": null,
+      "rationale": null,
+      "statement": "Insert into composer works for a file opened from either location and inserts its path relative to that location."
+    },
+    {
+      "key": "the-side-panel-s-files-tab-browses-the-agent-s-follows-the-agent",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "When a turn of the agent ends, an open Files tab showing its checkout lists any file that turn created, and updates its changed marks, within 5 seconds and without a reload."
+    },
+    {
+      "key": "a-terminal-in-the-side-panel-local-only",
+      "modal": "MUST",
+      "party": "consumer",
+      "rationale": "A shell runs any command as the operator; anyone who could open one from elsewhere owns the computer.",
+      "statement": "The Hub opens a shell only for a request from a loopback address made by the signed-in operator; a request from any other address, Docker bridge addresses included, or without the operator's sign-in, is refused and starts no process, and the Terminal tab used from another computer says the terminal opens only on the computer AgentWeave runs on."
+    },
+    {
+      "key": "a-terminal-in-the-side-panel-same-site-only",
+      "modal": "MUST",
+      "party": "consumer",
+      "rationale": "Browsers let any website open a live connection to localhost; without this, a page the operator merely visits could run commands.",
+      "statement": "A request to open or attach to a shell whose origin is not the app's own page is refused and starts no process, even from the Hub's own computer."
+    },
+    {
+      "key": "a-terminal-in-the-side-panel-no-docker",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "A Hub running in Docker mode offers no terminal: the tab says the terminal is not available in Docker mode and the Hub refuses every shell request."
+    },
+    {
+      "key": "a-terminal-in-the-side-panel-detected-shells",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "The menu for a new shell lists the shells installed on the Hub's computer and only those: on Windows, whichever of PowerShell 7, Windows PowerShell, Command Prompt and Git Bash are found, and each installed WSL distribution; elsewhere, the operator's login shell and the installed shells the system lists. The operator's last pick is listed first and marked."
+    },
+    {
+      "key": "a-terminal-in-the-side-panel-opens-where-chosen",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "A new shell starts in the conversation agent's worktree or the project root, as the operator chose, and its tab shows the shell's name and that directory as the shell names it (a WSL shell's /mnt/<drive>/... path); when the agent has no worktree, the worktree choice is unavailable and says why."
+    },
+    {
+      "key": "a-terminal-in-the-side-panel-interactive",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "What the operator types reaches the shell and its output appears as it is produced, with colour and cursor movement drawn correctly enough that full-screen programs (an editor, a pager) are usable, and the shell's size follows the panel's size."
+    },
+    {
+      "key": "a-terminal-in-the-side-panel-several-shells",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "A conversation can have up to four open shells at once, each in its own tab with its own directory and shell; asking for a fifth is refused with a message naming the limit and starts no process."
+    },
+    {
+      "key": "a-terminal-in-the-side-panel-keeps-running",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "A dev server or a long test run should not die because the operator went to answer another agent.",
+      "statement": "A conversation's shells keep running while the operator is in another conversation, another tab or has the panel closed; returning shows each shell with the output produced meanwhile, up to its last 5,000 lines."
+    },
+    {
+      "key": "a-terminal-in-the-side-panel-ends-cleanly",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "On Windows a shell's children outlive it unless ended with it; an orphaned dev server holds its port.",
+      "statement": "Closing a shell, Restart, reloading the page and stopping the Hub each end the shells concerned and every process they started; after a reload no earlier shell is listed and opening the Terminal tab starts one fresh shell. A shell that exits by itself shows that it ended, with its exit code, and offers to open it again."
+    },
+    {
+      "key": "a-terminal-in-the-side-panel-clean-environment",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Whatever runs in the shell, and any agent reading its output, must not be handed the Hub's secrets.",
+      "statement": "A shell, WSL shells included, has the operator's environment, including PATH, without the variables the Hub itself holds: its database location, its API keys and any agent's run credentials."
+    },
+    {
+      "key": "a-terminal-in-the-side-panel-send-to-agent",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "The operator can send a selection of a shell's output, or its visible screen when nothing is selected, into the conversation's composer, unsent, marked with the shell's name and directory."
+    },
+    {
+      "key": "a-terminal-in-the-side-panel-agent-reads",
+      "modal": "MUST",
+      "party": "consumer",
+      "rationale": null,
+      "statement": "The conversation's agent has a tool that returns, for each open shell of that conversation, its shell name, directory, whether it is still running and up to its last 500 lines of output; it cannot type into, start or end a shell, an agent of another conversation gets none of them, and the Terminal tab says the agent can read its shells."
+    },
+    {
+      "key": "the-side-panel-s-watch-tab-follows-another-agent-s-con-watch-tab",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "The conversation side panel offers a Watch tab alongside Specs, Files, Running, Changes and Terminal, opened, closed and remembered like the others (which tabs are open is kept per project)."
+    },
+    {
+      "key": "the-side-panel-s-watch-tab-follows-another-ag-who-can-be-watched",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "A flow runs the same agent in several conversations, so watching only other agents would miss the case the operator asked for (operator, 2026-11-15).",
+      "statement": "The Watch tab's agent menu lists every agent of the current project, including the conversation's own agent, each with its colour and what it is doing now; its conversation menu lists the chosen agent's open conversations, newest activity first."
+    },
+    {
+      "key": "the-side-panel-s-watch-tab-follows-another-agent-s-con-not-twice",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "With what is watched kept per project, the main view can arrive at the watched conversation; two copies of one timeline side by side add nothing.",
+      "statement": "When the watched conversation is the one shown in the main view, the Watch tab does not draw it a second time: it says the operator is in this conversation and offers the watched agent's other conversations; watching resumes when the main view moves elsewhere."
+    },
+    {
+      "key": "the-side-panel-s-watch-tab-follows-another-default-conversation",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "Choosing an agent opens the conversation it is running now, or its most recently active conversation when it is idle; an agent with no conversation shows that it has none yet rather than an empty timeline."
+    },
+    {
+      "key": "the-side-panel-s-watch-tab-follows-another-age-follows-the-agent",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Following keeps the tab live as a flow moves the agent from task to task; a hand pick is a deliberate choice that must not be taken away mid-read.",
+      "statement": "While the operator has not picked a conversation by hand, the tab switches to the conversation the watched agent starts running next; once the operator picks one by hand, it stays on that conversation until they choose an agent again."
+    },
+    {
+      "key": "the-side-panel-s-watch-tab-follows-another-agent-live-read-only",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Watch only (roadmap, operator 2026-11-12): two composers side by side make it easy to write to the wrong agent.",
+      "statement": "The watched conversation is drawn as the main view draws it (messages, turn output, tool calls) and new output appears as the agent produces it without a reload; the tab offers no way to send a message, answer a question, stop a run or change the queue."
+    },
+    {
+      "key": "the-side-panel-s-watch-tab-follows-another-agent-s-c-agent-state",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Waiting for an answer is the state the operator most needs to see (operator, 2026-11-15).",
+      "statement": "The tab says whether the watched agent is working, idle, or waiting for the operator's answer, the last whenever the agent has an unanswered question, and the statement changes when that state does without a reload."
+    },
+    {
+      "key": "the-side-panel-s-watch-tab-follows-another-agent-s-co-remembered",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The tab's purpose is keeping an eye on one agent while talking to several; it matches the panel's other per-project state (operator, 2026-11-15).",
+      "statement": "The watched agent and conversation are kept per project: switching the main view to any other conversation of the project, or reloading the page, leaves the Watch tab showing the same agent and conversation; a remembered conversation that has since been closed falls back to the default conversation of that agent, and a remembered agent that no longer exists leaves the tab asking which agent to watch."
+    },
+    {
+      "key": "the-side-panel-s-watch-tab-follows-another-agent-s-conve-talk-to",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "The tab has a control that makes the watched conversation the main view in one click, where the operator can talk to that agent; the conversation they left keeps its unsent draft."
+    },
+    {
+      "key": "the-watch-tab-shows-what-the-agent-is-doing-with-co-state-colour",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator, 2026-11-15: grey text does not say what is happening. Waiting currently looks the same as idle, yet it is the one state that needs the operator.",
+      "statement": "The Watch tab's status line shows each state in its own colour with a mark beside it: working in the app's green, waiting for your answer in the app's amber, idle in a muted neutral. The three states cannot be confused with colour alone or with the text alone."
+    },
+    {
+      "key": "the-watch-tab-shows-what-the-agent-is-doing-with-co-state-motion",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Motion is what says 'something is happening now' at a glance; a different rhythm for waiting keeps it from reading as work in progress.",
+      "statement": "While the watched agent is working, its mark pulses continuously; while it is waiting for your answer, its mark draws attention with a slower, distinct pulse; idle has no motion. When the state changes, the colour and motion change with it, without a reload."
+    },
+    {
+      "key": "the-watch-tab-shows-what-the-agent-is-doing-with-co-menu-matches",
+      "modal": "SHOULD",
+      "party": null,
+      "rationale": null,
+      "statement": "The agent menu's entries show each agent's state in the same colour as the status line, so the operator can see who is working or waiting before choosing whom to watch."
+    },
+    {
+      "key": "the-watch-tab-shows-what-the-agent-is-doing-with-reduced-motion",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Accessibility, and the app already honours it everywhere else (index.css's prefers-reduced-motion rule).",
+      "statement": "With the operating system's reduce-motion setting on, the marks keep their colours but do not pulse."
     }
   ],
   "schema_version": 1,

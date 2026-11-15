@@ -3,7 +3,7 @@
     {
       "checked_by": "operator",
       "given": "the mock route with fixtures for every stage and close",
-      "how_to_check": "Operator reviews the mock",
+      "how_to_check": "Operator reviews the mock (done 2026-11-12)",
       "key": "ac-mock",
       "requirement": "mock-first",
       "then": "every stage and close appears on at least one card, and the story shows a long fixture history",
@@ -11,20 +11,20 @@
     },
     {
       "checked_by": "agent",
-      "given": "a fixture task with every field filled, priority medium",
-      "how_to_check": "UI component test",
+      "given": "a task from the live tasks route with every field filled, priority medium",
+      "how_to_check": "UI component test fed the tasks route's real payload shape",
       "key": "ac-content",
       "requirement": "card-content",
       "then": "only the listed items show, and no priority shows",
-      "when": "its card renders"
+      "when": "its card renders on the board"
     },
     {
       "checked_by": "agent",
-      "given": "a task waiting on a long question with a long held reason",
-      "how_to_check": "Browser drive measuring line count at default width",
+      "given": "a task waiting on a long question with long builder and reviewer names",
+      "how_to_check": "Browser drive on :8010 measuring line count at default width",
       "key": "ac-budget",
       "requirement": "card-text-budget",
-      "then": "the text below the title takes at most two lines",
+      "then": "the text below the title takes at most two lines, the waits-on line shows and the reviewer's name is whole",
       "when": "its card renders at default width"
     },
     {
@@ -33,26 +33,44 @@
       "how_to_check": "UI component test",
       "key": "ac-drawer",
       "requirement": "drawer-holds-rest",
-      "then": "the description and criteria appear only in the drawer",
-      "when": "the card and drawer render"
+      "then": "the description and criteria appear only in the opened task",
+      "when": "the card and the opened task render"
     },
     {
       "checked_by": "agent",
       "given": "a completed task whose latest checks failed two of five",
-      "how_to_check": "UI component test plus a drive on :8010",
+      "how_to_check": "Hub route test for the count plus a drive on :8010",
       "key": "ac-checks",
       "requirement": "failing-checks",
-      "then": "it shows a marker reading 2, and opening it names both checks",
-      "when": "the card renders"
+      "then": "its card shows a marker reading 2, and its Work view names both failed checks",
+      "when": "the board loads from the Hub"
     },
     {
       "checked_by": "agent",
-      "given": "a task with six consecutive runs and a landing",
+      "given": "a task with six consecutive runs, an answered question and a landing, in the story route's real order",
       "how_to_check": "UI component test fed the story route's real order",
       "key": "ac-story",
       "requirement": "story-timeline",
-      "then": "one folded entry for six runs, then the landing entry, each entry's label six words or fewer",
-      "when": "the story opens"
+      "then": "one folded entry for the six runs, the answered question and the landing shown unfolded, each label six words or fewer, and every trace and conversation link still present",
+      "when": "the Story opens"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a task serving two requirements, one with accepted evidence and one with none, and a previous failed run",
+      "how_to_check": "UI component test plus a drive on :8010",
+      "key": "ac-work",
+      "requirement": "work-view",
+      "then": "both requirements show their evidence state from coverage, their criteria, the latest checks, and Earlier runs reveals the previous run's checks",
+      "when": "Work opens"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a task with notes, a dependency and a builder",
+      "how_to_check": "UI component test",
+      "key": "ac-details",
+      "requirement": "details-view",
+      "then": "every control today's Details offers is present, and Facts reads 'Built by Developer' with no repeated label",
+      "when": "Details opens"
     },
     {
       "checked_by": "agent",
@@ -65,12 +83,12 @@
     },
     {
       "checked_by": "operator",
-      "given": "the mock in light and dark themes",
-      "how_to_check": "Operator reviews the mock",
+      "given": "the board and the opened task in light and dark themes",
+      "how_to_check": "Operator reviews the live board",
       "key": "ac-identity",
       "requirement": "identity",
-      "then": "it reads as AgentWeave",
-      "when": "the operator reviews it"
+      "then": "they read as AgentWeave",
+      "when": "the operator reviews them"
     },
     {
       "checked_by": "agent",
@@ -83,31 +101,48 @@
     }
   ],
   "algorithms": [],
+  "already_built": {
+    "built": false,
+    "commits": [],
+    "note": ""
+  },
   "aw_identity": {
     "digests": {
-      "FR-1": "21517a20ba8bd3842805db06bdf3b2c3ff041bc06a6e07104335f87e1c84ce17",
-      "FR-2": "bcbcaddee6cc86b8eb734dea25a00788cda09f515f07355c2c189a81830c08a9",
-      "FR-3": "413bf3abc3e5b802e30ae432c41d01391e3843d753d45479d98369a28c0c4312",
-      "FR-4": "4310c198dea2e42de0feb61f0e6c6e5a13cd2db1dfe456e5e4344c61bed7c30b",
-      "FR-5": "ccae6d514e78d483997e6bcbbb60854ab381e1588404997bbc4e2a1d6ae0a0a1",
-      "FR-6": "1cb536ee5cdfbb481700cdf373730b011f8f01b1d92cbf2112363257e13f5a8d",
+      "FR-1": "2311324ea7b5162ed34f76fd09dc99610abf01328142108e5fb721b76be8220f",
+      "FR-10": "853c65c13d7090848e94cfaae955deba28ceee8f2a170da5f75e526b356f806c",
+      "FR-11": "008ce739f38b2941a7e483b5773c2d5c4f07a8c3d3b6528b99a33855a68e1640",
+      "FR-2": "97bddbaefa177408bd52d75b88ce7fd04e797a1787bf282f19756271f64aaa9c",
+      "FR-3": "63740281ac25ef9b68bc4eac71bc0ecb564304372dc95aff6ba0d576006b070e",
+      "FR-4": "5bf219f0af0280d3100aafc15974b9bb4c7179fb9d8fdb29fe0e409294ada094",
+      "FR-5": "c267b271b3ef6fdaee5d5ec1ae63f861d760836294925c07349c96e50d02995f",
+      "FR-6": "b2905a2bfddd5af5925226558a0f4679b27269c727444ba96b8c89f767ab0307",
       "FR-7": "236b13062bcb86d94723241607b413db4e023a94b61eac1a963f83642feb7c64",
-      "FR-8": "352505f6861e92ee84aa47abb6906bcd29a82936191980edecb49e6843d013ba",
+      "FR-8": "456423b2a1db8696696c898e4992a261d508191e2ef55d1014f1781c02fec898",
       "FR-9": "2aaeed68b12fae90fb1e58bc2ef328a8668ef7a9999e315ccd2ea6a74860c8a7"
     },
-    "high_water": 9,
+    "high_water": 11,
     "requirements": {
       "card-content": "FR-2",
       "card-text-budget": "FR-3",
+      "details-view": "FR-11",
       "drawer-holds-rest": "FR-4",
       "failing-checks": "FR-5",
       "identity": "FR-8",
       "mock-first": "FR-1",
       "motion": "FR-7",
       "not-colour-alone": "FR-9",
-      "story-timeline": "FR-6"
+      "story-timeline": "FR-6",
+      "work-view": "FR-10"
     },
     "retired": {}
+  },
+  "capabilities": {
+    "changes": [],
+    "creates": [
+      {
+        "title": "Task board"
+      }
+    ]
   },
   "delivery": {
     "agent": "DeveloperSonnet2",
@@ -116,33 +151,101 @@
     "cron": "*/5 * * * *",
     "mode": "flow",
     "reasons": {
-      "agent": "UI work: Sonnet is enough.",
-      "builder": "Same as agent.",
-      "checker": "QA2 runs the browser drives.",
+      "agent": "UI work: Sonnet is enough and spares the weekly quota.",
+      "builder": "Sonnet for the UI tasks; the drive tasks name QA2 and the Hub route task names DeveloperOpus2.",
+      "checker": "QA2 runs browser drives; QA checks the tasks QA2 builds and the Hub route.",
       "cron": "Five minutes keeps it moving.",
-      "mode": "Two tasks; the second waits on the operator's review of the first.",
-      "stop": "Stop once both tasks are done."
+      "mode": "Five tasks with a dependency chain; a flow runs the independent ones in parallel overnight.",
+      "stop": "Stop when the queue empties, or by 9am at the latest, so nothing runs unwatched into the day."
     },
     "reviewer": null,
-    "stop_at": null,
+    "stop_at": "2026-11-13T09:00:00-03:00",
     "stop_when_queue_empties": true
   },
-  "design": "",
+  "design": "Decisions taken during the mock (operator, 2026-11-12):\n- Today's centred dialog with blur, header and Story (traces and conversation links) stays. The side sheet and the two-column dialog were rejected: the operator said today's looks better and wants fewer changes.\n- The real TaskStory component is trimmed in place; no parallel timeline component (its class names broke the real story).\n- Today's Details content is split into Work (requirements with evidence state, criteria, latest checks, Earlier runs) and a reworked Details (description, waits-on/needed-by, notes, facts, history, escalation). Today's controls are kept inside it.\n- Work reads evidence state from the document's coverage, not the requirement's lifecycle field (that field is active/retired).\n- The mock lives at hub/ui/mock#task-redesign. The dialog work (story trim, Work, Details) is in the real components on master since 59333db; the new TaskCard, StageThread and taskStageVisual exist but only the mock uses them.\n- Style classes use the aw-tview prefix; aw-sheet clashes with story.css's fixed right-hand panel. Buttons use the app's Button component with data-slot, because the global button style otherwise hides them.\n- The acceptance drive is a browser drive script under scripts/drive, outside the test suite, so it can be written and failing first without failing the project's checks. Its task is approved on a drive_baseline showing each check reached and failing at its own assertion; the final task runs it green.",
   "evidence": {
-    "checked": [],
-    "limits": []
+    "checked": [
+      "Mock at hub/ui/mock#task-redesign reviewed and approved by the operator on 2026-11-12",
+      "Full UI suite on agentweave/Architect before its merge to master (59333db): 272 files, 2688 tests passed, with the dialog's story trim, Work and Details in the real components"
+    ],
+    "limits": [
+      "The failed-check count is invented in the mock; no Hub data exists for it yet",
+      "Reduced motion and contrast have not been checked in a browser",
+      "The UI suite was not re-run on master after the merge"
+    ]
   },
   "hub": {
-    "phase": "exploring",
+    "builds": [
+      {
+        "budget_cap_usd": null,
+        "builder": "DeveloperSonnet2",
+        "builders": [
+          "QA2",
+          "DeveloperSonnet2",
+          "DeveloperOpus2"
+        ],
+        "checker": "QA2",
+        "checkers": [],
+        "chosen_by": "operator",
+        "driver": "flow",
+        "ended_at": "2026-11-13T02:35:52.583855+00:00",
+        "id": "build-72ca7e65a6cf",
+        "landing": "main",
+        "lead": null,
+        "level": "reviewed",
+        "pull_request": null,
+        "started_at": "2026-11-12T21:24:28.255995+00:00",
+        "state": "finished",
+        "stop_reason": null,
+        "tasks": {
+          "card": {
+            "builder": "DeveloperSonnet2",
+            "checker": "QA2"
+          },
+          "card-waits-on-fits": {
+            "builder": null,
+            "builder_default": true,
+            "checker": null
+          },
+          "drive": {
+            "builder": "QA2",
+            "checker": "QA"
+          },
+          "drive-green": {
+            "builder": "QA2",
+            "checker": "QA"
+          },
+          "failed-count": {
+            "builder": "DeveloperOpus2",
+            "checker": "QA"
+          },
+          "story-work-details": {
+            "builder": "DeveloperSonnet2",
+            "checker": "QA2"
+          },
+          "task-bd890c546fea": {
+            "builder": "Developer",
+            "checker": "QA"
+          }
+        },
+        "window_end": null,
+        "window_start": null
+      }
+    ],
+    "phase": "approved",
     "size": "small",
-    "step": "intake"
+    "step": "build"
   },
   "kind": "change-spec",
   "lifecycle": "",
   "open_questions": [
     {
-      "question": "Which story entries are milestones that are never folded? Proposed: created, completed, approved, sent back, landed or did not land, closed.",
-      "resolved": false
+      "question": "Which story entries are never folded? Resolved 2026-11-12: created, finished building, approved, sent back, landed or did not land, closed, any failure, anything waiting on the operator, and answered questions.",
+      "resolved": true
+    },
+    {
+      "question": "On narrow cards, does waits-on beat time at stage? Resolved 2026-11-12: yes.",
+      "resolved": true
     }
   ],
   "problem": "Cards and especially the task story (TaskStory.tsx, sentences such as '<agent> is working') carry too much text, so it is hard to understand what is in a task. The operator asked for a redesign based on best UI/UX practice, with animation and finish, in AgentWeave's visual identity (brand/ in the repository is the identity kit).",
@@ -151,8 +254,8 @@
       "key": "mock-first",
       "modal": "MUST",
       "party": null,
-      "rationale": "Operator, 2026-10-20: mocks are the real components fed fixtures, so applying one is wiring rather than redrawing.",
-      "statement": "The redesign is shown first as a mock built from the real board, card, drawer and story components fed fixtures. The mock covers every stage from slice glance and every close from slice loose-tasks. Nothing is wired to live data until the operator approves the mock."
+      "rationale": "Operator, 2026-10-20: mocks are the real components fed fixtures, so applying one is wiring rather than redrawing. Approved 2026-11-12.",
+      "statement": "The redesign is shown first as a mock built from the real board, card, dialog and story components fed fixtures. The mock covers every stage from slice glance and every close from slice loose-tasks. Nothing is wired to live data until the operator approves the mock."
     },
     {
       "key": "card-content",
@@ -165,29 +268,43 @@
       "key": "card-text-budget",
       "modal": "MUST",
       "party": null,
-      "rationale": null,
-      "statement": "Apart from its title, no card shows more than two lines of text at the board's default width."
+      "rationale": "Operator, 2026-11-12: what a card is stuck on is actionable, how long it has been stuck is not.",
+      "statement": "Apart from its title, no card shows more than two lines of text at the board's default width. When the waits-on line and time at stage do not both fit, waits-on is kept and time at stage gives way; when names are long, the builder's name is cut before the reviewer's."
     },
     {
       "key": "drawer-holds-rest",
       "modal": "MUST",
       "party": null,
       "rationale": null,
-      "statement": "Description, branch, commits, requirements and acceptance criteria appear in the drawer and never on the card."
+      "statement": "Description, branch, commits, requirements and acceptance criteria appear in the opened task and never on the card."
     },
     {
       "key": "failing-checks",
       "modal": "MUST",
       "party": null,
       "rationale": null,
-      "statement": "A task whose latest checks failed shows, before review, a marker on its card naming how many checks failed. Opening it lists them."
+      "statement": "A task whose latest checks failed shows, before review, a marker on its card naming how many checks failed. Opening the task lists them in its Work view."
     },
     {
       "key": "story-timeline",
       "modal": "MUST",
       "party": null,
+      "rationale": "Operator, 2026-11-12: answered questions record decisions, which is what is looked for later.",
+      "statement": "The Story keeps every link it has today (traces, conversations) and shows each entry as a glyph, a label of at most six words, the actor and the time. Runs of four or more consecutive routine entries fold into one entry that opens. These are never folded: created, finished building, approved, sent back, landed or did not land, closed, any failure, anything waiting on the operator, and questions the operator answered. Any entry can be expanded to its full text."
+    },
+    {
+      "key": "work-view",
+      "modal": "MUST",
+      "party": null,
       "rationale": null,
-      "statement": "The story view shows a task's history as a timeline of entries, each a glyph, a label of at most six words, the actor and the time. Runs of four or more consecutive routine entries are folded into one that opens. Any entry can be expanded to its full text."
+      "statement": "The opened task has a Work view listing the requirements it serves, each with its evidence state read from the document's coverage, the requirement's acceptance criteria, and the latest checks with their outcome. An Earlier runs control shows the checks of previous runs."
+    },
+    {
+      "key": "details-view",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator, 2026-11-12: fewer changes; dropping today's controls was rejected.",
+      "statement": "The opened task's Details view shows description, waits-on and needed-by tasks, notes, facts, history and escalation, and keeps every control today's Details offers. Facts never repeat their label in their value (no 'Built by: built by Developer')."
     },
     {
       "key": "motion",
@@ -218,63 +335,164 @@
   "schema_version": 1,
   "scope": {
     "in_scope": [
-      "The task card, the drawer's summary area and the story view",
-      "Motion and theming of those"
+      "The task card on the board, the opened task dialog's Story, Work and Details views",
+      "Motion and theming of those",
+      "The Hub data the card needs for its failing-checks count"
     ],
     "non_goals": [
-      "What a card's facts are and how they are computed (slices glance, loose-tasks and finding)",
+      "What a card's stage facts are and how they are computed (slices glance, loose-tasks and finding)",
       "Other screens' cards",
-      "Changing the identity kit itself"
+      "Changing the identity kit itself",
+      "Replacing the centred dialog with a side sheet"
     ]
   },
-  "summary": "Cards and the story view are redesigned around visual state instead of prose, with motion and finish in AgentWeave's visual identity. The design is shown first as a mock built from the real components fed fixtures, and wired to live data once the operator approves it.",
+  "summary": "Cards and the opened task are redesigned around visual state instead of prose. The card shows a stage line, a people line and a stage thread. Today's centred dialog stays, with a trimmed Story, a new Work view (requirements with evidence state, criteria, latest checks) and a reworked Details view. The mock was approved by the operator on 2026-11-12; this change wires it to live data.",
   "tasks": [
     {
-      "builder": "DeveloperSonnet2",
-      "checker": "QA2",
+      "builder": "QA2",
+      "builder_reason": "A browser drive is QA2's work, and the same agent runs it green at the end.",
+      "checker": "QA",
+      "checker_reason": "An independent Opus check that each baseline check fails for the right reason, not at a 404 or a missing selector.",
       "depends_on": [],
-      "description": "Build the redesigned card, drawer header and story timeline as real components fed fixtures in the mock, covering every stage and close, in light and dark themes. Stop for the operator's review.",
+      "description": "Write a browser drive script under scripts/drive (outside the test suite) that seeds tasks on :8010 and checks, in both themes: the two-line card budget with waits-on kept, reduced motion and the 300 ms stage animation, axe contrast and a greyscale screenshot, the failed-check marker reading the right count, Story folding with answered questions unfolded, and Work with Earlier runs. Run it against master and record a drive_baseline: one line per check, each reached and failing at its own assertion.",
       "files": [
-        "hub/ui/mock",
-        "hub/ui/src/components/tasks"
+        "scripts/drive"
       ],
       "from": null,
-      "key": "mock",
+      "key": "drive",
+      "requirements": [
+        "card-text-budget",
+        "motion",
+        "not-colour-alone",
+        "failing-checks",
+        "story-timeline",
+        "work-view"
+      ],
+      "reviewer": null,
+      "title": "Acceptance drive, failing first"
+    },
+    {
+      "builder": "DeveloperSonnet2",
+      "builder_reason": "Wiring existing, approved mock components into the board is UI work Sonnet handles, and it spares the weekly quota.",
+      "checker": "QA2",
+      "checker_reason": "QA2 wrote the drive and can run its card checks against this branch.",
+      "depends_on": [
+        "drive"
+      ],
+      "description": "Replace the board's card with the mock's TaskCard, StageThread and taskStageVisual, fed from the live tasks route: stage line, people line, thread, spec tag, critical-only priority, two-line budget with waits-on kept over time at stage, and the stage-change animation with reduced-motion respected. The failing-checks marker renders from a count field and is hidden while the field is absent.",
+      "files": [
+        "hub/ui/src/components/tasks/TaskCard.tsx",
+        "hub/ui/src/components/tasks/StageThread.tsx",
+        "hub/ui/src/lib/taskStageVisual.ts",
+        "hub/ui/src/styles/task-redesign.css",
+        "hub/ui/src/components/board",
+        "hub/ui/src/pages"
+      ],
+      "from": null,
+      "key": "card",
       "requirements": [
         "mock-first",
         "card-content",
         "card-text-budget",
         "drawer-holds-rest",
-        "failing-checks",
-        "story-timeline",
         "motion",
         "identity",
         "not-colour-alone"
       ],
       "reviewer": null,
-      "title": "Redesign mock"
+      "title": "New card on the live board"
     },
     {
       "builder": "DeveloperSonnet2",
+      "builder_reason": "Finishing components that already exist is bounded UI work; Sonnet is enough.",
       "checker": "QA2",
+      "checker_reason": "QA2 wrote the drive and can run its Story and Work checks against this branch.",
       "depends_on": [
-        "mock"
+        "drive"
       ],
-      "description": "Wire the approved card, drawer and story to live data, including the failing-checks marker, and drive the board on :8010.",
+      "description": "Finish the dialog work already in TaskStory, TaskViews and TaskDetailDrawer: apply the never-fold list (including answered questions), add the Earlier runs control to Work, fix the Facts wording ('Built by Developer') and update the test that pins it, and add component tests fed the story and coverage routes' real order.",
       "files": [
-        "hub/ui/src/components/tasks",
-        "hub/ui/src/api/tasks.ts"
+        "hub/ui/src/components/tasks/TaskStory.tsx",
+        "hub/ui/src/components/tasks/TaskViews.tsx",
+        "hub/ui/src/components/tasks/TaskDetailDrawer.tsx",
+        "hub/ui/src/styles/task-views.css",
+        "hub/ui/src/__tests__"
       ],
       "from": null,
-      "key": "wire",
+      "key": "story-work-details",
       "requirements": [
-        "card-content",
-        "failing-checks",
         "story-timeline",
-        "motion"
+        "work-view",
+        "details-view"
       ],
       "reviewer": null,
-      "title": "Wire the approved design"
+      "title": "Story, Work and Details finished"
+    },
+    {
+      "builder": "DeveloperOpus2",
+      "builder_reason": "It changes the tasks route's payload, which every board view reads, so it gets the stronger model.",
+      "checker": "QA",
+      "checker_reason": "QA is free while QA2 checks the UI tasks, and Hub route changes warrant an Opus check.",
+      "depends_on": [
+        "card"
+      ],
+      "description": "Add to the tasks route, per task, how many of its latest run's checks failed (absent when none ran), with a Hub test; wire it into the card's marker.",
+      "files": [
+        "hub/hub/api/v1/tasks.py",
+        "hub/hub/schemas",
+        "hub/ui/src/api/tasks.ts",
+        "hub/ui/src/components/tasks/TaskCard.tsx"
+      ],
+      "from": null,
+      "key": "failed-count",
+      "requirements": [
+        "failing-checks"
+      ],
+      "reviewer": null,
+      "title": "Failed-check count for the card"
+    },
+    {
+      "builder": "QA2",
+      "builder_reason": "QA2 wrote the drive and knows its setup.",
+      "checker": "QA",
+      "checker_reason": "QA did not build it, and the bundle reaches the operator's live app, so it gets an independent Opus check.",
+      "depends_on": [
+        "card",
+        "story-work-details",
+        "failed-count"
+      ],
+      "description": "Run the acceptance drive against master with all three build tasks landed, fix nothing but the drive's own setup, and record each criterion's evidence from it. Refresh the committed UI bundle (hub/ui/src and hub/hub/static/ui together).",
+      "files": [
+        "hub/hub/static/ui",
+        "scripts/drive"
+      ],
+      "from": null,
+      "key": "drive-green",
+      "requirements": [
+        "card-text-budget",
+        "motion",
+        "not-colour-alone",
+        "failing-checks",
+        "story-timeline",
+        "work-view"
+      ],
+      "reviewer": null,
+      "title": "Drive green and bundle"
+    },
+    {
+      "depends_on": [],
+      "description": "ac-budget fails on the landed card (TCSR-2's TaskCard.tsx and task-redesign.css). At the 232px default card width, a task waiting on the operator shows 'Needs your answer · asked by DeveloperSonnetWithALongName2'. The .aw-tcard-waits span sits on one nowrap line beside the stage glyph, the stage word and the markers. It is cut from 238px to a 63px box, so it reads about 'asked b…'. FR-3 says waits-on is kept when space is short: time at stage already gives way, but the waits-on text itself is lost. Change the card so the waits-on text shows whole, or keeps the asker's name readable, at default width. Stay within two lines below the title, and keep the reviewer's name whole (the builder's name is cut first). Then re-run scripts/drive/dtcsr_card_and_story.py; ac-budget must pass in both themes.",
+      "files": [
+        "hub/ui/src/components/tasks/TaskCard.tsx",
+        "hub/ui/src/styles/task-redesign.css"
+      ],
+      "from": null,
+      "key": "card-waits-on-fits",
+      "requirements": [
+        "card-text-budget"
+      ],
+      "reviewer": null,
+      "title": "Keep the waits-on text readable on the card"
     }
   ],
   "title": "Task card and story redesign"

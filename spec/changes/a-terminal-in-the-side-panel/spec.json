@@ -1,0 +1,559 @@
+{
+  "acceptance_criteria": [
+    {
+      "checked_by": "agent",
+      "given": "a Hub listening on a non-loopback interface",
+      "how_to_check": "Acceptance drive on a test Hub (never :8000): requests from each source, then the process list",
+      "key": "ac-remote-refused",
+      "requirement": "local-only",
+      "then": "each is refused, no new process exists on the Hub's machine, and the tab opened from the other address shows the 'only on the computer AgentWeave runs on' message",
+      "when": "a shell is requested from another address, from a Docker bridge address (simulated), and from loopback without the operator's sign-in"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the operator signed in on the Hub's own computer",
+      "how_to_check": "Acceptance drive: connection attempts carrying a foreign Origin, then the process list",
+      "key": "ac-other-site-refused",
+      "requirement": "same-site-only",
+      "then": "both are refused and no process is started",
+      "when": "a page served from another origin tries to open and to attach to a shell"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a Hub started in Docker mode",
+      "how_to_check": "Hub test with Docker mode set",
+      "key": "ac-docker",
+      "requirement": "no-docker",
+      "then": "the tab says the terminal is not available in Docker mode and the request is refused",
+      "when": "the operator opens the Terminal tab and a shell is requested directly"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the Hub's computer",
+      "how_to_check": "Hub test with a faked set of installed shells and WSL distributions; drive on this Windows machine comparing the menu with what is installed and with wsl.exe's list",
+      "key": "ac-detected",
+      "requirement": "detected-shells",
+      "then": "it lists exactly the supported shells found installed, each WSL distribution included, and after the operator opens Git Bash once, Git Bash is listed first and marked next time",
+      "when": "the operator opens the new-shell menu"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a conversation with an agent that has a worktree, and a WSL distribution installed",
+      "how_to_check": "Acceptance drive in a browser",
+      "key": "ac-where",
+      "requirement": "opens-where-chosen",
+      "then": "each prints the directory its tab shows, the WSL one as /mnt/<drive>/...; for an agent with no worktree, the worktree choice is disabled with a reason",
+      "when": "the operator opens one shell in the worktree, one in the project root, and a WSL shell in the worktree, and prints the current directory in each"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an open shell",
+      "how_to_check": "Acceptance drive in a browser, with screenshots",
+      "key": "ac-interactive",
+      "requirement": "interactive",
+      "then": "the colour shows, the pager fills the shell and quits cleanly, and the shell reports the new width",
+      "when": "the operator runs a command printing coloured text, opens and quits a pager, and widens the panel"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a conversation with four open shells",
+      "how_to_check": "Hub test and drive",
+      "key": "ac-cap",
+      "requirement": "several-shells",
+      "then": "it is refused with a message naming the limit of four and the process count is unchanged",
+      "when": "the operator asks for a fifth"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a shell running a command that prints a line every second",
+      "how_to_check": "Acceptance drive in a browser",
+      "key": "ac-keeps-running",
+      "requirement": "keeps-running",
+      "then": "the shell is still running and shows the lines printed meanwhile",
+      "when": "the operator switches to another conversation for 20 seconds and comes back"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a shell that has started a long-running child process listening on a port",
+      "how_to_check": "Acceptance drive with the process list and a port probe, on Windows, once with PowerShell and once with a WSL shell",
+      "key": "ac-ends",
+      "requirement": "ends-cleanly",
+      "then": "each time the shell and its child are gone and the port is free, and after the reload the tab shows one fresh shell and none of the earlier ones; typing exit in a shell shows it ended with its exit code",
+      "when": "the operator closes the shell; then separately reloads the page; then separately the Hub is stopped"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a Hub started with its database location, an API key and an agent run credential in its environment",
+      "how_to_check": "Hub test spawning a shell and reading its environment; the WSL case in the drive",
+      "key": "ac-env",
+      "requirement": "clean-environment",
+      "then": "PATH is present in both and none of those variables is in either",
+      "when": "the operator lists the environment in a new PowerShell shell and in a new WSL shell"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a shell with output",
+      "how_to_check": "Component test and drive",
+      "key": "ac-send",
+      "requirement": "send-to-agent",
+      "then": "the composer holds those two lines, then the visible screen, each marked with the shell's name and directory, and nothing has been sent",
+      "when": "the operator selects two lines and presses Send to agent, then presses it again with nothing selected"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a conversation with two open shells, one of them ended, and another conversation with its own agent",
+      "how_to_check": "Hub test over the tool, and a real Haiku turn in the drive asking the agent what the shell shows",
+      "key": "ac-agent-reads",
+      "requirement": "agent-reads",
+      "then": "the first gets both shells with name, directory, running state and their last lines (at most 500 each); the second gets none of them; neither tool call can send input; the tab's footer says the agent can read these shells",
+      "when": "the conversation's agent calls the read tool, and the other conversation's agent calls it"
+    }
+  ],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {
+      "FR-1": "9d16e42574531a6351f0351c5101c5b0c9c32fd6a4bdb854178e0fa65d2f7db4",
+      "FR-10": "405b16daf859292444fb0ddd9ab994cf6e2bca405615ddd299d861b2c121a80a",
+      "FR-11": "3fe14b47e534ef234440c909e0b44f19f880266bc0f01fc4fca5ba2e529f02b9",
+      "FR-12": "47b0772568150dd99114c882eecd75f8491c1b7fc6eed6016f5b78f2e4206e13",
+      "FR-2": "7665bbde3c6eb655ee9828ce665c5cf812239b642bfbe45eec4cef12a17aee5e",
+      "FR-3": "869f79223a4e0ffa89594d68aab14653f15e5db70e228ee6155c588bb97c0635",
+      "FR-4": "d9039c89529ee2aee81ffdbd7d815d57f7869ad2e85182f6072217a768d3291e",
+      "FR-5": "c15a2b0b44c1b9908f399f977395f64c27451d2272ac0ebcc99c1110f6df635b",
+      "FR-6": "dfcf10e81c7d7c20d3764e605f315fd716a9908c07917f9e01205052142821fb",
+      "FR-7": "3c1e29dcd9570b9cf3d13c5ddef5096e6b1035fd83964c11d60cefbf1f83874c",
+      "FR-8": "5bbccc90408af7275f63b39ffe2435e714dbe39df50a8d07cd2d6fcdcfe52239",
+      "FR-9": "9b804f3e9d76b50b1b2162ec634f2f3f7ae9183ff73542f9bb396baa1a03a1c2"
+    },
+    "high_water": 12,
+    "requirements": {
+      "agent-reads": "FR-12",
+      "clean-environment": "FR-10",
+      "detected-shells": "FR-4",
+      "ends-cleanly": "FR-9",
+      "interactive": "FR-6",
+      "keeps-running": "FR-8",
+      "local-only": "FR-1",
+      "no-docker": "FR-3",
+      "opens-where-chosen": "FR-5",
+      "same-site-only": "FR-2",
+      "send-to-agent": "FR-11",
+      "several-shells": "FR-7"
+    },
+    "retired": {}
+  },
+  "capabilities": {
+    "changes": [
+      "spec/capabilities/conversation-side-panel/spec.json"
+    ],
+    "creates": []
+  },
+  "delivery": {
+    "agent": "Developer",
+    "builder": "Developer",
+    "checker": "QA",
+    "cron": "*/5 * * * *",
+    "mode": "flow",
+    "reasons": {
+      "agent": "Developer wired the Files tab next door.",
+      "builder": "Tasks name their own builders; Developer is the fallback.",
+      "checker": "QA reviews the security-bearing work and the drive.",
+      "cron": "Flows' usual cadence.",
+      "mode": "Drive first, the Hub service, then UI and agent tool in parallel, then the drive green: a short flow.",
+      "stop": "Stops when its five tasks are done."
+    },
+    "reviewer": null,
+    "stop_at": null,
+    "stop_when_queue_empties": true
+  },
+  "design": "Tier 2: security. An interactive shell is command execution on the operator's computer, and this adds the Hub's first live two-way channel to the browser. No migration: shells are held in the Hub's memory and end with it. Hazard on merge: the operator's :8000 Hub runs this checkout, so the terminal reaches the live app at its next restart and bundle reload; the acceptance drive's refusal criteria must pass before that.\n\nThe look is the mock (operator asked for it 2026-11-14): TerminalTab.tsx is the real component, props only (shells, active shell, options found, last pick, unavailable reason), fed fixtures in hub/ui/mock/screens/SidePanel.tsx; routes #conversation/Architect/conv-9cdda4865e0b/terminal, terminal-full, terminal-remote, terminal-docker. Wiring it is feeding it the Hub's data and mounting the emulator where the mock shows a recording.\n\nDecisions (operator, 2026-11-14 unless marked):\n- Worktree or project root, the operator choosing; a page reload ends every shell (roadmap, operator 2026-11-12). Local machine only; Docker mode unsupported (roadmap).\n- Several shells: four per conversation, as tabs inside the Terminal tab, each keeping the place and shell it was opened with; + asks where and which shell. Flipping the location therefore no longer restarts a shell.\n- Shells are detected, not configured: + lists only what is installed, WSL distributions included; the last pick is listed first and marked. A WSL shell opens at the directory's /mnt/<drive>/... path, and its tab shows that path. Git Bash likewise shows /c/... .\n- Inheritance: the operator's environment, minus what the Hub itself holds (database location, API keys, agent run credentials). Rationale: the shell should behave like the operator's own, but must not hand the Hub's secrets to whatever runs in it, or to an agent reading its output. This includes what WSL is told to pass across from Windows.\n- No off switch: always on.\n- Shells keep running when the operator leaves the conversation; only close, Restart, reload and Hub stop end them; the cap bounds what can pile up.\n- Agents: the operator can send output into the conversation (like the Files tab's Insert), and the conversation's agent gets a read-only tool over its shells' recent output; the tab's footer says the agent can read them. Typing into the operator's shell is out: an agent's own commands go through its permission level and are recorded on its run, and a keystroke in the operator's shell would bypass both and be indistinguishable on screen.\n- \"Local\" for a terminal means loopback only, not Docker bridge addresses, and the request must come from the app's own page: browsers do not stop another website from opening a live connection to localhost, so the Hub has to.\n- The UI needs a real terminal emulator (colour, cursor movement, full-screen programs); unlike the dashboard charts this is not reasonable to hand-draw, so a terminal-emulator package is expected as a UI dependency.\n- Numbers (Architect's proposal, operator confirmed four shells and raised no objection to the rest, 2026-11-14): 4 shells per conversation; 5,000 lines kept per shell; the agent's read returns at most the last 500 lines per shell.\n\nCURRENT  check an agent's work -> leave the app -> find the worktree path -> open a shell; copy output back by hand\nPROPOSED Terminal tab -> + (where, which shell) -> shell in the worktree; Send to agent, or the agent reads it",
+  "evidence": {
+    "checked": [
+      "Mock built and driven 2026-11-14 on localhost:5200 (Architect branch): three shells as tabs, + menu with place and five detected shells (WSL marked, last used first), opening a fourth reaches 'Limit of 4 reached', a WSL shell showing /mnt/c/... and 'Ended with exit code 0 / Open it again', Send to agent filling the composer draft with a toast, remote and Docker states; no console errors; app tsc and eslint clean",
+      "No WebSocket route exists in hub/hub (grep, 2026-11-14)",
+      "PTY libraries already depended on: hub/pyproject.toml pywinpty (win32), ptyprocess (other); hub/hub/pty_runner.py spawns agents under them",
+      "hub/hub/api/v1/setup.py _is_local_address accepts 172.16-31.x.x Docker bridge addresses as local"
+    ],
+    "limits": [
+      "Nothing behind the tab is built or driven; every criterion is proposed coverage",
+      "Shell detection and process-tree ending were not tried on macOS or Linux; the drive runs on this Windows machine only",
+      "Whether pywinpty's ConPTY gives full-screen programs correctly in the panel, and how WSL passes Windows variables across, are untested"
+    ]
+  },
+  "hub": {
+    "builds": [
+      {
+        "budget_cap_usd": null,
+        "builder": "Developer",
+        "builders": [
+          "QA2",
+          "DeveloperOpus2",
+          "Developer"
+        ],
+        "checker": "QA",
+        "checkers": [],
+        "chosen_by": "operator",
+        "driver": "flow",
+        "ended_at": "2026-11-15T04:59:23.649917+00:00",
+        "id": "build-aba36d302a01",
+        "landing": "main",
+        "lead": null,
+        "level": "reviewed",
+        "pull_request": null,
+        "started_at": "2026-11-14T12:10:33.017727+00:00",
+        "state": "finished",
+        "stop_reason": null,
+        "tasks": {
+          "acceptance-drive": {
+            "builder": "QA2",
+            "checker": "QA"
+          },
+          "agent-read-tool": {
+            "builder": "DeveloperOpus2",
+            "checker": "QA"
+          },
+          "first-key-after-focus-report": {
+            "builder": null,
+            "builder_default": true,
+            "checker": null
+          },
+          "input-survives-resize": {
+            "builder": null,
+            "builder_default": true,
+            "checker": null
+          },
+          "run-acceptance-drive": {
+            "builder": "QA2",
+            "checker": "QA"
+          },
+          "shell-service": {
+            "builder": "DeveloperOpus2",
+            "checker": "QA"
+          },
+          "task-d3e0cf29701b": {
+            "builder": null,
+            "builder_default": true,
+            "checker": null
+          },
+          "terminal-ui": {
+            "builder": "Developer",
+            "checker": "QA2"
+          }
+        },
+        "window_end": null,
+        "window_start": null
+      }
+    ],
+    "phase": "approved",
+    "size": "large",
+    "step": "build"
+  },
+  "kind": "change-spec",
+  "lifecycle": "",
+  "open_questions": [
+    {
+      "question": "More than one shell? Answer (operator, 2026-11-14): yes, four per conversation.",
+      "resolved": true
+    },
+    {
+      "question": "Which shell? Answer (operator, 2026-11-14): detect what the machine has.",
+      "resolved": true
+    },
+    {
+      "question": "WSL now or later? Answer (operator, 2026-11-14): now.",
+      "resolved": true
+    },
+    {
+      "question": "What does the shell inherit? Answer (operator, 2026-11-14): the operator's environment minus the Hub's own variables.",
+      "resolved": true
+    },
+    {
+      "question": "An off switch? Answer (operator, 2026-11-14): no, always on.",
+      "resolved": true
+    },
+    {
+      "question": "Agent access? Answer (operator, 2026-11-14): the operator can send output to the agent, and the agent can read its conversation's shells; no typing.",
+      "resolved": true
+    },
+    {
+      "question": "Switching conversations? Answer (operator, 2026-11-14): shells keep running.",
+      "resolved": true
+    }
+  ],
+  "problem": "Comparable tools put a terminal beside the chat; AgentWeave's panel has none, so checking what an agent did (running its tests, git status in its worktree) means leaving the app for a separate shell and finding the worktree path by hand, and showing the agent what happened means copying output across. The tab exists only as a mock (hub/ui/src/components/panel/TerminalTab.tsx, mock routes in hub/ui/mock/screens/SidePanel.tsx): the Hub has no live two-way channel to the browser today (no WebSocket route in hub/hub), and its PTY code (hub/hub/pty_runner.py, pywinpty/ptyprocess) spawns agents, not interactive shells. A terminal is command execution on the operator's computer, so who may open one is the slice's central rule; the existing local-address check (hub/hub/api/v1/setup.py _is_local_address) counts Docker bridge addresses as local, which is right for setup tokens and wrong for a shell.",
+  "requirements": [
+    {
+      "key": "local-only",
+      "modal": "MUST",
+      "party": "consumer",
+      "rationale": "A shell runs any command as the operator; anyone who could open one from elsewhere owns the computer.",
+      "statement": "The Hub opens a shell only for a request from a loopback address made by the signed-in operator; a request from any other address, Docker bridge addresses included, or without the operator's sign-in, is refused and starts no process, and the Terminal tab used from another computer says the terminal opens only on the computer AgentWeave runs on."
+    },
+    {
+      "key": "same-site-only",
+      "modal": "MUST",
+      "party": "consumer",
+      "rationale": "Browsers let any website open a live connection to localhost; without this, a page the operator merely visits could run commands.",
+      "statement": "A request to open or attach to a shell whose origin is not the app's own page is refused and starts no process, even from the Hub's own computer."
+    },
+    {
+      "key": "no-docker",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "A Hub running in Docker mode offers no terminal: the tab says the terminal is not available in Docker mode and the Hub refuses every shell request."
+    },
+    {
+      "key": "detected-shells",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "The menu for a new shell lists the shells installed on the Hub's computer and only those: on Windows, whichever of PowerShell 7, Windows PowerShell, Command Prompt and Git Bash are found, and each installed WSL distribution; elsewhere, the operator's login shell and the installed shells the system lists. The operator's last pick is listed first and marked."
+    },
+    {
+      "key": "opens-where-chosen",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "A new shell starts in the conversation agent's worktree or the project root, as the operator chose, and its tab shows the shell's name and that directory as the shell names it (a WSL shell's /mnt/<drive>/... path); when the agent has no worktree, the worktree choice is unavailable and says why."
+    },
+    {
+      "key": "interactive",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "What the operator types reaches the shell and its output appears as it is produced, with colour and cursor movement drawn correctly enough that full-screen programs (an editor, a pager) are usable, and the shell's size follows the panel's size."
+    },
+    {
+      "key": "several-shells",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "A conversation can have up to four open shells at once, each in its own tab with its own directory and shell; asking for a fifth is refused with a message naming the limit and starts no process."
+    },
+    {
+      "key": "keeps-running",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "A dev server or a long test run should not die because the operator went to answer another agent.",
+      "statement": "A conversation's shells keep running while the operator is in another conversation, another tab or has the panel closed; returning shows each shell with the output produced meanwhile, up to its last 5,000 lines."
+    },
+    {
+      "key": "ends-cleanly",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "On Windows a shell's children outlive it unless ended with it; an orphaned dev server holds its port.",
+      "statement": "Closing a shell, Restart, reloading the page and stopping the Hub each end the shells concerned and every process they started; after a reload no earlier shell is listed and opening the Terminal tab starts one fresh shell. A shell that exits by itself shows that it ended, with its exit code, and offers to open it again."
+    },
+    {
+      "key": "clean-environment",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Whatever runs in the shell, and any agent reading its output, must not be handed the Hub's secrets.",
+      "statement": "A shell, WSL shells included, has the operator's environment, including PATH, without the variables the Hub itself holds: its database location, its API keys and any agent's run credentials."
+    },
+    {
+      "key": "send-to-agent",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "The operator can send a selection of a shell's output, or its visible screen when nothing is selected, into the conversation's composer, unsent, marked with the shell's name and directory."
+    },
+    {
+      "key": "agent-reads",
+      "modal": "MUST",
+      "party": "consumer",
+      "rationale": null,
+      "statement": "The conversation's agent has a tool that returns, for each open shell of that conversation, its shell name, directory, whether it is still running and up to its last 500 lines of output; it cannot type into, start or end a shell, an agent of another conversation gets none of them, and the Terminal tab says the agent can read its shells."
+    }
+  ],
+  "roadmap": {
+    "document": "spec/changes/a-side-panel-worth-keeping-open-activity-changes-files-terminal-and-peers/spec.json",
+    "slice": "terminal-tab"
+  },
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "A Terminal tab in the conversation side panel with up to four shells, each its own tab",
+      "Opening each shell in the conversation agent's worktree or the project root, in a shell detected as installed on the Hub's computer, WSL distributions included",
+      "Shells that keep running while the operator is in another conversation or tab",
+      "Restart, close, page reload and Hub stop ending shells and everything they started",
+      "Refusing a terminal to anyone not using the app on the Hub's own computer, saying why",
+      "Sending terminal output into the conversation's composer",
+      "A read-only tool for the conversation's agent to read its shells' recent output"
+    ],
+    "non_goals": [
+      "A terminal reachable from another machine, or in Docker mode",
+      "A terminal that survives a page reload or a Hub restart",
+      "Agents typing into, starting or ending the operator's shells (a later slice, if ever, with the agent's permission level and attribution)",
+      "Agents of other conversations reading these shells",
+      "A setting to turn the terminal off (operator, 2026-11-14: always on)",
+      "Splits, or more than four shells per conversation",
+      "Shells the operator configures by hand rather than ones detected as installed",
+      "WSL distributions whose filesystem cannot reach the project's drive (a project on a network share)"
+    ]
+  },
+  "summary": "The conversation's side panel gets working terminals: up to four shells per conversation, each in the conversation agent's worktree or the project root, in any shell the Hub's computer has installed, WSL distributions included. They keep running while the operator is elsewhere in the app and end on reload, Restart, close or Hub stop. Only the operator, using the app on the Hub's own computer, can open one. The operator can send output into the conversation, and the conversation's agent can read its shells' recent output but never type into them.",
+  "tag": "panel-terminal",
+  "tasks": [
+    {
+      "builder": "QA2",
+      "builder_reason": "QA2 writes the browser drives for the panel slices and builds nothing else here.",
+      "checker": "QA",
+      "checker_reason": "QA is not the drive's author.",
+      "depends_on": [],
+      "description": "Write scripts/drive/panel_terminal_drive.py covering every criterion on a test Hub started from the checkout (never :8000; real agent turns bind Haiku), the refusal criteria first, with the WSL cases where a distribution is installed. Commit it failing on today's master, each failure naming the missing behaviour; the last task runs it green.",
+      "files": [
+        "scripts/drive/panel_terminal_drive.py"
+      ],
+      "from": null,
+      "key": "acceptance-drive",
+      "requirements": [
+        "local-only",
+        "same-site-only",
+        "ends-cleanly"
+      ],
+      "reviewer": null,
+      "title": "Acceptance drive, failing first"
+    },
+    {
+      "builder": "DeveloperOpus2",
+      "builder_reason": "The security-bearing task: the Hub side of opening, attaching, capping, cleaning and ending shells; Opus for a Tier 2 contract.",
+      "checker": "QA",
+      "checker_reason": "QA reviews contracts and refusal paths; not the builder.",
+      "depends_on": [
+        "acceptance-drive"
+      ],
+      "description": "Hub-side shell sessions: detect installed shells and WSL distributions, start one in the agent's worktree or the project root (translated for WSL) with the cleaned environment, a live two-way channel to the app for input, output and resize, the four-per-conversation cap, 5,000 lines kept per shell, ending a shell and its whole process tree on close, restart, the page going away and Hub stop, and the loopback, sign-in, same-origin and Docker-mode refusals. Hub tests for each refusal and for the environment.",
+      "files": [
+        "hub/hub/terminal",
+        "hub/hub/api/v1/terminal.py",
+        "hub/hub/main.py",
+        "hub/tests/test_terminal.py"
+      ],
+      "from": null,
+      "key": "shell-service",
+      "requirements": [
+        "local-only",
+        "same-site-only",
+        "no-docker",
+        "detected-shells",
+        "opens-where-chosen",
+        "several-shells",
+        "keeps-running",
+        "ends-cleanly",
+        "clean-environment"
+      ],
+      "reviewer": null,
+      "title": "Shells on the Hub, local and same-site only"
+    },
+    {
+      "builder": "Developer",
+      "builder_reason": "Developer wired the Files tab, which this tab shares its location switch and panel with.",
+      "checker": "QA2",
+      "checker_reason": "QA2 drives the panel in a browser; not the builder.",
+      "depends_on": [
+        "shell-service"
+      ],
+      "description": "Feed the mocked TerminalTab (props only, already the real component) from the Hub: mount a terminal emulator where the mock shows a recording, open and close shells through +, keep the last pick, show refusals and the ended state, Send to agent into the composer draft, reattach on return to a conversation, and one fresh shell after a reload. Component tests; refresh and commit the UI bundle with the source.",
+      "files": [
+        "hub/ui/src/components/panel",
+        "hub/ui/src/api/terminal.ts",
+        "hub/ui/src/__tests__",
+        "hub/ui/package.json",
+        "hub/ui/package-lock.json",
+        "hub/hub/static/ui"
+      ],
+      "from": null,
+      "key": "terminal-ui",
+      "requirements": [
+        "interactive",
+        "opens-where-chosen",
+        "several-shells",
+        "keeps-running",
+        "ends-cleanly",
+        "send-to-agent",
+        "detected-shells"
+      ],
+      "reviewer": null,
+      "title": "The Terminal tab, wired"
+    },
+    {
+      "builder": "DeveloperOpus2",
+      "builder_reason": "Builds on the shell service it wrote, and has added agent tools before.",
+      "checker": "QA",
+      "checker_reason": "QA reads tool contracts and runs the tool-surface snapshot; not the builder.",
+      "depends_on": [
+        "shell-service"
+      ],
+      "description": "A read-only agent tool returning the conversation's shells (name, directory, running, last lines up to 500 each), scoped to the calling agent's conversation; Hub tests for the scope and that no input path exists; update the tools/list snapshot test.",
+      "files": [
+        "hub/hub/mcp_server.py",
+        "hub/tests/test_terminal_agent_read.py",
+        "hub/tests/test_copilot_context_split.py"
+      ],
+      "from": null,
+      "key": "agent-read-tool",
+      "requirements": [
+        "agent-reads"
+      ],
+      "reviewer": null,
+      "title": "Agents read their conversation's shells"
+    },
+    {
+      "builder": "QA2",
+      "builder_reason": "The drive's author runs it and fixes only drive-side faults.",
+      "checker": "QA",
+      "checker_reason": "QA reads the recorded evidence; not the builder.",
+      "depends_on": [
+        "acceptance-drive",
+        "shell-service",
+        "terminal-ui",
+        "agent-read-tool"
+      ],
+      "description": "Run scripts/drive/panel_terminal_drive.py against the finished slice on Windows and record evidence for every criterion, with screenshots. Fix only the drive; a failing criterion goes back to the task that built it.",
+      "files": [
+        "scripts/drive/panel_terminal_drive.py"
+      ],
+      "from": null,
+      "key": "run-acceptance-drive",
+      "requirements": [
+        "local-only",
+        "same-site-only",
+        "interactive",
+        "ends-cleanly",
+        "agent-reads"
+      ],
+      "reviewer": null,
+      "title": "Run the acceptance drive green"
+    },
+    {
+      "depends_on": [],
+      "description": "FR-6 says what the operator types reaches the shell. In a full acceptance drive (run 231921, commit f1e1563, Git Bash), the first command typed after dragging the panel from 510px to 765px arrived as `cho AWC5777$(tput cols)W` and bash answered 'cho: command not found'. The leading 'e' was lost (screenshot testbed/terminal-drive/231921/interactive.png). The drive's read_cols retries up to 3 times, so ac-interactive still passed, and QA2's run 192452 lost nothing. Find where the key is dropped: xterm focus or fit after the drag, the resize/input ordering on the WebSocket, or ConPTY/MSYS readline handling SIGWINCH. Then fix it in the product if it is ours, or document it as a Git Bash/ConPTY limitation if it is not. Either way, add a check that types immediately after a resize and fails if a character is lost.",
+      "from": null,
+      "key": "input-survives-resize",
+      "requirements": [
+        "interactive"
+      ],
+      "reviewer": null,
+      "title": "A keystroke typed just after widening the panel reaches the shell"
+    },
+    {
+      "depends_on": [],
+      "description": "F1177: under ConPTY, Git Bash intermittently loses the first character typed after the terminal regains focus (after a resize drag). TSP-6 showed the browser sends every key and the Hub writes every key to the pty in order. In every traced failure (two in scripts/drive/evidence/tsp6-pty-trace-failing-run.log, QA's run on :8062, QA's run 015334 on :8064), the failing attempt's frames begin with ESC[I, xterm's focus-in report, a few ms before the first key, and the retry that works has no ESC[I. Nothing in hub/ui/src or hub/hub/terminal handles focus reporting, so the report is passed straight through to ConPTY, which asked for it with DECSET 1004. Run the experiment first: drop or delay the focus-in/out reports before they reach the pty, or send them in the same write as the next key. If that stops the loss, ship it as the product fix. If it does not, record the run as evidence and keep F1177 as a documented limitation. Either way, ac-interactive-first-key is the check.",
+      "files": [
+        "hub/hub/terminal/sessions.py",
+        "hub/ui/src",
+        "scripts/drive/FINDINGS.md"
+      ],
+      "from": null,
+      "key": "first-key-after-focus-report",
+      "requirements": [
+        "interactive"
+      ],
+      "reviewer": null,
+      "title": "The first key after xterm's focus-in report reaches Git Bash"
+    }
+  ],
+  "title": "A terminal in the side panel"
+}

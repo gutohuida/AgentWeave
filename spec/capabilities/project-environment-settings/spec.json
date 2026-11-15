@@ -43,20 +43,6 @@
       "when": "The operator types a value outside its range and saves"
     },
     {
-      "given": "The Settings section",
-      "key": "ac7",
-      "requirement": "saving-reports-its-outcome",
-      "then": "The section shows \"Settings saved.\"",
-      "when": "The operator saves a valid change"
-    },
-    {
-      "given": "The Settings section",
-      "key": "ac8",
-      "requirement": "saving-reports-its-outcome",
-      "then": "The reason is shown in the section and the entered values remain.",
-      "when": "A save is refused"
-    },
-    {
       "given": "A git project with no main branch chosen and a detected branch",
       "key": "ac9",
       "requirement": "the-operator-can-choose-the-branch-approval-merges-into",
@@ -125,20 +111,6 @@
       "requirement": "settings-may-be-changed-one-at-a-time",
       "then": "that field is cleared",
       "when": "a checkpoint field is sent as null"
-    },
-    {
-      "given": "Environment > Settings",
-      "key": "the-settings-that-gate-collaboration-are-on-the-pro-groups-order",
-      "requirement": "settings-rows-are-grouped-collaboration-first",
-      "then": "group headings read Collaboration, Integration, Checkpointing, Conversations, Project in that order, and Delete project is the last control",
-      "when": "it renders"
-    },
-    {
-      "given": "Environment > Settings with a project token_budget of 5000",
-      "key": "the-settings-that-gate-collaboration-are-on-no-token-in-settings",
-      "requirement": "settings-leaves-the-token-budget-to-budgets",
-      "then": "no token budget input is rendered, the PUT body has no token_budget key, and a link to Budgets is shown",
-      "when": "the operator saves the hop budget"
     },
     {
       "given": "Settings and Overview",
@@ -335,9 +307,253 @@
       "requirement": "settings-rows-that-hold-any-value-no-sideways-scroll",
       "then": "each reads whole, with nothing cut off or one word per line",
       "when": "the operator opens Agent → Context, Agent → Workspace, Project General and Worktrees on their own data"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a project open in the app",
+      "how_to_check": "py -3.11 scripts/checks/settings_style_check.py (reads the side list of a Hub started on a temporary database)",
+      "key": "settings-in-the-app-s-style-where-you-expect-ac-sections-listed",
+      "requirement": "settings-in-the-app-s-style-where-you-expect-th-project-sections",
+      "then": "the side list shows the four group headings and fifteen sections in the stated order, and no General, Quality or Runners entry",
+      "when": "Project settings is opened"
+    },
+    {
+      "checked_by": "agent",
+      "given": "each section named in the requirement",
+      "how_to_check": "settings_style_check.py asserts each section's row labels against the requirement's list",
+      "key": "settings-in-the-app-s-style-where-you-expect-th-ac-every-setting",
+      "requirement": "settings-in-the-app-s-style-where-you-expect-every-setting-kept",
+      "then": "every setting the requirement places there is present as a labelled row, and none appears on two sections",
+      "when": "it is opened"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the URLs of the old General, Quality and Runners sections and of each old agent section",
+      "how_to_check": "settings_style_check.py opens each old route and reads the active section",
+      "key": "settings-in-the-app-s-style-where-you-expect-them-ac-old-links",
+      "requirement": "settings-in-the-app-s-style-where-you-expect-them-old-links-land",
+      "then": "the successor section named in the requirement is shown, not an empty page",
+      "when": "each is opened"
+    },
+    {
+      "checked_by": "agent",
+      "given": "every project and agent settings section",
+      "how_to_check": "settings_style_check.py counts Save buttons per section and watches the writes each change issues",
+      "key": "settings-in-the-app-s-style-where-you-expect-ac-no-save-buttons",
+      "requirement": "settings-in-the-app-s-style-where-you-expect-them-save-on-change",
+      "then": "no button named Save, Save steps or Save export settings exists outside Instructions; changing a hop budget, a spec step's sizes, the trace retention and an agent's question wait each issues one write with no further click",
+      "when": "each is rendered"
+    },
+    {
+      "checked_by": "agent",
+      "given": "every project and agent settings section",
+      "how_to_check": "settings_style_check.py queries each section's DOM",
+      "key": "settings-in-the-app-s-style-where-you-expect-them-ac-no-native",
+      "requirement": "settings-in-the-app-s-style-where-you-expect-t-app-controls-only",
+      "then": "it contains no input[type=checkbox], no input[type=date] and no select element",
+      "when": "each is rendered"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a project with the built-in steps and one step of the operator's",
+      "how_to_check": "vitest for SpecStepsSettings and its container, plus the drive above",
+      "key": "settings-in-the-app-s-style-where-you-expect-them-ac-spec-steps",
+      "requirement": "settings-in-the-app-s-style-where-you-expect-spec-steps-section",
+      "then": "built-in steps read in words and are marked built in, the move and size change are stored without a Save, and the colliding add is refused with a reason while the list stays as stored",
+      "when": "Spec steps is opened, the operator's step is moved up and its sizes changed, then a step whose title collides with an existing one is added"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a project with traces and a collector header stored",
+      "how_to_check": "vitest for TracesSettings and its container",
+      "key": "settings-in-the-app-s-style-where-you-expect-them-ac-traces",
+      "requirement": "settings-in-the-app-s-style-where-you-expect-them-traces-section",
+      "then": "each change is stored without a Save, no stored header value appears anywhere on the page, and the download asks for traces since seven days ago",
+      "when": "the retention is changed, the collector switch turned, the headers replaced, and Download pressed with 7 days chosen"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an agent's settings",
+      "how_to_check": "settings_style_check.py on an agent's settings",
+      "key": "settings-in-the-app-s-style-where-you-expect-t-ac-agent-sections",
+      "requirement": "settings-in-the-app-s-style-where-you-expect-them-agent-sections",
+      "then": "exactly Agent, Running, Permissions, Checkpoints and Workspace are listed, each holding the rows the requirement names",
+      "when": "they are opened"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an agent on Claude Sonnet and no runner for Claude Haiku in the project",
+      "how_to_check": "Hub test on the binding route, plus a drive: choose the model, start a turn with claude replaced on PATH by a recording stub, read the launch command",
+      "key": "settings-in-the-app-s-style-where-you-expect-them-ac-model-new",
+      "requirement": "settings-in-the-app-s-style-where-you-expect-agent-model-choice",
+      "then": "the agent's next turn launches Claude Code with that model, and the project holds exactly one runner for it",
+      "when": "Claude Code · Haiku is chosen in Running → Model"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a runner for Claude Opus already exists",
+      "how_to_check": "Hub test counting runners before and after",
+      "key": "settings-in-the-app-s-style-where-you-expect-them-ac-model-reuse",
+      "requirement": "settings-in-the-app-s-style-where-you-expect-agent-model-choice",
+      "then": "no new runner is created and both agents are bound to the existing one",
+      "when": "a second agent chooses Claude Code · Opus"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an agent with no checkpoint mode of its own and a project set to Offer me one",
+      "how_to_check": "vitest for AgentCheckpointsSettings",
+      "key": "settings-in-the-app-s-style-where-you-exp-ac-unset-shows-project",
+      "requirement": "settings-in-the-app-s-style-where-you-agent-unset-shows-project",
+      "then": "the mode reads as the project's, naming Offer me one, and after choosing Off the reset returns it to the project's",
+      "when": "its Checkpoints section is opened"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the long-values check's seeded long values",
+      "how_to_check": "py -3.11 scripts/checks/long_values_check.py",
+      "key": "settings-in-the-app-s-style-where-you-expect-them-ac-long-values",
+      "requirement": "settings-in-the-app-s-style-where-you-expe-long-values-still-fit",
+      "then": "it reports PASS at 960 and 1440, dark and light",
+      "when": "it runs over every new project and agent section"
+    },
+    {
+      "checked_by": "agent",
+      "given": "project settings open on Project",
+      "how_to_check": "scripts/checks/settings_search_check.py step cross-scope",
+      "key": "find-any-setting-and-see-where-its-value-comes-fr-ac-cross-scope",
+      "requirement": "find-any-setting-and-see-where-its-value-come-search-on-settings",
+      "then": "results include the project's Checkpoints settings and the agent Checkpoints settings, each naming scope and section, label matches first",
+      "when": "the operator types 'checkpoint'"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an agent's settings open",
+      "how_to_check": "settings_search_check.py step app-from-agent",
+      "key": "find-any-setting-and-see-where-its-value-comes-ac-app-from-agent",
+      "requirement": "find-any-setting-and-see-where-its-value-come-search-on-settings",
+      "then": "the App setting for notification volume is listed and choosing it opens App settings at it",
+      "when": "the operator types 'volume'"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a project with three agents",
+      "how_to_check": "settings_search_check.py step agents-listed",
+      "key": "find-any-setting-and-see-where-its-value-comes-ac-agents-listed",
+      "requirement": "find-any-setting-and-see-where-its-value-come-agent-results-once",
+      "then": "the agent setting appears once with three agent names under it, and choosing the second opens that agent's Checkpoints at checkpoint mode",
+      "when": "the operator searches 'checkpoint mode'"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the Overview tab",
+      "how_to_check": "settings_search_check.py step palette",
+      "key": "find-any-setting-and-see-where-its-value-comes-from-ac-palette",
+      "requirement": "find-any-setting-and-see-where-its-valu-palette-reaches-settings",
+      "then": "Project settings opens at Landing with the CI cutoff row highlighted",
+      "when": "the operator presses Ctrl K, types 'CI cutoff' and chooses the Settings result"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a search result for a row below the fold of its section at 960px",
+      "how_to_check": "settings_search_check.py step highlight",
+      "key": "find-any-setting-and-see-where-its-value-come-ac-highlight-focus",
+      "requirement": "find-any-setting-and-see-where-its-value-comes-land-highlighted",
+      "then": "the row is in view, highlighted, still highlighted at 2s, and the focused element is its control",
+      "when": "it is chosen"
+    },
+    {
+      "checked_by": "agent",
+      "given": "any settings screen",
+      "how_to_check": "settings_search_check.py step no-match",
+      "key": "find-any-setting-and-see-where-its-value-comes-from-ac-no-match",
+      "requirement": "find-any-setting-and-see-where-its-value-comes-no-match-says-so",
+      "then": "a no-match message names the words and no result is listed",
+      "when": "the operator types 'zzqx'"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the operator landed on Landing → CI cutoff by search",
+      "how_to_check": "settings_search_check.py step reload",
+      "key": "find-any-setting-and-see-where-its-value-comes-from-ac-reload",
+      "requirement": "find-any-setting-and-see-where-its-value-location-names-setting",
+      "then": "both times Landing opens with CI cutoff highlighted",
+      "when": "the app is reloaded, then the operator goes elsewhere and presses Back"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the project's hop budget set to a non-default value",
+      "how_to_check": "settings_search_check.py step source",
+      "key": "find-any-setting-and-see-where-its-value-comes-ac-source-project",
+      "requirement": "find-any-setting-and-see-where-its-value-comes-from-source-shown",
+      "then": "the row reads Changed and names the default value",
+      "when": "Collaboration is opened"
+    },
+    {
+      "checked_by": "agent",
+      "given": "agent A with its own checkpoint mode and agent B with none",
+      "how_to_check": "settings_search_check.py step source",
+      "key": "find-any-setting-and-see-where-its-value-comes-f-ac-source-agent",
+      "requirement": "find-any-setting-and-see-where-its-value-comes-from-source-shown",
+      "then": "A reads Agent's own with the project's mode, B reads From project with it",
+      "when": "each agent's Checkpoints is opened"
+    },
+    {
+      "checked_by": "agent",
+      "given": "agent A's own checkpoint mode",
+      "how_to_check": "settings_search_check.py step reset (reads the agent through the Hub API after the click)",
+      "key": "find-any-setting-and-see-where-its-value-comes-from-ac-reset",
+      "requirement": "find-any-setting-and-see-where-its-value-comes-reset-one-action",
+      "then": "A's row reads From project with the project's mode, and the Hub's agent record has no checkpoint mode of its own",
+      "when": "the row's reset is used once"
+    },
+    {
+      "checked_by": "agent",
+      "given": "agents A and B hold their own default permissions, C does not",
+      "how_to_check": "settings_search_check.py step overrides",
+      "key": "find-any-setting-and-see-where-its-value-comes-from-ac-overrides",
+      "requirement": "find-any-setting-and-see-where-its-value-comes-f-overrides-named",
+      "then": "default permissions names A and B, not C, and clicking B opens B's Permissions at default permissions; granted reach, with no agent holding its own, names nobody",
+      "when": "Project settings → Permissions is opened"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a project with only hop budget changed",
+      "how_to_check": "settings_search_check.py step changed-only",
+      "key": "find-any-setting-and-see-where-its-value-comes-f-ac-changed-only",
+      "requirement": "find-any-setting-and-see-where-its-value-comes-from-changed-only",
+      "then": "only Collaboration with hop budget is shown; turned off, all 14 sections return; on a project with nothing changed it says nothing is changed",
+      "when": "'Changed only' is turned on in project settings"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the built app",
+      "how_to_check": "run it, then repeat on a scratch edit removing one entry",
+      "key": "find-any-setting-and-see-where-its-value-comes-from-ac-findable",
+      "requirement": "find-any-setting-and-see-where-its-value-come-every-row-findable",
+      "then": "it searches every settings row's own label in all three scopes and passes; with one row's search entry removed it fails naming that row",
+      "when": "`py -3.11 scripts/checks/settings_search_check.py --findable` runs"
+    },
+    {
+      "checked_by": "agent",
+      "given": "long values seeded and the new marks shown",
+      "how_to_check": "run it",
+      "key": "find-any-setting-and-see-where-its-value-comes-fr-ac-long-values",
+      "requirement": "find-any-setting-and-see-where-its-value-c-long-values-still-fit",
+      "then": "PASS at 960 and 1440px, dark and light",
+      "when": "`py -3.11 scripts/checks/long_values_check.py` runs"
     }
   ],
-  "algorithms": [],
+  "algorithms": [
+    {
+      "name": "Matching a search",
+      "steps": [
+        "Split what was typed into words on spaces; ignore case and surrounding punctuation; fewer than two characters in total lists nothing.",
+        "A setting matches when every typed word is the start of some word in its label, description, section name or scope name.",
+        "Order: settings where every typed word starts a word in the label, then the rest; within each, App, then Project, then agent settings, then section order, then row order.",
+        "An agent setting is one result regardless of how many agents there are; its agent list is the project's non-archived agents in roster order."
+      ]
+    }
+  ],
   "aw_identity": {
     "digests": {
       "FR-1": "8885a4f88f9c19092e2c1fbc626f65974221178de88bbb68649f0187ff00d096",
@@ -363,27 +579,70 @@
       "FR-28": "039cf653db14646210b6891cfa62bfe223d533c8f8d9314130500d83d20581b5",
       "FR-29": "b14cdb69e65e291d564319995009063c56ceace9419004d1028045ccd080cc28",
       "FR-3": "3d17e80456d3f69222d7169a7c4ec9ce2d4a46f47cbc111314070a9aa06d74d3",
+      "FR-30": "6e8567767071e3d9d133fa6bb06a7c025852c2cc0234abb5161d03a02e5fa654",
+      "FR-31": "8da5453a5f49a9f4748257fd7d5b9d5eae42c8625c1a71bea3476968c2a8a439",
+      "FR-32": "71de29463481ecb2adafeccde8da41166cbfce819279f3820fe2a7b81bbfbbc1",
+      "FR-33": "43947e7a6adb0b5cd32f11f744f8f57014a14025ca093decbdf0c70b6aecb240",
+      "FR-34": "939f929b6b62708f4dcc6387f0ecbbb912c365d3cb90c6fb67803846d52b3d57",
+      "FR-35": "5d4027ccae89e4c9d1653911c91d3ffedfb50a718fc560e291a2dfe0a8426c39",
+      "FR-36": "5d0f053afe65b83c1f1c35777ed3e460e11472fa482b8acd9692e462890d9192",
+      "FR-37": "945a7fc07958f36e5da7b089b69272f98d6d861351d047de892d218e544b7197",
+      "FR-38": "8aa93752409b1c1ef4068e2886e06750d73b7d37ffb7e72ac0104deda75269f5",
+      "FR-39": "f19a1b02d077670dc526b0f07a78c4c5bcdd67d21849573a39394f3f67dcedc4",
       "FR-4": "c3fa0ada765d0b1b4df73f7a0b5713adf89b1ebe9295037ced4ec359b0def217",
+      "FR-40": "4bd5f64c69502ff6c57105ffe9be515247ddb8c0e41546fc013ce81c2c1ae15f",
+      "FR-41": "e2831f006d639f030c53b4c60bb58852f340ba7ae3a841edb88afb9b21b80325",
+      "FR-42": "69cff2d7ef312c1fb3224bc85211126b577c3fe7f08ded1cd7a5078a3c738f48",
+      "FR-43": "42049c7603644f0ab35245ef587525877f2ad37ff5e0be296b8cdfb7d617e641",
+      "FR-44": "fa1b167c82c37c60360a758b5de9d83bb700d6d23758755c92ba8336949a7748",
+      "FR-45": "3568339e16a1d4994bd1625107d63c83454e3cebaf458315228bed5b95b6895d",
+      "FR-46": "7818beaa609a70b37c1dcd780e1be8841d37ecc2ed49a4a61f3e6794478fa2f2",
+      "FR-47": "f4a30506373fbadcfeb3d48ba8d993d60e4eee1e3e5889af7445633672124703",
+      "FR-48": "dbc3165dd76076d6e1a0d58b8f2b6c7888246e17a5488071fe7f1a9c15d07f0f",
+      "FR-49": "dd2f6a4846b09491d1129874cd1256c09b27e18510338bd683c9df88ae7d5a7a",
       "FR-5": "e96d369a56a85af82bd1c1cded65f19882ef14ac46b961ad196d133b16e4861b",
-      "FR-6": "349c879716437957c01306e3b473e6a1d5600b9a8f1cf94694c38f99135888d1",
+      "FR-50": "6eb303f2cc0c316c73a963515afe613acdb6c48ec7813a977d5324afa04da25f",
+      "FR-51": "c047ab223967c6dc223788272faaedcda711f9b5540e9e5c496405b5e3313a69",
+      "FR-52": "5a48990564182cca16a50264b75db3c83016f6923cd10071b375f0803092691e",
+      "FR-6": "ef050be304286afc199b99ee8da25672e0aef75965458dc44a2b0d4f6be7c27f",
       "FR-7": "89e3b012ab8f4397be39437a1f5f4d89ee44361fcb494532b0977cc7ef78e8ae",
       "FR-8": "fbe280747c17fa189e29bd08b42d6ae2417f40c215e181fe700d92ee3e734dc4",
       "FR-9": "5b0433746ab29fd83c04af62dfa6376c1faea677d279d9d7fa87a1dc7e9dcf57"
     },
-    "high_water": 29,
+    "high_water": 52,
     "requirements": {
       "a-configuration-section-occupies-the-content-region": "FR-3",
       "a-configuration-section-states-what-it-governs": "FR-1",
       "a-workers-answer-is-kept-answer-kept": "FR-21",
       "agent-budget-is-described-as-what-it-caps": "FR-12",
+      "find-any-setting-and-see-where-its-valu-palette-reaches-settings": "FR-43",
+      "find-any-setting-and-see-where-its-value-c-long-values-still-fit": "FR-52",
+      "find-any-setting-and-see-where-its-value-come-agent-results-once": "FR-42",
+      "find-any-setting-and-see-where-its-value-come-every-row-findable": "FR-51",
+      "find-any-setting-and-see-where-its-value-come-search-on-settings": "FR-41",
+      "find-any-setting-and-see-where-its-value-comes-f-overrides-named": "FR-49",
+      "find-any-setting-and-see-where-its-value-comes-from-changed-only": "FR-50",
+      "find-any-setting-and-see-where-its-value-comes-from-source-shown": "FR-47",
+      "find-any-setting-and-see-where-its-value-comes-land-highlighted": "FR-44",
+      "find-any-setting-and-see-where-its-value-comes-no-match-says-so": "FR-45",
+      "find-any-setting-and-see-where-its-value-comes-reset-one-action": "FR-48",
+      "find-any-setting-and-see-where-its-value-location-names-setting": "FR-46",
       "n1-a-saved-settings-change-is-recorded-in-history": "FR-8",
       "n2-a-runner-named-in-settings-must-belong-to-the-project": "FR-9",
       "numeric-fields-are-typed-not-stepped": "FR-4",
-      "saving-reports-its-outcome": "FR-5",
       "settings-are-presented-as-labelled-rows-not-as-boxed-cards": "FR-2",
-      "settings-leaves-the-token-budget-to-budgets": "FR-11",
+      "settings-in-the-app-s-style-where-you-agent-unset-shows-project": "FR-39",
+      "settings-in-the-app-s-style-where-you-expe-long-values-still-fit": "FR-40",
+      "settings-in-the-app-s-style-where-you-expect-agent-model-choice": "FR-38",
+      "settings-in-the-app-s-style-where-you-expect-every-setting-kept": "FR-31",
+      "settings-in-the-app-s-style-where-you-expect-spec-steps-section": "FR-35",
+      "settings-in-the-app-s-style-where-you-expect-t-app-controls-only": "FR-34",
+      "settings-in-the-app-s-style-where-you-expect-th-project-sections": "FR-30",
+      "settings-in-the-app-s-style-where-you-expect-them-agent-sections": "FR-37",
+      "settings-in-the-app-s-style-where-you-expect-them-old-links-land": "FR-32",
+      "settings-in-the-app-s-style-where-you-expect-them-save-on-change": "FR-33",
+      "settings-in-the-app-s-style-where-you-expect-them-traces-section": "FR-36",
       "settings-may-be-changed-one-at-a-time": "FR-7",
-      "settings-rows-are-grouped-collaboration-first": "FR-10",
       "settings-rows-that-hold-any-value-lists-grow": "FR-26",
       "settings-rows-that-hold-any-value-long-values-check": "FR-29",
       "settings-rows-that-hold-any-value-long-values-editable": "FR-25",
@@ -402,7 +661,11 @@
       "the-hubs-background-jobs-are-configured-on-a-settings-compatible": "FR-18",
       "the-operator-can-choose-the-branch-approval-merges-into": "FR-6"
     },
-    "retired": {}
+    "retired": {
+      "saving-reports-its-outcome": "FR-5",
+      "settings-leaves-the-token-budget-to-budgets": "FR-11",
+      "settings-rows-are-grouped-collaboration-first": "FR-10"
+    }
   },
   "design": "D1 One shared `SettingsSection` / `SettingsRow` pair (`hub/ui/src/components/environment/SettingsSection.tsx`) serves project and per-agent settings; its `scope` eyebrow says which.\n\nD2 The update body is derived from `ProjectSettings` with every field optional (`ProjectSettingsUpdate` in `hub/hub/api/v1/projects.py`), so a field cannot be accepted and then silently not written; the handler merges onto stored values with `exclude_unset` and validates the merged object.\n\nD3 Steppers are removed in CSS (`hub/ui/src/index.css`), not by changing input types, so browser validation still applies.",
   "evidence": {
@@ -451,18 +714,11 @@
       "statement": "Numeric settings SHALL be typed, with no increment or decrement steppers in any browser engine, and SHALL keep their numeric constraints, an invalid value being refused with an explanation."
     },
     {
-      "key": "saving-reports-its-outcome",
-      "modal": "SHALL",
-      "party": null,
-      "rationale": "A save whose outcome is only in a log is a save the operator has to guess about.",
-      "statement": "Saving a configuration section SHALL report success in the section, and a refused save SHALL state the reason in the section and keep the values the operator entered."
-    },
-    {
       "key": "the-operator-can-choose-the-branch-approval-merges-into",
       "modal": "SHALL",
       "party": null,
       "rationale": "The note on an unmerged task sends the operator to settings to choose a branch; the control it names has to be there.",
-      "statement": "The Settings section SHALL offer a main-branch control showing the project's chosen branch, offering the repository's detected branch as a one-click suggestion when none is chosen, and disabled with an explanation when the project is not a git repository."
+      "statement": "The Landing section SHALL offer a main-branch control showing the project's chosen branch, offering the repository's detected branch as a one-click suggestion when none is chosen, and disabled with an explanation when the project is not a git repository."
     },
     {
       "key": "settings-may-be-changed-one-at-a-time",
@@ -484,20 +740,6 @@
       "party": null,
       "rationale": "These references are not foreign keys, so the route is the only place a cross-project or deleted runner can be caught.",
       "statement": "A settings save naming a conversation-title runner or checkpoint runner that does not exist in this project SHALL be refused with 400 naming the runner ID."
-    },
-    {
-      "key": "settings-rows-are-grouped-collaboration-first",
-      "modal": "MUST",
-      "party": null,
-      "rationale": "The flat list of 18 is why the five gating rows are hard to find; nothing moves out of Settings.",
-      "statement": "Environment > Settings MUST render its rows under headed groups in this order: Collaboration (agents may start flows, hop budget, per-turn delivery cap, agent budget), Integration (main branch, checks), Checkpointing (the checkpoint rows), Conversations (title mode, title runner), Project (name, directory, then delete set apart last)."
-    },
-    {
-      "key": "settings-leaves-the-token-budget-to-budgets",
-      "modal": "MUST",
-      "party": null,
-      "rationale": "Two editors for one field is the F237 shape; a Settings form holding a stale token_budget would overwrite a limit just set in Budgets.",
-      "statement": "Environment > Settings MUST NOT render a token budget input and MUST NOT send token_budget in its save; its Collaboration group MUST link to Budgets, which stays the one editor."
     },
     {
       "key": "agent-budget-is-described-as-what-it-caps",
@@ -624,6 +866,167 @@
       "party": null,
       "rationale": "Nothing measured this, which is how it broke unnoticed; the check is what keeps the slice true. It must not depend on files only one checkout has.",
       "statement": "A repeatable check, runnable from a fresh checkout of the repository on this machine with one command, renders every App, Project and Agent settings section with long values at 960px and 1440px, dark and light, and fails naming the section and the element whenever something scrolls sideways, sits outside the window, or leaves a text column under 240px beside its control."
+    },
+    {
+      "key": "settings-in-the-app-s-style-where-you-expect-th-project-sections",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The operator approved this list and grouping in the mock (2026-11-10). General held seven groups on one ~5,700px page, so nothing on it was where its name said.",
+      "statement": "Project settings lists exactly these sections, under these group headings, in this order: Project — Project, Collaboration, Permissions, Budgets; Agents — Instructions, Charters, Checkpoints, Manager; Landing work — Checks, Landing, Worktrees; Specs and records — Spec steps, Traces, Diagnostics. No section named General, Quality or Runners is listed."
+    },
+    {
+      "key": "settings-in-the-app-s-style-where-you-expect-every-setting-kept",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "A reorganisation that drops a setting is a regression nobody sees until they need it.",
+      "statement": "Every setting the General page held appears on exactly one project settings section: name, folder and delete on Project; jobs allowed, hop budget and deliveries per turn on Collaboration; default permissions and granted reach on Permissions; agent budget and token limit on Budgets; the six checkpoint settings on Checkpoints; checks, checks give way and generated files on Checks; main branch, pull-request landing, one commit per build, PR CI as the full check, CI check names, CI interval and CI cutoff on Landing."
+    },
+    {
+      "key": "settings-in-the-app-s-style-where-you-expect-them-old-links-land",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Links to settings exist in toasts, notices and other screens (General's token limit, a runner error); a removed id must not open a blank page.",
+      "statement": "A link or saved location naming a section that no longer exists opens its successor: General, Quality and Runners open Project; an agent's Identity or Charter opens Agent, Execution or Interaction opens Running, Access opens Permissions, Context opens Checkpoints."
+    },
+    {
+      "key": "settings-in-the-app-s-style-where-you-expect-them-save-on-change",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator, 2026-11-10: a Save stays only where it is needed. Saving Instructions writes and commits AGENTS.md and emptying it asks to confirm, so it is an act rather than a stored value. Confirm buttons inside dialogs (add a check, replace headers, clear traces) are actions, not saves.",
+      "statement": "Every setting on project and agent settings applies when it is changed — a text or number field when it is left or Enter is pressed, a long text when it is left — and no section shows a Save button for a setting, except Instructions, which keeps its one Save."
+    },
+    {
+      "key": "settings-in-the-app-s-style-where-you-expect-t-app-controls-only",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "No project or agent settings section renders a native checkbox, a native <select> or a native date input; each such choice uses the app's own switch, toggle, menu or segmented control."
+    },
+    {
+      "key": "settings-in-the-app-s-style-where-you-expect-spec-steps-section",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "Spec steps shows the steps in order, each built-in step under a title in words (Intake, Requirements, Requirements and acceptance, Acceptance criteria, Approach, Tasks, Build) and marked built in; adding a step, moving or removing one of the operator's steps, changing its sizes, or changing any step's added instruction or a custom step's instructions applies at once, and a change the Hub refuses shows the Hub's reason and leaves the list as the Hub last stored it."
+    },
+    {
+      "key": "settings-in-the-app-s-style-where-you-expect-them-traces-section",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "Traces applies the retention, the collector switch and the endpoint on change; replaces the collector headers only through a dialog, never displaying a stored value; and downloads or clears the traces of the last 24 hours, 7 days, 30 days or all of them, as chosen, with clearing confirmed first."
+    },
+    {
+      "key": "settings-in-the-app-s-style-where-you-expect-them-agent-sections",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator, 2026-11-10. Permissions and Checkpoints share their names with the project sections they override, which slice 3's inheritance display builds on.",
+      "statement": "An agent's settings list exactly five sections — Agent (name, description, last active, charter, archive), Running (model, permission-decision wait, question wait, and Copilot's extras for a Copilot agent), Permissions (default permissions, own granted reach, reading other agents' checkpoints, recall, deciding evidence, keeping the specs true), Checkpoints (checkpoint mode, its own checkpoint point, its checkpoints taken) and Workspace (working directory, its own checkout, provider sessions)."
+    },
+    {
+      "key": "settings-in-the-app-s-style-where-you-expect-agent-model-choice",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "With no Runners screen, a menu of existing runners could never reach a model nobody had used yet. Reusing runners keeps the checkpoint and manager menus, which still list runners, from filling with duplicates.",
+      "statement": "An agent's Running → Model lists every model of every provider whose coding agent is installed, plus each provider's own default, and choosing one makes the agent's next turn run on that provider and model without a runner having been created first; the Hub reuses an existing runner of the same provider and model rather than adding a second one."
+    },
+    {
+      "key": "settings-in-the-app-s-style-where-you-agent-unset-shows-project",
+      "modal": "SHOULD",
+      "party": null,
+      "rationale": null,
+      "statement": "Where an agent has no value of its own for a checkpoint setting or a permission, its section says what the project's value is, and a reset returns it to following the project."
+    },
+    {
+      "key": "settings-in-the-app-s-style-where-you-expe-long-values-still-fit",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "The long-values check from `settings-rows-that-hold-any-value` passes on every new project and agent section at 960 and 1440px, dark and light."
+    },
+    {
+      "key": "find-any-setting-and-see-where-its-value-come-search-on-settings",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The operator often does not know which of the three places holds a setting; a search confined to the open scope would not answer that.",
+      "statement": "App, project and agent settings each show a search field above their section list; typing lists every setting across all three scopes that matches by the rule in this document, each result naming the setting, its scope (App, Project or the agent) and its section, label matches listed before description-only matches."
+    },
+    {
+      "key": "find-any-setting-and-see-where-its-value-come-agent-results-once",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "With eight agents, one row per agent buries every other result (operator, 2026-11-11).",
+      "statement": "A setting every agent has appears once in the results, with the project's non-archived agents listed under it; choosing an agent opens that agent's setting."
+    },
+    {
+      "key": "find-any-setting-and-see-where-its-valu-palette-reaches-settings",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Ctrl K is where the operator already looks for anything by name.",
+      "statement": "The command palette lists matching settings, by the same rule and with the same scope and section, under a Settings group, and choosing one lands on it as a search result does."
+    },
+    {
+      "key": "find-any-setting-and-see-where-its-value-comes-land-highlighted",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Finding a setting is not done until the eye is on it; long sections are where it is missed.",
+      "statement": "Choosing a result opens the setting's scope and section, scrolls its row into view, highlights the row for at least two seconds, and puts keyboard focus on its control."
+    },
+    {
+      "key": "find-any-setting-and-see-where-its-value-comes-no-match-says-so",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "A search that matches no setting says that no setting matches the words typed, and lists nothing."
+    },
+    {
+      "key": "find-any-setting-and-see-where-its-value-location-names-setting",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "After landing on a setting, the app's location names that setting, so a reload or Back returns to it opened and highlighted as a search would."
+    },
+    {
+      "key": "find-any-setting-and-see-where-its-value-comes-from-source-shown",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "A reset button alone says something differs, not from what.",
+      "statement": "Every setting row whose value is not its default says where its value comes from: on app and project settings 'Changed' with the default it would otherwise have; on an agent setting that follows a project setting, 'Agent's own' with the project's value, or, when the agent has none of its own, 'From project' with that value."
+    },
+    {
+      "key": "find-any-setting-and-see-where-its-value-comes-reset-one-action",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "A changed setting returns to the value it would otherwise have (the default, or for an agent the project's) in one action from its row, and the row then shows that value and no longer reads as changed."
+    },
+    {
+      "key": "find-any-setting-and-see-where-its-value-comes-f-overrides-named",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "An agent's own value replaces the project's (reach grants included, hub/hub/reach.py:99), so a project change can silently not apply to it.",
+      "statement": "On project settings, default permissions, granted reach, checkpoint mode and checkpoint point each name the non-archived agents that hold their own value for it, each name opening that agent's setting; when none does, nothing is shown."
+    },
+    {
+      "key": "find-any-setting-and-see-where-its-value-comes-from-changed-only",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "Each settings scope offers a 'Changed only' view that shows only settings whose value is not its default (for an agent, only its own values), hides sections with none, and says nothing is changed when there is none; turning it off restores the full list."
+    },
+    {
+      "key": "find-any-setting-and-see-where-its-value-come-every-row-findable",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "A search kept beside the screens drifts the first time a row is added without it.",
+      "statement": "A repeatable check, runnable on this machine with one command, fails naming the scope, section and label of any settings row that a search for its own label does not return, or that a result lands on the wrong row."
+    },
+    {
+      "key": "find-any-setting-and-see-where-its-value-c-long-values-still-fit",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "The long-values check from `settings-rows-that-hold-any-value` passes on every settings section with the search field, the source marks, the agent names and 'Changed only' shown, at 960 and 1440px, dark and light."
     }
   ],
   "schema_version": 1,

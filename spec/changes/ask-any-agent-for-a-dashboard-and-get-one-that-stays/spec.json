@@ -39,7 +39,7 @@
     {
       "checked_by": "agent",
       "given": "agent output containing three occurrences of a marker string",
-      "how_to_check": "hub/tests/test_dashboard_query.py seeds agent output with three markers and counts by regex; the acceptance drive does it with a Haiku agent and also times a regex over all trace spans",
+      "how_to_check": "hub/tests/test_dashboard_query.py seeds agent output with three markers and counts by regex; the acceptance drive does it with a Haiku agent",
       "key": "ac-regex",
       "requirement": "free-text-and-regex",
       "then": "the count is three",
@@ -57,10 +57,10 @@
     {
       "checked_by": "agent",
       "given": "a query that runs longer than 10 seconds (a recursive CTE, which a read-only query permits)",
-      "how_to_check": "hub/tests/test_dashboard_query.py runs a deliberately slow query (limit shortened through the aw_dashboard_query_timeout setting) and asserts error code timeout; the acceptance drive runs a real slow query and times a health request made while it runs",
+      "how_to_check": "hub/tests/test_dashboard_query.py runs a deliberately slow query (limit shortened through aw_dashboard_query_timeout) and asserts error code timeout",
       "key": "ac-timeout",
       "requirement": "query-bounded",
-      "then": "it is stopped and answers an error saying it ran too long, and a request to the Hub made while it runs is answered without waiting for it",
+      "then": "it is stopped and answers an error saying it ran too long",
       "when": "an agent or a panel runs it"
     },
     {
@@ -74,6 +74,15 @@
     },
     {
       "checked_by": "agent",
+      "given": "a Hub started from the checkout over a copy of the operator's database taken with the SQLite backup API (never :8000 itself), with the Hub's lag probe on",
+      "how_to_check": "Acceptance drive: start a regex query over every trace span and a query that hits the time limit, issue GET /agents every 200 ms meanwhile, read the lag probe; print the regex query's time, the worst stall and the worst GET /agents time",
+      "key": "ac-responsive",
+      "requirement": "hub-stays-responsive",
+      "then": "no event-loop stall exceeds 100 ms and every GET /agents answers within 500 ms",
+      "when": "both queries run"
+    },
+    {
+      "checked_by": "agent",
       "given": "the running Hub",
       "how_to_check": "hub/tests/test_dashboard_query.py reads the reference, runs a select over every listed table and asserts none is refused and none of the forbidden names is listed; the acceptance drive repeats it against the running trial Hub",
       "key": "ac-reference",
@@ -83,30 +92,39 @@
     },
     {
       "checked_by": "agent",
-      "given": "a project",
-      "how_to_check": "hub test reads the tool guidance and the vault note in a fresh project and asserts the note's name appears in the guidance and both traps are in the note; the acceptance drive's final step does the same on the trial Hub",
+      "given": "a project registered before the Hub started, and a project created afterwards, and a note an agent has appended to",
+      "how_to_check": "Hub test: start the app over a database with an existing project, create a second, assert the note exists in both with both traps; append to it, restart, assert the appended text survives; assert the dashboard tools' guidance names the note",
       "key": "ac-vault-note",
       "requirement": "data-notes-in-vault",
-      "then": "it names the vault note on data meaning, and that note exists and holds the two seeded traps",
-      "when": "an agent reads the dashboard tools' guidance"
+      "then": "both projects hold the note with the two traps, the guidance names it, and the appended text is still there after a restart",
+      "when": "the Hub starts and an agent reads the dashboard tools' guidance"
     },
     {
       "checked_by": "agent",
       "given": "an agent in a conversation",
-      "how_to_check": "hub/tests/test_dashboards.py saves and reads back at the store seam; the acceptance drive saves through a Haiku agent, restarts the trial Hub and lists the dashboard",
+      "how_to_check": "hub/tests/test_dashboards.py saves and reads back at the store seam, including a panel whose query names a missing column (saved, not refused); the acceptance drive saves through a Haiku agent, restarts the trial Hub and lists the dashboard",
       "key": "ac-save",
       "requirement": "save-dashboard",
-      "then": "the dashboard is listed with its name, the agent's name and the time, and its panels are unchanged",
-      "when": "it saves a dashboard with three panels and the Hub restarts"
+      "then": "the dashboard is listed with its name, the agent's name and the time, its panels are unchanged, and the panel with the broken query was saved",
+      "when": "it saves a dashboard with three panels, one with a broken query, and the Hub restarts"
     },
     {
       "checked_by": "operator",
       "given": "a dashboard with one panel of each chart kind",
-      "how_to_check": "hub/tests/test_dashboards.py asserts a save naming another kind is refused; a UI component test renders each kind from fixtures; the operator looks at one panel of each kind in both themes on the trial Hub for the look",
+      "how_to_check": "hub/tests/test_dashboards.py asserts a save naming another kind is refused; a UI component test renders each kind from fixtures; the operator looks at one panel of each kind in both themes in the mock and on the trial Hub",
       "key": "ac-chart-kinds",
       "requirement": "chart-kinds",
       "then": "each panel draws with the app's colours and type, and a panel naming any other kind is refused when saved",
       "when": "it is opened in the light and in the dark theme"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a table panel whose query returns a 2,000-character agent output line containing a marker value",
+      "how_to_check": "UI component test from fixtures plus the drive's browser step: the full text including the marker is in the rendered cell",
+      "key": "ac-full-values",
+      "requirement": "values-in-full",
+      "then": "the whole value, marker included, is shown or reachable in the cell without masking",
+      "when": "the dashboard is opened"
     },
     {
       "checked_by": "agent",
@@ -137,7 +155,7 @@
     },
     {
       "checked_by": "agent",
-      "given": "a dashboard with a panel querying a column that does not exist (saved, since a save does not run its queries), a line panel with no numeric column, and a working panel",
+      "given": "a dashboard with a panel querying a column that does not exist, a line panel with no numeric column, and a working panel",
       "how_to_check": "hub/tests/test_dashboards.py asserts the run route returns the error, the warning and the working panel's rows; a UI component test and the drive's browser step check what is drawn",
       "key": "ac-panel-error",
       "requirement": "panel-errors",
@@ -155,29 +173,37 @@
     }
   ],
   "algorithms": [],
+  "already_built": {
+    "built": false,
+    "commits": [],
+    "note": ""
+  },
   "aw_identity": {
     "digests": {
       "FR-1": "b0803baac55f44c18b623be53f77b4997dd2e31f939a33d74ff9a8c60fc325e1",
       "FR-10": "c0f58de3c5c6f7d67df0438947379f8c5afbe8d38cb0df021bfd0be6b61d18d7",
       "FR-11": "f453eafdffcb41054df830b5efdb786e7656f6ce92cac4823585260a07a82194",
-      "FR-12": "5f27fa1089fc36b6a0a698f91c373b18debe0a8e19e406ed74049f53185d2f20",
+      "FR-12": "c2ad78e3a13682dc9c9bb5610cc6af4e9a20e3131b221f0411ce8227c988f2f6",
       "FR-13": "a229b61221000e39ff54a3875cb1f996cdd220d4359a3442c0276ad1676105c9",
+      "FR-14": "6ab7f67a8ce02b3660f0a84983a1e7c89295e38700918362fa06b568447ceee7",
+      "FR-15": "83a6a32938f7505d379e07686c55be3738a40ab635012ea325c27ebfe876d9bd",
       "FR-2": "1733f4bd9ee5b3f463786055856094b95bd2dddb8dc3c8d984b663d855bac5a1",
       "FR-3": "e2f78e34150d6d5bcbc2112a66e8336bd5fcc04d64924dd941db37f7d37980f7",
       "FR-4": "af7fa17dbfa2df761126c2b62007a860d461528a34e69f5b25df1a0b2d347684",
       "FR-5": "2fe38cab527e030794f902e391f230fa5e563cd3b73be8a8dec699827d86bb79",
-      "FR-6": "f209a31d3c0e24c2daa40d51508fee650f70dc36f530a0cbb8adc7ad1110edb1",
+      "FR-6": "b9b54ceddf51b1d5e9bc94e5554220ae39de29c59d8a66d90618c0ab95938666",
       "FR-7": "cfe7ee96fedd84763fd9720d97a252e47108c29785eca497af1e80370c644b20",
-      "FR-8": "0bb5a80d23f3141be1f287ade1f310358d3754d94d1bb4a53b867e4609812698",
-      "FR-9": "50dbf53b27754b504d5dfea3ee94c6acc17e5b11deb4206f5c9886025954cd04"
+      "FR-8": "00ce2299ea9c198981a1a4d3dbb5d3a4ea8c61cface131ab88043a080885355b",
+      "FR-9": "0ee90ef908d6ce5103cc51c07b138f33925ae86002b77cf0688325bfbe031966"
     },
-    "high_water": 13,
+    "high_water": 15,
     "requirements": {
       "agent-runs-query": "FR-1",
       "chart-kinds": "FR-10",
       "dashboards-screen": "FR-11",
       "data-notes-in-vault": "FR-8",
       "free-text-and-regex": "FR-5",
+      "hub-stays-responsive": "FR-14",
       "never-queryable": "FR-3",
       "panel-errors": "FR-12",
       "project-delete-removes": "FR-13",
@@ -185,9 +211,18 @@
       "query-bounded": "FR-6",
       "query-reference": "FR-7",
       "read-only": "FR-4",
-      "save-dashboard": "FR-9"
+      "save-dashboard": "FR-9",
+      "values-in-full": "FR-15"
     },
     "retired": {}
+  },
+  "capabilities": {
+    "changes": [],
+    "creates": [
+      {
+        "title": "Project dashboards"
+      }
+    ]
   },
   "delivery": {
     "agent": "DeveloperOpus2",
@@ -196,64 +231,120 @@
     "cron": "*/5 * * * *",
     "mode": "flow",
     "reasons": {
-      "agent": "Opus: the query boundary is security work; DeveloperOpus2 is free of PR slice 2's planned builders where possible.",
-      "builder": "Same as the agent; one Opus hand holds the whole chain.",
-      "checker": "QA2 has run dedicated-Hub drives; tasks that name QA override it.",
+      "agent": "Opus: the query boundary is security work.",
+      "builder": "One Opus hand holds the security chain; the screen task names Developer.",
+      "checker": "QA2 has run dedicated-Hub drives; the vault-note task names QA.",
       "cron": "The usual five-minute tick.",
-      "mode": "A drive at each end (written failing first, run green last) with the builders between; a flow runs them in dependency order. Runs in parallel with PR slice 2; both add a migration, so whichever merges second reorders its migration.",
-      "stop": "Stops when the tasks are done."
+      "mode": "A drive at each end (written failing first, run green last) with the builders between; a flow runs them in dependency order.",
+      "stop": "Stops when the six tasks are done."
     },
     "reviewer": null,
     "stop_at": null,
     "stop_when_queue_empties": true
   },
-  "design": "Decisions with the operator, 2026-11-02:\n- Current project only. A query never returns another project's rows, and the Hub enforces this rather than trusting each query to filter.\n- Queries only: no stored tables or materialised datasets in this slice.\n- Free text is queryable (agent output, trace tool arguments and results, model messages, command lines, message, queue and checkpoint text), and queries can match regular expressions, so a dashboard can count leaks or occurrences in conversations. Rejected: metrics and names only, which could not answer those questions.\n- Never queryable: credentials (API keys, operator credentials, run tokens, the trace exporter's headers), this machine's paths (project directory, run workspaces, workspace fingerprints), and other projects' rows. Credentials have no chart value; paths and other projects matter once other users connect projects.\n- The reference of what can be queried is generated by the Hub from the version that is running, so it always matches what a query can reach. Rejected: a hand-written schema description in the vault, which goes stale on the first migration and would cost a distillation on every upgrade. What the data means and its traps go in a vault note that agents read and add to.\n- Charts are a fixed set of kinds the app draws in its own colours, type and light and dark themes. Rejected: agent-written visual code.\n- A dashboard runs its queries when opened and when Refresh is pressed; it does not refresh on its own while open.\n- A Hub upgrade that breaks a query is surfaced on the panel, not prevented.\n- Reachability decisions the criteria rely on: a read-only query includes SELECT with recursive CTEs (ac-timeout and ac-row-cap need a query that runs long or returns many rows; only writes, schema changes and attach are refused); saving a dashboard checks the chart kind and the never-queryable boundary but does NOT run the queries, so a panel whose query fails (a column that does not exist) can be saved and shows its error when opened (ac-panel-error). See open questions.\n\nHazard (Tier 2): storing dashboards adds a table, so the operator's :8000 Hub runs a migration on its real database at its next restart after this lands on master. The migration only creates new tables and changes no existing one; rollback is the migration's downgrade dropping them, which loses only saved dashboards.\n\nMigration ordering: this slice runs in parallel with PR slice 2 (its 0169 and 0170 are already on master) and with the change-a-dashboard-by-asking slice, and each adds a migration. The migration's number is not fixed in this document: the builder takes it at build time from master's head (`git ls-tree master hub/hub/migrations/versions/`; head was 0170_the_pr_s_ci_is_read_on_the_head.py when this was written), names the file `NNNN_dashboards_an_agent_builds.py`, and points its down-revision at that head. Whichever of this slice and change-a-dashboard-by-asking merges second renumbers its migration after the other's and re-points its down-revision before landing; the migration touches only its own new table, so the reorder is mechanical.\n\nTHE CONTRACT (names the builder and the drive bind to; follow the existing naming: snake_case MCP tools, `/projects/{project_id}/...` routes on `project_resources_router` in hub/hub/api/v1/__init__.py, prefixed ids, `sse_manager.broadcast(project_id, event_type, data)`):\n\nTable `dashboards` (model `Dashboard` in hub/hub/db/models.py), project-scoped, so the project-delete sweep reaches it with no code: `id` String(64) pk, value `dash-` + 12 hex; `project_id` String(64) indexed; `name` String(200); `description` Text; `panels` JSON; `author` String(32) (the agent's name, from the run credential, never the request body); `created_at`, `updated_at` timestamps. Unique index `ix_dashboards_project_name` (project_id, name).\n\nPanel JSON, an element of `panels` (array order is display order): `{\"id\": \"pnl-<12 hex>\", \"title\": str, \"query\": str, \"kind\": \"number\" | \"table\" | \"bar\" | \"stacked_bar\" | \"line\"}`. The Hub assigns `id` when a save omits it and keeps it when a replace carries it. Any other `kind` is refused with 422 `{\"code\": \"invalid_chart_kind\"}`.\n\nHub settings (hub/hub/config.py `Settings`, pydantic-settings, fields prefixed `aw_`): `aw_dashboard_query_timeout: int = 10` (seconds) and `aw_dashboard_query_max_rows: int = 10000`; tests shorten them through these fields.\n\nQuery service: `hub/hub/dashboard_query.py`, `async def run_query(project_id, sql) -> QueryResult`. Result JSON: `{\"columns\": [str], \"rows\": [[any]], \"row_count\": int, \"truncated\": bool, \"elapsed_ms\": int}`. Refusals are HTTP 422 with `{\"detail\": {\"code\": \"not_queryable\" | \"read_only\" | \"timeout\" | \"query_error\", \"message\": str}}`, the message naming what is not queryable or what failed.\n\nRoutes, all under `/api/v1/projects/{project_id}` (new router file hub/hub/api/v1/dashboards.py, registered beside the other project resources):\n- `GET /dashboards/query-reference` -> `{\"version\": str, \"tables\": [{\"name\", \"meaning\", \"columns\": [{\"name\", \"type\", \"meaning\"}]}]}`\n- `POST /dashboards/query` body `{\"sql\": str}` -> QueryResult\n- `GET /dashboards` -> `{\"dashboards\": [{\"id\",\"name\",\"description\",\"author\",\"created_at\",\"updated_at\",\"panel_count\"}]}`\n- `POST /dashboards` body `{\"name\",\"description\",\"panels\"}` -> 201 dashboard (id, project_id, name, description, panels, author, created_at, updated_at); a duplicate name in the project is 409 `{\"code\": \"dashboard_name_taken\"}`\n- `PUT /dashboards/{dashboard_id}` body as POST -> 200 dashboard (replace whole)\n- `GET /dashboards/{dashboard_id}` -> the stored dashboard\n- `GET /dashboards/{dashboard_id}/run` -> `{\"id\",\"name\",\"description\",\"author\",\"fetched_at\", \"panels\": [{\"id\",\"title\",\"kind\",\"columns\",\"rows\",\"truncated\",\"error\": null | {\"code\",\"message\"},\"warning\": null | str}]}`; one panel failing does not fail the rest\n- `DELETE /dashboards/{dashboard_id}` -> 204\nAnother project's dashboard id on any of these is 404.\n\nAgent tools (hub/hub/mcp_server.py, `@_tool()`, each a thin `_hub_request` call): `dashboard_query_reference()`, `run_dashboard_query(sql: str)`, `save_dashboard(name: str, description: str, panels: List[Dict], dashboard_id: str = \"\")` (empty creates, a given id replaces whole), `list_dashboards()`, `read_dashboard(dashboard_id: str)`. There is no agent delete tool: deletion is the operator's, on the screen. The tool guidance names the vault note (see the vault-note task).\n\nEvents: `dashboard_saved` and `dashboard_deleted`, payload `{\"id\": str, \"name\": str}`, broadcast after commit, so an open Dashboards list updates; opening a dashboard still runs its queries only on open and Refresh.\n\nUI: tab id `dashboards` appended to `PROJECT_TABS` in hub/ui/src/lib/navigation.ts; components under hub/ui/src/components/dashboards; api hooks in hub/ui/src/api/dashboards.ts with project-prefixed keys `['project', projectId, 'dashboards', ...]`.\n\nGuards and tests this change touches: hub/tests/test_project_delete_api.py asserts the sweep covers every project-scoped table (satisfied by `dashboards.project_id`, no relaxation, and the new dashboards test counts rows after a project delete); hub/ui/src/__tests__/ThreadScreen.test.tsx asserts the order of `PROJECT_TABS` (thread right after overview), so the new tab goes at the end and that test is not relaxed; the Copilot MCP tool allowlist in hub/hub/copilot_acp.py (the set holding `vault_read`) must gain the five new tool names, and hub/tests/test_mcp_server_stdio_surface.py (tools/list) is checked in case it pins the list.\n\nTask plan: six tasks. The acceptance drive is written first against this contract and committed failing. The query service (security work), the store and tools (after the service, which they call), then the screen and the vault note (each after the store, neither needing the other: the screen needs the routes, the note shares mcp_server.py with the store). A last task runs the drive against the finished feature and records its evidence. Only tasks that share a path or need what another builds are chained; the drive file is shared only by the first and last tasks.",
+  "design": "Decisions with the operator, 2026-11-02 and 2026-11-13:\n- Current project only. A query never returns another project's rows, and the Hub enforces this rather than trusting each query to filter.\n- Queries only: no stored tables or materialised datasets in this slice.\n- Free text is queryable (agent output, trace tool arguments and results, model messages, command lines, message, queue and checkpoint text), and queries can match regular expressions, so a dashboard can count leaks or occurrences in conversations.\n- Table panels show what the query returns in full, free text included; nothing is masked (2026-11-13: the screen is local, and masking would defeat finding a leak).\n- Never queryable: credentials (API keys, operator credentials, run tokens, the trace exporter's headers), this machine's paths (project directory, run workspaces, workspace fingerprints), and other projects' rows.\n- The reference of what can be queried is generated by the Hub from the version that is running. What the data means and its traps go in a vault note that agents read and add to.\n- The note is seeded in every project, idempotently, at Hub startup and at project creation, and never overwrites what agents added (2026-11-13).\n- Charts are a fixed set of kinds the app draws in its own colours, type and light and dark themes. Rejected: agent-written visual code.\n- Saving a dashboard checks the chart kind and the never-queryable boundary but does not run its queries; the tool guidance tells agents to check each query with run_dashboard_query first, and a failing panel shows its error when opened (2026-11-13).\n- A dashboard runs its queries when opened and when Refresh is pressed; it does not refresh on its own while open.\n- A Hub upgrade that breaks a query is surfaced on the panel, not prevented.\n- Limits 10 s per query and 10,000 rows per result stay; the drive measures a regex over every trace span on a copy of the operator's database and the numbers are revisited from that (2026-11-13).\n- No separate design round: the screen is built as real components shown first in the mock (hub/ui/mock), which the operator reviews as the look (2026-11-13).\n- A read-only query includes SELECT with recursive CTEs; only writes, schema changes and attach are refused.\n\nWhy responsiveness is its own requirement: on 2026-11-13 the operator's database holds 263,000 trace spans in a 920 MB file, and ordinary reads already take 1.5-3 s during night builds. A regex over every span is the heaviest read anyone will ask for; it must not add to that.\n\nHazard (Tier 2): storing dashboards adds a table, so the operator's :8000 Hub runs a migration on its real database at its next restart after this lands on master. The migration only creates a new table; rollback is its downgrade dropping it, which loses only saved dashboards. The migration's number is taken at build time from master's head (0176_spec_tag.py on 2026-11-13); if another migration lands first, re-point the down-revision before landing.\n\nTHE CONTRACT (snake_case MCP tools, `/projects/{project_id}/...` routes on `project_resources_router` in hub/hub/api/v1/__init__.py, prefixed ids, `sse_manager.broadcast(project_id, event_type, data)`):\n\nTable `dashboards` (model `Dashboard` in hub/hub/db/models.py), project-scoped so the project-delete sweep reaches it with no code: `id` String(64) pk, `dash-` + 12 hex; `project_id` String(64) indexed; `name` String(200); `description` Text; `panels` JSON; `author` String(32) (from the run credential, never the request body); `created_at`, `updated_at`. Unique index (project_id, name).\n\nPanel JSON: `{\"id\": \"pnl-<12 hex>\", \"title\": str, \"query\": str, \"kind\": \"number\" | \"table\" | \"bar\" | \"stacked_bar\" | \"line\"}`. The Hub assigns `id` when omitted and keeps it on replace. Any other kind: 422 `{\"code\": \"invalid_chart_kind\"}`.\n\nSettings (hub/hub/config.py): `aw_dashboard_query_timeout: int = 10`, `aw_dashboard_query_max_rows: int = 10000`.\n\nQuery service: hub/hub/dashboard_query.py, `async def run_query(project_id, sql) -> QueryResult` = `{\"columns\", \"rows\", \"row_count\", \"truncated\", \"elapsed_ms\"}`. Refusals: 422 `{\"detail\": {\"code\": \"not_queryable\" | \"read_only\" | \"timeout\" | \"query_error\", \"message\"}}`.\n\nRoutes under `/api/v1/projects/{project_id}` (hub/hub/api/v1/dashboards.py): GET /dashboards/query-reference; POST /dashboards/query; GET /dashboards; POST /dashboards (409 dashboard_name_taken); PUT /dashboards/{id}; GET /dashboards/{id}; GET /dashboards/{id}/run (per panel columns, rows, truncated, error, warning; one failing panel does not fail the rest); DELETE /dashboards/{id}. Another project's id is 404.\n\nAgent tools (hub/hub/mcp_server.py): dashboard_query_reference(), run_dashboard_query(sql), save_dashboard(name, description, panels, dashboard_id=\"\"), list_dashboards(), read_dashboard(dashboard_id). No agent delete. Added to the Copilot allowlist in hub/hub/copilot_acp.py.\n\nEvents: dashboard_saved, dashboard_deleted `{\"id\", \"name\"}` after commit.\n\nUI: tab `dashboards` appended at the end of PROJECT_TABS (hub/ui/src/lib/navigation.ts; ThreadScreen.test.tsx asserts the order, not relaxed); components in hub/ui/src/components/dashboards, shown in hub/ui/mock/screens/Dashboards.tsx; hooks in hub/ui/src/api/dashboards.ts with keys ['project', projectId, 'dashboards', ...]. No charting library is added unless the builder justifies it.",
   "evidence": {
     "checked": [
-      "Live :8000 database read with mode=ro on 2026-11-02: 61 tables, 56 carry project_id; credential-bearing api_keys, operator_credentials, runs.capability_token_hash, trace_settings.otlp_headers; paths in projects.working_directory, runs.workspace_dir, workspace_fingerprints",
-      "Free-text columns scanned for real-length aw_live_ and Anthropic keys: none found",
-      "trace_spans holds 136,139 project-scoped spans with name, operation, status, start/end times and attributes",
-      "No charting library in hub/ui/package.json; chapter_versions not removed on project delete was a past defect (task-85a6c6d51cd8), hence ac-project-delete",
-      "Contract names grounded on master 2026-11-07: project deletion sweeps every table with a project_id column (hub/hub/project_lifecycle.py _project_scoped_tables, guarded by hub/tests/test_project_delete_api.py); Settings fields are aw_-prefixed (hub/hub/config.py); the Copilot MCP allowlist is the set in hub/hub/copilot_acp.py; PROJECT_TABS order is asserted in hub/ui/src/__tests__/ThreadScreen.test.tsx; migration head on master is 0170"
+      "Live :8000 database read with mode=ro on 2026-11-02: credential-bearing api_keys, operator_credentials, runs.capability_token_hash, trace_settings.otlp_headers; paths in projects.working_directory, runs.workspace_dir, workspace_fingerprints",
+      "Live :8000 database read with mode=ro on 2026-11-13: 920 MB file, trace_spans 263,736 rows (~377 MB of text), agent_outputs 119,161 rows; slow reads (over 1 s) cluster in night-build hours",
+      "No dashboard code on master (grep of hub/hub and hub/ui/src, 2026-11-13); no charting library in hub/ui/package.json",
+      "Migration head on master 0176_spec_tag.py (2026-11-13); PROJECT_TABS in hub/ui/src/lib/navigation.ts:26 ends with activity",
+      "Project deletion sweeps every table with a project_id column (hub/hub/project_lifecycle.py, guarded by hub/tests/test_project_delete_api.py)"
     ],
     "limits": [
       "The hand-written reference queries for the three examples are not written yet; the acceptance-drive task writes them",
-      "The 10-second and 10,000-row limits are proposed numbers, not measured; the drive times a regex over all spans",
+      "The 10-second and 10,000-row limits and the 100 ms / 500 ms responsiveness budgets are proposed, not measured; the drive measures them",
       "The acceptance drive is proposed coverage, not yet written or run",
-      "File paths in tasks are the author's expectation from the module layout and may shift when built; hub/hub/vault_seed does not exist on master"
+      "File paths in tasks are expectations from the module layout and may shift when built"
     ]
   },
   "hub": {
-    "phase": "exploring",
+    "builds": [
+      {
+        "budget_cap_usd": null,
+        "builder": "DeveloperOpus2",
+        "builders": [
+          "DeveloperOpus2",
+          "Developer"
+        ],
+        "checker": "QA2",
+        "checkers": [],
+        "chosen_by": "operator",
+        "driver": "flow",
+        "ended_at": "2026-11-13T14:57:27.202292+00:00",
+        "id": "build-7b284fca6fb8",
+        "landing": "main",
+        "lead": null,
+        "level": "reviewed",
+        "pull_request": null,
+        "started_at": "2026-11-13T10:18:08.406968+00:00",
+        "state": "finished",
+        "stop_reason": null,
+        "tasks": {
+          "acceptance-drive": {
+            "builder": "DeveloperOpus2",
+            "checker": "QA2"
+          },
+          "dashboard-store-and-tools": {
+            "builder": "DeveloperOpus2",
+            "checker": "QA2"
+          },
+          "dashboards-screen": {
+            "builder": "Developer",
+            "checker": "QA2"
+          },
+          "examples-guidance": {
+            "builder": null,
+            "builder_default": true,
+            "checker": null
+          },
+          "query-service": {
+            "builder": "DeveloperOpus2",
+            "checker": "QA2"
+          },
+          "run-acceptance-drive": {
+            "builder": "DeveloperOpus2",
+            "checker": "QA2"
+          },
+          "vault-note": {
+            "builder": "DeveloperOpus2",
+            "checker": "QA"
+          }
+        },
+        "window_end": null,
+        "window_start": null
+      }
+    ],
+    "phase": "approved",
     "size": "large",
-    "step": "intake"
+    "step": "build"
   },
   "kind": "change-spec",
   "lifecycle": "",
   "open_questions": [
     {
-      "question": "May a table panel show matched free text in full (for example the leaked value itself), or must panels over text show counts and masked excerpts only? Recommended (Architect): table panels show what the query returns in full; the screen is local-only and masking would defeat the purpose of finding the leak.",
-      "resolved": false
+      "question": "May a table panel show matched free text in full? Answer (operator, 2026-11-13): yes, in full, nothing masked.",
+      "resolved": true
     },
     {
-      "question": "Is the Dashboards screen and chart look designed first in a separate mock with the operator, or left to the builder held to the app's colours and type? Recommended (Architect): no separate mock; the screen task builds real components bound to the app's theme, and the operator reviews that as the mock.",
-      "resolved": false
+      "question": "Is the screen designed first in a separate mock round? Answer (operator, 2026-11-13): no; real components shown in the mock first, reviewed there.",
+      "resolved": true
     },
     {
-      "question": "Are 10 seconds per query and 10,000 rows per result the right limits? Recommended (Architect): keep both; they are unmeasured against about 136,000 spans, so the acceptance drive measures a regex over all spans and records the time, and the limits are revisited from that number.",
-      "resolved": false
+      "question": "Are 10 s per query and 10,000 rows the right limits? Answer (operator, 2026-11-13): keep both; the drive measures a regex over all spans and they are revisited from that.",
+      "resolved": true
     },
     {
-      "question": "Is the task plan right? Recommended (Architect): six tasks — acceptance drive first and failing; query service and its project boundary; dashboard store and agent tools (after the service); Dashboards screen and charts, and the vault note (each after the store, independent of each other); and a last task that runs the drive against the built feature and records its evidence. Builder DeveloperOpus2 (the query boundary is security work), checker QA2 or QA, running in parallel with PR slice 2.",
-      "resolved": false
+      "question": "Is the task plan right? Answer (operator, 2026-11-13): yes; DeveloperOpus2 builds the query service, Developer the screen, QA2 checks.",
+      "resolved": true
     },
     {
-      "question": "Does saving a dashboard run its queries and refuse one that fails, or save it and show the error when opened? ac-panel-error needs a saved panel whose query fails, and a Hub upgrade can break a saved query anyway. Recommended (Architect): save checks only the chart kind and the never-queryable boundary and does not run the queries; the agent is told to check each query with run_dashboard_query first, and a failing panel shows its error on open.",
-      "resolved": false
+      "question": "Does saving run the queries? Answer (operator, 2026-11-13): no; save checks the chart kind and the never-queryable boundary, a failing panel shows its error on open.",
+      "resolved": true
     },
     {
-      "question": "When is the data-meaning vault note seeded? ac-vault-note starts from 'a project' and an agent reading the tool guidance, so the note must exist in every project (also projects registered before this ships) before any dashboard tool is called. Recommended (Architect): seed it idempotently for every project at Hub startup and at project creation, never overwriting a note agents have added to.",
-      "resolved": false
+      "question": "When is the vault note seeded? Answer (operator, 2026-11-13): in every project at Hub startup and project creation, idempotently, never overwriting agents' additions.",
+      "resolved": true
     }
   ],
   "problem": "Questions about how the project is going — how much each spec cost, how often QA sends each model's work back, which kinds of task take longest, how many times something appears in the conversations — have no screen, although the Hub records everything needed to answer them. Today an answer is a one-off query an agent runs by hand, and it is lost with the conversation. This slice proves the loop the roadmap rests on: ask, get a dashboard with correct numbers in the app's look, reopen it later, and see it current.",
@@ -297,8 +388,15 @@
       "key": "query-bounded",
       "modal": "MUST",
       "party": null,
-      "rationale": "The Hub has a history of freezing when one piece of work holds it; a dashboard must not be the next one.",
-      "statement": "A query that runs longer than 10 seconds is stopped and answers an error saying so; a result over 10,000 rows is cut to 10,000 and says it was cut; and running queries does not hold up the Hub's other work."
+      "rationale": null,
+      "statement": "A query that runs longer than 10 seconds is stopped and answers an error saying so, and a result over 10,000 rows is cut to 10,000 and says it was cut."
+    },
+    {
+      "key": "hub-stays-responsive",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "On 2026-11-13 ordinary reads already take 1.5-3 s during builds on a 920 MB database; the heaviest read anyone will ask for must not add to that.",
+      "statement": "While dashboard queries run — including a regular-expression search over every trace span and a query stopped at the time limit — the Hub's event loop never stalls for more than 100 ms, and a GET /agents made meanwhile answers within 500 ms on a copy of the operator's database."
     },
     {
       "key": "query-reference",
@@ -312,14 +410,14 @@
       "modal": "SHOULD",
       "party": null,
       "rationale": null,
-      "statement": "The project's vault holds a note on what the data means and its traps, which the agent tools point agents to and which agents add to, seeded with the known traps (a send-back rejects every piece of evidence from that commit; cost per spec counts its tasks' building and reviewing runs)."
+      "statement": "Every project's vault holds a note on what the data means and its traps, present before any dashboard tool is first called — including in projects registered before this ships — and never overwritten once agents have added to it; the agent tools point agents to it, and it is seeded with the known traps (a send-back rejects every piece of evidence from that commit; cost per spec counts its tasks' building and reviewing runs)."
     },
     {
       "key": "save-dashboard",
       "modal": "MUST",
       "party": null,
-      "rationale": null,
-      "statement": "An agent can save a dashboard to the current project with a name, a description of the question it answers, and panels, each with a title, a query and a chart kind; the dashboard records which agent made it and when, and survives a Hub restart."
+      "rationale": "A Hub upgrade can break a saved query anyway, so a failing panel has to be handled on the screen regardless.",
+      "statement": "An agent can save a dashboard to the current project with a name, a description of the question it answers, and panels, each with a title, a query and a chart kind; the dashboard records which agent made it and when, and survives a Hub restart. Saving checks chart kinds and the never-queryable boundary but does not run the queries, so a panel whose query fails can be saved."
     },
     {
       "key": "chart-kinds",
@@ -327,6 +425,13 @@
       "party": null,
       "rationale": null,
       "statement": "A panel's chart kind is one of a fixed set — single number, table, bar, stacked bar and line — and every kind is drawn in the app's colours and type, readable in both light and dark themes."
+    },
+    {
+      "key": "values-in-full",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator, 2026-11-13: the screen is local, and a masked leak cannot be found.",
+      "statement": "A table panel shows every value its query returns in full, free text included; no value is masked or redacted."
     },
     {
       "key": "dashboards-screen",
@@ -361,19 +466,22 @@
       "A Dashboards screen per project: list, open, refresh, delete",
       "Panels: a title, a query and a chart kind from a fixed set, drawn in the app's style",
       "Errors and warnings shown per panel",
-      "A vault note for what the data means, seeded with the gotchas already known"
+      "Queries that never stall the rest of the Hub",
+      "A vault note for what the data means, seeded in every project with the gotchas already known"
     ],
     "non_goals": [
       "Changing a saved dashboard by asking (slice change-by-asking); in this slice an agent saves a new dashboard or replaces one whole",
       "Stored tables, materialised or reusable named datasets",
       "Queries across projects, or any write to project data",
       "Agent-written chart code or styles outside the app's look",
+      "Masking or redacting values a query returns",
       "Refreshing on a timer or as runs finish",
       "Keeping saved queries working across Hub upgrades",
       "Sharing or exporting dashboards"
     ]
   },
-  "summary": "Any agent, asked in a conversation, writes queries over the current project's data (traces and free text included), checks their results, and saves a dashboard of panels drawn in the app's own chart kinds and colours. The project gets a Dashboards screen that lists them; opening one runs its queries, a Refresh button runs them again, and a panel whose query fails shows the error while the rest draws. The Hub publishes a reference of what can be queried, generated from the running version, and a vault note holds what agents learn about what the data means.",
+  "summary": "Any agent, asked in a conversation, writes queries over the current project's data (traces and free text included), checks their results, and saves a dashboard of panels drawn in the app's own chart kinds and colours. The project gets a Dashboards screen that lists them; opening one runs its queries, a Refresh button runs them again, and a panel whose query fails shows the error while the rest draws. Queries never slow the rest of the Hub. The Hub publishes a reference of what can be queried, generated from the running version, and a vault note in every project holds what agents learn about what the data means.",
+  "tag": "Dashboards",
   "tasks": [
     {
       "builder": "DeveloperOpus2",
@@ -381,14 +489,15 @@
       "checker": "QA2",
       "checker_reason": "QA2 has run dedicated-Hub drives and is not the builder.",
       "depends_on": [],
-      "description": "Write scripts/drive/dashboards_drive.py against the contract named in the design (tools run_dashboard_query, dashboard_query_reference, save_dashboard, list_dashboards, read_dashboard; the /api/v1/projects/{project_id}/dashboards routes; the Dashboards tab), run against a dedicated trial Hub of its own port and database (real agent turns bind Haiku). It seeds two projects with specs, tasks, runs, usage and reviews; carries hand-written reference queries for cost per spec, QA send-backs per model and the longest kinds of task; asks an agent for the dashboard; checks every acceptance criterion of this document (project boundary, never-queryable, read-only, regex, timeout and row cap, save across restart, screen refresh, panel errors, project delete, vault note). It also times a regex over all trace spans and prints the time. Committed failing on today's code, with the failure naming the missing tool or route. The drive is not run to green here: the last task does that.",
+      "description": "Write scripts/drive/dashboards_drive.py against the contract named in the design, run against a dedicated trial Hub of its own port and database (real agent turns bind Haiku), never :8000. It seeds two projects with specs, tasks, runs, usage and reviews; carries hand-written reference queries for cost per spec, QA send-backs per model and the longest kinds of task; asks an agent for the dashboard; checks every acceptance criterion of this document. For ac-responsive it also runs against a Hub over a copy of the operator's database taken with the SQLite backup API (mode=ro source), times a regex over every trace span, and reads the lag probe and GET /agents times. Committed failing on today's code, with the failure naming the missing tool or route. Not run to green here: the last task does that.",
       "files": [
         "scripts/drive/dashboards_drive.py"
       ],
       "from": null,
       "key": "acceptance-drive",
       "requirements": [
-        "agent-runs-query"
+        "agent-runs-query",
+        "hub-stays-responsive"
       ],
       "reviewer": null,
       "title": "Acceptance drive for dashboards, failing first"
@@ -401,7 +510,7 @@
       "depends_on": [
         "acceptance-drive"
       ],
-      "description": "A Hub service, hub/hub/dashboard_query.py run_query(project_id, sql), that runs one read-only query for one project and returns the QueryResult of the contract: the project boundary is enforced by the Hub (not by the query text), credentials and machine paths are not reachable and a query naming them is refused with code not_queryable, writes and attach are refused with read_only, the limit aw_dashboard_query_timeout (10 s) stops a query with code timeout, results cut at aw_dashboard_query_max_rows (10,000) say truncated, recursive CTEs stay permitted, queries run off the Hub's request loop, regular-expression matching is available on text columns, and the query reference (table, column, type, meaning) is generated from the running models. Both settings are new fields on Settings in hub/hub/config.py. Tests at the service seam include the other-project and credential cases and fail before the fix.",
+      "description": "hub/hub/dashboard_query.py run_query(project_id, sql) returning the contract's QueryResult: the project boundary enforced by the Hub, not the query text; credentials and machine paths unreachable and refused with not_queryable; writes and attach refused with read_only; aw_dashboard_query_timeout (10 s) stops a query with timeout; results cut at aw_dashboard_query_max_rows (10,000) say truncated; recursive CTEs permitted; regex on text columns; queries run on their own read-only connection off the event loop so the loop never stalls over 100 ms; the query reference generated from the running models. Both settings are new Settings fields in hub/hub/config.py. Tests at the service seam include the other-project, credential and stall cases and fail before the fix.",
       "files": [
         "hub/hub/dashboard_query.py",
         "hub/hub/config.py",
@@ -416,6 +525,7 @@
         "read-only",
         "free-text-and-regex",
         "query-bounded",
+        "hub-stays-responsive",
         "query-reference"
       ],
       "reviewer": null,
@@ -424,12 +534,12 @@
     {
       "builder": "DeveloperOpus2",
       "builder_reason": "Opus: a migration on the operator's live database and a new MCP tool surface (Tier 2 hazard).",
-      "checker": "QA",
-      "checker_reason": "QA is Opus and reads migrations; not the builder. May be busy with PR slice 2; QA2 is the fallback.",
+      "checker": "QA2",
+      "checker_reason": "QA2 reads migrations and is not the builder.",
       "depends_on": [
         "query-service"
       ],
-      "description": "The dashboards table and model of the contract with its migration (number taken from master's head at build time), saving (POST), replacing (PUT), listing, reading, running (GET .../run, one panel failing does not fail the rest) and deleting (DELETE) dashboards through the routes named in the design, the chart-kind check (invalid_chart_kind), the dashboard_saved and dashboard_deleted events, the five agent tools (dashboard_query_reference, run_dashboard_query, save_dashboard, list_dashboards, read_dashboard) added to hub/hub/mcp_server.py and to the Copilot allowlist in hub/hub/copilot_acp.py. Project deletion needs no new code because the table carries project_id (check the sweep test passes). Migration follows the .claude/rules checklist and only creates the table; before the last commit check master's revision head and re-point the down-revision if another migration landed first. Hub tests at the store and route seams fail before the fix; this task also builds the delete route behind ac-delete.",
+      "description": "The dashboards table and model with its migration (number from master's head at build time, 0176 on 2026-11-13; re-point if another lands first; only creates the table; follows .claude/rules), POST/PUT/GET/run/DELETE routes of the contract, the chart-kind check, saving without running queries, the dashboard_saved and dashboard_deleted events, the five agent tools in hub/hub/mcp_server.py and the Copilot allowlist in hub/hub/copilot_acp.py. Project deletion needs no new code because the table carries project_id (the sweep test must pass). Hub tests at the store and route seams fail before the fix.",
       "files": [
         "hub/hub/db/models.py",
         "hub/hub/migrations/versions",
@@ -437,7 +547,6 @@
         "hub/hub/copilot_acp.py",
         "hub/hub/api/v1/dashboards.py",
         "hub/hub/api/v1/__init__.py",
-        "hub/hub/deletion.py",
         "hub/tests/test_dashboards.py"
       ],
       "from": null,
@@ -455,16 +564,17 @@
       "title": "Dashboard store and agent tools"
     },
     {
-      "builder": "DeveloperOpus2",
-      "builder_reason": "Routine UI work after the store; Developer (Sonnet) is an acceptable swap if DeveloperOpus2 is busy, which the operator may set at Build.",
+      "builder": "Developer",
+      "builder_reason": "UI to an existing contract and the app's theme: Sonnet is enough (operator, 2026-11-13).",
       "checker": "QA2",
       "checker_reason": "QA2 drives the screen in both themes; not the builder.",
       "depends_on": [
         "dashboard-store-and-tools"
       ],
-      "description": "The Dashboards screen: tab id dashboards appended to PROJECT_TABS in hub/ui/src/lib/navigation.ts, list (name, author, date), open (runs all queries through GET .../run), Refresh, fetched-at time, delete, per-panel error and warning, and the five chart kinds drawn with the app's own colours and type in both themes. Built as real components bound to the app's theme (the operator reviews the screen as the mock). The list listens for dashboard_saved and dashboard_deleted. No charting library is added unless the builder justifies it in the task. The UI bundle is refreshed per .claude/rules (commit hub/ui/src and hub/hub/static/ui together).",
+      "description": "The Dashboards screen as real components, shown first in hub/ui/mock/screens/Dashboards.tsx from fixtures for the operator's look: tab dashboards appended at the end of PROJECT_TABS, list (name, author, date), open (runs all queries via GET .../run), Refresh, fetched-at time, delete, per-panel error and warning, table cells showing full values, and the five chart kinds in the app's colours and type in both themes. The list listens for dashboard_saved and dashboard_deleted. No charting library unless justified in the task. Refresh the UI bundle per .claude/rules (commit hub/ui/src and hub/hub/static/ui together).",
       "files": [
         "hub/ui/src/components/dashboards",
+        "hub/ui/mock/screens/Dashboards.tsx",
         "hub/ui/src/App.tsx",
         "hub/ui/src/lib/navigation.ts",
         "hub/ui/src/api/dashboards.ts",
@@ -474,6 +584,7 @@
       "key": "dashboards-screen",
       "requirements": [
         "chart-kinds",
+        "values-in-full",
         "dashboards-screen",
         "panel-errors"
       ],
@@ -482,16 +593,17 @@
     },
     {
       "builder": "DeveloperOpus2",
-      "builder_reason": "Small; shares mcp_server.py with the tools task.",
+      "builder_reason": "Small; shares mcp_server.py with the tools task, so the same hand avoids a conflict.",
       "checker": "QA",
       "checker_reason": "QA reads the note against the real data; not the builder.",
       "depends_on": [
         "dashboard-store-and-tools"
       ],
-      "description": "Seed the project's vault with the note on what the data means and its traps (a send-back rejects every piece of evidence from that commit; cost per spec counts its tasks' building and reviewing runs), have the dashboard tools' guidance name it, and invite agents to add to it. When and where the seed happens follows the open question on seeding (hub/hub/vault_seed does not exist on master; the builder finds the vault's existing seeding point).",
+      "description": "Seed every project's vault with the note on what the data means and its traps (a send-back rejects every piece of evidence from that commit; cost per spec counts its tasks' building and reviewing runs), idempotently at Hub startup and at project creation, never overwriting a note agents have added to; the dashboard tools' guidance names it and invites agents to add to it. The builder finds the vault's existing seeding point.",
       "files": [
         "hub/hub/mcp_server.py",
-        "hub/hub/vault_seed"
+        "hub/hub/main.py",
+        "hub/tests/test_dashboard_vault_note.py"
       ],
       "from": null,
       "key": "vault-note",
@@ -503,7 +615,7 @@
     },
     {
       "builder": "DeveloperOpus2",
-      "builder_reason": "Opus: the same hand that wrote the drive and holds the contract runs it and fixes drive-side faults; a defect it finds in the feature goes back to the task that built it.",
+      "builder_reason": "The hand that wrote the drive runs it and fixes drive-side faults; a defect in the feature goes back to the task that built it.",
       "checker": "QA2",
       "checker_reason": "QA2 has run dedicated-Hub drives and reads the recorded evidence; not the builder.",
       "depends_on": [
@@ -513,17 +625,34 @@
         "dashboards-screen",
         "vault-note"
       ],
-      "description": "Run scripts/drive/dashboards_drive.py against the finished feature on the dedicated trial Hub and record its evidence: every criterion passing, the regex-over-all-spans time, and the ac-examples comparison of each panel's rows with the hand-written reference queries. Fix only the drive itself; a failing criterion is a defect in the task that built it and goes back there. This is the task that closes ac-examples, which needs the query service, tools, screen and vault note together.",
+      "description": "Run scripts/drive/dashboards_drive.py against the finished feature on the dedicated trial Hub and on the copy of the operator's database, and record its evidence: every criterion passing, the regex-over-all-spans time, the worst stall and GET /agents time, and the ac-examples comparison with the hand-written reference queries. Fix only the drive itself.",
       "files": [
         "scripts/drive/dashboards_drive.py"
       ],
       "from": null,
       "key": "run-acceptance-drive",
       "requirements": [
-        "dashboards-screen"
+        "dashboards-screen",
+        "hub-stays-responsive"
       ],
       "reviewer": null,
       "title": "Run the acceptance drive against the built feature"
+    },
+    {
+      "depends_on": [],
+      "description": "ac-examples fails on every run so far: 3 by the builders and 1 by QA2 at fbfc0cd. The Haiku analyst gets 'cost per spec' right, mostly; once it added a filter that matched nothing. It gets the other two panels wrong in the same way every time. (1) QA send-backs per model: it counts each move to revision_needed under the model of the run that made the move (the reviewer), so it gets {claude-opus-5-5: 4} where the drive's reference_send_backs_per_model gets {haiku-4-5: 2, opus-5-5: 1, sonnet-5-5: 1}. The reference attributes each send-back to the model of the run behind the task's latest move to completed (task_transitions.run_id joined to turn_usage). (2) Longest kinds of task: it averages per run (1068/612.5/254) where the reference first sums each task's runs and then averages per kind (2670/1225/1270). Fix this in what the agent is told, not in the drive: add the traps to the seeded data-meaning vault note and/or to the query reference's column meanings. Say what task_transitions.run_id is (the run that made the move, so a send-back's run is the reviewer's) and how to attribute work to the builder's model. Say that per-task totals are summed from runs before averaging per kind. The note must stay idempotent and never overwrite agents' additions. Then run scripts/drive/dashboards_drive.py --part main until ac-examples passes, and record its evidence for FR-11.",
+      "files": [
+        "hub/hub/dashboard_query.py",
+        "hub/hub/mcp_server.py"
+      ],
+      "from": null,
+      "key": "examples-guidance",
+      "requirements": [
+        "dashboards-screen",
+        "data-notes-in-vault"
+      ],
+      "reviewer": null,
+      "title": "Make a Haiku analyst's example dashboard match the reference queries (ac-examples)"
     }
   ],
   "title": "Ask any agent for a dashboard and get one that stays"

@@ -3,7 +3,7 @@
     {
       "checked_by": "agent",
       "given": "a saved dashboard with three panels",
-      "how_to_check": "scripts/drive/dashboard_edit_drive.py: seed a dashboard, ask a Haiku agent for the change (edit_dashboard), list dashboards before and after",
+      "how_to_check": "scripts/drive/dashboard_edit_drive.py: seed a dashboard, ask a Haiku agent for the change, list dashboards before and after",
       "key": "ac-edit-in-place",
       "requirement": "edit-in-place",
       "then": "the project still lists one such dashboard, with the same identifier, now with four panels, and the dashboard's edited-by and edited-at name that agent and time",
@@ -20,16 +20,7 @@
     },
     {
       "checked_by": "agent",
-      "given": "a dashboard open on the screen and no name in the request (reachable only once the open question on open-dashboard context is settled so the conversation carries open_dashboard_id)",
-      "how_to_check": "drive: open one dashboard in the app (browser drive), ask without naming it, check which version moved",
-      "key": "ac-open-one",
-      "requirement": "which-dashboard",
-      "then": "the open dashboard changes",
-      "when": "the operator asks to change 'this' dashboard"
-    },
-    {
-      "checked_by": "agent",
-      "given": "two dashboards whose names both match the request, or no match, or no name and none open",
+      "given": "two dashboards whose names both match the request, or no match, or no name at all",
       "how_to_check": "drive: ask ambiguously, assert the agent's reply asks and the dashboard list and versions are unchanged",
       "key": "ac-ambiguous",
       "requirement": "which-dashboard",
@@ -38,35 +29,44 @@
     },
     {
       "checked_by": "agent",
+      "given": "a dashboard open on the screen",
+      "how_to_check": "browser drive on the dedicated trial Hub with a Haiku agent, checking which version moved",
+      "key": "ac-ask-to-change",
+      "requirement": "ask-to-change",
+      "then": "that agent's conversation opened with the dashboard's name and id in the composer, nothing was sent before the operator sent it, and after the turn that dashboard, and no other, changed",
+      "when": "the operator presses Ask to change, picks an agent, adds 'add a panel of runs per day' after the prefilled line and sends"
+    },
+    {
+      "checked_by": "agent",
       "given": "a dashboard of four panels",
       "how_to_check": "drive and Hub test: compare the stored dashboard before and after field by field",
       "key": "ac-keep-the-rest",
       "requirement": "keep-the-rest",
-      "then": "the other three panels are identical to before (title, query, kind, position) and so are the name and description",
+      "then": "the other three panels are identical to before (id, title, query, kind, position) and so are the name and description",
       "when": "the operator asks to change one panel's chart kind"
     },
     {
       "checked_by": "agent",
       "given": "a dashboard",
-      "how_to_check": "Hub test at the edit seam (PATCH route), failing before the fix; drive repeats it through the agent tool",
+      "how_to_check": "Hub test at the edit route, failing before the fix; drive repeats it through the agent tool",
       "key": "ac-all-or-nothing",
       "requirement": "edit-operations",
-      "then": "it is refused naming the second operation (operation_index 1), and the dashboard (including its version) is unchanged",
-      "when": "an edit with a valid add-panel followed by a change to a chart kind outside the fixed set is submitted"
+      "then": "the first is refused naming operation 1, the second is refused as a taken name, and the dashboard (including its version) is unchanged both times",
+      "when": "an edit with a valid add-panel followed by a change to a chart kind outside the fixed set is submitted, and separately a rename to another dashboard's name"
     },
     {
       "checked_by": "agent",
       "given": "an agent that read a dashboard at version 3, and another edit that made it version 4",
-      "how_to_check": "Hub test at the edit seam: two edits against the same base version, assert the second is refused and the stored dashboard is the first's result",
+      "how_to_check": "Hub test at the edit and save routes: two writes against the same base version",
       "key": "ac-stale",
       "requirement": "stale-edit",
-      "then": "it is refused (stale_version) with the current dashboard, the version 4 content is intact, and an edit naming version 4 is then accepted",
-      "when": "the first agent submits its edit naming version 3"
+      "then": "both are refused as stale with the current dashboard, the version 4 content is intact, and an edit naming version 4 is then accepted",
+      "when": "the first agent submits its edit naming version 3, and separately a whole replace naming version 3"
     },
     {
       "checked_by": "agent",
       "given": "a dashboard edited once",
-      "how_to_check": "browser drive on the dedicated trial Hub; Hub test for the restore (POST undo route)",
+      "how_to_check": "browser drive on the dedicated trial Hub; Hub test for the undo route",
       "key": "ac-undo",
       "requirement": "undo-one-step",
       "then": "the dashboard's panels equal those before the edit, its version number is higher than before, and Undo now restores the edited panels",
@@ -78,7 +78,7 @@
       "how_to_check": "browser drive and component test",
       "key": "ac-undo-none",
       "requirement": "undo-one-step",
-      "then": "Undo is not offered (can_undo false)",
+      "then": "Undo is not offered",
       "when": "the operator opens it"
     },
     {
@@ -92,8 +92,17 @@
     },
     {
       "checked_by": "agent",
-      "given": "a dashboard that has been opened, with one panel whose query names a column that no longer exists (saved, since slice 1's save does not run queries) and two working panels",
-      "how_to_check": "drive: break a panel's query, open the dashboard, ask a Haiku agent to fix it, open the dashboard again and compare",
+      "given": "a dashboard with one panel whose query names a column that does not exist and two working panels",
+      "how_to_check": "Hub test comparing the agent run route with the operator run route",
+      "key": "ac-run-for-agent",
+      "requirement": "repair-broken-panel",
+      "then": "it receives the broken panel's error and the other two panels' rows, matching what the screen's run shows",
+      "when": "an agent runs the dashboard"
+    },
+    {
+      "checked_by": "agent",
+      "given": "that dashboard",
+      "how_to_check": "drive: ask a Haiku agent to fix it, run the dashboard again and compare",
       "key": "ac-repair",
       "requirement": "repair-broken-panel",
       "then": "the panel's query is changed, the panel draws on the next open, and the other two panels are unchanged",
@@ -101,26 +110,17 @@
     },
     {
       "checked_by": "agent",
-      "given": "a dashboard with a failing panel that has been opened",
-      "how_to_check": "Hub test at the read seam",
-      "key": "ac-read-errors",
-      "requirement": "repair-broken-panel",
-      "then": "the failing panel carries its error message (last_error)",
-      "when": "an agent reads the dashboard"
-    },
-    {
-      "checked_by": "agent",
       "given": "two projects each with a dashboard",
       "how_to_check": "Hub test; drive repeats it with a second project",
       "key": "ac-edit-boundary",
       "requirement": "edit-validated-and-scoped",
-      "then": "the first is refused as not queryable and the second is refused as not found, and both dashboards are unchanged",
-      "when": "an agent in project A edits with a query naming credentials, and then names project B's dashboard"
+      "then": "the first is refused as not queryable and the rest as not found, and both dashboards are unchanged",
+      "when": "an agent in project A edits with a query naming credentials, and then names project B's dashboard to edit, undo and run"
     },
     {
       "checked_by": "agent",
       "given": "an edited dashboard",
-      "how_to_check": "Hub test counting dashboard_versions rows after each deletion",
+      "how_to_check": "Hub test counting the kept-version rows after each deletion",
       "key": "ac-history-delete",
       "requirement": "history-removed-with-dashboard",
       "then": "no row of its earlier version remains",
@@ -137,21 +137,28 @@
     }
   ],
   "algorithms": [],
+  "already_built": {
+    "built": false,
+    "commits": [],
+    "note": ""
+  },
   "aw_identity": {
     "digests": {
       "FR-1": "2a9dfb51ad9fb18dfeed97528f06e8fa41ab802deb29af967daaaed674e8cc2c",
       "FR-10": "f08394da91d8fa7a55286fa51ff10d68d11c88d951d5bc514fd4f7bac6c5fd2d",
-      "FR-2": "cbfd9e15cfece59cccdae3afa02f05af16eabfb71121c6858b5b6b3a9f44197d",
-      "FR-3": "99b765416f9fc6b3511e1b22992e951ac9d9e4dcae91f5fa043006f44de9e540",
-      "FR-4": "a16740e6bdc09c5c29c1665dd741908360da9c397b5654c7e059ac7a072e922a",
-      "FR-5": "2b9269002fe2b5744488fd40d33ac5fe70856abb15075b5651526b1a4817503b",
-      "FR-6": "9e57accd9b55e03a26123d2787c3c74b55b4ee49c754846e2965a0e0558138d3",
-      "FR-7": "85cb25b5f1ba8f3c0ff692b38b69b91e874b204cec455b84cb28bd65b77458ac",
-      "FR-8": "e831054bb5298e72829868915428642c64f7b68463aa9f0024603d63eec6804b",
+      "FR-11": "e5133af37e89a19e2b305e0a146951b32062b94aa8bdb749a5c0568619765df0",
+      "FR-2": "bc8e670996b9e65b2e05ccee12f1a3d2f6ea0eb1fcf4fb3b412c0448a5f0a8e0",
+      "FR-3": "1b52fcb8128c8c76c80be66562c4fdd3ca559bb99cd324572cc8abf2727b0d51",
+      "FR-4": "c697dcb785a33e55487e3d8471b588a76b9165f29eb6f729ff58ef58c9776331",
+      "FR-5": "20b196fe1343531592ad65bdefc6825f7bfe89b7eb7e42edaacb2732f766d7aa",
+      "FR-6": "4b96343dbb2e82c025557dbbf89117fe4099ce5a806091b2669621a592cca96e",
+      "FR-7": "d357c05813f838d5979fba19d295831209d22085fcbbc2d847792470c7b426eb",
+      "FR-8": "ceebad5877612f961b085ac1dd9db2085f8c0b2dc541595c0df7d955c90a8c13",
       "FR-9": "83cc00daa85e76fb2d6d514dfc7a865413229d4f80508700d801c0a980b5256f"
     },
-    "high_water": 10,
+    "high_water": 11,
     "requirements": {
+      "ask-to-change": "FR-11",
       "edit-in-place": "FR-1",
       "edit-operations": "FR-4",
       "edit-validated-and-scoped": "FR-8",
@@ -165,60 +172,118 @@
     },
     "retired": {}
   },
+  "capabilities": {
+    "changes": [
+      "spec/capabilities/project-dashboards/spec.json"
+    ],
+    "creates": []
+  },
   "delivery": {
-    "agent": "DeveloperOpus",
-    "builder": "DeveloperOpus",
+    "agent": "DeveloperOpus2",
+    "builder": "DeveloperOpus2",
     "checker": "QA",
     "cron": "*/5 * * * *",
     "mode": "flow",
     "reasons": {
-      "agent": "Opus builder because of the migration and tool surface; builds after first-dashboard, which may by then have freed DeveloperOpus2 as the alternative.",
-      "builder": "Same as the agent; the UI task names Developer (Sonnet) as routine work.",
-      "checker": "QA is Opus and reads migrations; the UI task names QA2.",
+      "agent": "DeveloperOpus2 built slice 1's store and tools.",
+      "builder": "Opus for the migration and tool surface; the screen task names Developer.",
+      "checker": "QA did not build or check slice 1's store, so it reviews with fresh eyes; QA2 authors the drive.",
       "cron": "The usual five-minute tick.",
-      "mode": "The drive is written first and run last; the store and the screen are chained because the screen needs the store's routes. This whole document builds after slice first-dashboard has landed.",
+      "mode": "Drive first, store, screen, drive last: a short chained flow.",
       "stop": "Stops when the tasks are done."
     },
     "reviewer": null,
     "stop_at": null,
     "stop_when_queue_empties": true
   },
-  "design": "Tier 2 (light). Hazard: a version history for dashboards adds a table and three columns, and the operator's :8000 Hub runs that migration on its real database at the first restart after this lands. The migration creates the new table `dashboard_versions` and adds three columns with defaults to slice 1's `dashboards` table (`version`, `edited_by`, `edited_at`, plus `panel_status`, see the contract); it deletes and rewrites no existing row's data, existing dashboards becoming version 1. Rollback is its downgrade dropping the table and the added columns, which loses only edit history and last-run errors, never a dashboard's name, description or panels. This slice builds after first-dashboard, so its migration follows that slice's in the revision chain.\n\nMigration ordering: the migration's number is not fixed in this document. The builder takes it at build time from master's head (`git ls-tree master hub/hub/migrations/versions/`; the head was 0170_the_pr_s_ci_is_read_on_the_head.py when this was written, PR slice 2's 0169 and 0170 are already on master), names the file `NNNN_dashboards_edit_history.py` and points its down-revision at that head. Whichever of this slice, ask-any-agent-for-a-dashboard-and-get-one-that-stays (slice 1) and any other pending migration merges second renumbers after the other and re-points its down-revision before landing; this slice also needs slice 1's `dashboards` table, so it cannot merge before slice 1 does.\n\nDecisions (the author's choice unless an open question says otherwise):\n- Edit in place, by operation: the edit tool takes the dashboard's identifier, the version the agent read, and a list of operations (add panel, remove panel, change a panel's title, query or chart kind, move a panel, rename or re-describe the dashboard). Rejected: replacing the whole dashboard on every change, which is the failure this slice exists to remove. Slice 1's replace-whole save stays for creating, but a replace is also an edit: it bumps the version and keeps what it replaced, so it cannot be used to bypass history.\n- Every edit is validated like a save in slice 1 (chart kind in the fixed set, never-queryable boundary, project boundary; the queries are not run), and the dashboard is unchanged if any operation is refused: an edit applies whole or not at all.\n- Each dashboard carries a version number that goes up on every edit. An edit that names an older version than the current one is refused with the current dashboard returned, so the agent re-reads and re-applies.\n- The Hub keeps the version an edit replaced; undo restores it as a new edit (so undo can itself be undone by asking). Depth: one step, see open questions.\n- A dashboard's read answers, per panel, the last error or warning seen when it was run, so a repair needs no re-run to find the cause. The error is only known once the dashboard (or the panel) has been run, so a repair starts from an opened dashboard; an agent that finds no error for a panel runs its query with run_dashboard_query.\n\nTHE CONTRACT (binds to slice 1's names: table `dashboards`, panel `{id, title, query, kind}` with `id` `pnl-<12 hex>`, routes under `/api/v1/projects/{project_id}/dashboards`, tools save_dashboard / list_dashboards / read_dashboard / run_dashboard_query, events dashboard_saved / dashboard_deleted):\n\nColumns added to `dashboards`: `version` Integer not null default 1; `edited_by` String(32) nullable (the agent's name from the run credential, or `operator` for an undo pressed on the screen; never taken from the request body); `edited_at` timestamp nullable (null until first edit); `panel_status` JSON not null default `{}` mapping panel id to `{\"error\": null | {\"code\": str, \"message\": str}, \"warning\": null | str, \"at\": timestamp}`, written by the Hub each time the run route (`GET .../dashboards/{dashboard_id}/run`) runs a panel; writing it does not change `version`.\n\nTable `dashboard_versions` (model `DashboardVersion`), at most one row per dashboard: `dashboard_id` String(64) primary key; `project_id` String(64) indexed (so the project-delete sweep reaches it with no code); `version` Integer (the version it held); `name`, `description`, `panels` as in `dashboards`; `edited_by`, `edited_at` of the edit that produced it. Every edit and undo overwrites the row with what it replaced. Deleting a dashboard (DELETE route) deletes its row explicitly.\n\nOperations, elements of the edit's `operations` array, each `{\"op\": ..., ...}`:\n- `{\"op\": \"add_panel\", \"panel\": {\"title\", \"query\", \"kind\"}, \"position\": int | null}` (null appends)\n- `{\"op\": \"remove_panel\", \"panel_id\": str}`\n- `{\"op\": \"change_panel\", \"panel_id\": str, \"title\": str?, \"query\": str?, \"kind\": str?}` (only the keys present change)\n- `{\"op\": \"move_panel\", \"panel_id\": str, \"position\": int}`\n- `{\"op\": \"rename\", \"name\": str}`\n- `{\"op\": \"set_description\", \"description\": str}`\n\nRoutes (added to hub/hub/api/v1/dashboards.py):\n- `PATCH /dashboards/{dashboard_id}` body `{\"base_version\": int, \"operations\": [Operation]}` -> 200 dashboard with `version` + 1. Refusals: 409 `{\"detail\": {\"code\": \"stale_version\", \"message\": str, \"current\": <dashboard>}}`; 422 `{\"detail\": {\"code\": \"operation_refused\", \"operation_index\": int, \"message\": str}}` (including `invalid_chart_kind` and `not_queryable` reasons in the message, and an unknown `panel_id`); 404 for another project's dashboard.\n- `POST /dashboards/{dashboard_id}/undo` -> 200 dashboard (the previous version's content, `version` + 1, `edited_by` the actor); 409 `{\"detail\": {\"code\": \"nothing_to_undo\"}}` when no row exists.\n- `PUT /dashboards/{dashboard_id}` (slice 1) takes an optional `base_version`; when present it is checked like an edit's.\n- Dashboard JSON (read, list, run, edit responses) gains `version: int`, `edited_by: str | null`, `edited_at: timestamp | null`, `can_undo: bool`; the stored read gives each panel `last_error: {\"code\",\"message\"} | null` and `last_warning: str | null` from `panel_status`; the run route's panel entries already carry `error` and `warning`.\n\nAgent tools (hub/hub/mcp_server.py, `@_tool()`): `edit_dashboard(dashboard_id: str, base_version: int, operations: List[Dict])` and `undo_dashboard(dashboard_id: str)`; `read_dashboard` returns the added fields. Finding the dashboard by name is `list_dashboards` plus the tool guidance (match by name; on none, several, or no name and none open, ask the operator which one and call nothing that writes). Both new tool names are added to the Copilot MCP allowlist in hub/hub/copilot_acp.py.\n\nEvents: `dashboard_edited`, payload `{\"id\": str, \"name\": str, \"version\": int}`, broadcast after commit by edit and undo, so an open screen refreshes.\n\nOpen dashboard context (provisional, bound by the open question): the conversation turn carries `open_dashboard_id` when the conversation is started from the Dashboards screen; the builder confirms where the conversation start carries context before the screen task starts.\n\nUI: Undo button on the screen shown only when `can_undo`; the edited-by line reads `edited_by` and `edited_at`; hooks in hub/ui/src/api/dashboards.ts (`useUndoDashboard`) invalidate `['project', projectId, 'dashboards']`.\n\nGuards and tests this change touches: the project-delete sweep test (hub/tests/test_project_delete_api.py) is satisfied because `dashboard_versions.project_id` exists; slice 1's tests in hub/tests/test_dashboards.py that compare a dashboard's exact JSON are relaxed to allow the four added fields (version, edited_by, edited_at, can_undo); the Copilot allowlist and the tools/list surface test as in slice 1.\n\nCURRENT (slice 1): save(name, description, panels) -> dashboard; read; list; delete; run.\nPROPOSED: edit(dashboard, base_version, operations[]) -> dashboard at version+1 | refused(reason, current); undo(dashboard) -> dashboard at version+1; read adds version, edited-by, edited-at and per-panel last error.",
+  "design": "Tier 2 (light). Hazard: the operator's :8000 Hub runs this slice's migration on its real database at the first restart after it lands. The migration adds three columns with defaults to slice 1's `dashboards` table and creates one table; it deletes and rewrites no existing row, existing dashboards becoming version 1. Rollback is its downgrade dropping the table and the columns, which loses only edit history, never a dashboard's name, description or panels.\n\nMigration ordering: master's head is 0177_dashboards.py (slice 1, revision \"0177\"). The builder re-reads the head at build time (`git ls-tree master hub/hub/migrations/versions/`), names the file `NNNN_dashboards_edit_history.py` and points its down-revision at that head, re-checking before the last commit; it is guarded the way 0177 is (skip when already applied).\n\nDecisions (operator-approved 2026-11-14 where marked, otherwise the author's):\n- Edit in place, by operation: the edit names the dashboard, the version the agent read, and a list of operations. Slice 1's replace-whole save stays for creating, but a replace of an existing dashboard is also an edit: it takes an optional base version, bumps the version and keeps what it replaced, so it cannot bypass history or staleness.\n- Every edit is validated like a save in slice 1 (panel shape and limits, chart kind in the fixed set, never-queryable boundary, project boundary, unique name; queries are not run), and applies whole or not at all. Panel ids are kept across edits; an added panel gets a new one.\n- Each dashboard carries a version that goes up on every edit, replace or undo. A write naming an older version is refused with the current dashboard returned, never merged (operator, 2026-11-14).\n- One kept version per dashboard; undo restores it as a new edit (operator, 2026-11-14).\n- Repair needs no stored errors: agents get a run of a saved dashboard returning the same per-panel results the screen's run returns (dashboards.py:300-314, error and warning per panel).\n- Ask to change (operator, 2026-11-14): the open dashboard offers a control that picks an agent, opens its conversation and fills the composer with 'Change the dashboard \"<name>\" (<id>): ', editable, sent only by the operator; nothing hidden is added to the turn. The look is mocked in hub/ui/mock route #tab/dashboards.\n\nTHE CONTRACT (bound to slice 1's shipped names: table `dashboards`, model Dashboard hub/hub/db/models.py:3719, ids `dash-<12 hex>`, panels `{id, title, query, kind}` with `id` `pnl-<12 hex>`, operator routes under `/api/v1/projects/{project_id}/dashboards`, agent routes under `/api/v1/agent-actions/dashboards`, tools save_dashboard / list_dashboards / read_dashboard / run_dashboard_query / dashboard_query_reference, events dashboard_saved / dashboard_deleted):\n\nColumns added to `dashboards`: `version` Integer not null default 1; `edited_by` String(32) nullable (the agent from the run credential, or `operator`; never from the request body); `edited_at` UTCDateTime nullable.\n\nTable `dashboard_versions` (model DashboardVersion), at most one row per dashboard: `dashboard_id` String(64) primary key; `project_id` String(64) FK projects.id, indexed (so ProjectLifecycle.delete's project_id sweep, hub/hub/project_lifecycle.py:432, reaches it with no code); `version`; `name`, `description`, `panels` as in `dashboards`; `edited_by`, `edited_at`. Every edit, replace and undo overwrites the row with what it replaced. The DELETE route deletes it explicitly.\n\nOperations, elements of `operations`, each `{\"op\": ...}`:\n- `{\"op\": \"add_panel\", \"panel\": {\"title\", \"query\", \"kind\"}, \"position\": int | null}` (null appends)\n- `{\"op\": \"remove_panel\", \"panel_id\": str}`\n- `{\"op\": \"change_panel\", \"panel_id\": str, \"title\"?: str, \"query\"?: str, \"kind\"?: str}` (only keys present change)\n- `{\"op\": \"move_panel\", \"panel_id\": str, \"position\": int}`\n- `{\"op\": \"rename\", \"name\": str}`\n- `{\"op\": \"set_description\", \"description\": str}`\n\nRoutes (hub/hub/api/v1/dashboards.py):\n- Agent: `PATCH /agent-actions/dashboards/{id}` body `{\"base_version\": int, \"operations\": [...]}` -> 200 view at version+1; `POST /agent-actions/dashboards/{id}/undo`; `GET /agent-actions/dashboards/{id}/run` -> slice 1's run result.\n- Operator: `POST /projects/{pid}/dashboards/{id}/undo`.\n- Refusals: 409 `{\"detail\": {\"code\": \"stale_version\", \"message\", \"current\": <view>}}`; 422 `{\"detail\": {\"code\": \"operation_refused\", \"operation_index\": int, \"reason\": \"invalid_chart_kind\" | \"not_queryable\" | \"invalid_panel\" | \"unknown_panel\", \"message\"}}`; 409 `dashboard_name_taken` for a rename; 409 `{\"detail\": {\"code\": \"nothing_to_undo\"}}`; 404 `dashboard_not_found` for another project's dashboard.\n- Agent POST save (slice 1) and operator PUT take an optional `base_version`, checked like an edit's when present.\n- The view (read, list summary, run, edit responses) gains `version`, `edited_by`, `edited_at`, `can_undo`.\n\nAgent tools (hub/hub/mcp_server.py, `@_tool()`): `edit_dashboard(dashboard_id, base_version, operations)`, `undo_dashboard(dashboard_id)`, `run_dashboard(dashboard_id)`; `save_dashboard` gains `base_version`. Guidance: find the dashboard with list_dashboards by name or by the id the operator's message carries; on none, several or no name, ask which and call nothing that writes. All three new names join HUB_MCP_TOOLS in hub/hub/copilot_acp.py, and the tools/list snapshot test is updated.\n\nEvent: `dashboard_edited` `{\"id\", \"name\", \"version\"}`, broadcast after commit by edit, replace and undo, registered in hub/ui/src/hooks/useSSE.ts so an open screen refreshes.\n\nUI: Undo on the open dashboard only when `can_undo`; edited-by line; Ask to change (agent picker -> conversation -> composer prefill); hooks in hub/ui/src/api/dashboards.ts invalidate `['project', projectId, 'dashboards']`.\n\nCURRENT (slice 1): save(name, description, panels, dashboard_id?) -> whole replace; read; list; operator delete; operator run.\nPROPOSED: edit(id, base_version, operations[]) -> version+1 | refused(reason, current); undo(id) -> version+1; agent run(id); replace keeps history and checks staleness.",
   "evidence": {
     "checked": [
-      "Slice first-dashboard's document (spec/changes/ask-any-agent-for-a-dashboard-and-get-one-that-stays/spec.json): its non-goals defer changing a saved dashboard to this slice, and it defines save, list, read, delete, the fixed chart kinds, and the per-panel error display this slice builds on; its contract now names the table, panel shape, routes, tools and events this document binds to",
-      "The roadmap (spec/changes/dashboards-an-agent-builds-from-the-project-s-data/spec.json) slice change-by-asking: done = asking for a change edits the saved dashboard rather than creating a new one, and a broken panel is repaired by asking",
-      "Grounded on master 2026-11-07: project deletion sweeps every table with a project_id column (hub/hub/project_lifecycle.py), the Copilot MCP allowlist is in hub/hub/copilot_acp.py, migration head is 0170"
+      "Slice 1 shipped (build-7b284fca6fb8, AAADG-1..7 approved 2026-11-13); model hub/hub/db/models.py:3719-3746 with unique (project_id, name); migration 0177_dashboards.py is master's head",
+      "Agent save with dashboard_id replaces whole: hub/hub/api/v1/dashboards.py:416-429, hub/hub/mcp_server.py:1001",
+      "Run returns per-panel error and warning without storing them: dashboards.py:267-314; model comment 'panels are stored, never their results' models.py:3723",
+      "Agent router has list, read, save and query but no run and no delete: dashboards.py:39 and docstring :6-7",
+      "Project deletion sweeps project_id tables: hub/hub/project_lifecycle.py:432-433",
+      "Tools are in HUB_MCP_TOOLS: hub/hub/copilot_acp.py:225-253; events dashboard_saved/deleted registered at hub/ui/src/hooks/useSSE.ts:61-62",
+      "The screen has no conversation start: hub/ui/src/components/dashboards/DashboardsView.tsx:46"
     ],
     "limits": [
-      "Nothing of slice first-dashboard exists in code yet, so the names bind to that document's contract, not to code",
-      "How the agent learns which dashboard is open is not verified against the conversation-context code and is an open question",
       "The acceptance drive is proposed coverage, not yet written or run",
-      "File paths in tasks are the author's expectation and may shift when slice 1 is built"
+      "How a conversation is opened with a prefilled composer from another screen was not traced; the screen task must find it",
+      "File paths in tasks are expectations"
     ]
   },
   "hub": {
-    "phase": "exploring",
+    "builds": [
+      {
+        "budget_cap_usd": null,
+        "builder": "DeveloperOpus2",
+        "builders": [
+          "DeveloperOpus2",
+          "Developer",
+          "QA2"
+        ],
+        "checker": "QA",
+        "checkers": [],
+        "chosen_by": "operator",
+        "driver": "flow",
+        "ended_at": "2026-11-14T06:10:32.858627+00:00",
+        "id": "build-2c1e8f732e65",
+        "landing": "main",
+        "lead": null,
+        "level": "reviewed",
+        "pull_request": null,
+        "started_at": "2026-11-14T01:20:36.030292+00:00",
+        "state": "finished",
+        "stop_reason": null,
+        "tasks": {
+          "acceptance-drive": {
+            "builder": "DeveloperOpus2",
+            "checker": "QA"
+          },
+          "ambiguous-request-never-writes": {
+            "builder": null,
+            "builder_default": true,
+            "checker": null
+          },
+          "edit-store-and-tools": {
+            "builder": "DeveloperOpus2",
+            "checker": "QA"
+          },
+          "run-acceptance-drive": {
+            "builder": "QA2",
+            "checker": "QA"
+          },
+          "screen-undo-and-ask": {
+            "builder": "Developer",
+            "checker": "QA2"
+          }
+        },
+        "window_end": null,
+        "window_start": null
+      }
+    ],
+    "phase": "approved",
     "size": "large",
-    "step": "intake"
+    "step": "build"
   },
   "kind": "change-spec",
   "lifecycle": "",
   "open_questions": [
     {
-      "question": "How deep is undo? Options: one previous version (restore it, and restoring is itself undoable), or a full history the operator browses. Recommended (Architect): keep the previous version only, one step of undo; a browsable history is a later slice if it is missed.",
-      "resolved": false
+      "question": "How deep is undo? Answer (operator, 2026-11-14): one previous version, one step of undo, and restoring is itself undoable.",
+      "resolved": true
     },
     {
-      "question": "How does the agent know which dashboard is open when the operator says 'this one'? Options: the conversation turn carries the identifier of the dashboard open on the Dashboards screen; or the agent only works by name and asks otherwise. Recommended (Architect): the turn carries the open dashboard's identifier (open_dashboard_id) when the conversation is started from the screen, with asking as the fallback; the builder must confirm the conversation can carry it before the screen task starts. Until settled, ac-open-one is not reachable.",
-      "resolved": false
+      "question": "How does the agent know which dashboard the operator means by 'this one'? Answer (operator, 2026-11-14): an Ask to change button on an open dashboard: pick an agent, its conversation opens with 'Change the dashboard \"<name>\" (<id>): ' in the composer, visible and editable; no hidden turn context.",
+      "resolved": true
     },
     {
-      "question": "On a stale edit, should the Hub refuse, or merge when the two edits touch different panels? Recommended (Architect): refuse and return the current dashboard (simple, never loses an edit); merging is not worth it for dashboards edited a few times a day.",
-      "resolved": false
+      "question": "On a stale edit, refuse or merge? Answer (operator, 2026-11-14): refuse and return the current dashboard.",
+      "resolved": true
     }
   ],
-  "problem": "After slice first-dashboard (not yet built; see spec/changes/ask-any-agent-for-a-dashboard-and-get-one-that-stays/spec.json, non-goals) an agent can only save a new dashboard or replace one whole. Asked \"add a panel for X\" it has two bad choices: create a second dashboard that duplicates the first, or rewrite the whole thing from memory and risk silently altering panels the operator liked. A panel that breaks after a Hub upgrade, which that slice surfaces but does not repair, stays broken until someone rewrites the dashboard. This slice makes a saved dashboard something the operator keeps refining by asking.",
+  "problem": "Slice first-dashboard shipped on 2026-11-13 (build-7b284fca6fb8). An agent can create a dashboard, or replace one whole: save_dashboard with a dashboard_id overwrites its name, description and panels (hub/hub/mcp_server.py:1001, hub/hub/api/v1/dashboards.py:416-429). Asked \"add a panel for X\", it has two bad choices: create a near-duplicate second dashboard, or rewrite the whole thing from memory and risk silently altering panels the operator liked. Nothing records who changed a dashboard, nothing keeps what a replace overwrote, and two edits from the same starting point silently overwrite each other. A panel that breaks (after a Hub upgrade, say) shows its error on the screen, but agents have no way to run a saved dashboard and see that error: the agent router has no run route (dashboards.py:39 router serves list, read, save and query only). This slice makes a saved dashboard something the operator keeps refining by asking.",
   "requirements": [
     {
       "key": "edit-in-place",
@@ -232,49 +297,56 @@
       "modal": "MUST",
       "party": null,
       "rationale": "Guessing between two dashboards edits the wrong one without anyone noticing.",
-      "statement": "The agent edits the dashboard the operator means: the one named in the request, or when none is named the one open on the Dashboards screen; when the name matches no dashboard, or several, or none is named and none is open, the agent says so and asks which, and changes nothing and creates nothing."
+      "statement": "The agent edits the dashboard the operator means: the one named in the request, or the one the operator's Ask to change named; when the name matches no dashboard, or several, or no dashboard is named, the agent says so and asks which, and changes nothing and creates nothing."
+    },
+    {
+      "key": "ask-to-change",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator, 2026-11-14: what the agent is told stays visible, rather than a hidden context the operator cannot see.",
+      "statement": "An open dashboard on the Dashboards screen offers Ask to change: the operator picks an agent, that agent's conversation opens, and its composer holds an editable line naming the dashboard's name and identifier, sent only when the operator sends it."
     },
     {
       "key": "keep-the-rest",
       "modal": "MUST",
       "party": null,
       "rationale": "The operator trusts a dashboard they have looked at; an edit that quietly rewrites other panels breaks that.",
-      "statement": "An edit changes only what was asked: every panel, query, title, chart kind, the order of panels, the name and description that the request did not mention are unchanged after the edit."
+      "statement": "An edit changes only what was asked: every panel, query, title, chart kind, panel id, the order of panels, the name and description that the request did not mention are unchanged after the edit."
     },
     {
       "key": "edit-operations",
       "modal": "MUST",
       "party": null,
       "rationale": "A half-applied edit leaves a dashboard nobody asked for.",
-      "statement": "The Hub applies an edit as a list of operations (add a panel, remove a panel, change a panel's title, query or chart kind, move a panel, rename or re-describe the dashboard); if any operation is refused, including a chart kind outside the fixed set or a panel that does not exist, no operation is applied and the refusal says which and why."
+      "statement": "The Hub applies an edit as a list of operations (add a panel, remove a panel, change a panel's title, query or chart kind, move a panel, rename or re-describe the dashboard); if any operation is refused, including a chart kind outside the fixed set, a panel that does not exist, or a name another dashboard of the project holds, no operation is applied and the refusal says which and why."
     },
     {
       "key": "stale-edit",
       "modal": "MUST",
       "party": null,
       "rationale": "An agent works from what it read at the start of a long turn; the operator or another agent may have edited since.",
-      "statement": "An edit made against a version of the dashboard that is no longer the current one is refused with a message saying the dashboard changed and the current dashboard, and nothing is overwritten."
+      "statement": "An edit or a whole replace made against a version of the dashboard that is no longer the current one is refused with a message saying the dashboard changed and the current dashboard, and nothing is overwritten."
     },
     {
       "key": "undo-one-step",
       "modal": "MUST",
       "party": null,
       "rationale": "Asking for changes is only safe if a wrong one costs one click.",
-      "statement": "After an edit the Hub keeps the version it replaced, and the operator can restore it in one step from the Dashboards screen (and an agent can when asked); restoring is itself an edit, so it can be undone the same way; a dashboard with no earlier version offers nothing to restore."
+      "statement": "After an edit or a whole replace the Hub keeps the version it replaced, and the operator can restore it in one step from the Dashboards screen (and an agent can when asked); restoring is itself an edit, so it can be undone the same way; a dashboard with no earlier version offers nothing to restore."
     },
     {
       "key": "repair-broken-panel",
       "modal": "MUST",
       "party": null,
       "rationale": "Slice first-dashboard surfaces a broken panel but cannot mend it; this is the other half.",
-      "statement": "A dashboard read tells the agent, for each panel, the error or warning its last run produced; asked to fix a broken panel, the agent can correct that panel's query from its error, check the new result, and save only that panel, after which the panel draws."
+      "statement": "An agent can run a saved dashboard and receive, for each panel, its result or its error and drawing warning, exactly as the screen shows them; asked to fix a broken panel, it can correct that panel's query from its error, check the new result, and change only that panel, after which the panel draws."
     },
     {
       "key": "edit-validated-and-scoped",
       "modal": "MUST",
       "party": null,
       "rationale": "The edit path must not become a way round the query boundary.",
-      "statement": "An edit's queries are held to the same limits as slice first-dashboard's queries (current project only, read-only, never-queryable data refused), and an agent cannot edit, undo or read the versions of a dashboard belonging to another project."
+      "statement": "An edit's queries are held to the same limits as slice first-dashboard's saves (current project only, read-only, never-queryable data refused), and an agent cannot edit, undo, run or read the kept version of a dashboard belonging to another project."
     },
     {
       "key": "history-removed-with-dashboard",
@@ -299,60 +371,66 @@
   "scope": {
     "in_scope": [
       "An agent tool to edit a saved dashboard in place by operations, with the version it read",
-      "Finding which dashboard the operator means: by name, or the one open on the Dashboards screen",
+      "Finding which dashboard the operator means: by name, or the one the operator asked about from the Dashboards screen",
+      "An Ask to change control on the Dashboards screen that starts the request in a conversation with the dashboard named",
       "Refusing a stale edit and returning the current dashboard",
       "Keeping the replaced version and one step of undo, on the Dashboards screen and for agents",
-      "A dashboard read that shows each panel's last error so an agent can repair a panel by asking",
+      "An agent tool that runs a saved dashboard and returns each panel's result or error, so an agent can repair a panel by asking",
       "Recording who last edited a dashboard and when, shown on the screen"
     ],
     "non_goals": [
       "Full version history, browsing or diffing old versions (one previous version only)",
       "Several agents or people editing at once with merging; a stale edit is refused, not merged",
       "The operator editing panels by hand on the screen (changes are asked for)",
+      "A hidden 'open dashboard' identifier carried on the agent's turn; the dashboard is named in the visible message",
       "Changing the query tool, the chart kinds, or the queryable data from slice 1",
       "Fixing a panel's query automatically without being asked",
+      "Storing panels' last results or errors; a dashboard is run to learn them",
+      "Agents deleting dashboards (slice 1 keeps delete the operator's)",
       "Sharing, exporting, or copying dashboards between projects",
       "Scheduled or automatic refresh"
     ]
   },
-  "summary": "The operator asks an agent to change a dashboard that already exists (add a panel, change a chart, fix a broken query). The agent finds the right saved dashboard, changes only what was asked in place, and the operator sees the same dashboard updated, not a new one. A change made on top of a newer edit is refused rather than overwriting it, the previous version is kept so one step undoes an edit, and a panel whose query broke is repaired by the agent from the error the panel shows.",
+  "summary": "The operator asks an agent to change a dashboard that already exists (add a panel, change a chart, fix a broken query). The agent finds the right saved dashboard, changes only what was asked in place, and the operator sees the same dashboard updated, not a new one. A change made on top of a newer edit is refused rather than overwriting it, the previous version is kept so one step undoes an edit, and a panel whose query broke is repaired by the agent from the error running it returns.",
   "tasks": [
     {
-      "builder": "DeveloperOpus",
-      "builder_reason": "Opus because the drive carries the boundary check; builds after first-dashboard so DeveloperOpus2 will have finished that chain, but DeveloperOpus may be busy with PR slice 2.",
+      "builder": "QA2",
+      "builder_reason": "QA2 checked slice 1 and knows its drive; it builds nothing else here, so the drive stays independent of the code.",
       "checker": "QA",
-      "checker_reason": "QA (Opus) is not the builder; QA2 is the fallback if busy.",
+      "checker_reason": "QA (Opus) is not the drive's author.",
       "depends_on": [],
-      "description": "Write scripts/drive/dashboard_edit_drive.py against the contract named in the design (edit_dashboard, undo_dashboard, read_dashboard with version / edited_by / edited_at / can_undo / last_error, the PATCH and undo routes, the Undo control) on a dedicated trial Hub of its own port and database (real agent turns bind Haiku), building on slice first-dashboard's drive helpers. It seeds dashboards and covers every criterion of this document: edit in place, by name, the open one, ambiguous, keep the rest, all-or-nothing, stale edit, undo (including after a restart), repairing a broken panel, the project boundary, and history removed with the dashboard. Committed failing on today's code, the failure naming the missing edit tool. The last task runs it to green.",
+      "description": "Write scripts/drive/dashboard_edit_drive.py against the contract in the design (edit_dashboard, undo_dashboard, run_dashboard, base_version on save, version / edited_by / edited_at / can_undo in the view, the PATCH, undo and agent run routes, the Undo and Ask to change controls) on a dedicated trial Hub of its own port and database (real agent turns bind Haiku), reusing slice first-dashboard's scripts/drive/dashboards_drive.py helpers. It seeds dashboards and covers every criterion of this document. Committed failing on today's code, the failure naming the missing edit tool. The last task runs it to green.",
       "files": [
         "scripts/drive/dashboard_edit_drive.py"
       ],
       "from": null,
       "key": "acceptance-drive",
       "requirements": [
-        "edit-in-place"
+        "edit-in-place",
+        "which-dashboard",
+        "repair-broken-panel"
       ],
       "reviewer": null,
       "title": "Acceptance drive for editing dashboards, failing first"
     },
     {
-      "builder": "DeveloperOpus",
-      "builder_reason": "Opus: migration on the operator's live database and an MCP tool change (Tier 2 hazard).",
+      "builder": "DeveloperOpus2",
+      "builder_reason": "DeveloperOpus2 built slice 1's store and tools; Opus for a migration on the operator's live database and a tool-surface change (Tier 2).",
       "checker": "QA",
-      "checker_reason": "QA reads migrations and tool contracts; not the builder.",
+      "checker_reason": "QA reads migrations and tool contracts and did not build this.",
       "depends_on": [
         "acceptance-drive"
       ],
-      "description": "Add the dashboard_versions table and the added dashboards columns (version, edited_by, edited_at, panel_status) with their migration, the edit operation list applied whole-or-nothing through PATCH with the same validation as a save, the stale-edit refusal (409 stale_version returning the current dashboard), one-step restore as a new edit (POST undo), panel_status written by the run route and returned as last_error / last_warning in the read, can_undo, the explicit removal of the kept version when a dashboard is deleted (and with its project through the project_id sweep), the dashboard_edited event, and the agent tools edit_dashboard and undo_dashboard with guidance on finding the right dashboard by name and on asking when it is unclear, also added to the Copilot allowlist. Slice 1's replace-whole PUT bumps the version and keeps what it replaced. Hub tests at the edit seam fail before the fix. Migration number is taken from master's head at build time; check it again before the last commit.",
+      "description": "Add the dashboard_versions table and the version / edited_by / edited_at columns with their migration (number from master's head at build time); the operation list applied whole-or-nothing through the agent PATCH with slice 1's save validation and the unique-name check; the stale refusal on edit and on whole replace; one kept version and undo as a new edit (agent and operator routes); the agent run route; can_undo in the view; explicit removal of the kept version on delete; the dashboard_edited event; the tools edit_dashboard, undo_dashboard and run_dashboard with guidance on finding the dashboard and asking when unclear, base_version on save_dashboard, all added to the Copilot allowlist and the tools/list snapshot. Hub tests at the edit seam fail before the fix.",
       "files": [
         "hub/hub/db/models.py",
         "hub/hub/migrations/versions",
         "hub/hub/mcp_server.py",
         "hub/hub/copilot_acp.py",
         "hub/hub/api/v1/dashboards.py",
-        "hub/hub/deletion.py",
         "hub/tests/test_dashboard_edit.py",
-        "hub/tests/test_dashboards.py"
+        "hub/tests/test_dashboards.py",
+        "hub/tests/test_copilot_context_split.py"
       ],
       "from": null,
       "key": "edit-store-and-tools",
@@ -372,49 +450,68 @@
     },
     {
       "builder": "Developer",
-      "builder_reason": "Sonnet: routine UI wiring onto an existing screen; may be busy with PR slice 2, DeveloperSonnet2 is the fallback.",
+      "builder_reason": "Developer built slice 1's screen; routine UI wiring, Sonnet is enough.",
       "checker": "QA2",
       "checker_reason": "QA2 drives both themes and the browser flow; not the builder.",
       "depends_on": [
         "edit-store-and-tools"
       ],
-      "description": "On the Dashboards screen: the Undo control (offered only when can_undo), the edited-by and edited-at line, and telling the agent which dashboard is open (open_dashboard_id) when the operator asks in a conversation from that screen (the mechanism is the one the open question settles). UI bundle refreshed per .claude/rules, src and bundle committed together.",
+      "description": "Wire the mocked controls on the Dashboards screen (hub/ui/mock #tab/dashboards) to the routes: Undo (only when can_undo), the edited-by and edited-at line, the dashboard_edited event refreshing an open dashboard, and Ask to change (pick an agent, open its conversation, fill its composer with the dashboard's name and id, sent only by the operator). UI bundle refreshed per .claude/rules, src and bundle committed together.",
       "files": [
         "hub/ui/src/components/dashboards",
         "hub/ui/src/api/dashboards.ts",
+        "hub/ui/src/hooks/useSSE.ts",
         "hub/hub/static/ui"
       ],
       "from": null,
-      "key": "screen-undo-and-open-context",
+      "key": "screen-undo-and-ask",
       "requirements": [
         "undo-one-step",
-        "which-dashboard",
+        "ask-to-change",
         "edited-by-shown"
       ],
       "reviewer": null,
-      "title": "Undo, edited-by and the open dashboard on the screen"
+      "title": "Undo, edited-by and Ask to change on the screen"
     },
     {
-      "builder": "DeveloperOpus",
-      "builder_reason": "Opus: the hand that wrote the drive runs it and fixes drive-side faults; a defect it finds in the feature goes back to the task that built it.",
+      "builder": "QA2",
+      "builder_reason": "The drive's author runs it and fixes only drive-side faults.",
       "checker": "QA",
-      "checker_reason": "QA (Opus) reads the recorded evidence and is not the builder; QA2 is the fallback.",
+      "checker_reason": "QA reads the recorded evidence; not the builder.",
       "depends_on": [
         "acceptance-drive",
         "edit-store-and-tools",
-        "screen-undo-and-open-context"
+        "screen-undo-and-ask"
       ],
-      "description": "Run scripts/drive/dashboard_edit_drive.py against the finished feature on the dedicated trial Hub and record its evidence: every criterion passing, including the ones that need the tools and the screen together (ac-open-one, ac-undo, ac-undo-none, ac-undo-survives-restart, ac-edited-by screenshot for the operator). Fix only the drive itself; a failing criterion is a defect in the task that built it and goes back there.",
+      "description": "Run scripts/drive/dashboard_edit_drive.py against the finished feature on the dedicated trial Hub and record its evidence: every criterion passing, including those needing the tools and the screen together (ac-ask-to-change, ac-undo, ac-undo-none, ac-undo-survives-restart, the ac-edited-by screenshots for the operator). Fix only the drive; a failing criterion goes back to the task that built it.",
       "files": [
         "scripts/drive/dashboard_edit_drive.py"
       ],
       "from": null,
       "key": "run-acceptance-drive",
       "requirements": [
-        "which-dashboard"
+        "which-dashboard",
+        "undo-one-step",
+        "ask-to-change"
       ],
       "reviewer": null,
       "title": "Run the acceptance drive against the built feature"
+    },
+    {
+      "depends_on": [],
+      "description": "ac-ambiguous (FR-2) failed in 1 of 3 runs of scripts/drive/dashboard_edit_drive.py (run 20261114-040540): given 'Add a panel counting runs to the team health dashboard.' with 'Team health North' and 'Team health South' both present, the Haiku agent asked nothing and edited Team health North (its DB row: version 2, edited_by 'amb-both'); amb-unnamed likewise edited Weekly delivery. Today the only guard is _refuse_after_unanswered_question (hub/hub/api/v1/dashboards.py:731), which fires only after the agent has asked; an agent that guesses without asking is not stopped, and the edit_dashboard docstring (hub/hub/mcp_server.py:1056) is advice a model can ignore. Make FR-2's ambiguity handling hold deterministically, not by the model's compliance: e.g. a write must carry the dashboard the request named (the `dash-...` id or exact name), checked by the Hub against what the run's request named, and refused otherwise; or another mechanism the builder chooses that makes a guess unable to land. Then run the drive's ac-ambiguous at least 3 times in a row and have all pass.",
+      "files": [
+        "hub/hub/api/v1/dashboards.py",
+        "hub/hub/mcp_server.py",
+        "hub/tests/test_dashboards.py"
+      ],
+      "from": null,
+      "key": "ambiguous-request-never-writes",
+      "requirements": [
+        "which-dashboard"
+      ],
+      "reviewer": null,
+      "title": "An ambiguous dashboard request never writes, whatever the agent does"
     }
   ],
   "title": "Change a dashboard by asking"

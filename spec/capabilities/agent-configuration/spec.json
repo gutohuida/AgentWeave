@@ -23,13 +23,6 @@
     },
     {
       "given": "an agent",
-      "key": "ac4",
-      "requirement": "configuration-sections-are-named-for-operator-intent",
-      "then": "the sections are Identity, Execution, Charter, Interaction, Context, Access and Workspace, and checkpointing is in Context",
-      "when": "its configuration is opened"
-    },
-    {
-      "given": "an agent",
       "key": "ac5",
       "requirement": "an-agent-carries-a-description-written-for-the-operator",
       "then": "the first is stored trimmed and returned with the summary; the second leaves no description; neither changes the agent's turn context",
@@ -274,23 +267,23 @@
       "FR-12": "78c847d3537e694b8329e223cab628fa1e0d2ef1fe9f8263c469abf2f11d914b",
       "FR-13": "e362b92349b1d3b246e8f959c804a97580477f80b1773a5a67c678a3bb78784a",
       "FR-14": "7d50db5ef6aeaa4fd1b59ad258c22f3db3ea74dce82356c3b0700f1aaf060120",
-      "FR-15": "6a3c8d220fdc95d9ada3c15ee423ced08bd057c4b422e101ff2e245c543e0201",
+      "FR-15": "ccb38b976327867c1b1d1f684a27e9d275a0fc4f01f9b06c4a0db741c0111977",
       "FR-16": "8278c53444b1afde0d80457bd8d5f97bbd47462f4e73120dd9df0467428f8edf",
       "FR-17": "1893f6ee9d659de39e532f07868df75f89c39625628137305907819f0ab718c6",
-      "FR-18": "046fb23d871662a32ba004569dff2202580f00d3b7fcf3b3ff377373e3cc24c4",
+      "FR-18": "e4f3ffbf635b6fbc08f563b4d1c97d50272aeae5aab5a68d823cad7267432733",
       "FR-19": "f121c9e4dfdee131920928b547969f122094af8c9fa7240f4e99c1d3e12a9f7e",
-      "FR-20": "e71b2d6c077ecccbe96fc0f882ca91c8184ab111e8ae5c133714be931c1a11ae",
+      "FR-20": "905585f794c6cb48691dc1080aa584079e745721d3f646e74c9353ef37b5fe33",
       "FR-21": "5d166072cb34f1ab95550611246ba727e57b1974085ddf92e166d74b158d61a0",
       "FR-22": "9ea8b0597c1e832cda613c58da952e62f9f0f28632035ac456f21b43d7ce39a1",
-      "FR-23": "80472f2bb9a64dbccab0b41ad657358db070b108c4f4de1efc0658da47b1cebf",
+      "FR-23": "2effec19dc3b10fb10a39937ba51283deb81885f1e57385b4be4836baf5298f4",
       "FR-24": "d6c96fa62156c18378ef807862bb83812f43b14a594fa0d012c81e4c66b0ed2a",
       "FR-25": "da8e3265d29b7cb60502697099bee0ec6aba5d9a01742e7b9495b29279536a4e",
       "FR-26": "c09cbd0c83ccb281804a6e8b88f9ce3363480937dc0eed377ab7c52de1a8d2c4",
       "FR-27": "9acd25fab59e8e4364871c9ffa21ceb4451abc108ba52e51485af5113718d6f6",
       "FR-28": "daf4c6069a97964d47444d881411a3e278cd4fdb2af05a0e20d3036fb61dc769",
       "FR-29": "01d5d1f1d31325318cf117b33f5589e383d2e15146c7be228cdd07ddcbb634ed",
-      "FR-30": "c68022117d5d56d0209dd5c66150051de5964e86c822899099f57c329c703f31",
-      "FR-31": "da119286bff6da5ab5a41909a563cc05f30fa54646ec417a085a1b92780a4f39",
+      "FR-30": "538550d5268a732a5269a0e7cc59b76fe9510d42ccb812c6993e3ad2752d55b0",
+      "FR-31": "3e33f3aaec75aa42676dcc65f812c7f9795e9a65bae41b54cfbd53d1832bfc77",
       "FR-32": "d78817ec16968b4f8d1674d4ba46c4744fe190850313540138a95ee72809cf90",
       "FR-33": "303c2e83dd33912f50194c7ef8844366d86685efd590110a63fdd304e8c76f30",
       "FR-34": "bb79b93beb11f58317274021e11c1a3917437ac28b4663d9a93b4a006ed789f3",
@@ -310,7 +303,6 @@
       "an-agent-that-will-run-but-cannot-collaborate-shall-say-so-w": "FR-37",
       "configuration-is-separated-from-observation": "FR-13",
       "configuration-navigation-replaces-the-surrounding-navigation": "FR-12",
-      "configuration-sections-are-named-for-operator-intent": "FR-14",
       "copilot-s-built-in-github-server-is-off-unless-the-operator-": "FR-23",
       "how-long-an-agent-waits-for-the-operator-is-a-per-agent-sett": "FR-36",
       "n1": "FR-24",
@@ -327,6 +319,7 @@
     },
     "retired": {
       "an-agent-with-no-way-to-be-launched-shall-say-so-and-shall-n": "FR-21",
+      "configuration-sections-are-named-for-operator-intent": "FR-14",
       "n12": "FR-35",
       "n5": "FR-28"
     }
@@ -344,7 +337,6 @@
   },
   "hub": {
     "phase": "current",
-    "rigor": "sketch",
     "size": null,
     "step": null
   },
@@ -375,18 +367,11 @@
       "statement": "An agent's configuration SHALL NOT present live observations (status, latest status message, last-seen time), which stay with the agent's conversation, and no setting SHALL be editable from more than one surface; provider sessions MAY appear only as diagnostic detail in the Workspace section."
     },
     {
-      "key": "configuration-sections-are-named-for-operator-intent",
-      "modal": "SHALL",
-      "party": null,
-      "rationale": "Sections named for intent let later settings be added without restructuring; checkpointing lives in Context and read grants in Access.",
-      "statement": "An agent's configuration SHALL be divided into the sections Identity, Execution, Charter, Interaction, Context, Access and Workspace, and no section SHALL be named for a concept the product no longer has."
-    },
-    {
       "key": "an-agent-carries-a-description-written-for-the-operator",
       "modal": "SHALL",
       "party": null,
       "rationale": "The charter is where behaviour is stated; a second behaviour-shaping field would leave two places to look when an agent acts wrongly. \"Cleared\" and \"never written\" are one state.",
-      "statement": "An agent SHALL carry an optional description of at most 256 characters, edited in Identity and returned with the agent's summary, stored trimmed with a blank value stored as none, and never injected into any turn's context."
+      "statement": "An agent SHALL carry an optional description of at most 256 characters, edited in the Agent section and returned with the agent's summary, stored trimmed with a blank value stored as none, and never injected into any turn's context."
     },
     {
       "key": "an-agent-is-archived-rather-than-deleted",
@@ -442,7 +427,7 @@
       "modal": "SHALL",
       "party": null,
       "rationale": "Runs no operator starts still need a posture the operator chose.",
-      "statement": "An agent SHALL carry an optional default permission posture, chosen in Execution from the postures the catalog's providers declare with the same labels, applied to any run whose conversation has not chosen one (including peer- and schedule-started runs), and overridden by a conversation's own choice."
+      "statement": "An agent SHALL carry an optional default permission posture, chosen in the Permissions section from the postures the catalog's providers declare with the same labels, applied to any run whose conversation has not chosen one (including peer- and schedule-started runs), and overridden by a conversation's own choice."
     },
     {
       "key": "n6",
@@ -463,21 +448,21 @@
       "modal": "SHALL",
       "party": null,
       "rationale": "Authority over what merges is the operator's to give, and is not a kind of reading; an enforced capability settable nowhere is a refusal of everyone.",
-      "statement": "The operator SHALL be able to grant and withdraw an agent's authority to accept or reject requirement evidence (`can_accept_evidence`), shown in Access apart from the read grants, stating that a granted agent still cannot accept its own work; with no agent granted, the operator SHALL still be able to decide evidence."
+      "statement": "The operator SHALL be able to grant and withdraw an agent's authority to accept or reject requirement evidence (`can_accept_evidence`), shown in the Permissions section apart from the read grants, stating that a granted agent still cannot accept its own work; with no agent granted, the operator SHALL still be able to decide evidence."
     },
     {
       "key": "n7",
       "modal": "SHALL",
       "party": null,
       "rationale": "Reading a summary of a peer's work and reading the raw output behind it are different permissions.",
-      "statement": "The operator SHALL be able to grant and withdraw an agent's read grants `can_read_checkpoints` and `can_recall` in Access, both closed by default."
+      "statement": "The operator SHALL be able to grant and withdraw an agent's read grants `can_read_checkpoints` and `can_recall` in the Permissions section, both closed by default."
     },
     {
       "key": "n8",
       "modal": "SHALL",
       "party": null,
       "rationale": "How long an agent holds its turn open for the operator is a per-agent choice; validating at the route keeps a nonsense value out of the column a run reads.",
-      "statement": "The Interaction section SHALL let the operator set how long a run waits for a permission decision and for an answer to a question, each a whole number of seconds from 10 to 600 or cleared to the built-in default (the page states 120 s and 240 s), refused with 400 otherwise."
+      "statement": "The Running section SHALL let the operator set how long a run waits for a permission decision and for an answer to a question, each a whole number of seconds from 10 to 600 or cleared to the built-in default (the page states 120 s and 240 s), refused with 400 otherwise."
     },
     {
       "key": "n9",
@@ -505,7 +490,7 @@
       "modal": "SHALL",
       "party": null,
       "rationale": "That server acts on GitHub as the signed-in operator, outside the agent's workspace, so it is off until the operator turns it on.",
-      "statement": "For an agent bound to a `copilot` runner, the Execution section SHALL offer a GitHub server setting, stored per agent and enabled only when the stored value is `true`, described as giving the agent read-only GitHub tools Copilot runs without asking in every posture and as not governing `gh` in a shell; with it off, the agent's runs SHALL start with Copilot's built-in MCP servers disabled."
+      "statement": "For an agent bound to a `copilot` runner, the Running section SHALL offer a GitHub server setting, stored per agent and enabled only when the stored value is `true`, described as giving the agent read-only GitHub tools Copilot runs without asking in every posture and as not governing `gh` in a shell; with it off, the agent's runs SHALL start with Copilot's built-in MCP servers disabled."
     },
     {
       "key": "how-long-an-agent-waits-for-the-operator-is-a-per-agent-sett",

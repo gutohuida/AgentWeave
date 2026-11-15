@@ -1094,15 +1094,6 @@
     },
     {
       "checked_by": "agent",
-      "given": "a project with tasks in specs A (3 tasks) and B (1 task), 2 tasks with no spec, and an approved spec C with no tasks",
-      "how_to_check": "UI test on the board fed the task list route's payload in the order the route returns it",
-      "key": "the-board-shows-one-spec-no-spec-or-all-ac-picker-lists",
-      "requirement": "the-board-shows-one-spec-no-spec-or-all-scope-picker",
-      "then": "the picker offers All, No spec, A (3) and B (1), not C; after typing it offers only A",
-      "when": "the operator opens the board's scope picker and then types part of A's title"
-    },
-    {
-      "checked_by": "agent",
       "given": "an archived spec A with one completed and one pending task, and spec B with two tasks",
       "how_to_check": "UI test plus a Hub test on the list route's filter",
       "key": "the-board-shows-one-spec-no-spec-or-all-ac-one-spec",
@@ -1127,15 +1118,6 @@
       "requirement": "the-board-shows-one-spec-no-spec-or-all-no-spec-exact",
       "then": "the board shows the two tasks with no spec and nothing else",
       "when": "the operator chooses No spec"
-    },
-    {
-      "checked_by": "agent",
-      "given": "the project from ac-one-spec",
-      "how_to_check": "UI test",
-      "key": "the-board-shows-one-spec-no-spec-or-all-ac-all",
-      "requirement": "the-board-shows-one-spec-no-spec-or-all-all-unchanged",
-      "then": "B's two tasks and A's pending task show, and A's completed task does not",
-      "when": "the operator chooses All"
     },
     {
       "checked_by": "agent",
@@ -1226,6 +1208,267 @@
       "requirement": "a-red-main-does-not-hold-the-night-sweep-starts-what-was-missed",
       "then": "an entry is queued for the first and none for the second",
       "when": "stalls.sweep runs"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a task in a running flow, completed",
+      "how_to_check": "Hub test through PATCH /tasks/{id}",
+      "key": "tasks-outside-a-flow-move-freely-ac-flow-unchanged",
+      "requirement": "tasks-outside-a-flow-move-freely-loose-defined",
+      "then": "the move is refused as it is today",
+      "when": "the operator asks to approve it directly"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a hand-created pending task linked to a spec requirement and in no flow or loop",
+      "how_to_check": "Hub test through PATCH /tasks/{id}",
+      "key": "tasks-outside-a-flow-move-freely-ac-spec-linked-loose",
+      "requirement": "tasks-outside-a-flow-move-freely-loose-defined",
+      "then": "the move succeeds",
+      "when": "the operator cancels it"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a loose pending task",
+      "how_to_check": "Hub test",
+      "key": "tasks-outside-a-flow-move-freely-ac-any-move",
+      "requirement": "tasks-outside-a-flow-move-freely-operator-any-move",
+      "then": "every move succeeds and the history lists four operator moves",
+      "when": "the operator moves it to completed, then to pending, then cancels it, then reopens it"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a loose completed task, one operator-initiated run and one flow-fired run",
+      "how_to_check": "Hub test over the MCP update_task path with both run kinds",
+      "key": "tasks-outside-a-flow-move-freely-ac-piloted",
+      "requirement": "tasks-outside-a-flow-move-freely-piloted-agent",
+      "then": "the operator-initiated run succeeds and the flow-fired run is refused",
+      "when": "each asks update_task to approve it"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a loose completed task with no reviewer",
+      "how_to_check": "Drive on trial Hub :8010 with a Haiku-built task",
+      "key": "tasks-outside-a-flow-move-freely-ac-approve-lands",
+      "requirement": "tasks-outside-a-flow-move-freely-approve-without-review",
+      "then": "it enters the landing queue and its checks run before it reaches main",
+      "when": "the operator approves it"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a loose task completed while D held it",
+      "how_to_check": "Hub test",
+      "key": "tasks-outside-a-flow-move-freely-ac-send-back",
+      "requirement": "tasks-outside-a-flow-move-freely-send-back-direct",
+      "then": "it is revision_needed and held by D, not A",
+      "when": "a piloted run of agent A sends it back"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a loose task held by D",
+      "how_to_check": "Hub test",
+      "key": "tasks-outside-a-flow-move-freely-ac-mover",
+      "requirement": "tasks-outside-a-flow-move-freely-mover-not-holder",
+      "then": "D still holds it",
+      "when": "the operator moves it to completed without naming a holder"
+    },
+    {
+      "checked_by": "agent",
+      "given": "loose pending task B and task A, whose work landed at commit X",
+      "how_to_check": "Hub test reading task_check_runs and runs for B",
+      "key": "tasks-outside-a-flow-move-freely-ac-done-elsewhere",
+      "requirement": "tasks-outside-a-flow-move-freely-close-done-elsewhere",
+      "then": "B's stage is 'on main' at X, and no check run or review was started for B",
+      "when": "B is closed as done elsewhere by A"
+    },
+    {
+      "checked_by": "agent",
+      "given": "task A approved but not landed",
+      "how_to_check": "Hub test",
+      "key": "tasks-outside-a-flow-move-freely-ac-done-elsewhere-refused",
+      "requirement": "tasks-outside-a-flow-move-freely-close-done-elsewhere",
+      "then": "it is refused, saying A is not on main",
+      "when": "B is closed as done elsewhere by A"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a loose in-progress task",
+      "how_to_check": "Hub test",
+      "key": "tasks-outside-a-flow-move-freely-ac-cancel",
+      "requirement": "tasks-outside-a-flow-move-freely-close-cancelled",
+      "then": "its stage is 'closed without landing', the reason shows, and nothing is queued to land",
+      "when": "the operator cancels it with reason 'not needed'"
+    },
+    {
+      "checked_by": "agent",
+      "given": "four loose tasks selected, one of them in a flow",
+      "how_to_check": "UI component test plus a drive on :8010",
+      "key": "tasks-outside-a-flow-move-freely-ac-several",
+      "requirement": "tasks-outside-a-flow-move-freely-close-several",
+      "then": "three close and the flow task is named as refused, with its reason",
+      "when": "the operator closes them as done elsewhere by AW-80"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a loose completed task and a completed task in a flow",
+      "how_to_check": "UI component test fed the moves route's real answer",
+      "key": "tasks-outside-a-flow-move-freely-ac-offered",
+      "requirement": "tasks-outside-a-flow-move-freely-moves-offered",
+      "then": "the loose one offers approve, send back, close as done elsewhere and cancel; the flow one offers only what its rules allow",
+      "when": "the operator opens each drawer"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a flow-built document with two tasks on a disposable Hub, where the second task's work fails the project's checks on main",
+      "how_to_check": "e2e drive on a disposable Hub (never :8000/:8010): approve both, wait for the landing batch, read GET builds and the Running panel; fails on master today because the build reads finished after the second approval",
+      "key": "work-is-done-when-it-has-landed-on-master-not-when-it-i-ac-drive",
+      "requirement": "work-is-done-when-it-has-landed-on-ma-build-finishes-when-landed",
+      "then": "the first task lands and counts as done, the second is sent back, the build is still running, the flow is still enabled, and the Running tab lists the build with the second task as sent back and its reason",
+      "when": "both tasks are approved and landing runs"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an approved task whose landing is queued",
+      "how_to_check": "hub test driving a task through approve then a landed landing, asserting done before and after",
+      "key": "work-is-done-when-it-has-landed-on-master-not-when-it-is-ac-done",
+      "requirement": "work-is-done-when-it-has-landed-on-master-not-whe-done-is-landed",
+      "then": "it is not done; after its landing lands it is done",
+      "when": "its done state is read"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an approved task",
+      "how_to_check": "hub test: land a task, assert done and no new task_transition row; assert the status enum is unchanged",
+      "key": "work-is-done-when-it-has-landed-on-master-not-when-it-ac-no-step",
+      "requirement": "work-is-done-when-it-has-landed-on-master-not-when-i-no-new-step",
+      "then": "the task is done with no further transition, click or run, and the set of task statuses is unchanged",
+      "when": "its landing lands"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a build of three tasks: one landed, one approved and queued for landing, one in progress",
+      "how_to_check": "hub test on the builds list route",
+      "key": "work-is-done-when-it-has-landed-on-master-not-when-i-ac-progress",
+      "requirement": "work-is-done-when-it-has-landed-on-master-progress-counts-landed",
+      "then": "done is 1, landing is 1, total is 3",
+      "when": "its progress is read"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a flow set to stop when its queue empties, whose every task is approved but one has not landed",
+      "how_to_check": "hub scheduler test",
+      "key": "work-is-done-when-it-has-landed-on-master-not-when-it-is-ac-flow",
+      "requirement": "work-is-done-when-it-has-landed-on-master-flow-stops-when-landed",
+      "then": "it does not stop; once that task lands, the next firing stops it",
+      "when": "the flow fires"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a running build with an approved task sent back by landing",
+      "how_to_check": "UI test feeding the route's real payload order, plus the acceptance drive's screenshot",
+      "key": "work-is-done-when-it-has-landed-on-master-not-when-it-ac-running",
+      "requirement": "work-is-done-when-it-has-landed-on-master-running-shows-landing",
+      "then": "the build is listed and the task shows 'sent back' with the landing's reason",
+      "when": "the operator opens the Running tab"
+    },
+    {
+      "checked_by": "agent",
+      "given": "two approved tasks, one landed and one waiting to land",
+      "how_to_check": "UI component test",
+      "key": "work-is-done-when-it-has-landed-on-master-not-when-it-is-ac-card",
+      "requirement": "work-is-done-when-it-has-landed-on-mast-board-card-shows-landing",
+      "then": "the cards read differently and the unlanded one names its landing state",
+      "when": "the board renders them"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a build stored as finished whose approved task has a not_landed landing",
+      "how_to_check": "hub test seeding the old state",
+      "key": "work-is-done-when-it-has-landed-on-master-not-when-it-is-ac-old",
+      "requirement": "work-is-done-when-it-has-landed-on-maste-already-finished-builds",
+      "then": "the build reads running and appears in Running",
+      "when": "the Hub next evaluates it"
+    },
+    {
+      "checked_by": "agent",
+      "given": "one build landing as a pull request and one landing nowhere, each with an approved task",
+      "how_to_check": "hub test with the PR merge stubbed at the pull_requests seam",
+      "key": "work-is-done-when-it-has-landed-on-master-not-when-it-is-a-ac-pr",
+      "requirement": "work-is-done-when-it-has-landed-on-master-not-wh-no-main-landing",
+      "then": "the PR task is done only after the merge; the lands-nowhere task is done at approval",
+      "when": "their done state is read before and after the PR merges"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a fresh isolated Hub (`--profile`, not :8000) and a small git project with planner, builder and reviewer agents (Haiku)",
+      "how_to_check": "run the acceptance drive script `scripts/drive/quickstart_review_to_merge.py` against an isolated profile; it prints PASS/FAIL and the final task status, reviewer and main-branch log",
+      "key": "a-hand-started-task-reaches-review-and-merge-ac-drive",
+      "requirement": "a-hand-started-task-reaches-review-and-me-the-quickstart-matches",
+      "then": "the task ends `approved` by the reviewer (not the operator), its evidence is accepted, and its commit is on the main branch, with no use of \"Land it\"",
+      "when": "the operator follows the quickstart: ask the planner, Check, Approve, start the builder from the card, and does nothing else"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a `completed` task authored by builder in a project with builder and reviewer",
+      "how_to_check": "component test on TaskCard plus a Hub test asserting the trigger's effect on the task",
+      "key": "a-hand-started-task-reaches-review-and-merge-ac-card-menu",
+      "requirement": "a-hand-started-task-reaches-review-and-merg-review-from-the-card",
+      "then": "it lists \"Review with reviewer\" and not builder; choosing it posts `/agent/trigger` with `review_task_id` and the task moves to `under_review` held by reviewer",
+      "when": "the card's start menu is opened"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a task with a declared checker, in no running build",
+      "how_to_check": "Hub test",
+      "key": "a-hand-started-task-reaches-review-and-merge-ac-auto-declared",
+      "requirement": "a-hand-started-task-reaches-revie-finished-work-finds-a-reviewer",
+      "then": "a review turn by the declared checker starts and the task is `under_review` held by it",
+      "when": "its builder completes it and the checks pass"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a task with no declared checker, in no running build, in a project with an idle agent other than the author",
+      "how_to_check": "Hub test",
+      "key": "a-hand-started-task-reaches-review-and-merge-ac-auto-picked",
+      "requirement": "a-hand-started-task-reaches-revie-finished-work-finds-a-reviewer",
+      "then": "a review turn by that other agent starts",
+      "when": "it completes and the checks pass"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a single-agent project",
+      "how_to_check": "Hub test asserting the stage/reason the task API returns",
+      "key": "a-hand-started-task-reaches-review-and-merge-ac-auto-none",
+      "requirement": "a-hand-started-task-reaches-revie-finished-work-finds-a-reviewer",
+      "then": "no review starts and the task shows that there is no agent other than the author to review it",
+      "when": "its only agent completes a task"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a review staffed without a declared checker",
+      "how_to_check": "Hub test on the story payload plus a component test",
+      "key": "a-hand-started-task-reaches-review-and-merge-ac-picked-visible",
+      "requirement": "a-hand-started-task-reaches-review-a-picked-reviewer-is-visible",
+      "then": "it shows an entry naming the reviewer and saying nobody was declared",
+      "when": "the task's story is read"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a completed task with 4 evidence rows awaiting",
+      "how_to_check": "component test on TaskDetailDrawer",
+      "key": "a-hand-started-task-reaches-review-and-merge-ac-land-confirm",
+      "requirement": "a-hand-started-task-reaches-review-land-it-says-it-skips-review",
+      "then": "a confirmation says it merges without review and that 4 pieces of evidence are unreviewed; Cancel leaves the task and branch untouched; Confirm lands it as today",
+      "when": "the operator presses \"Land it\""
+    },
+    {
+      "checked_by": "agent",
+      "given": "docs/getting-started/quickstart.md",
+      "how_to_check": "read the page; `mkdocs build --strict` passes",
+      "key": "a-hand-started-task-reaches-review-and-merge-ac-docs",
+      "requirement": "a-hand-started-task-reaches-review-and-me-the-quickstart-matches",
+      "then": "they describe the review starting by itself (or \"Review with <agent>\" from the card) and approval merging, and mention \"Land it\" only as the operator's override",
+      "when": "steps 5–6 are read"
     }
   ],
   "algorithms": [],
@@ -1273,6 +1516,30 @@
       "FR-139": "6a896298b40165f46fc212128b54fa37e33992e526a211180c94b69b82adf710",
       "FR-140": "b2aa441b286334788b168732f390d22b32731d66e6ac9fed089d2302d24bcc38",
       "FR-141": "923fd090d1ff1e844ce91c7b6d6401eff99995c1b5a324a338799b1dcd4b6a16",
+      "FR-142": "7ad616a55e12aea966d9e2d02b388060cbddfbfbd5fd5c9c80680cac60149010",
+      "FR-143": "0b8d3d5e03b786e3fc2b0a5ef2cbd1950a85d15902d06473f61cc539fc5f8db1",
+      "FR-144": "1f9e0c5cbb652a4185e95f7ec676040b92596102f5516ebdfe9ec3ccb3d6a283",
+      "FR-145": "2caa23d311332a06076f4e3cc1ca7747fd1b8a8a14232340eb4df00f033fef6e",
+      "FR-146": "980466f569102ad2c8467dcd3428d4752418c4b7ca437a2f27b0fb5fa76827f7",
+      "FR-147": "5a4993f80d8babb3d39e446ad0008e7b3971d2017c9c9a5c929d266816150769",
+      "FR-148": "6dcb3fa22f6fd435dfb39396a3bdaf2ac242db7da548c46c2117fe45fb538946",
+      "FR-149": "34e6d1dd612087bde4b1f981e0b02badb978a71b0481ff98459acb8eb2139215",
+      "FR-150": "99c6fd949cbfd3b3d1b2edd548c541098b198e85ec7d01b34454db561155cf79",
+      "FR-151": "d8124bf6a716e8ccd1ecf91ba4f7cda1f349dbf79d5c8e0283c63f645e2c1f92",
+      "FR-152": "c958851aed67369bfbeafbae1698c6050ed77fe22435944c37df0641d8ea0909",
+      "FR-153": "af805531fbc11cf773891776e89b3414dd1c17e04ea4d3d77fe5710dea6de4ef",
+      "FR-154": "a50eecf0828aa717a44ed8025644f22dddd8783f4d38c8871d564c26a6285720",
+      "FR-155": "55d90667db350c1cc4458c32930e37ca488e6fccdaa5754a0c93728f99a4bc13",
+      "FR-156": "0bf472f214d22dfb16ad8b7540fb6686399b0dbda43ebc5e7f51494e04581604",
+      "FR-157": "c3b8fae10327a6b669e0874f3099ceb6d65da58a686468560695da3aa3d7ba28",
+      "FR-158": "215c1ef4931b0158e5f88c721833a418e96f6ad7aa9678218909caa02f94a17d",
+      "FR-159": "83db274de30cfcca5a1e137b971e6d92408bbfc0a09592b47d7eddf0f80955c6",
+      "FR-160": "38181b82b34dfcd2bad657d6c1604da5edd0442e9b309628699cd05ce6506cf7",
+      "FR-161": "0cdc5b9c700df41de52d0b6ddccf610ff1da917943bd8eadf8844a23bba13c12",
+      "FR-162": "7fe16a827f3dd35bdabf6ddb8a2cc12427d87538deae4aa9d092a37a65184aaf",
+      "FR-163": "ddb9505a7a37f7e4ded724de204cafe0750b04256eb4211f8f684057945b715d",
+      "FR-164": "2c0564f3825d4a876a7f80d3599392a7d03726b84d84ec7f4c6d3b1d7340e533",
+      "FR-165": "34d86f1496419df322cb1672742379e9620da1383bfc29230bbd1ad7fde0d0ed",
       "FR-33": "7c740474881186d7a0e928ab0150619be41407ca2768ef98b31ee72ba673aef9",
       "FR-34": "8a8faac0eea8d9531c99a6f9bc479c464c90c9eee149933bce352537b1e5a451",
       "FR-35": "c4e50307b122c0e1381d35e14907fc5c648a211171aaff447c7b90087fb37af2",
@@ -1341,8 +1608,13 @@
       "FR-98": "6fd361c52514449bab9c7e50f5b55ac9ef41f4d90d4ef7c6ad650e916a947525",
       "FR-99": "cb3b52213f3a9755eb9ffb3befd98e80ea6ea1a871fea4c79ea651c4643fea43"
     },
-    "high_water": 141,
+    "high_water": 165,
     "requirements": {
+      "a-hand-started-task-reaches-revie-finished-work-finds-a-reviewer": "FR-162",
+      "a-hand-started-task-reaches-review-a-picked-reviewer-is-visible": "FR-163",
+      "a-hand-started-task-reaches-review-and-me-the-quickstart-matches": "FR-165",
+      "a-hand-started-task-reaches-review-and-merg-review-from-the-card": "FR-161",
+      "a-hand-started-task-reaches-review-land-it-says-it-skips-review": "FR-164",
       "a-move-a-scheduled-firing-makes-is-recorded-as-that-firing-s": "FR-82",
       "a-red-main-does-not-hold-the-nigh-assigned-outside-a-flow-starts": "FR-140",
       "a-red-main-does-not-hold-the-night-rerun-on-its-own": "FR-139",
@@ -1391,14 +1663,22 @@
       "some-transitions-are-the-operator-s-alone": "FR-36",
       "status-sets-are-derived-from-the-classification-not-listed-i": "FR-71",
       "task-status-moves-only-along-declared-transitions": "FR-33",
+      "tasks-outside-a-flow-move-freely-approve-without-review": "FR-145",
+      "tasks-outside-a-flow-move-freely-close-cancelled": "FR-149",
+      "tasks-outside-a-flow-move-freely-close-done-elsewhere": "FR-148",
+      "tasks-outside-a-flow-move-freely-close-several": "FR-150",
+      "tasks-outside-a-flow-move-freely-loose-defined": "FR-142",
+      "tasks-outside-a-flow-move-freely-mover-not-holder": "FR-147",
+      "tasks-outside-a-flow-move-freely-moves-offered": "FR-151",
+      "tasks-outside-a-flow-move-freely-operator-any-move": "FR-143",
+      "tasks-outside-a-flow-move-freely-piloted-agent": "FR-144",
+      "tasks-outside-a-flow-move-freely-send-back-direct": "FR-146",
       "the-board-shows-one-spec-no-spec-or-al-spec-page-opens-its-scope": "FR-138",
-      "the-board-shows-one-spec-no-spec-or-all-all-unchanged": "FR-133",
       "the-board-shows-one-spec-no-spec-or-all-combines-with-filters": "FR-135",
       "the-board-shows-one-spec-no-spec-or-all-no-spec-exact": "FR-132",
       "the-board-shows-one-spec-no-spec-or-all-one-spec-exact": "FR-131",
       "the-board-shows-one-spec-no-spec-or-all-remembers-scope": "FR-136",
       "the-board-shows-one-spec-no-spec-or-all-says-what-it-shows": "FR-134",
-      "the-board-shows-one-spec-no-spec-or-all-scope-picker": "FR-130",
       "the-board-shows-one-spec-no-spec-or-all-task-list-overrides": "FR-137",
       "the-operator-can-delete-a-document-a-task-or-an-archived-ag-task": "FR-89",
       "the-operator-can-perform-every-transition-reserved-to-them": "FR-35",
@@ -1418,6 +1698,15 @@
       "tickets-have-readable-ids-old-ids-resolve": "FR-125",
       "tickets-have-readable-ids-shown-everywhere": "FR-127",
       "tickets-have-readable-ids-unique-never-reused": "FR-119",
+      "work-is-done-when-it-has-landed-on-ma-build-finishes-when-landed": "FR-154",
+      "work-is-done-when-it-has-landed-on-mast-board-card-shows-landing": "FR-158",
+      "work-is-done-when-it-has-landed-on-maste-already-finished-builds": "FR-159",
+      "work-is-done-when-it-has-landed-on-master-flow-stops-when-landed": "FR-156",
+      "work-is-done-when-it-has-landed-on-master-not-wh-no-main-landing": "FR-160",
+      "work-is-done-when-it-has-landed-on-master-not-whe-done-is-landed": "FR-152",
+      "work-is-done-when-it-has-landed-on-master-not-when-i-no-new-step": "FR-153",
+      "work-is-done-when-it-has-landed-on-master-progress-counts-landed": "FR-155",
+      "work-is-done-when-it-has-landed-on-master-running-shows-landing": "FR-157",
       "work-that-proceeded-without-an-answer-says-so-for-good": "FR-76"
     },
     "retired": {
@@ -1451,6 +1740,8 @@
       "re-approving-an-amended-document-refreshes-its-open-tasks-report": "FR-92",
       "starting-work-is-gated-on-its-prerequisites-and-the-gate-liv": "FR-67",
       "the-approval-preview-says-whether-the-work-would-merge-clean": "FR-85",
+      "the-board-shows-one-spec-no-spec-or-all-all-unchanged": "FR-133",
+      "the-board-shows-one-spec-no-spec-or-all-scope-picker": "FR-130",
       "the-operator-may-approve-over-failing-checks-with-a-recorded": "FR-87",
       "work-already-in-the-main-line-is-not-reported-as-merged": "FR-53",
       "work-that-no-evidence-governs-is-integrated-from-the-task-s-": "FR-77"
@@ -1929,13 +2220,6 @@
       "statement": "After the migration, every existing task holds a readable id numbered in creation order within its acronym, and nothing else about it has changed. A task whose spec no longer exists takes the project's acronym."
     },
     {
-      "key": "the-board-shows-one-spec-no-spec-or-all-scope-picker",
-      "modal": "MUST",
-      "party": null,
-      "rationale": "27 specs carry tasks in the live project; a list that cannot be narrowed by typing is a scroll hunt.",
-      "statement": "The Tasks board offers a scope of All, No spec, or one spec. The spec choices are every spec in the project that has at least one task, each shown by title with its number of tasks, and the list narrows as the operator types part of a title."
-    },
-    {
       "key": "the-board-shows-one-spec-no-spec-or-all-one-spec-exact",
       "modal": "MUST",
       "party": null,
@@ -1948,13 +2232,6 @@
       "party": null,
       "rationale": null,
       "statement": "With No spec chosen, the board shows exactly the tasks that belong to no spec, however many tasks the project holds."
-    },
-    {
-      "key": "the-board-shows-one-spec-no-spec-or-all-all-unchanged",
-      "modal": "MUST",
-      "party": null,
-      "rationale": null,
-      "statement": "With All chosen, the board shows the same tasks it shows today, including hiding the completed tasks of archived specs."
     },
     {
       "key": "the-board-shows-one-spec-no-spec-or-all-says-what-it-shows",
@@ -2011,6 +2288,174 @@
       "party": null,
       "rationale": null,
       "statement": "The stall sweep (every 300 s) queues the same turn for any task left assigned outside a flow with no turn queued or delivered for its assignee since it entered assigned, such as one assigned before this change, while the Hub was down, or whose prerequisites have since cleared."
+    },
+    {
+      "key": "tasks-outside-a-flow-move-freely-loose-defined",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Flows rely on their moves to hand work between builder and checker; loosening them there would break the mechanism the operator says works well. A hand-made task written against a spec is still worked by hand, so it gets the hand moves (operator, 2026-11-12).",
+      "statement": "A task is loose when it is not in any flow's or loop's queue, whether or not it is linked to a specification document. The rules that name a loose task apply only to loose tasks; a task in a flow or loop keeps exactly the moves the other rules give it."
+    },
+    {
+      "key": "tasks-outside-a-flow-move-freely-operator-any-move",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "The operator can move a loose task from any status that is not closed to any other status, and can reopen a closed task to pending. Each move is recorded in the task's history with who made it."
+    },
+    {
+      "key": "tasks-outside-a-flow-move-freely-piloted-agent",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The operator directs quick fixes through the agent they are talking to; agents running unattended should not gain the same reach (operator, 2026-11-12).",
+      "statement": "A run started by the operator's own message (an operator-initiated run, one whose turn carries operator input) can make every move on a loose task that the operator can. A run started by a flow, loop or scheduled job cannot. It keeps today's moves."
+    },
+    {
+      "key": "tasks-outside-a-flow-move-freely-approve-without-review",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "For quick fixes the operator or the agent they direct has already tested the work; a mandatory reviewer or skip step is ceremony. The project's checks remain the guard (operator, 2026-11-12).",
+      "statement": "The operator or a piloted run can approve a completed loose task directly, with no reviewer and no recorded skip. Approving still sends it through the project's landing, checks included."
+    },
+    {
+      "key": "tasks-outside-a-flow-move-freely-send-back-direct",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "The operator or a piloted run can send a completed, or approved but not yet landed, loose task straight back to revision. Its holder becomes its builder, never the one who sent it back."
+    },
+    {
+      "key": "tasks-outside-a-flow-move-freely-mover-not-holder",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "Moving a loose task never makes the mover its holder. The holder changes only when the move names a new holder."
+    },
+    {
+      "key": "tasks-outside-a-flow-move-freely-close-done-elsewhere",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Together with approve-and-land (done here) and cancel, this is the complete set of ways a loose task ends (operator, 2026-11-12).",
+      "statement": "A loose task can be closed as 'done elsewhere', naming another task or a commit. It is refused unless the named task's work is on main, or the named commit is on main. Once closed, the task's stage is 'on main' at that commit, and no build, check or review runs for it."
+    },
+    {
+      "key": "tasks-outside-a-flow-move-freely-close-cancelled",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "A loose task can be cancelled from any status that is not closed, with an optional reason. Nothing of it lands, and its stage is 'closed without landing'."
+    },
+    {
+      "key": "tasks-outside-a-flow-move-freely-close-several",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "The operator can select several loose tasks on the board and close all of them in one action, either as done elsewhere by the same task or commit, or as cancelled. A selected task that cannot be closed is named with its reason, and the others still close."
+    },
+    {
+      "key": "tasks-outside-a-flow-move-freely-moves-offered",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "The task drawer offers only the moves the Hub will allow on that task, for whoever is looking, as plain actions. A loose task's actions include approve, send back, close as done elsewhere and cancel."
+    },
+    {
+      "key": "work-is-done-when-it-has-landed-on-master-not-whe-done-is-landed",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Landing can still fail after approval (SPSCT-2 at 11:40, AW-124 at 14:41 on 2026-11-13); calling such work done hides it from the operator.",
+      "statement": "A task counts as done only when it is approved and its work has landed on the project's main branch; an approved task whose landing is queued, being checked, held, or sent back is not done."
+    },
+    {
+      "key": "work-is-done-when-it-has-landed-on-master-not-when-i-no-new-step",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator, 2026-11-13: the landing is the final step and already exists.",
+      "statement": "Reaching done requires no action beyond what landing already does: no new task status, operator click or agent turn is introduced between a landing that lands and the task being done."
+    },
+    {
+      "key": "work-is-done-when-it-has-landed-on-ma-build-finishes-when-landed",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "A build is marked finished only when every one of its tasks is done or rejected; while any approved task in it has not landed, the build stays running."
+    },
+    {
+      "key": "work-is-done-when-it-has-landed-on-master-progress-counts-landed",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "A build's progress counts as done only tasks that are done, and shows approved tasks that have not landed as a separate 'landing' count."
+    },
+    {
+      "key": "work-is-done-when-it-has-landed-on-master-flow-stops-when-landed",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "A flow set to stop when its queue empties stops only once every one of its tasks is done or rejected; a landing that sends a task back finds the flow still running and the task is picked up by its next firing."
+    },
+    {
+      "key": "work-is-done-when-it-has-landed-on-master-running-shows-landing",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "The Running tab lists a build until it is finished, and for each approved task that has not landed shows its landing state (waiting, being checked, held, or sent back with the reason the landing gave)."
+    },
+    {
+      "key": "work-is-done-when-it-has-landed-on-mast-board-card-shows-landing",
+      "modal": "SHOULD",
+      "party": null,
+      "rationale": null,
+      "statement": "A task card on the board distinguishes an approved task that has landed from one that has not, naming the landing state of the latter."
+    },
+    {
+      "key": "work-is-done-when-it-has-landed-on-maste-already-finished-builds",
+      "modal": "SHOULD",
+      "party": null,
+      "rationale": "Otherwise builds that finished under the old rule before the change keep hiding unlanded work.",
+      "statement": "A build already marked finished whose approved tasks include one that has not landed is shown as running again, without operator action, the first time the Hub evaluates it after this change ships."
+    },
+    {
+      "key": "work-is-done-when-it-has-landed-on-master-not-wh-no-main-landing",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator, 2026-11-13: a lands-nowhere build will never merge, so waiting for a merge would keep it running forever.",
+      "statement": "For a task in a build that lands as a pull request, done means the pull request was merged; for a task in a build that lands nowhere, done means approved."
+    },
+    {
+      "key": "a-hand-started-task-reaches-review-and-merg-review-from-the-card",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The label promised a review and delivered a work turn; the review turn is what lets a reviewer decide the evidence and approve.",
+      "statement": "On a task in `completed`, the card's start menu MUST offer each open agent other than the task's author as \"Review with <agent>\", and choosing one MUST start that agent's review turn on the task, moving it to `under_review` with that agent as its reviewer; the author MUST NOT be offered."
+    },
+    {
+      "key": "a-hand-started-task-reaches-revie-finished-work-finds-a-reviewer",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The operator chose \"pick someone and say so\" over refusing approval: a newcomer who skipped naming a checker still gets a review.",
+      "statement": "When a task that belongs to no running build reaches `completed` and its project checks pass, the Hub MUST start a review turn by the task's declared checker if one resolves, otherwise by an open agent other than the author chosen as a build would choose one; when none can be chosen, the task MUST show why (e.g. \"no agent other than the author to review this\") instead of waiting silently."
+    },
+    {
+      "key": "a-hand-started-task-reaches-review-a-picked-reviewer-is-visible",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Choosing silently would read as if somebody had named that reviewer.",
+      "statement": "A review the Hub staffed without a declared checker MUST say so on the task's story, naming the reviewer and that nobody was declared."
+    },
+    {
+      "key": "a-hand-started-task-reaches-review-land-it-says-it-skips-review",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "One click merged unreviewed work during the drive; the operator keeps the power, but knowingly.",
+      "statement": "\"Land it\" MUST ask for confirmation before merging, stating that it merges without a review and, when any of the task's evidence is still awaiting, how many pieces are unreviewed; cancelling MUST change nothing."
+    },
+    {
+      "key": "a-hand-started-task-reaches-review-and-me-the-quickstart-matches",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The quickstart is the first thing a new user follows; it failed on 2026-11-13.",
+      "statement": "The quickstart's review-and-merge step MUST describe the path this change provides, and following it on a fresh install MUST end with the task approved by a reviewing agent and merged."
     }
   ],
   "schema_version": 1,

@@ -1,0 +1,429 @@
+{
+  "acceptance_criteria": [
+    {
+      "checked_by": "agent",
+      "given": "a dashboard with a number, a bar, a stacked bar and a line panel",
+      "how_to_check": "Browser drive on a Hub started from the checkout over a test database (never :8000): sample the computed widths, the line's dash offset and the number element at 0.3 s and 1.5 s",
+      "key": "ac-draw-in",
+      "requirement": "draw-in",
+      "then": "at 0.3 s the panels are part-way in (bars narrower than final, the line partly drawn) and by 1.5 s every mark is at its final position, while the number's element read at any moment holds the final value",
+      "when": "the operator opens it"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an open dashboard whose data changes between runs",
+      "how_to_check": "Browser drive tagging the bar elements before the run and finding the same elements with new widths after",
+      "key": "ac-values-move",
+      "requirement": "values-move",
+      "then": "during each run the charts are dimmed, and afterwards the same bar elements carry the new widths (they were not removed and re-created)",
+      "when": "the operator presses Refresh, and separately an agent saves the same dashboard with one value changed"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an open dashboard of four panels",
+      "how_to_check": "Browser drive with an agent save through the tool, reading each panel's state",
+      "key": "ac-edit-visible",
+      "requirement": "edit-visible",
+      "then": "the removed panel is still on screen marked leaving within 100 ms and gone by 600 ms, the added panel is marked new, and on reopening the dashboard nothing is marked new",
+      "when": "an agent's save removes one panel and adds another"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a bar chart of four labels and a line of six points",
+      "how_to_check": "Browser drive in both themes, with screenshots for the operator",
+      "key": "ac-tooltip",
+      "requirement": "hover-tooltip",
+      "then": "each time a tooltip names that label, series and value and the other marks are dimmed; after moving off there is no tooltip and nothing is dimmed",
+      "when": "the operator hovers the second bar, then a line point, then moves off"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a dashboard whose queries take a second",
+      "how_to_check": "Browser drive with a slowed run response",
+      "key": "ac-skeleton",
+      "requirement": "loading-skeleton",
+      "then": "placeholders show until the panels arrive, and none remain after",
+      "when": "the operator opens it"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a browser asking for reduced motion",
+      "how_to_check": "Browser drive with the reduced-motion preference emulated, reading getAnimations() on the screen",
+      "key": "ac-reduced-motion",
+      "requirement": "reduced-motion",
+      "then": "no element has a running animation or transition, the figures show their final values at once, and the tooltip still shows",
+      "when": "the operator opens a dashboard, refreshes it and hovers a bar"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the agent tool list",
+      "how_to_check": "Hub test over the tools/list output",
+      "key": "ac-guidance",
+      "requirement": "chart-guidance",
+      "then": "it names the kind for each of the five kinds of question and the four shaping rules",
+      "when": "the save tool's description is read"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a project with tasks and runs whose vault was seeded with the data note",
+      "how_to_check": "Hub test running each example through the query service and the drawing check",
+      "key": "ac-examples-draw",
+      "requirement": "worked-examples",
+      "then": "every example returns rows and draws with no warning",
+      "when": "each worked example is run as a panel of its stated kind"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a seeded project and a Haiku agent",
+      "how_to_check": "Drive with a real Haiku turn, then the run route",
+      "key": "ac-first-time-right",
+      "requirement": "first-time-right",
+      "then": "the saved dashboard has panels of the five kinds and opening it shows no error and no drawing warning on any panel",
+      "when": "it is asked for 'a dashboard with this week's cost as one figure, cost per spec, send-backs per model by reason, runs per day, and the latest failed runs'"
+    }
+  ],
+  "algorithms": [],
+  "already_built": {
+    "built": false,
+    "commits": [],
+    "note": ""
+  },
+  "aw_identity": {
+    "digests": {
+      "FR-1": "1cdda88247788580b6b8253d2d38b8daf652398eb28c60b29f48270ba49f0c8b",
+      "FR-2": "fd30426ca53d276c2da912b70114ec89df7a43e33c698b9e4ea31bf29462c8aa",
+      "FR-3": "5a47f0ccaa69c54d161d9bbebcde615864783b7f6e4484a499f74c17cfb741e5",
+      "FR-4": "0af891377e1db84bb335b8fe442aa30aa744c1a23f8979c87a759bfa3c893be7",
+      "FR-5": "bbe5f2af1bdbd177f0b8568705bd93ee4d39ea1dabf4cdde782055cb84609aad",
+      "FR-6": "9d1a000d9a1986392ad8208d6d69a5cd9e6ec48de351f676344c158b4cb1371f",
+      "FR-7": "f7e636855b99803f3412ef26ae8a2ca9d0d310aade74d7744f9054f09aa37e23",
+      "FR-8": "da5bf02765bd8238f6303f98a3b8248a2add7f2e17bb8e64280238db1ef4a4e6",
+      "FR-9": "973c113b50d483d8af8778e8c758993c2bb096af662b6b0075ac1fce5d954faa"
+    },
+    "high_water": 9,
+    "requirements": {
+      "chart-guidance": "FR-7",
+      "draw-in": "FR-1",
+      "edit-visible": "FR-3",
+      "first-time-right": "FR-9",
+      "hover-tooltip": "FR-4",
+      "loading-skeleton": "FR-5",
+      "reduced-motion": "FR-6",
+      "values-move": "FR-2",
+      "worked-examples": "FR-8"
+    },
+    "retired": {}
+  },
+  "capabilities": {
+    "changes": [
+      "spec/capabilities/project-dashboards/spec.json"
+    ],
+    "creates": []
+  },
+  "delivery": {
+    "agent": "Developer",
+    "builder": "Developer",
+    "checker": "QA2",
+    "cron": "*/5 * * * *",
+    "mode": "flow",
+    "reasons": {
+      "agent": "Developer built slice 1's screen.",
+      "builder": "The motion task is now tests over existing components; the guidance task names DeveloperOpus2.",
+      "checker": "QA2 drives the browser; QA checks the drive and the tool guidance.",
+      "cron": "Flows' usual cadence.",
+      "mode": "Drive, two independent tasks in parallel, drive green: a short flow.",
+      "stop": "Stops when its four tasks are done."
+    },
+    "reviewer": null,
+    "stop_at": null,
+    "stop_when_queue_empties": true
+  },
+  "design": "Tier 1: UI motion and agent guidance; no migration, no route or data change, no Hub-restart hazard (the guidance is a tool description and a seeded note).\n\nDecisions (operator-approved 2026-11-14 where marked):\n- Still no charting library (operator, 2026-11-14). The motion is CSS on the app's --ease and --dur-* tokens plus a little React in the existing components, so both themes and colours stay as they are.\n- The motion is merged to master ahead of this document (operator, 2026-11-14, commit 5a9d179): hub/ui/src/styles/dashboards.css, PanelChart.tsx (ChartFrame tooltip, count-up drawn over the real figure), usePanelPresence.ts (new and leaving panels), DashboardsView.tsx (stagger, refreshing dim, skeleton), with the UI bundle rebuilt. The motion task is therefore tests against what is there, fixing only what they find; it does not rebuild the components.\n- An agent's save already re-runs an open dashboard: the dashboard_saved event invalidates ['project', pid, 'dashboards'] (hub/ui/src/hooks/useSSE.ts), a prefix of the run's key, and the screen passes isFetching as refreshing; values-move and edit-visible ride on that.\n- Agents never choose visual detail: guidance is about which kind and how to shape the query, never colours or motion.\n- Guidance lives in the save tool's description (read every time the tool is offered) and the worked examples in the seeded data note (hub/hub/data_notes.py), where agents already go for the data's meaning.\n\nSlice change-a-dashboard-by-asking has landed (CDA, 2026-11-14), so there is no remaining file overlap with it; the guidance task edits the save tool's description as that slice left it.\n\nCURRENT  (master 5a9d179) motion present, proven by one mock drive only; agents get no chart-choice guidance\nPROPOSED motion pinned by component tests and an acceptance drive; agents guided and checked by a real Haiku turn",
+  "evidence": {
+    "checked": [
+      "Motion merged to master as 5a9d179 (2026-11-14) on top of slice 2; tsc and eslint clean, hub/ui/src/__tests__/dashboardsView.test.tsx 9 of 9, scripts/refresh_ui_bundle.py --check passes",
+      "Mock driven on 2026-11-14 at localhost:5200: stagger, draw-in mid-animation, tooltip text and 0.35 dimming of other bars, refreshing class, leaving then new panel states, no console errors in both themes; under emulated reduced motion the panel animation is none and no count overlay renders",
+      "Save tool guidance today: hub/hub/mcp_server.py save_dashboard; drawing check: hub/hub/api/v1/dashboards.py drawing_warning; seeded data note: hub/hub/data_notes.py",
+      "An agent's save re-runs an open dashboard: hub/ui/src/hooks/useSSE.ts invalidates the dashboards prefix"
+    ],
+    "limits": [
+      "The existing 9 component tests predate the motion's presence and reduced-motion behaviour and do not pin them",
+      "The acceptance drive is proposed coverage, not yet written or run; the motion was driven only on the mock, not the app over a real Hub",
+      "Whether a Haiku agent gets every kind right with the guidance is the question ac-first-time-right answers; not tried yet",
+      "CSS transitions of SVG d, cx and cy are Chromium behaviours; the app's window is Chromium-based, other browsers may jump instead of slide"
+    ]
+  },
+  "hub": {
+    "builds": [
+      {
+        "budget_cap_usd": null,
+        "builder": "DeveloperOpus2",
+        "builders": [
+          "DeveloperOpus2",
+          "Developer"
+        ],
+        "checker": "QA2",
+        "checkers": [],
+        "chosen_by": "operator",
+        "driver": "flow",
+        "ended_at": "2026-11-15T01:10:54.527790+00:00",
+        "id": "build-177cb9731586",
+        "landing": "main",
+        "lead": null,
+        "level": "reviewed",
+        "pull_request": null,
+        "started_at": "2026-11-14T11:42:12.881706+00:00",
+        "state": "finished",
+        "stop_reason": null,
+        "tasks": {
+          "acceptance-drive": {
+            "builder": "DeveloperOpus2",
+            "checker": "QA"
+          },
+          "first-time-right-guidance": {
+            "builder": null,
+            "builder_default": true,
+            "checker": null
+          },
+          "guidance": {
+            "builder": "DeveloperOpus2",
+            "checker": "QA"
+          },
+          "motion": {
+            "builder": "Developer",
+            "checker": "QA2"
+          },
+          "run-acceptance-drive": {
+            "builder": "DeveloperOpus2",
+            "checker": "QA"
+          },
+          "task-ff8f9dc73e14": {
+            "builder": null,
+            "builder_default": true,
+            "checker": null
+          }
+        },
+        "window_end": null,
+        "window_start": null
+      }
+    ],
+    "phase": "approved",
+    "size": "small",
+    "step": "build"
+  },
+  "kind": "change-spec",
+  "lifecycle": "",
+  "open_questions": [
+    {
+      "question": "Does the mock's motion feel right? Answer (operator, 2026-11-14): approved.",
+      "resolved": true
+    },
+    {
+      "question": "Is this a third slice of the dashboards roadmap? The roadmap is approved and lists two slices; adding this one there is the operator's (or spec-admin's) act, so this document does not name the roadmap until it holds the slice.",
+      "resolved": true
+    },
+    {
+      "question": "Merge the motion before this document is approved? Answer (operator, 2026-11-14): merge now; this slice is reduced to tests, the drive and the guidance.",
+      "resolved": true
+    }
+  ],
+  "problem": "Slice first-dashboard (shipped 2026-11-13) drew its five chart kinds with SVG and CSS and no motion. The operator asked on 2026-11-14 for more finish and approved the mock; the operator then had the mock's motion merged to master as 5a9d179 (2026-11-14) ahead of this document, so the motion exists but is covered only by the slice-1 component tests and one mock drive. Separately, agents get the five kinds and the label-then-numbers rule (save_dashboard, hub/hub/mcp_server.py) but no word on which kind suits which question, or that bars draw in query order, that a long bar list stops being readable, or that column names become the legend and tooltip labels. Nothing tells an agent a panel will not draw until the operator opens it (drawing_warning runs only on the run route, hub/hub/api/v1/dashboards.py).",
+  "requirements": [
+    {
+      "key": "draw-in",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Tests, drives and screen readers read the page; a count-up must not make them read a wrong figure.",
+      "statement": "On opening a dashboard, its panels appear one after another, bars grow from their start, lines trace from left to right, points appear after their line, and a number counts up to its value, all within 1.5 seconds; throughout, the number's element holds its real value, and no figure read from the page is ever a mid-animation value."
+    },
+    {
+      "key": "values-move",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "When an open dashboard's queries run again (Refresh, or an agent saving that dashboard), its charts dim while the queries run and then bars, lines and points move to their new values rather than the panel being redrawn from empty."
+    },
+    {
+      "key": "edit-visible",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Shows the operator what an agent's change did without comparing before and after by eye.",
+      "statement": "When the open dashboard gains a panel, that panel is marked once as new as it appears; when it loses one, that panel fades out where it was before it is gone; on first opening a dashboard no panel is marked new."
+    },
+    {
+      "key": "hover-tooltip",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "Hovering a bar segment or a line point shows a tooltip in the app's own style naming the point's label, its series and its value, and dims the other marks of that chart; leaving the mark removes both."
+    },
+    {
+      "key": "loading-skeleton",
+      "modal": "SHOULD",
+      "party": null,
+      "rationale": null,
+      "statement": "While a dashboard's queries first run, placeholders shaped like its panels shimmer where the panels will be, instead of a line of text."
+    },
+    {
+      "key": "reduced-motion",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "When the system asks for reduced motion, nothing on the Dashboards screen animates: panels, charts and numbers appear at their final state at once, and the tooltip and dimming still work."
+    },
+    {
+      "key": "chart-guidance",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "The save tool's guidance tells an agent which kind suits which question (one figure: number; a ranking or comparison: bar; parts of a whole across labels: stacked bar; change over time: line; detail rows: table), and how to shape a query to read well: order rows as they should be drawn, keep bar charts to about 15 labels by taking the top ones, put time in order for a line, and alias columns to the readable names the legend and tooltip will show."
+    },
+    {
+      "key": "worked-examples",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "An example that does not draw teaches the wrong thing; each is checked by running it.",
+      "statement": "The data note every project's vault is seeded with carries one worked example per chart kind, each a query over that project's own data and its kind, and each example draws with no warning on a project that has tasks and runs."
+    },
+    {
+      "key": "first-time-right",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "Asked in plain words for a dashboard needing each of the five kinds, an agent on the project's cheapest model produces a dashboard whose every panel draws with no error and no drawing warning on first opening."
+    }
+  ],
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "Tests and a drive proving the motion already on master: staggered arrival, draw-in, count-up, values sliding on Refresh and on an agent's save, added panel marked once, removed panel fading, tooltip with dimming, skeleton, reduced motion",
+      "Fixing only what those tests and the drive find in the motion",
+      "Guidance in the save tool on choosing a chart kind and shaping its query",
+      "One worked, drawable example of each kind in the data note every project's vault is seeded with"
+    ],
+    "non_goals": [
+      "Rebuilding or redesigning the motion components (merged as 5a9d179)",
+      "A charting library, or new chart kinds, axes, zoom or brushing",
+      "Agents choosing colours, animation or any visual detail: the app decides how every kind looks",
+      "Changing what a query can read, or the five chart kinds",
+      "Editing dashboards in place, undo and the agent's run tool (slice change-a-dashboard-by-asking, landed)",
+      "Animation in other screens"
+    ]
+  },
+  "summary": "Dashboards get motion and finish: panels arrive one after another, charts draw in, a refresh or an agent's change moves values instead of redrawing them, an added panel glows and a removed one fades, hovering shows a tooltip in the app's style, and a skeleton stands in while queries first run, all turned off under reduced motion. The motion is already on master (5a9d179, merged by the operator 2026-11-14); this slice proves it with tests and a drive. Agents are also told which chart kind suits which question and how to shape a query so it reads well, with a worked example of each kind, so a dashboard asked for in plain words draws correctly the first time.",
+  "tag": "dashboards-alive",
+  "tasks": [
+    {
+      "builder": "QA2",
+      "builder_reason": "QA2 checked slice 1 and knows its drive; it builds nothing else here.",
+      "checker": "QA",
+      "checker_reason": "QA is not the drive's author.",
+      "depends_on": [],
+      "description": "Write scripts/drive/dashboards_motion_drive.py covering every criterion against a Hub started from the checkout over a test database (never :8000; real agent turns bind Haiku), reusing scripts/drive/dashboards_drive.py's seeding. The motion is already on master, so its motion criteria may pass on first run; the guidance and first-time-right criteria must fail on today's master, each failure naming the missing behaviour. The last task runs it green.",
+      "files": [
+        "scripts/drive/dashboards_motion_drive.py"
+      ],
+      "from": null,
+      "key": "acceptance-drive",
+      "requirements": [
+        "draw-in",
+        "values-move",
+        "first-time-right"
+      ],
+      "reviewer": null,
+      "title": "Acceptance drive"
+    },
+    {
+      "builder": "Developer",
+      "builder_reason": "Developer built slice 1's screen; the components exist, so this is tests and small fixes.",
+      "checker": "QA2",
+      "checker_reason": "QA2 drives both themes and reduced motion in a browser; not the builder.",
+      "depends_on": [
+        "acceptance-drive"
+      ],
+      "description": "The motion is on master (5a9d179). Add component tests for the count-up holding the real value, the presence states (new once, leaving then gone, nothing new on first open), the tooltip and dimming, the skeleton, and reduced motion; confirm an agent's save animates an open dashboard through the existing event. Fix only what the tests or the drive find, and refresh and commit the UI bundle with the source if any source changes.",
+      "files": [
+        "hub/ui/src/components/dashboards",
+        "hub/ui/src/styles/dashboards.css",
+        "hub/ui/src/__tests__/dashboardsView.test.tsx",
+        "hub/hub/static/ui"
+      ],
+      "from": null,
+      "key": "motion",
+      "requirements": [
+        "draw-in",
+        "values-move",
+        "edit-visible",
+        "hover-tooltip",
+        "loading-skeleton",
+        "reduced-motion"
+      ],
+      "reviewer": null,
+      "title": "Pin the dashboards motion with tests"
+    },
+    {
+      "builder": "DeveloperOpus2",
+      "builder_reason": "DeveloperOpus2 wrote slice 1's tools and data note and knows the data's traps.",
+      "checker": "QA",
+      "checker_reason": "QA reads tool contracts; not the builder.",
+      "depends_on": [
+        "acceptance-drive"
+      ],
+      "description": "Extend the save tool's description with the kind-per-question list and the four shaping rules, add one worked example per kind to the seeded data note, and a Hub test that runs every example through the query service and the drawing check on a seeded project. Update the tools/list snapshot test.",
+      "files": [
+        "hub/hub/mcp_server.py",
+        "hub/hub/data_notes.py",
+        "hub/tests/test_dashboard_guidance.py",
+        "hub/tests/test_copilot_context_split.py"
+      ],
+      "from": null,
+      "key": "guidance",
+      "requirements": [
+        "chart-guidance",
+        "worked-examples"
+      ],
+      "reviewer": null,
+      "title": "Tell agents how to choose and shape a chart"
+    },
+    {
+      "builder": "QA2",
+      "builder_reason": "The drive's author runs it and fixes only drive-side faults.",
+      "checker": "QA",
+      "checker_reason": "QA reads the recorded evidence; not the builder.",
+      "depends_on": [
+        "acceptance-drive",
+        "motion",
+        "guidance"
+      ],
+      "description": "Run scripts/drive/dashboards_motion_drive.py against the finished slice and record evidence for every criterion, with the tooltip screenshots in both themes. Fix only the drive; a failing criterion goes back to the task that built it.",
+      "files": [
+        "scripts/drive/dashboards_motion_drive.py"
+      ],
+      "from": null,
+      "key": "run-acceptance-drive",
+      "requirements": [
+        "first-time-right",
+        "reduced-motion"
+      ],
+      "reviewer": null,
+      "title": "Run the acceptance drive green"
+    },
+    {
+      "depends_on": [],
+      "description": "ac-first-time-right fails on real Haiku turns. Two ways it misses: (a) 'send-backs per model by reason' is saved as a long-format table (model, reason, count) instead of a stacked_bar, so the dashboard has four kinds; (b) the turn ends without ever calling save_dashboard: it prints the panels JSON and stops ('Let me invoke the save_dashboard tool with these panels. I need to make the actual function call now:' then exit 0), or offers 'a different approach to save this dashboard'. Rework the agent-facing guidance (save_dashboard's description in hub/hub/mcp_server.py and the stacked_bar worked example in hub/hub/data_notes.py EXAMPLES) so that a breakdown by two labels is plainly a stacked_bar whose query pivots one column per series, and so an agent saves by calling the tool rather than describing the call. Also make scripts/drive/dashboards_motion_drive.py keep the whole reply (or the save_dashboard tool result) for a turn that saves nothing, so a miss can be diagnosed. Done when the full drive passes ac-first-time-right 3 of 3 turns, on two consecutive full runs.",
+      "files": [
+        "hub/hub/mcp_server.py",
+        "hub/hub/data_notes.py",
+        "scripts/drive/dashboards_motion_drive.py"
+      ],
+      "from": null,
+      "key": "first-time-right-guidance",
+      "requirements": [
+        "first-time-right"
+      ],
+      "reviewer": null,
+      "title": "Make a Haiku agent save a five-kind dashboard every time"
+    }
+  ],
+  "title": "Dashboards that feel alive and draw right the first time"
+}

@@ -1,0 +1,577 @@
+{
+  "acceptance_criteria": [
+    {
+      "checked_by": "agent",
+      "given": "one task in each stage",
+      "how_to_check": "UI component test with fixtures in the order the tasks route returns them",
+      "key": "where-each-task-stands-is-visible-on-the-board-ac-every-stage",
+      "requirement": "where-each-task-stands-is-visible-on-the-board-stage-on-card",
+      "then": "each card shows its own stage label and no card shows two",
+      "when": "the board renders"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an approved task whose landing is checking",
+      "how_to_check": "Hub test through the tasks route with TaskLanding rows",
+      "key": "where-each-task-stands-is-visible-on-the-ac-approved-not-on-main",
+      "requirement": "where-each-task-stands-is-visible-on-the-b-stage-from-real-state",
+      "then": "its stage is 'checking', not 'on main'. After it lands, the stage is 'on main'.",
+      "when": "the tasks route is read"
+    },
+    {
+      "checked_by": "agent",
+      "given": "agent D holds tasks A and B and runs on A",
+      "how_to_check": "Hub test",
+      "key": "where-each-task-stands-is-visible-on-the-b-ac-working-only-bound",
+      "requirement": "where-each-task-stands-is-visible-on-the-b-stage-from-real-state",
+      "then": "A is 'being worked on' and B is 'not started'",
+      "when": "the tasks route is read"
+    },
+    {
+      "checked_by": "agent",
+      "given": "one landed, one held and one not-landed task",
+      "how_to_check": "UI component test",
+      "key": "where-each-task-stands-is-visible-on-the-board-ac-detail",
+      "requirement": "where-each-task-stands-is-visible-on-the-board-stage-detail",
+      "then": "the landed card shows the short commit id, the held card shows what it waits on, and the not-landed card shows its reason",
+      "when": "the board renders"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a task that entered 'checking' 14 minutes ago, and one that entered 'waiting for review' 2 days ago",
+      "how_to_check": "Hub test for the start time plus a UI component test with a fixed clock",
+      "key": "where-each-task-stands-is-visible-on-the-board-ac-time-at-stage",
+      "requirement": "where-each-task-stands-is-visible-on-the-board-time-at-stage",
+      "then": "the route reports each stage's start time, and the cards read '14 min' and '2 days'",
+      "when": "the tasks route is read and the board renders"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the board open on a card reading '1 min'",
+      "how_to_check": "UI component test with a fake timer",
+      "key": "where-each-task-stands-is-visible-on-the-board-ac-time-advances",
+      "requirement": "where-each-task-stands-is-visible-on-the-board-time-at-stage",
+      "then": "the card reads '3 min' without a reload",
+      "when": "two minutes pass with no change to the task"
+    },
+    {
+      "checked_by": "agent",
+      "given": "task A waiting on an open question from agent Q, task B whose prerequisite AW-7 is unfinished, and task C in progress with nothing pending",
+      "how_to_check": "Hub test for the reported cause plus a UI component test",
+      "key": "where-each-task-stands-is-visible-on-the-board-ac-waits-on",
+      "requirement": "where-each-task-stands-is-visible-on-the-board-waits-on",
+      "then": "A's card names Q, B's card names AW-7, and C's card has no waits-on line",
+      "when": "the board renders"
+    },
+    {
+      "checked_by": "operator",
+      "given": "one task on main and one approved task still checking",
+      "how_to_check": "Operator looks at the board on trial Hub :8010",
+      "key": "where-each-task-stands-is-visible-on-the-board-ac-distinct",
+      "requirement": "where-each-task-stands-is-visible-on-the-board-on-main-distinct",
+      "then": "they can tell which is on main without reading text",
+      "when": "the operator looks at the board"
+    },
+    {
+      "checked_by": "agent",
+      "given": "two approved tasks not on main and one task being worked on",
+      "how_to_check": "UI component test plus a drive on :8010",
+      "key": "where-each-task-stands-is-visible-on-the-board-ac-counts",
+      "requirement": "where-each-task-stands-is-visible-on-the-board-not-yet-on-main",
+      "then": "it shows 2 not yet on main and 1 being worked on, and revealing each lists exactly those tasks",
+      "when": "the board renders"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a task checking on the open board",
+      "how_to_check": "Drive on :8010 with a real landing, timed",
+      "key": "where-each-task-stands-is-visible-on-the-board-ac-live",
+      "requirement": "where-each-task-stands-is-visible-on-the-board-stage-is-live",
+      "then": "within 5 seconds, with no reload, the card reads 'on main' and the not-on-main count drops by one",
+      "when": "its landing finishes"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a task outside a flow completed while DeveloperSonnet2 holds it",
+      "how_to_check": "Hub test through the reassign route",
+      "key": "where-each-task-stands-is-visible-on-the-board-ac-builder-kept",
+      "requirement": "where-each-task-stands-is-visible-on-the-builder-survives-review",
+      "then": "it still records DeveloperSonnet2 as builder, and its holder is QA",
+      "when": "it is reassigned to QA for review"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a task built by D, sent back, then completed while E holds it",
+      "how_to_check": "Hub test",
+      "key": "where-each-task-stands-is-visible-on-the-ac-builder-recompleted",
+      "requirement": "where-each-task-stands-is-visible-on-the-builder-survives-review",
+      "then": "its builder is E",
+      "when": "the task is read"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a task under review built by D and reviewed by Q",
+      "how_to_check": "UI component test plus a drive on :8010",
+      "key": "where-each-task-stands-is-visible-on-the-board-ac-two-names",
+      "requirement": "where-each-task-stands-is-visible-on-builder-and-reviewer-shown",
+      "then": "both show 'built by D' and 'reviewing: Q' as separate labels",
+      "when": "the card and the drawer render"
+    },
+    {
+      "checked_by": "agent",
+      "given": "spec P whose last task moved an hour ago and spec Q whose last task moved a week ago, with Q alphabetically first",
+      "how_to_check": "Hub or UI test with fixtures in the order the route returns them; reversing that order must fail it",
+      "key": "find-a-spec-s-tasks-without-knowing-its-name-ac-recency",
+      "requirement": "find-a-spec-s-tasks-without-knowing-its-name-picker-recency",
+      "then": "P is listed above Q",
+      "when": "the operator opens the filter"
+    },
+    {
+      "checked_by": "agent",
+      "given": "spec P with tag 'tasks board', last activity 2 hours ago and 3 unfinished tasks",
+      "how_to_check": "UI component test",
+      "key": "find-a-spec-s-tasks-without-knowing-its-name-ac-entry",
+      "requirement": "find-a-spec-s-tasks-without-knowing-its-name-picker-entry",
+      "then": "P's entry shows 'tasks board', '2 h' and 3",
+      "when": "the filter opens"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a spec tagged 'tasks board' whose title does not contain 'board'",
+      "how_to_check": "UI component test",
+      "key": "find-a-spec-s-tasks-without-knowing-its-name-ac-search",
+      "requirement": "find-a-spec-s-tasks-without-knowing-its-name-picker-search",
+      "then": "that spec is listed",
+      "when": "the operator types 'board'"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a task of spec P",
+      "how_to_check": "Hub test for uniqueness plus UI component test",
+      "key": "find-a-spec-s-tasks-without-knowing-its-name-ac-tag",
+      "requirement": "find-a-spec-s-tasks-without-knowing-its-name-short-tag",
+      "then": "its card shows P's tag; two specs in the project never share a tag",
+      "when": "the board renders"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a spec submitted with tag 'tasks board'",
+      "how_to_check": "Hub test through submit_spec_document plus UI component test",
+      "key": "find-a-spec-s-tasks-without-knowing-its-name-ac-tag-written",
+      "requirement": "find-a-spec-s-tasks-without-knowing-its-name-short-tag",
+      "then": "their cards show 'tasks board'",
+      "when": "its tasks render on the board"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an existing spec with no written tag, and a second spec whose derived tag would collide with the first",
+      "how_to_check": "Hub test",
+      "key": "find-a-spec-s-tasks-without-knowing-its-name-ac-tag-derived",
+      "requirement": "find-a-spec-s-tasks-without-knowing-its-name-short-tag",
+      "then": "both show a tag of at most 24 characters and the two tags differ",
+      "when": "the board renders"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a spec already tagged 'tasks board'",
+      "how_to_check": "Hub test through submit_spec_document",
+      "key": "find-a-spec-s-tasks-without-knowing-its-ac-tag-written-collision",
+      "requirement": "find-a-spec-s-tasks-without-knowing-its-name-short-tag",
+      "then": "the submission is answered with the collision named, and the existing tag is unchanged",
+      "when": "another spec is submitted with the same written tag"
+    },
+    {
+      "checked_by": "agent",
+      "given": "five tasks on main, one cancelled and two in progress",
+      "how_to_check": "UI component test plus a drive on :8010",
+      "key": "find-a-spec-s-tasks-without-knowing-its-name-ac-hidden",
+      "requirement": "find-a-spec-s-tasks-without-knowing-its-name-finished-hidden",
+      "then": "it shows the two in progress and says 6 finished are hidden",
+      "when": "the default board renders"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the board hiding finished tasks",
+      "how_to_check": "UI component test plus a drive on :8010",
+      "key": "find-a-spec-s-tasks-without-knowing-its-name-ac-show",
+      "requirement": "find-a-spec-s-tasks-without-knowing-its-name-show-finished",
+      "then": "finished tasks are shown, marked, and the switch is still on",
+      "when": "the operator turns on 'show finished' and reloads"
+    },
+    {
+      "checked_by": "agent",
+      "given": "'show finished' off and a finished task titled 'Fix flaky test X'",
+      "how_to_check": "UI component test",
+      "key": "find-a-spec-s-tasks-without-knowing-its-name-ac-search-finished",
+      "requirement": "find-a-spec-s-tasks-without-knowing-its-na-search-finds-finished",
+      "then": "that task appears, marked finished",
+      "when": "the operator searches 'flaky test X'"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a task from the live tasks route with every field filled, priority medium",
+      "how_to_check": "UI component test fed the tasks route's real payload shape",
+      "key": "task-card-and-story-redesign-ac-content",
+      "requirement": "task-card-and-story-redesign-card-content",
+      "then": "only the listed items show, and no priority shows",
+      "when": "its card renders on the board"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a task waiting on a long question with long builder and reviewer names",
+      "how_to_check": "Browser drive on :8010 measuring line count at default width",
+      "key": "task-card-and-story-redesign-ac-budget",
+      "requirement": "task-card-and-story-redesign-card-text-budget",
+      "then": "the text below the title takes at most two lines, the waits-on line shows and the reviewer's name is whole",
+      "when": "its card renders at default width"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a task with a description and criteria",
+      "how_to_check": "UI component test",
+      "key": "task-card-and-story-redesign-ac-drawer",
+      "requirement": "task-card-and-story-redesign-drawer-holds-rest",
+      "then": "the description and criteria appear only in the opened task",
+      "when": "the card and the opened task render"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a completed task whose latest checks failed two of five",
+      "how_to_check": "Hub route test for the count plus a drive on :8010",
+      "key": "task-card-and-story-redesign-ac-checks",
+      "requirement": "task-card-and-story-redesign-failing-checks",
+      "then": "its card shows a marker reading 2, and its Work view names both failed checks",
+      "when": "the board loads from the Hub"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a task with six consecutive runs, an answered question and a landing, in the story route's real order",
+      "how_to_check": "UI component test fed the story route's real order",
+      "key": "task-card-and-story-redesign-ac-story",
+      "requirement": "task-card-and-story-redesign-story-timeline",
+      "then": "one folded entry for the six runs, the answered question and the landing shown unfolded, each label six words or fewer, and every trace and conversation link still present",
+      "when": "the Story opens"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a task serving two requirements, one with accepted evidence and one with none, and a previous failed run",
+      "how_to_check": "UI component test plus a drive on :8010",
+      "key": "task-card-and-story-redesign-ac-work",
+      "requirement": "task-card-and-story-redesign-work-view",
+      "then": "both requirements show their evidence state from coverage, their criteria, the latest checks, and Earlier runs reveals the previous run's checks",
+      "when": "Work opens"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a task with notes, a dependency and a builder",
+      "how_to_check": "UI component test",
+      "key": "task-card-and-story-redesign-ac-details",
+      "requirement": "task-card-and-story-redesign-details-view",
+      "then": "every control today's Details offers is present, and Facts reads 'Built by Developer' with no repeated label",
+      "when": "Details opens"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a card moving from checking to on main",
+      "how_to_check": "Browser drive with emulated prefers-reduced-motion",
+      "key": "task-card-and-story-redesign-ac-motion",
+      "requirement": "task-card-and-story-redesign-motion",
+      "then": "the animation ends within 300 ms; with reduced motion none runs",
+      "when": "it changes, once with motion allowed and once with reduced motion"
+    },
+    {
+      "checked_by": "operator",
+      "given": "the board and the opened task in light and dark themes",
+      "how_to_check": "Operator reviews the live board",
+      "key": "task-card-and-story-redesign-ac-identity",
+      "requirement": "task-card-and-story-redesign-identity",
+      "then": "they read as AgentWeave",
+      "when": "the operator reviews them"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the board in both themes",
+      "how_to_check": "Browser drive with an axe contrast check and a greyscale screenshot",
+      "key": "task-card-and-story-redesign-ac-a11y",
+      "requirement": "task-card-and-story-redesign-not-colour-alone",
+      "then": "no contrast failures, and every stage is still distinguishable",
+      "when": "an automated contrast check runs and colour is removed (greyscale)"
+    }
+  ],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {
+      "FR-1": "5da7e74d7bc874f3655e11fae7d7e8d17679d79f929763fa656de6b7a21d3689",
+      "FR-10": "7adf11a2a048e54e5985bd4a2f0877601f2e21a5cb1c1afaaaedeb75189e21a4",
+      "FR-11": "94d8984cbcb48e12ce0f3a4c0c684e7e7a3576002716a85c32c2e0089bd07bb0",
+      "FR-12": "72bc13e8665e8744cc8949443a7513effc5b718b6ee81b5aa72e64edd11262c7",
+      "FR-13": "58e1dd24da9a02a4e37048a2b9536322f35791641b96c80ec3dd7a694421ae83",
+      "FR-14": "0dd3964bd30410941e707c90026bdd28dc7abb7c5493f1d412c943668462e2a6",
+      "FR-15": "923b9f295166fd579c49a95630695d5cf63d8776c6b0bc29b64d5ac92a9012c7",
+      "FR-16": "f3b2cef67d44e171eee287f960066b8bbaf9d58f4f215c1848a5e656a6cc18e1",
+      "FR-17": "898897316a0a4ab12d8208973ec79adef85863a377d9203cf0bf01812fe5ca33",
+      "FR-18": "97bddbaefa177408bd52d75b88ce7fd04e797a1787bf282f19756271f64aaa9c",
+      "FR-19": "63740281ac25ef9b68bc4eac71bc0ecb564304372dc95aff6ba0d576006b070e",
+      "FR-2": "851fd7032a09522edb5538cd16b9462764697a9e61ffd23588272eac2e54df91",
+      "FR-20": "5bf219f0af0280d3100aafc15974b9bb4c7179fb9d8fdb29fe0e409294ada094",
+      "FR-21": "c267b271b3ef6fdaee5d5ec1ae63f861d760836294925c07349c96e50d02995f",
+      "FR-22": "b2905a2bfddd5af5925226558a0f4679b27269c727444ba96b8c89f767ab0307",
+      "FR-23": "853c65c13d7090848e94cfaae955deba28ceee8f2a170da5f75e526b356f806c",
+      "FR-24": "008ce739f38b2941a7e483b5773c2d5c4f07a8c3d3b6528b99a33855a68e1640",
+      "FR-25": "236b13062bcb86d94723241607b413db4e023a94b61eac1a963f83642feb7c64",
+      "FR-26": "456423b2a1db8696696c898e4992a261d508191e2ef55d1014f1781c02fec898",
+      "FR-27": "2aaeed68b12fae90fb1e58bc2ef328a8668ef7a9999e315ccd2ea6a74860c8a7",
+      "FR-3": "4ff01a0d8266762db28eeb4ecd225c7683584218c467bfb30b1d3dacdb5716e8",
+      "FR-4": "502ae745f157092e43d63cdd901bf646c67c8fdea401636b8aa2cdb6d6f28555",
+      "FR-5": "e5b06822f8842f5b7a7cdf2526f79f88c4877a3f2e297dd1fdab4dd91f2b98ca",
+      "FR-6": "bd47780e79729083eb79a9c9a8fb3df18aeec7051d6810530012aaa6ca298e59",
+      "FR-7": "610045270418bcc17600d0e267ed554d5ad2b5d19dab9cb4d53e3f9f0b52de33",
+      "FR-8": "45aa915a93108d76c85c058c23b046533194fa2caf5f4a102e4be91196f192c5",
+      "FR-9": "7da2ecbe197794326c611c989f7675f95c138aac49e46133674f880b4ee0b8d0"
+    },
+    "high_water": 27,
+    "requirements": {
+      "find-a-spec-s-tasks-without-knowing-its-na-search-finds-finished": "FR-17",
+      "find-a-spec-s-tasks-without-knowing-its-name-finished-hidden": "FR-15",
+      "find-a-spec-s-tasks-without-knowing-its-name-picker-entry": "FR-12",
+      "find-a-spec-s-tasks-without-knowing-its-name-picker-recency": "FR-11",
+      "find-a-spec-s-tasks-without-knowing-its-name-picker-search": "FR-13",
+      "find-a-spec-s-tasks-without-knowing-its-name-short-tag": "FR-14",
+      "find-a-spec-s-tasks-without-knowing-its-name-show-finished": "FR-16",
+      "task-card-and-story-redesign-card-content": "FR-18",
+      "task-card-and-story-redesign-card-text-budget": "FR-19",
+      "task-card-and-story-redesign-details-view": "FR-24",
+      "task-card-and-story-redesign-drawer-holds-rest": "FR-20",
+      "task-card-and-story-redesign-failing-checks": "FR-21",
+      "task-card-and-story-redesign-identity": "FR-26",
+      "task-card-and-story-redesign-motion": "FR-25",
+      "task-card-and-story-redesign-not-colour-alone": "FR-27",
+      "task-card-and-story-redesign-story-timeline": "FR-22",
+      "task-card-and-story-redesign-work-view": "FR-23",
+      "where-each-task-stands-is-visible-on-builder-and-reviewer-shown": "FR-10",
+      "where-each-task-stands-is-visible-on-the-b-stage-from-real-state": "FR-2",
+      "where-each-task-stands-is-visible-on-the-board-not-yet-on-main": "FR-7",
+      "where-each-task-stands-is-visible-on-the-board-on-main-distinct": "FR-6",
+      "where-each-task-stands-is-visible-on-the-board-stage-detail": "FR-3",
+      "where-each-task-stands-is-visible-on-the-board-stage-is-live": "FR-8",
+      "where-each-task-stands-is-visible-on-the-board-stage-on-card": "FR-1",
+      "where-each-task-stands-is-visible-on-the-board-time-at-stage": "FR-4",
+      "where-each-task-stands-is-visible-on-the-board-waits-on": "FR-5",
+      "where-each-task-stands-is-visible-on-the-builder-survives-review": "FR-9"
+    },
+    "retired": {}
+  },
+  "design": "",
+  "evidence": {
+    "checked": [],
+    "limits": []
+  },
+  "hub": {
+    "phase": "current",
+    "size": null,
+    "step": null
+  },
+  "kind": "capability",
+  "lifecycle": "",
+  "open_questions": [],
+  "problem": "",
+  "requirements": [
+    {
+      "key": "where-each-task-stands-is-visible-on-the-board-stage-on-card",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "Every task card shows exactly one stage, readable without opening the task. The stages are: not started; being worked on; waiting for an answer or blocked; waiting for review; under review; sent back; approved, waiting to land; checking; landing; on main; landing held; did not land; closed without landing."
+    },
+    {
+      "key": "where-each-task-stands-is-visible-on-the-b-stage-from-real-state",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The status 'approved' says a reviewer agreed. It does not say the work reached main, and those are the moments the operator needs to tell apart.",
+      "statement": "A card's stage reflects what is actually happening, not only the task's status column. A task is 'being worked on' only while a run bound to that task is running. It is 'on main' only once its work has landed on the main branch. An approved task whose work has not landed is never shown as on main."
+    },
+    {
+      "key": "where-each-task-stands-is-visible-on-the-board-stage-detail",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "A card at 'on main' shows the short commit id its work landed at. A card at 'landing held' shows what it waits on. A card at 'did not land' shows why, in one line."
+    },
+    {
+      "key": "where-each-task-stands-is-visible-on-the-board-time-at-stage",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "A task stuck for days must look different from one that moved a minute ago; nothing on the card shows that today.",
+      "statement": "Every card shows how long its task has been at its current stage, measured from when it entered that stage, in a compact form ('14 min', '2 days'). The duration advances while the board is open, at least once a minute."
+    },
+    {
+      "key": "where-each-task-stands-is-visible-on-the-board-waits-on",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "When a task is waiting (for an answer, blocked, held, or not started because of prerequisites), its card names what it waits on in one line. That is one of: the agent whose question is open, the id of each unfinished task it depends on, or the name of the failing check or held item. A task not waiting shows no such line."
+    },
+    {
+      "key": "where-each-task-stands-is-visible-on-the-board-on-main-distinct",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "On the board, a task that is on main is visually distinct from an approved task not yet on main. The operator can tell them apart without reading the stage text."
+    },
+    {
+      "key": "where-each-task-stands-is-visible-on-the-board-not-yet-on-main",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "Without opening any task, the board shows how many tasks are approved but not yet on main, and lets the operator see which ones. The same applies to tasks being worked on."
+    },
+    {
+      "key": "where-each-task-stands-is-visible-on-the-board-stage-is-live",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "A card's stage, its waits-on line and the counts from not-yet-on-main change within 5 seconds of the underlying change (a run ending, a landing finishing, a prerequisite completing), without a page reload."
+    },
+    {
+      "key": "where-each-task-stands-is-visible-on-the-builder-survives-review",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator, 2026-11-11: one clear name, the holder at completion, rather than every agent that ran on the task.",
+      "statement": "When a task moves to completed, it records as its builder the agent holding it at that moment. That name stays unchanged when the task is handed to a reviewer or tester, inside or outside a flow. If the task is sent back and completed again, the builder becomes whoever holds it at that later completion."
+    },
+    {
+      "key": "where-each-task-stands-is-visible-on-builder-and-reviewer-shown",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "From 'waiting for review' onward, a card and the task drawer show the builder and the current reviewer as two separately labelled names. A task never reviewed shows only its builder."
+    },
+    {
+      "key": "find-a-spec-s-tasks-without-knowing-its-name-picker-recency",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "The spec filter lists specs ordered by the most recent activity on any of their tasks (created or moved), newest first. 'All', 'Building' and 'No spec' stay at the top."
+    },
+    {
+      "key": "find-a-spec-s-tasks-without-knowing-its-name-picker-entry",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "Each spec in the filter shows its short tag, how long ago its last task activity was ('2 h', '3 days'), and how many of its tasks are not finished."
+    },
+    {
+      "key": "find-a-spec-s-tasks-without-knowing-its-name-picker-search",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "Typing in the filter matches any spec whose short tag or title contains the typed text, case-insensitively, keeping the recency order."
+    },
+    {
+      "key": "find-a-spec-s-tasks-without-knowing-its-name-short-tag",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "A written tag reads well; the derived fallback means existing specs, and authors who skip the field, still get one (operator, 2026-11-12).",
+      "statement": "Every spec has a short tag of at most 24 characters, unique within the project. The spec's author may write it when submitting the document; a spec with no written tag gets one derived from its title. Every card of a task belonging to a spec shows that tag."
+    },
+    {
+      "key": "find-a-spec-s-tasks-without-knowing-its-name-finished-hidden",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "By default the board shows no finished task. A task is finished when it is on main or closed without landing. The board states how many finished tasks it is hiding."
+    },
+    {
+      "key": "find-a-spec-s-tasks-without-knowing-its-name-show-finished",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "A 'show finished' switch on the board brings finished tasks back into view, marked as finished. The choice is remembered per project."
+    },
+    {
+      "key": "find-a-spec-s-tasks-without-knowing-its-na-search-finds-finished",
+      "modal": "SHOULD",
+      "party": null,
+      "rationale": "Looking up one old task should not require switching the whole board to show everything.",
+      "statement": "The board's search also finds finished tasks while 'show finished' is off, showing them marked as finished."
+    },
+    {
+      "key": "task-card-and-story-redesign-card-content",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "A card shows only: its title; its stage as a glyph and a word; time at stage; the waits-on line when waiting; builder and reviewer; its spec's short tag; a failing-checks marker; and priority only when critical."
+    },
+    {
+      "key": "task-card-and-story-redesign-card-text-budget",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator, 2026-11-12: what a card is stuck on is actionable, how long it has been stuck is not.",
+      "statement": "Apart from its title, no card shows more than two lines of text at the board's default width. When the waits-on line and time at stage do not both fit, waits-on is kept and time at stage gives way; when names are long, the builder's name is cut before the reviewer's."
+    },
+    {
+      "key": "task-card-and-story-redesign-drawer-holds-rest",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "Description, branch, commits, requirements and acceptance criteria appear in the opened task and never on the card."
+    },
+    {
+      "key": "task-card-and-story-redesign-failing-checks",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "A task whose latest checks failed shows, before review, a marker on its card naming how many checks failed. Opening the task lists them in its Work view."
+    },
+    {
+      "key": "task-card-and-story-redesign-story-timeline",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator, 2026-11-12: answered questions record decisions, which is what is looked for later.",
+      "statement": "The Story keeps every link it has today (traces, conversations) and shows each entry as a glyph, a label of at most six words, the actor and the time. Runs of four or more consecutive routine entries fold into one entry that opens. These are never folded: created, finished building, approved, sent back, landed or did not land, closed, any failure, anything waiting on the operator, and questions the operator answered. Any entry can be expanded to its full text."
+    },
+    {
+      "key": "task-card-and-story-redesign-work-view",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "The opened task has a Work view listing the requirements it serves, each with its evidence state read from the document's coverage, the requirement's acceptance criteria, and the latest checks with their outcome. An Earlier runs control shows the checks of previous runs."
+    },
+    {
+      "key": "task-card-and-story-redesign-details-view",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator, 2026-11-12: fewer changes; dropping today's controls was rejected.",
+      "statement": "The opened task's Details view shows description, waits-on and needed-by tasks, notes, facts, history and escalation, and keeps every control today's Details offers. Facts never repeat their label in their value (no 'Built by: built by Developer')."
+    },
+    {
+      "key": "task-card-and-story-redesign-motion",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "A card changing stage animates the change, finishing within 300 ms. With reduced motion requested by the system, no animation plays and the change still shows."
+    },
+    {
+      "key": "task-card-and-story-redesign-identity",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "Colours, type and glyphs come from AgentWeave's identity kit, in both light and dark themes."
+    },
+    {
+      "key": "task-card-and-story-redesign-not-colour-alone",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "No stage or marker is conveyed by colour alone. All card and story text meets WCAG AA contrast in both themes."
+    }
+  ],
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [],
+    "non_goals": []
+  },
+  "summary": "",
+  "tasks": [],
+  "title": "Task board"
+}

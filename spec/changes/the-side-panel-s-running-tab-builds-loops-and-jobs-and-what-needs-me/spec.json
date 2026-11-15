@@ -1,0 +1,410 @@
+{
+  "acceptance_criteria": [
+    {
+      "checked_by": "agent",
+      "given": "a browser that has the Loops tab open and visible in a project's side panel from before the change",
+      "how_to_check": "a UI test that seeds the per-project panel storage with a visible `loops` tab, renders the conversation view, and asserts the strip and plus menu",
+      "key": "ac-restore",
+      "requirement": "running-replaces-loops",
+      "then": "the panel shows Running in the Loops tab's strip position, visible, and no Loops tab or Loops launcher card exists anywhere in the panel",
+      "when": "the operator opens a conversation in that project after the change"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a project with a flow build, a lead-driven build, an ended build, a plain loop and a plain job (built from route-shaped fixtures in the order the routes return them)",
+      "how_to_check": "model test over route-ordered fixtures, plus the acceptance drive",
+      "key": "ac-once",
+      "requirement": "every-item-once",
+      "then": "exactly five rows appear: the build's loop and the loop's job are not listed separately",
+      "when": "Running is shown with All selected"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a document whose build finished yesterday and another whose build was stopped early",
+      "how_to_check": "acceptance drive on the trial Hub",
+      "key": "ac-ended-builds",
+      "requirement": "every-item-once",
+      "then": "both appear, under Finished and Stopped early, with when they ended",
+      "when": "Finished is selected"
+    },
+    {
+      "checked_by": "agent",
+      "given": "one item in each group",
+      "how_to_check": "model and component test",
+      "key": "ac-order",
+      "requirement": "grouped-needs-you-first",
+      "then": "the group headings read, top to bottom: Needs you, Working now, Between steps, Scheduled, Paused, Finished, Stopped early, each with count 1",
+      "when": "All is selected"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a running build whose working agent has asked a blocking question",
+      "how_to_check": "acceptance drive on the trial Hub with a real agent turn that calls ask_user (Haiku)",
+      "key": "ac-question",
+      "requirement": "needs-you-says-why",
+      "then": "the build is under Needs you saying a question is waiting, and pressing Answer shows that question where it can be answered",
+      "when": "Running is shown"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a loop whose next firing the Hub would refuse",
+      "how_to_check": "model test plus acceptance drive",
+      "key": "ac-stall",
+      "requirement": "needs-you-says-why",
+      "then": "the loop is under Needs you showing the Hub's stall reason and a Look button that opens the loop's record",
+      "when": "Running is shown"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a build with seven tasks, three done, two agents working and a third next, $4.20 spent",
+      "how_to_check": "component test",
+      "key": "ac-row",
+      "requirement": "row-says-what-is-happening",
+      "then": "it reads the document's title, Build, started N ago, 3/7 tasks, $4.20, the two working agents with their tasks, and \"and 1 more\"",
+      "when": "its row is shown"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a paused job on the schedule `0 9 * * 1`",
+      "how_to_check": "component test asserting no text matching a cron or id pattern",
+      "key": "ac-words",
+      "requirement": "operators-words-only",
+      "then": "it reads \"On its own schedule, paused\" and no cron text or id appears anywhere in the tab",
+      "when": "its row is shown"
+    },
+    {
+      "checked_by": "agent",
+      "given": "items of every kind, some ended",
+      "how_to_check": "component test",
+      "key": "ac-filter",
+      "requirement": "filters",
+      "then": "only ended jobs show, the Now/Finished counts reflect the Jobs filter, and with none, the tab says nothing has finished",
+      "when": "the operator picks Finished and then Jobs"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a build row, a loop row and a job row",
+      "how_to_check": "UI test on the conversation view",
+      "key": "ac-open",
+      "requirement": "rows-open-their-item",
+      "then": "the build's document opens in the panel at its builds, the loop's detail tab opens, and the Jobs page opens",
+      "when": "each is selected"
+    },
+    {
+      "checked_by": "agent",
+      "given": "Running open beside a conversation while a build's flow fires",
+      "how_to_check": "acceptance drive on the trial Hub",
+      "key": "ac-live",
+      "requirement": "live",
+      "then": "the row's worker line and progress change without a reload",
+      "when": "an agent takes the next task"
+    },
+    {
+      "checked_by": "operator",
+      "given": "the built tab on the trial Hub with real items",
+      "how_to_check": "screenshots in both themes at 360px panel width, then the operator's look",
+      "key": "ac-looks",
+      "requirement": "matches-approved-mock",
+      "then": "it looks like the approved mock and nothing scrolls sideways",
+      "when": "the operator looks at it in dark and light at the panel's narrowest width"
+    }
+  ],
+  "algorithms": [],
+  "already_built": {
+    "built": false,
+    "commits": [],
+    "note": ""
+  },
+  "aw_identity": {
+    "digests": {
+      "FR-1": "e90654e9c973a8b1b068d4e1c5a240c111aca023546bb82b38f87695411a0532",
+      "FR-10": "516732b8381de170a2a7efbb9d5f09098dc6a5f46b496645a96a686b1593d9a9",
+      "FR-2": "9d7136179d85ec36b7c58837eeb5a982589280719abb107d3b0c224063f388d1",
+      "FR-3": "f495a096683e28da367056b2f3372f002ec50ea3a109c2842a162bb03fff5916",
+      "FR-4": "1fdb52b458f6519da8ccb80685978e6a6ce49af723d8efefa5b943547de038ca",
+      "FR-5": "d4fd23fd2a571350633ef314b49e410eafae6634a063b3d4bf8abe0ee1360833",
+      "FR-6": "b6d4a2da52fd6988ba4bdaa0ba08ff7b1ac076f6986ed25869a821400d3d2b74",
+      "FR-7": "fc059c66eca213ea5484b08c467b4c2865fd91b9a211d4cfe95196a41b6fe3e9",
+      "FR-8": "1d9b44e4cd95d248777f02d9a03542a1c0ccc9c0d9e85f6f9591c78feb49e328",
+      "FR-9": "bac6f5ba493443912250f52ec9907ff1c1a45b3d8321ee39297225b842f84e39"
+    },
+    "high_water": 10,
+    "requirements": {
+      "every-item-once": "FR-2",
+      "filters": "FR-7",
+      "grouped-needs-you-first": "FR-3",
+      "live": "FR-9",
+      "matches-approved-mock": "FR-10",
+      "needs-you-says-why": "FR-4",
+      "operators-words-only": "FR-6",
+      "row-says-what-is-happening": "FR-5",
+      "rows-open-their-item": "FR-8",
+      "running-replaces-loops": "FR-1"
+    },
+    "retired": {}
+  },
+  "capabilities": {
+    "changes": [
+      "spec/capabilities/conversation-side-panel/spec.json",
+      "spec/capabilities/agent-loops/spec.json"
+    ],
+    "creates": []
+  },
+  "delivery": {
+    "agent": "Developer",
+    "builder": "Developer",
+    "checker": "QA",
+    "cron": "*/5 * * * *",
+    "mode": "flow",
+    "reasons": {
+      "agent": "Developer works the flow by default.",
+      "builder": "A wiring job to an approved design: Sonnet is enough, per the operator's 2026-10-24 rule for unattended builds.",
+      "checker": "QA checks and drives, as the 2026-10-24 rule pairs it with Developer.",
+      "cron": "Every five minutes, the flows' usual cadence.",
+      "mode": "Three dependent tasks with a drive at the end suit an unattended flow.",
+      "stop": "Stop when the three tasks are done."
+    },
+    "reviewer": null,
+    "stop_at": null,
+    "stop_when_queue_empties": true
+  },
+  "design": "**The approved mock is the design.** `hub/ui/src/components/panel/RunningTab.tsx` (presentational), its pure rules in `runningModel.ts` (which group an item falls in, what its row says, the filters, de-duplication), and `hub/ui/src/styles/running-panel.css`, all written for the mock and approved by the operator as rendered on 2026-11-12 (`hub/ui/mock`, route `#conversation/Architect/conv-9cdda4865e0b/running`; `hub/ui/mock/README.md`). Building this slice is wiring those components to the Hub's data, not redrawing them. Change the look only where the operator asks.\n\n**Name.** Running, not Activity: the project already has an Activity tab (events, ledger, logs, traces).\n\n**What the data has today (read 2026-11-12, for the builder's grounding).** Loops come from `useLoops` (`LoopSummary`: queue counts, current tasks with agent and capacity, `open_questions`, `stall_reason`, `firing_active`, ending state). Jobs from `useJobs` (`Job`, with `loop` set when the job is a loop's, `history` holding an `in_progress` run while it fires, `next_run`). Builds are read only per document (`SpecDocument.builds`, from the document's own read); the documents list carries each document's running build as done/total (`useBuildProgress`). No route lists builds across documents, so finished builds, and builds driven by a lead or by hand (which have no loop), are not available to a project-wide view without a Hub change. How to supply them is the builder's call; FR-2 states what must be listed.\n\n**Where Answer goes.** A loop counts its open questions but the panel does not know which question. Answer takes the operator to where the question can be answered (the asking agent's conversation, with the question shown); if the Hub's loop record cannot name the question, it names the agent and conversation, and that is part of the Hub change this slice may need.\n\n**Replacing Loops.** The `loops` index tab id is persisted per project in the browser (capability conversation-side-panel FR-6, FR-7). A Loops tab the operator had open reopens as Running; the loop detail tab (`LoopTab`) stays as the place a loop row opens, since only the index was judged bad.",
+  "evidence": {
+    "checked": [
+      "The approved mock renders from the components this slice wires (screenshots in testbed/ui-judge/mock/running, dark and light, 1440px)",
+      "useLoops, useJobs, SpecDocument.builds and useBuildProgress read in hub/ui/src/api and useSpecSurface.tsx on 2026-11-12",
+      "No GET route lists builds across documents (hub/hub/api/v1/spec.py routes read 2026-11-12)",
+      "Capability conversation-side-panel FR-2, FR-6, FR-7 name the Loops index and its persistence"
+    ],
+    "limits": [
+      "The mock's data is hand-written; no real Hub data has gone through runningModel yet",
+      "Whether a loop's open question can be resolved to the question itself without a Hub change was not checked",
+      "The model's grouping rules were judged by eye in the mock, not tested"
+    ]
+  },
+  "hub": {
+    "builds": [
+      {
+        "budget_cap_usd": null,
+        "builder": "Developer",
+        "builders": [
+          "Developer",
+          "QA2"
+        ],
+        "checker": "QA",
+        "checkers": [],
+        "chosen_by": "operator",
+        "driver": "flow",
+        "ended_at": "2026-11-13T00:00:14.773999+00:00",
+        "id": "build-eb28c82af19d",
+        "landing": "main",
+        "lead": null,
+        "level": "reviewed",
+        "pull_request": null,
+        "started_at": "2026-11-12T21:27:31.193013+00:00",
+        "state": "finished",
+        "stop_reason": null,
+        "tasks": {
+          "acceptance-drive": {
+            "builder": "QA2",
+            "checker": "QA"
+          },
+          "builds-for-running": {
+            "builder": "Developer",
+            "checker": "QA"
+          },
+          "wire-running": {
+            "builder": "Developer",
+            "checker": "QA"
+          }
+        },
+        "window_end": null,
+        "window_start": null
+      }
+    ],
+    "phase": "approved",
+    "size": null,
+    "step": "build"
+  },
+  "kind": "change-spec",
+  "lifecycle": "",
+  "open_questions": [],
+  "problem": "The panel's Loops tab (`LoopsIndexTab`) lists loops with one status badge and a count line. The operator, 2026-11-12: \"it doesn't tell me anything, it's ugly and does not match the UI overhaul\". It answers \"what state is each loop in\" rather than \"what is happening now, and does anything need me\", and it shows only part of the unattended work: spec builds and plain scheduled jobs are not in it at all, although since the overhaul most unattended work runs as builds.",
+  "requirements": [
+    {
+      "key": "running-replaces-loops",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The operator replaced Loops rather than adding beside it; a stale stored tab must not resurrect the old view or vanish silently.",
+      "statement": "The side panel SHALL offer a Running index tab wherever it offered Loops (tab strip, plus menu, empty-state launcher with a count of items that need the operator or are working), and MUST NOT offer Loops any more. A Loops tab persisted from before SHALL be restored as Running, in the same strip position and visibility."
+    },
+    {
+      "key": "every-item-once",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "A build runs as a loop, and a loop is a job; showing all three layers would triple-count one piece of work.",
+      "statement": "Running SHALL list every build of every specification document in the project (whatever drives it, running or ended), every loop that is not a build's, and every scheduled job that is not a loop's, and MUST list each piece of work exactly once."
+    },
+    {
+      "key": "grouped-needs-you-first",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": null,
+      "statement": "Running SHALL group items in this order, leaving empty groups out: Needs you, Working now, Between steps, Scheduled, Paused, Finished, Stopped early; each group heading SHALL show its item count."
+    },
+    {
+      "key": "needs-you-says-why",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The operator's complaint was that the old tab did not say what needs them.",
+      "statement": "An item that has not ended SHALL be in Needs you when its work has an unanswered question or when the Hub would refuse its next firing. Its row SHALL say which, in one sentence (the stall reason as the Hub states it), and offer Answer for a question or Look for a refused firing. Answer SHALL take the operator to where that question can be answered, and Look to the item's own record."
+    },
+    {
+      "key": "row-says-what-is-happening",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": null,
+      "statement": "Each row SHALL show the item's name, its kind (Build, Loop or Job), the one time that matters for its group in relative words (started, next, ended or last ran), tasks done out of total where the item has a queue, the amount spent where a build has spent any, and up to two agents each with what they are doing (building, checking, holding, next on, running) and on which task, followed by \"and N more\" when there are more; where nobody is working it, one status line instead (for a job, its schedule)."
+    },
+    {
+      "key": "operators-words-only",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "Running MUST NOT show raw ids, cron expressions or event names. A schedule the app cannot say in words SHALL read \"On its own schedule\", and an amount or time SHALL be formatted the way the rest of the app formats it."
+    },
+    {
+      "key": "filters",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": null,
+      "statement": "Running SHALL offer a Now / Finished / All filter, defaulting to Now (everything that has not ended), with each choice's count shown, and a filter by kind (Everything, Builds, Loops, Jobs) that narrows the list and the counts together; a filter that leaves nothing SHALL say so rather than show an empty box. A summary line above the filters SHALL count items that need the operator, are working, and are waiting."
+    },
+    {
+      "key": "rows-open-their-item",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": null,
+      "statement": "Selecting a row SHALL open the item: a build opens its specification document in the panel at its builds, a loop opens the loop's detail tab, and a job opens the Jobs page."
+    },
+    {
+      "key": "live",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": null,
+      "statement": "Running SHALL reflect a change in a build, loop, job or question (a task taken, a firing started or ended, a question asked or answered) without the operator reloading, as quickly as the panel's other live views do."
+    },
+    {
+      "key": "matches-approved-mock",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": null,
+      "statement": "Running SHALL render as the mock approved on 2026-11-12 does, in dark and light, at the panel's narrowest width without horizontal scrolling."
+    }
+  ],
+  "roadmap": {
+    "document": "spec/changes/a-side-panel-worth-keeping-open-activity-changes-files-terminal-and-peers/spec.json",
+    "slice": "activity-tab"
+  },
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "A Running index tab in the conversation side panel, replacing the Loops index tab everywhere it is offered (strip, plus menu, empty-state launcher)",
+      "Listing builds, loops and scheduled jobs together, each once, grouped and filtered as the approved mock shows",
+      "Supplying the data that needs: including builds of every document, running and ended",
+      "Opening an item from its row, and answering or looking at what needs the operator",
+      "Restoring a previously open Loops tab as Running"
+    ],
+    "non_goals": [
+      "Redesigning the loop detail tab (`LoopTab`) or the Jobs page",
+      "Starting, stopping, pausing or editing builds, loops or jobs from the Running tab",
+      "Answering a question inside the Running tab itself",
+      "The project's Activity tab",
+      "The other roadmap slices: Changes, Files, Terminal, Watch",
+      "Notifications or sounds for new needs-you items"
+    ]
+  },
+  "summary": "The conversation side panel's Loops tab is replaced by a Running tab: every build, loop and scheduled job in one list, grouped so that what waits on the operator comes first, each row saying what is happening now, with a Now / Finished / All filter and a filter by kind. Built from the mock the operator approved on 2026-11-12.",
+  "tasks": [
+    {
+      "builder": "Developer",
+      "builder_reason": "A read-only Hub route over data the Hub already holds; no migration, so Sonnet is enough.",
+      "checker": "QA",
+      "checker_reason": "QA checks route shape and ordering against the UI's use, per the 2026-10-24 pairing.",
+      "depends_on": [],
+      "description": "Make every build of every document (running and ended, whatever drives it), with its document's title, its loop where it has one, and the question its open-question count refers to, available to the UI in one project-scoped read, without reading every document. Include a test of the route's shape and ordering.",
+      "files": [
+        "hub/hub/api/v1/spec.py",
+        "hub/hub/api/v1/loops.py",
+        "hub/tests",
+        "hub/ui/src/api/spec.ts",
+        "hub/ui/src/api/loops.ts"
+      ],
+      "from": null,
+      "key": "builds-for-running",
+      "requirements": [
+        "every-item-once",
+        "needs-you-says-why"
+      ],
+      "reviewer": null,
+      "title": "Builds across documents for Running"
+    },
+    {
+      "builder": "Developer",
+      "builder_reason": "Wiring approved, already-written components to hooks; Sonnet is enough.",
+      "checker": "QA",
+      "checker_reason": "QA checks the UI tests and the store migration, per the 2026-10-24 pairing.",
+      "depends_on": [
+        "builds-for-running"
+      ],
+      "description": "Replace the Loops index tab with the approved RunningTab: a container feeding it builds, loops and jobs from the Hub (via the read from builds-for-running), live via the app's event-driven cache invalidation; the panel store's persisted `loops` tab restored as Running; rows opening their item; Answer and Look going where FR-4 says. Model and component tests over route-ordered fixtures. Remove LoopsIndexTab once nothing uses it.",
+      "files": [
+        "hub/ui/src/components/panel",
+        "hub/ui/src/components/agents/ConversationView.tsx",
+        "hub/ui/src/components/spec/PanelShell.tsx",
+        "hub/ui/src/components/spec/LoopsIndexTab.tsx",
+        "hub/ui/src/store/panelTabsStore.ts",
+        "hub/ui/src/__tests__"
+      ],
+      "from": null,
+      "key": "wire-running",
+      "requirements": [
+        "running-replaces-loops",
+        "grouped-needs-you-first",
+        "row-says-what-is-happening",
+        "operators-words-only",
+        "filters",
+        "rows-open-their-item",
+        "live",
+        "every-item-once",
+        "needs-you-says-why"
+      ],
+      "reviewer": null,
+      "title": "Running tab on live data"
+    },
+    {
+      "builder": "QA2",
+      "builder_reason": "A drive is test work; QA2 did not build the slice, so it drives with fresh eyes.",
+      "checker": "QA",
+      "checker_reason": "QA checked the two build tasks and can judge whether the drive covered their criteria.",
+      "depends_on": [
+        "wire-running"
+      ],
+      "description": "On the trial Hub (:8010), with real Haiku agents: a flow build working, one agent asking a blocking question, a stalled loop, a scheduled job, a paused job, a finished and a stopped build. Confirm each acceptance criterion marked for the drive, take dark and light screenshots at the panel's narrowest width for the operator, and record what you saw.",
+      "files": [
+        "testbed"
+      ],
+      "from": null,
+      "key": "acceptance-drive",
+      "requirements": [
+        "every-item-once",
+        "needs-you-says-why",
+        "live",
+        "matches-approved-mock"
+      ],
+      "reviewer": null,
+      "title": "Drive Running on the trial Hub"
+    }
+  ],
+  "title": "The side panel's Running tab: builds, loops and jobs, and what needs me"
+}

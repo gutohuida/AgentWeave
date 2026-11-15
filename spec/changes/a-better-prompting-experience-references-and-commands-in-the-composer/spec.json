@@ -1,0 +1,116 @@
+{
+  "acceptance_criteria": [],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {},
+    "high_water": 0,
+    "requirements": {},
+    "retired": {}
+  },
+  "design": "CURRENT   operator copies a spec's name or text -> pastes into textarea -> agent gets prose, guesses which document\nPROPOSED  operator types @, or uses the insert action beside the thing in the side panel -> a boxed reference sits in the prompt -> the stored message keeps a readable string carrying a stable id -> the agent receives the id plus a one-line label and opens the thing with its own tools\n\nDecided by the operator, 2026-11-12:\n- `@` references things; `/` runs actions, at the start of a message.\n- Insert is its own action beside open (a click keeps meaning open), on list rows and in an open thing's header; dragging into the composer is a nice-to-have.\n- The agent receives kind, id and title, never the contents. It opens the thing with its own tools, so it reads the current version and the prompt stays small. The text a box turns into must not start with a raw `@`, because the Claude CLI expands `@x` into a file attachment (F409).\n- A sent box shows the thing's current name; the name at send time stays in the stored text. A thing that no longer exists shows as a muted box, never vanishes.\n- Ids that agents write in replies render as the same boxes, matched on exact id patterns only.\n- Skills move from `$` to `/`, leaving two triggers: `@` things, `/` actions.\n- `/` commands: `/explore`, `/task`, `/model` as the starting set.\n\nPrior art (research 2026-11-12): `/` means an action and only fires at the start of a message (Claude Code, Windsurf, T3 Code). `@` means a reference to a thing (Cursor, Zed, Claude Code, Copilot on github.com). Copilot's `#`/`@`/`/` changed meaning across surfaces, and its `@` participants are now being deprecated. Slack stores mentions as ids that render as pills. Notion mentions are live objects that track renames. Copilot turns a pasted issue or PR URL into an attachment and keeps the URL in the text. Zed turns pasted code into a mention, with a raw-paste escape hatch.",
+  "evidence": {
+    "checked": [],
+    "limits": []
+  },
+  "hub": {
+    "phase": "exploring",
+    "size": null,
+    "step": null
+  },
+  "kind": "roadmap",
+  "lifecycle": "",
+  "open_questions": [
+    {
+      "question": "Trigger for references: @ (decided 2026-11-12), / stays for actions.",
+      "resolved": true
+    },
+    {
+      "question": "Side panel: insert is its own action beside open, plus drag as a nice-to-have (decided 2026-11-12).",
+      "resolved": true
+    },
+    {
+      "question": "The agent receives kind, id and title, not contents (decided 2026-11-12).",
+      "resolved": true
+    },
+    {
+      "question": "A renamed thing's box shows the current name; the send-time name stays in the text (decided 2026-11-12).",
+      "resolved": true
+    },
+    {
+      "question": "Ids in agents' replies render as boxes (decided 2026-11-12).",
+      "resolved": true
+    },
+    {
+      "question": "Skills move from $ to / (decided 2026-11-12).",
+      "resolved": true
+    },
+    {
+      "question": "/ commands: /explore, /task, /model to start (decided 2026-11-12).",
+      "resolved": true
+    }
+  ],
+  "problem": "To talk about a spec, a task or a requirement in a conversation, the operator copies its name or contents into the composer by hand (operator, 2026-11-12: \"Today I need to copy and paste the spec. I want to make this easier.\"). Copied text is ambiguous to the agent (a title is not an identifier, and documents get renamed), bloats the prompt when the contents are pasted, and reads as undifferentiated text in the thread.\n\nThe triggers that exist are not discovered: the operator did not know `@` and `$` existed (2026-11-12), although the placeholder names `@`.\n\nWhat exists today (read 2026-11-12): the composer is a plain textarea (hub/ui/src/components/agents/Composer.tsx) with three typed triggers (hub/ui/src/lib/composerTrigger.ts): `@path` for workspace files, `$skill` for .claude/skills, and `/` at line start, whose only command is `/model`. A file tab in the side panel has \"Insert into composer\", which appends `@path` as text. Every inserted mention is a plain string; nothing is boxed. The spec pill (ComposerSpecControl) attaches one document to the conversation, which is different from mentioning one in a sentence. The operator's message is stored and delivered as plain text (TimelineEntry.content), and the Hub escapes `@` in Hub-composed prompts because the Claude CLI expands `@path` into a file attachment (hub/hub/file_mentions.py, F409).",
+  "requirements": [],
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "Referencing AgentWeave objects from the composer by typing @ and by an insert action wherever they are shown in the app",
+      "How a reference looks in the composer and in the sent message (boxed, still text underneath)",
+      "What the agent receives for a reference",
+      "Ids in agents' replies rendered as the same boxes",
+      "Making the triggers discoverable",
+      "A small set of / commands that act"
+    ],
+    "non_goals": [
+      "Inlining a referenced object's full contents into the prompt",
+      "Replacing the spec pill that attaches a document to a conversation",
+      "References to things outside AgentWeave (web pages, external tickets)"
+    ]
+  },
+  "slices": [
+    {
+      "builds_after": [],
+      "done": "The operator writes 'The spec [box] has these issues:' without copying anything, and the agent opens the right document from the reference",
+      "intent": "Typing @ lists the project's specs; picking one puts a boxed spec reference in the prompt; the insert action beside a spec in the side panel does the same; the sent message shows the box and the agent receives the spec's id and title",
+      "key": "boxed-spec-reference",
+      "title": "Reference a spec in a sentence"
+    },
+    {
+      "builds_after": [
+        "boxed-spec-reference"
+      ],
+      "done": "An agent reply naming FR-3 and spdoc-... shows two boxes that open the requirement and the spec",
+      "intent": "When an agent writes a spec id, FR-n, a task id or a vault id in a reply, it renders as a box that opens the thing",
+      "key": "references-in-replies",
+      "title": "Ids in agents' replies become the same boxes"
+    },
+    {
+      "builds_after": [
+        "boxed-spec-reference"
+      ],
+      "done": "Each kind can be picked from the menu and inserted from wherever it is shown in the app",
+      "intent": "The same boxed reference works for the other objects the operator talks about, grouped by kind in one @ menu, and existing @file mentions become boxes too",
+      "key": "more-reference-kinds",
+      "title": "Reference tasks, requirements, agents, vault entries, checkpoints and files the same way"
+    },
+    {
+      "builds_after": [
+        "more-reference-kinds"
+      ],
+      "done": "Pasting a spec link yields the same box as picking it from the menu",
+      "intent": "Pasting an AgentWeave link, or an id like spdoc-... or FR-3, turns into the box, with a way to paste raw text",
+      "key": "paste-becomes-reference",
+      "title": "A pasted AgentWeave link or id becomes a reference"
+    },
+    {
+      "builds_after": [],
+      "done": "Typing / lists /explore, /task, /model and the skills, and each one acts; $ no longer opens a menu",
+      "intent": "/ lists actions, including the project's skills (moved from $); /explore starts a spec, /task creates a task from the message",
+      "key": "slash-commands",
+      "title": "Commands that act: /explore, /task, /model, and skills under /"
+    }
+  ],
+  "summary": "Let the operator point at AgentWeave's own objects (specs, requirements, tasks, agents, vault entries, checkpoints, runs, files) from the composer, so they appear in the prompt as a boxed reference instead of copied text, and the agent receives an unambiguous identifier it can open. Ids agents write in replies render as the same boxes. `@` references things, `/` runs actions.",
+  "tasks": [],
+  "title": "A better prompting experience: references and commands in the composer"
+}

@@ -1,0 +1,124 @@
+{
+  "acceptance_criteria": [
+    {
+      "checked_by": "agent",
+      "given": "a dashboard whose run has not arrived",
+      "how_to_check": "cd hub/ui && npx vitest run src/__tests__/dashboardsMotion.test.tsx src/__tests__/loadingThread.test.tsx",
+      "key": "thread-once",
+      "requirement": "loading-placeholders",
+      "then": "panel-shaped placeholders show, exactly one loading thread is among them, and no element carries a shimmer or skeleton class",
+      "when": "the Dashboards screen draws it"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the placeholders are showing",
+      "how_to_check": "Same vitest run (placeholders describe block)",
+      "key": "gone-on-arrival",
+      "requirement": "loading-placeholders",
+      "then": "no placeholder remains",
+      "when": "the run arrives, or the run fails"
+    }
+  ],
+  "algorithms": [],
+  "already_built": {
+    "built": true,
+    "commits": [
+      "12c13bd"
+    ],
+    "note": ""
+  },
+  "aw_identity": {
+    "digests": {
+      "FR-1": "92c9d222b7baa3b3c3d98aa9bdbd010b8d0afdb8610511502e8c2964bac62976"
+    },
+    "high_water": 1,
+    "requirements": {
+      "loading-placeholders": "FR-1"
+    },
+    "retired": {}
+  },
+  "capabilities": {
+    "changes": [
+      "spec/capabilities/project-dashboards/spec.json"
+    ],
+    "creates": []
+  },
+  "delivery": {
+    "agent": null,
+    "cron": "*/5 * * * *",
+    "mode": "none",
+    "reasons": {
+      "mode": "Already built at 12c13bd; approving offers to close the task as built."
+    },
+    "reviewer": null,
+    "stop_at": null,
+    "stop_when_queue_empties": false
+  },
+  "design": "",
+  "evidence": {
+    "checked": [
+      "12c13bd on master: DashboardsView.tsx PanelPlaceholders renders one LoadingThread; dashboards.css drops .aw-dash-skeleton and aw-dash-shimmer",
+      "Locally at 12c13bd: full UI suite 2816 passed, including loadingThread.test.tsx and dashboardsMotion.test.tsx",
+      "CI on 77d7264 (master, includes 12c13bd): ui-test green, run 43743990634"
+    ],
+    "limits": [
+      "Not looked at in a browser while a slow query runs; the screenshots taken for 2.2.0 show a loaded dashboard only"
+    ]
+  },
+  "hub": {
+    "phase": "approved",
+    "size": "fix",
+    "step": "build"
+  },
+  "kind": "change-spec",
+  "lifecycle": "",
+  "open_questions": [],
+  "problem": "FR-5 of spec/changes/dashboards-that-feel-alive-and-draw-right-the-first-time (spdoc-17a01f1f5008) said placeholders 'shimmer where the panels will be'. The build delivered a grey shimmer (.aw-dash-skeleton), which contradicts 'the-thread-is-how-agentweave-shows-it-is-loading': every loading placeholder is the brand's thread, enforced by hub/ui/src/__tests__/loadingThread.test.tsx, which went red on master and blocked the 2.2.0 release. The operator decided on 2026-11-15 that the thread wins, keeping the panel-shaped placeholders. The code was changed at 12c13bd (DashboardsView.tsx PanelPlaceholders, dashboards.css); this document records the behaviour so the spec matches it.",
+  "requirements": [
+    {
+      "key": "loading-placeholders",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator, 2026-11-15: the thread wins over the shimmer FR-5 of the motion change asked for. One moving thing, not four, and loading looks the same everywhere in the app.",
+      "statement": "While a dashboard's queries first run, placeholders shaped like its panels (up to four) stand where the panels will be; the first carries the app's loading thread with the words 'Running its queries', the others are still, and nothing on the screen shimmers. The placeholders are gone once the run arrives, and are not shown when the run fails."
+    }
+  ],
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "What the Dashboards screen shows while a dashboard's queries first run"
+    ],
+    "non_goals": [
+      "Any other dashboard motion (FR-1 to FR-4 and FR-6 of the motion change stand as written)",
+      "Loading states on other screens, which the thread rule already covers",
+      "Changing the loading thread itself"
+    ]
+  },
+  "summary": "While a dashboard's queries first run, panel-shaped placeholders stand where the panels will be, and the brand's loading thread runs in the first of them; nothing shimmers. This replaces FR-5 of 'Dashboards that feel alive and draw right the first time', which asked for a shimmer and so broke the app-wide rule that loading is shown with the thread. Already built at 12c13bd (2026-11-15).",
+  "tag": "dash-loading-thread",
+  "tasks": [
+    {
+      "builder": "Developer",
+      "builder_reason": "Only if it is reopened: a small UI change in files Developer built.",
+      "checker": "QA2",
+      "checker_reason": "QA2 checked the dashboards motion build.",
+      "depends_on": [],
+      "description": "Replace the shimmer placeholders with panel-shaped placeholders carrying one LoadingThread; update the motion tests and the motion drive's test id; rebuild the UI bundle. Already done at 12c13bd.",
+      "files": [
+        "hub/ui/src/components/dashboards/DashboardsView.tsx",
+        "hub/ui/src/styles/dashboards.css",
+        "hub/ui/src/__tests__/dashboardsMotion.test.tsx",
+        "scripts/drive/dashboards_motion_drive.py",
+        "hub/hub/static/ui/"
+      ],
+      "from": null,
+      "key": "thread-placeholders",
+      "requirements": [
+        "loading-placeholders"
+      ],
+      "reviewer": null,
+      "title": "Dashboard placeholders use the thread"
+    }
+  ],
+  "title": "Dashboards load with the brand's thread instead of a shimmer"
+}

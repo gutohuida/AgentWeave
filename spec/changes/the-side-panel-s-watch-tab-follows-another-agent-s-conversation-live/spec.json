@@ -1,0 +1,417 @@
+{
+  "acceptance_criteria": [
+    {
+      "checked_by": "agent",
+      "given": "a conversation is open",
+      "how_to_check": "Browser drive on a trial Hub: open a conversation, add Watch from the panel's tab menu, assert [data-testid=watch-tab] is visible",
+      "key": "watch-tab-opens",
+      "requirement": "watch-tab",
+      "then": "the tab appears and shows an agent menu",
+      "when": "the operator adds the Watch tab to the side panel"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a project with agents A and B, A having two open conversations C1 and C2",
+      "how_to_check": "Component test over WatchTabContainer with fixtures in the order the conversations route returns, plus the drive",
+      "key": "menus-list-right-things",
+      "requirement": "who-can-be-watched",
+      "then": "the agent menu lists A and B with their states, and A's conversation menu lists C1 and C2, newest activity first",
+      "when": "the operator opens the agent menu and then picks A"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the operator watching A's C2 from A's C1",
+      "how_to_check": "Component test with the main view's conversation equal to the watched one; drive step",
+      "key": "in-this-conversation",
+      "requirement": "not-twice",
+      "then": "while the main view shows C2 the Watch tab draws no timeline, says the operator is in this conversation and offers C1; back in C1 it shows C2 again",
+      "when": "they switch the main view to C2, then back to C1"
+    },
+    {
+      "checked_by": "agent",
+      "given": "agent B running a turn in conversation C3 while its most recent other conversation is C4",
+      "how_to_check": "Component test for the three cases",
+      "key": "default-running",
+      "requirement": "default-conversation",
+      "then": "C3 is shown; with B idle, its most recently active conversation is shown; an agent with none says it has no conversation yet",
+      "when": "the operator picks B"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the operator is watching B without having picked a conversation",
+      "how_to_check": "Component test driving running_conversation_id changes; drive with a real Haiku agent sent to a second conversation",
+      "key": "follows-until-hand-pick",
+      "requirement": "follows-the-agent",
+      "then": "the tab switches to it; after the operator picks a conversation by hand, a later turn elsewhere leaves the tab where it is",
+      "when": "B starts a turn in a different conversation"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the operator watching B's conversation from A's conversation",
+      "how_to_check": "Browser drive on a trial Hub with a real Haiku agent: watch, trigger B, assert new timeline entries appear in the tab before the run ends; assert no textarea or stop button inside [data-testid=watch-tab]",
+      "key": "streams-live",
+      "requirement": "live-read-only",
+      "then": "B's turn output appears in the Watch tab while it runs, with no reload, and the tab has no message box, answer, stop or queue control",
+      "when": "B is sent a message and runs a turn"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the operator watching B",
+      "how_to_check": "Component test over the state derivation with agent and question fixtures; drive step with a Haiku agent told to call ask_user",
+      "key": "state-shown",
+      "requirement": "agent-state",
+      "then": "the tab reads working, then waiting for your answer, then idle, each without a reload",
+      "when": "B is working, then asks the operator a question, then the question is answered and B goes idle"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the operator watching B's C3 from A's C1",
+      "how_to_check": "Browser drive: switch, reload, assert the watched agent and conversation; store test for the closed-conversation and deleted-agent fallbacks",
+      "key": "survives-switch-and-reload",
+      "requirement": "remembered",
+      "then": "the Watch tab shows B and C3 in D1 and again after the reload; if C3 was closed meanwhile, B's default conversation is shown; if B was deleted, the tab asks which agent to watch",
+      "when": "they switch the main view to a different agent's conversation D1, then reload the page"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the operator watching B's C3 with an unsent draft in A's C1",
+      "how_to_check": "Browser drive: type a draft, press Talk to, assert the main view's conversation id, go back, assert the draft text",
+      "key": "talk-to-switches",
+      "requirement": "talk-to",
+      "then": "the main view shows C3 with its composer, and returning to C1 shows the draft intact",
+      "when": "they press Talk to B"
+    }
+  ],
+  "algorithms": [],
+  "already_built": {
+    "built": false,
+    "commits": [],
+    "note": ""
+  },
+  "aw_identity": {
+    "digests": {
+      "FR-1": "11add9e3143799d95d8c98b4383de7cf9b123631b7bce9ba98fe9a9cc088cde7",
+      "FR-2": "504736ea2db24326f473469222a6f0a010cf305b6c9516cfbef6e54f159b0a26",
+      "FR-3": "ccb806b5ce198f8fed8315e1eae58e8002c17a493db5fc331f4976d8b092a05a",
+      "FR-4": "c23d05b0fd9df5f9fc226aacdec6fb7907839038f1ef0bb23500495d4e4ce741",
+      "FR-5": "6922e4120955251eba0e2fdadecd0f81df11afd1b71f49d7c968bd32f5b1b196",
+      "FR-6": "2fc01c87a930b8e619f7576323c5a5abf6de114f751bdc64f0a316e5675c79b7",
+      "FR-7": "9928b846c8987a6123201f9f0ae25b6553a78355de1b515897c7b65216880269",
+      "FR-8": "8c8de93a79ff64d609f81a480bb6631318d4f2c5aba1c50a69c0d6aaf885438e",
+      "FR-9": "6fca3f3bb0747b754bbd21e8a4ef60337384a5447be6ca6cc39420af2de6ad2e"
+    },
+    "high_water": 9,
+    "requirements": {
+      "agent-state": "FR-6",
+      "default-conversation": "FR-3",
+      "follows-the-agent": "FR-4",
+      "live-read-only": "FR-5",
+      "not-twice": "FR-9",
+      "remembered": "FR-7",
+      "talk-to": "FR-8",
+      "watch-tab": "FR-1",
+      "who-can-be-watched": "FR-2"
+    },
+    "retired": {}
+  },
+  "capabilities": {
+    "changes": [
+      "spec/capabilities/conversation-side-panel/spec.json"
+    ],
+    "creates": []
+  },
+  "delivery": {
+    "agent": "Developer",
+    "builder": "Developer",
+    "checker": "QA2",
+    "cron": "*/5 * * * *",
+    "mode": "flow",
+    "reasons": {
+      "agent": "Developer built the Terminal tab's UI, the closest precedent.",
+      "builder": "The wiring is UI work over existing components, Sonnet-sized.",
+      "checker": "QA2 drives the browser; QA checks the drive itself.",
+      "cron": "Flows' usual cadence.",
+      "mode": "Drive first, then the wiring, then the drive green: a short flow.",
+      "stop": "Stops when its three tasks are done."
+    },
+    "reviewer": null,
+    "stop_at": null,
+    "stop_when_queue_empties": true
+  },
+  "design": "",
+  "evidence": {
+    "checked": [
+      "hub/ui/src/components/panel/WatchTab.tsx exists, used only by the mock",
+      "panelTabsStore.ts:31 lists five tab ids, no watch; panelTabsStore.ts:1-4 keeps open tabs per project",
+      "agentChat.ts filters the shared stream per agent and conversation, so another conversation's lines already reach the browser",
+      "AgentTimeline renders read-only when its optional callbacks are omitted (mock SidePanel.tsx:194)",
+      "Open questions carry from_agent and conversation (api/questions.ts:60; hub/hub/api/v1/questions.py:164-197)"
+    ],
+    "limits": [
+      "Not driven: the mock was not reopened this turn",
+      "Whether the conversations route returns a last-activity time for the menu's ordering is unconfirmed"
+    ]
+  },
+  "hub": {
+    "builds": [
+      {
+        "budget_cap_usd": null,
+        "builder": "Developer",
+        "builders": [
+          "QA2",
+          "Developer"
+        ],
+        "checker": "QA2",
+        "checkers": [],
+        "chosen_by": "operator",
+        "driver": "flow",
+        "ended_at": "2026-11-15T14:14:02.513506+00:00",
+        "id": "build-be2c106ed0f3",
+        "landing": "main",
+        "lead": null,
+        "level": "reviewed",
+        "pull_request": null,
+        "started_at": "2026-11-15T12:40:44.918860+00:00",
+        "state": "finished",
+        "stop_reason": null,
+        "tasks": {
+          "acceptance-drive": {
+            "builder": "QA2",
+            "checker": "QA"
+          },
+          "run-acceptance-drive": {
+            "builder": "QA2",
+            "checker": "QA"
+          },
+          "watch-follows-newest-output": {
+            "builder": null,
+            "builder_default": true,
+            "checker": null
+          },
+          "watch-tab-wiring": {
+            "builder": "Developer",
+            "checker": "QA2"
+          }
+        },
+        "window_end": null,
+        "window_start": null
+      }
+    ],
+    "phase": "approved",
+    "size": "small",
+    "step": "build"
+  },
+  "kind": "change-spec",
+  "lifecycle": "",
+  "open_questions": [
+    {
+      "question": "Which agents can be watched? Answer (operator, 2026-11-15): every agent, including this agent's other conversations.",
+      "resolved": true
+    },
+    {
+      "question": "Default conversation and following? Answer (operator, 2026-11-15): the running one, else most recent; follow the agent unless picked by hand.",
+      "resolved": true
+    },
+    {
+      "question": "State shown? Answer (operator, 2026-11-15): working, idle and waiting for your answer.",
+      "resolved": true
+    },
+    {
+      "question": "Remembered per what? Answer (operator, 2026-11-15): per project, after the earlier 'per conversation, like the other tabs' was found to rest on a wrong premise (open tabs are kept per project, panelTabsStore.ts:1-4; vault fact fct-ca14ea7023c0). The not-twice rule follows from it.",
+      "resolved": true
+    }
+  ],
+  "problem": "With several agents building at once (a flow hands tasks to four or five), the operator talking to one of them cannot see what another is doing without leaving the conversation they are in, losing their place and their unsent draft. The roadmap's last slice (peer-conversation) answers this. Grounding, master 405bef8: a presentational WatchTab exists (hub/ui/src/components/panel/WatchTab.tsx) but only the mock uses it (hub/ui/mock/screens/SidePanel.tsx:178-200); the panel's tab ids stop at specs/files/running/changes/terminal (hub/ui/src/store/panelTabsStore.ts:31), and which tabs are open is kept per project (panelTabsStore.ts:1-4). The data is already there: the browser's single event stream carries every conversation's agent_output, filtered per hook (hub/ui/src/api/agentChat.ts:348-359, :426), and useAgentChatHistory(agent, conversation) plus the read-only AgentTimeline (components/agents/AgentTimeline.tsx:32-60) draw any conversation. Working state is AgentSummary.running_conversation_id (api/agents.ts:15-29); open questions carry their agent and conversation (api/questions.ts:60, hub/hub/api/v1/questions.py:164-197), so 'waiting for your answer' needs no Hub change.",
+  "requirements": [
+    {
+      "key": "watch-tab",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "The conversation side panel offers a Watch tab alongside Specs, Files, Running, Changes and Terminal, opened, closed and remembered like the others (which tabs are open is kept per project)."
+    },
+    {
+      "key": "who-can-be-watched",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "A flow runs the same agent in several conversations, so watching only other agents would miss the case the operator asked for (operator, 2026-11-15).",
+      "statement": "The Watch tab's agent menu lists every agent of the current project, including the conversation's own agent, each with its colour and what it is doing now; its conversation menu lists the chosen agent's open conversations, newest activity first."
+    },
+    {
+      "key": "not-twice",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "With what is watched kept per project, the main view can arrive at the watched conversation; two copies of one timeline side by side add nothing.",
+      "statement": "When the watched conversation is the one shown in the main view, the Watch tab does not draw it a second time: it says the operator is in this conversation and offers the watched agent's other conversations; watching resumes when the main view moves elsewhere."
+    },
+    {
+      "key": "default-conversation",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "Choosing an agent opens the conversation it is running now, or its most recently active conversation when it is idle; an agent with no conversation shows that it has none yet rather than an empty timeline."
+    },
+    {
+      "key": "follows-the-agent",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Following keeps the tab live as a flow moves the agent from task to task; a hand pick is a deliberate choice that must not be taken away mid-read.",
+      "statement": "While the operator has not picked a conversation by hand, the tab switches to the conversation the watched agent starts running next; once the operator picks one by hand, it stays on that conversation until they choose an agent again."
+    },
+    {
+      "key": "live-read-only",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Watch only (roadmap, operator 2026-11-12): two composers side by side make it easy to write to the wrong agent.",
+      "statement": "The watched conversation is drawn as the main view draws it (messages, turn output, tool calls) and new output appears as the agent produces it without a reload; the tab offers no way to send a message, answer a question, stop a run or change the queue."
+    },
+    {
+      "key": "agent-state",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Waiting for an answer is the state the operator most needs to see (operator, 2026-11-15).",
+      "statement": "The tab says whether the watched agent is working, idle, or waiting for the operator's answer, the last whenever the agent has an unanswered question, and the statement changes when that state does without a reload."
+    },
+    {
+      "key": "remembered",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The tab's purpose is keeping an eye on one agent while talking to several; it matches the panel's other per-project state (operator, 2026-11-15).",
+      "statement": "The watched agent and conversation are kept per project: switching the main view to any other conversation of the project, or reloading the page, leaves the Watch tab showing the same agent and conversation; a remembered conversation that has since been closed falls back to the default conversation of that agent, and a remembered agent that no longer exists leaves the tab asking which agent to watch."
+    },
+    {
+      "key": "talk-to",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "The tab has a control that makes the watched conversation the main view in one click, where the operator can talk to that agent; the conversation they left keeps its unsent draft."
+    }
+  ],
+  "roadmap": {
+    "document": "spec/changes/a-side-panel-worth-keeping-open-activity-changes-files-terminal-and-peers/spec.json",
+    "slice": "peer-conversation"
+  },
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "A Watch tab in the conversation side panel",
+      "Choosing which agent, and which of its conversations, to watch, including this agent's other conversations",
+      "The watched conversation drawn as the main view draws it, updating live, read-only",
+      "Saying whether the watched agent is working, idle or waiting for the operator's answer",
+      "Following the agent into a new conversation unless the operator picked one by hand",
+      "Remembering what is watched per project, across switching conversations and reload",
+      "One click to make the watched conversation the main view"
+    ],
+    "non_goals": [
+      "Sending messages, answering questions, stopping runs or managing the queue from the Watch tab (roadmap: watch only)",
+      "Watching several conversations at once in split views",
+      "Watching an agent of another project",
+      "Notifications or sounds for events in the watched conversation",
+      "Any Hub route or migration: the slice uses data the browser already receives",
+      "Changing how the panel remembers which tabs are open: that stays per project",
+      "A different watched agent per main-view conversation (operator, 2026-11-15: per project)"
+    ]
+  },
+  "summary": "While talking to one agent, the operator opens a Watch tab in the side panel, picks another agent (or another conversation of the same agent), and sees that conversation stream in live and read-only, with what the agent is doing now — working, idle or waiting for the operator's answer — and one click to switch the main view to it. What is watched is kept per project, so it stays put as the operator moves between conversations.",
+  "tag": "WATCH",
+  "tasks": [
+    {
+      "builder": "QA2",
+      "builder_reason": "QA2 wrote and ran the Terminal and dashboards drives.",
+      "checker": "QA",
+      "checker_reason": "QA is not the drive's author.",
+      "depends_on": [],
+      "description": "Write the browser drive for this slice on a trial Hub with real Haiku agents, covering streams-live, state-shown, in-this-conversation, survives-switch-and-reload and talk-to-switches; it must fail on master (no Watch tab) and is committed under scripts/drive/ with a --self-test path that passes now.",
+      "files": [
+        "scripts/drive/watch_tab_drive.py"
+      ],
+      "from": null,
+      "key": "acceptance-drive",
+      "requirements": [
+        "live-read-only",
+        "agent-state",
+        "not-twice",
+        "remembered",
+        "talk-to"
+      ],
+      "reviewer": null,
+      "title": "Watch acceptance drive"
+    },
+    {
+      "builder": "Developer",
+      "builder_reason": "Developer built the Terminal tab's UI wiring, the closest precedent; Sonnet-sized UI work.",
+      "checker": "QA2",
+      "checker_reason": "QA2 drives the browser and wrote the drive this must pass.",
+      "depends_on": [
+        "acceptance-drive"
+      ],
+      "description": "Add 'watch' to the panel's tab ids (with the persisted-tab migration), mount a WatchTabContainer from ConversationView that derives agents, conversations, default and following conversation, working/idle/waiting state (agents plus open questions), the in-this-conversation case and the per-project remembered choice with its fallbacks, renders AgentTimeline read-only inside the existing WatchTab, and wires Talk to; component and store tests for each criterion; rebuild the committed UI bundle.",
+      "files": [
+        "hub/ui/src/store/panelTabsStore.ts",
+        "hub/ui/src/components/panel/",
+        "hub/ui/src/components/agents/ConversationView.tsx",
+        "hub/ui/src/components/spec/specPreferences.ts",
+        "hub/ui/src/__tests__/",
+        "hub/hub/static/ui/"
+      ],
+      "from": null,
+      "key": "watch-tab-wiring",
+      "requirements": [
+        "watch-tab",
+        "who-can-be-watched",
+        "not-twice",
+        "default-conversation",
+        "follows-the-agent",
+        "live-read-only",
+        "agent-state",
+        "remembered",
+        "talk-to"
+      ],
+      "reviewer": null,
+      "title": "Wire the Watch tab"
+    },
+    {
+      "builder": "QA2",
+      "builder_reason": "The drive's author runs it green.",
+      "checker": "QA",
+      "checker_reason": "QA checks the drive's evidence independently of its author.",
+      "depends_on": [
+        "acceptance-drive",
+        "watch-tab-wiring"
+      ],
+      "description": "Run the acceptance drive against the built tab on a trial Hub until it passes, fixing what it finds; record the run's output as evidence.",
+      "files": [
+        "scripts/drive/watch_tab_drive.py",
+        "hub/ui/src/components/panel/",
+        "hub/hub/static/ui/"
+      ],
+      "from": null,
+      "key": "run-acceptance-drive",
+      "requirements": [
+        "live-read-only",
+        "agent-state",
+        "not-twice",
+        "remembered",
+        "talk-to"
+      ],
+      "reviewer": null,
+      "title": "Run the Watch drive green"
+    },
+    {
+      "depends_on": [],
+      "description": "WatchTab.tsx:41-44 scrolls .aw-watch-body to the bottom only when the watched peer or conversation changes (deps [peer, conversationId]). Output that arrives later lands below the fold: in the drive at d80a12f, the state-shown-waiting.png screenshot shows B's 'DONE' clipped at the bottom edge and the whole ask_user turn, which is what makes B 'waiting for your answer', out of view. The tab's purpose is to follow another agent's conversation live, so while the operator is at (or near) the bottom, new timeline entries should keep it pinned to the newest message, as the main view's conversation does. If the operator has scrolled up to read, it should leave them where they are. Add a check that reads what is actually visible (for example, the newest entry's bounding box lies inside .aw-watch-body's client rect), not DOM text, to watch_tab_drive.py's streams-live step or a component test.",
+      "files": [
+        "hub/ui/src/components/panel/WatchTab.tsx",
+        "scripts/drive/watch_tab_drive.py"
+      ],
+      "from": null,
+      "key": "watch-follows-newest-output",
+      "requirements": [
+        "live-read-only"
+      ],
+      "reviewer": null,
+      "title": "Watch tab keeps the newest output in view while the agent works"
+    }
+  ],
+  "title": "The side panel's Watch tab follows another agent's conversation live"
+}
