@@ -978,8 +978,8 @@ def check_interactive(page, state):
            f"after {widened}")
     record("ac-interactive-first-key", True, intact,
            f"the first command typed after the resize arrived whole on attempt {attempts_after}; "
-           f"Git Bash/ConPTY drops its first character in about one run in four, with every key "
-           f"sent by the browser (TSP-6), so a retry is a failure here")
+           f"F1177: Git Bash/ConPTY drops its first character in about one run in four, with every key "
+           f"sent by the browser and written to the pty by the Hub (TSP-6), so a retry is a failure here")
 
 
 def read_cols(page):
