@@ -1315,17 +1315,35 @@ async def apply_transition(
         from . import landing_queue
 
         unchecked = bool(approval_gate is not None and approval_gate.overrode_own_failure)
-        landing_queue.stage(
-            session,
-            task,
-            actor_kind=actor.kind,
-            actor=actor.agent or ("operator" if actor.is_operator else ""),
-            kind="approval",
-            targets=approval_gate.will_merge if approval_gate is not None else None,
-            unchecked=unchecked,
-            override_reason=overridden if unchecked else None,
-            override_by=override_by if unchecked else None,
-        )
+        from . import task_integration
+        from .builds import LANDING_NOWHERE, LANDS_NOWHERE
+        from .db.models import Build
+
+        build = await session.get(Build, task.build_id) if task.build_id else None
+        if build is not None and build.landing == LANDING_NOWHERE:
+            # A build that lands nowhere stages no landing at all: only the integration record
+            # saying so (`ac-retro-nolanding`).
+            task_integration.record(
+                session,
+                task,
+                task_integration.IntegrationResult(
+                    outcome=task_integration.SKIPPED, reason=LANDS_NOWHERE
+                ),
+                actor_kind=actor.kind,
+                actor=actor.agent or ("operator" if actor.is_operator else ""),
+            )
+        else:
+            landing_queue.stage(
+                session,
+                task,
+                actor_kind=actor.kind,
+                actor=actor.agent or ("operator" if actor.is_operator else ""),
+                kind="approval",
+                targets=approval_gate.will_merge if approval_gate is not None else None,
+                unchecked=unchecked,
+                override_reason=overridden if unchecked else None,
+                override_by=override_by if unchecked else None,
+            )
         # The last open task of a document approved is a major event of the project's story: the
         # chapters job fires once this commits, if it is on with automatic firing.
         from . import chapters_job

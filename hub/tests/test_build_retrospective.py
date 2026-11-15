@@ -1165,7 +1165,5 @@ async def test_ac_retro_nolanding_fires_at_the_last_approval(app, auth_headers, 
 
     assert len(await _firings()) == 1 and len(fake.calls) == 1
     async with async_session_factory() as session:
-        landed = (
-            await session.execute(select(TaskLanding).where(TaskLanding.state == "landed"))
-        ).all()
-    assert landed == []
+        landings = (await session.execute(select(TaskLanding))).all()
+    assert landings == []  # no landing record of any state for a nowhere build's tasks
