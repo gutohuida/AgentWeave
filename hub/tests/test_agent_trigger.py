@@ -2326,14 +2326,14 @@ async def test_trigger_resolves_claude_proxy_env_at_spawn_time(
     assert spawned_env["ANTHROPIC_BASE_URL"] == "https://api.minimax.io/anthropic"
 
 
-async def _spawned_claude_env(app, auth_headers, bind_runner, agent, config):
+async def _spawned_claude_env(app, auth_headers, bind_runner, agent, config, model=None):
     sync = await app.post(
         "/api/v1/projects/proj-test/session/sync",
         json={"data": {"agents": {agent: config}}},
         headers=auth_headers,
     )
     assert sync.status_code == 200
-    await bind_runner(agent, cli="claude")
+    await bind_runner(agent, cli="claude", model=model)
     fake_spawn = _fake_pty(
         ['{"type":"result","subtype":"success","is_error":false,"session_id":"sess-bg-1"}\n']
     )
@@ -4008,3 +4008,21 @@ async def test_run_lifecycle_events_carry_the_runs_initiator(app, auth_headers):
     assert completed["run-by-a-flow"]["initiator"] == "autonomous"
     # No row, no claim: an unknown run is not said to be the operator's.
     assert completed["run-not-recorded"]["initiator"] is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "model, expected",
+    [("claude-haiku-4-5-20251001", "false"), ("haiku", "false"), ("claude-sonnet-5-5", None)],
+)
+async def test_a_haiku_claude_run_has_tool_search_turned_off(
+    app, auth_headers, bind_runner, monkeypatch, model, expected
+):
+    """`dashboards-that-feel-alive-and-draw-right-the-first-time` FR-9: with its tools deferred a
+    Haiku turn called `ToolSearch` 51 times and never the tool it loaded. Haiku gets the tools
+    themselves; other models keep tool search."""
+    monkeypatch.delenv("ENABLE_TOOL_SEARCH", raising=False)
+    env = await _spawned_claude_env(
+        app, auth_headers, bind_runner, "ts-claude", {"runner": "claude"}, model=model
+    )
+    assert env.get("ENABLE_TOOL_SEARCH") == expected

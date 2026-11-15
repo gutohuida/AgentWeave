@@ -49,7 +49,13 @@ async def _save(app, headers, name: str, panels: List[Dict[str, Any]]) -> Dict[s
         AA, json={"name": name, "description": "the question", "panels": panels}, headers=headers
     )
     assert saved.status_code == 200, saved.text
-    return saved.json()
+    return _dashboard(saved.json())
+
+
+def _dashboard(answer: Dict[str, Any]) -> Dict[str, Any]:
+    """An agent's save or edit answer without what only its run adds (`panel_problems`, FR-9 of
+    `dashboards-that-feel-alive-and-draw-right-the-first-time`): the dashboard a read answers."""
+    return {k: v for k, v in answer.items() if k not in ("panel_problems", "next_step")}
 
 
 async def _edit(app, headers, dash: Dict[str, Any], operations, base=None):
@@ -116,6 +122,7 @@ async def test_changing_one_chart_kind_keeps_every_other_field(app, auth_headers
             app, headers, dash, [{"op": "change_panel", "panel_id": target, "kind": "table"}]
         )
     ).json()
+    body = _dashboard(body)
     after = await _read(app, auth_headers, dash["id"])
     assert after == body
     assert [p for p in after["panels"] if p["id"] != target] == [
@@ -210,9 +217,11 @@ async def test_a_stale_edit_or_replace_is_refused_with_the_current_dashboard(app
     """ac-stale: two writes from the same base version."""
     headers = await _writer("run-edit-5", "Analyst", "Change the Stale dashboard.")
     dash = await _save(app, headers, "Stale", _four()[:2])
-    newer = (
-        await _edit(app, headers, dash, [{"op": "set_description", "description": "other"}])
-    ).json()
+    newer = _dashboard(
+        (
+            await _edit(app, headers, dash, [{"op": "set_description", "description": "other"}])
+        ).json()
+    )
     assert newer["version"] == 2
 
     stale = await _edit(app, headers, dash, [{"op": "set_description", "description": "stale"}])

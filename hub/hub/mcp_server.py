@@ -965,18 +965,38 @@ DASHBOARD_QUERY_REQUEST_TIMEOUT_SECONDS = 60
 
 
 @_tool()
-def dashboard_query_reference() -> Dict[str, Any]:
+def dashboard_query_reference(tables: Optional[List[str]] = None) -> Dict[str, Any]:
     """Everything a dashboard query can read: each table and column, its type and a short meaning,
     generated from the running Hub, with the query rules in `notes`, the known traps in `traps`
     (where a straightforward count gives the wrong answer, and how to count instead) and the
     limits, all before the tables.
+
+    Without `tables`, every table is listed with its meaning and its columns' names only, so the
+    answer fits in one tool result (in full it is over a hundred thousand characters). Then call
+    again naming the tables you will query, `tables=["turn_usage", "runs"]`, for each of their
+    columns' type and meaning.
 
     Every table holds only the current project's rows, so no project filter is needed. Read it
     before writing a query with `run_dashboard_query`, and read the vault note `src-27723331ae1d`
     ("What the project's data means, and its traps") with `vault_read`: where a straightforward
     count gives the wrong answer. When you find another trap, add it with `vault_append`.
     """
-    return _hub_request("GET", "/dashboards/query-reference")
+    if tables:
+        return _hub_request(
+            "GET", "/dashboards/query-reference", params={"tables": ",".join(tables)}
+        )
+    reference = _hub_request("GET", "/dashboards/query-reference")
+    if isinstance(reference, dict) and isinstance(reference.get("tables"), list):
+        reference["tables"] = [
+            {**t, "columns": [c.get("name") for c in t.get("columns") or [] if isinstance(c, dict)]}
+            for t in reference["tables"]
+            if isinstance(t, dict)
+        ]
+        reference["tables_note"] = (
+            "Columns are listed by name only; call dashboard_query_reference again with "
+            "tables=[...] naming the tables you will query for each column's type and meaning."
+        )
+    return reference
 
 
 @_tool()
@@ -1012,15 +1032,33 @@ def save_dashboard(
     it answers, and `panels` is a list of `{"title", "query", "kind"}`, where `kind` is one of
     `number`, `table`, `bar`, `stacked_bar`, `line` (anything else is refused
     `invalid_chart_kind`). For bar, stacked bar and line the first column labels the points and
-    the numeric columns after it are drawn; a number shows the first numeric value. Saving does
-    not run the queries, so check each with `run_dashboard_query` first: a panel whose query fails
-    is saved and shows its error when opened.
+    the numeric columns after it are drawn; a number shows the first numeric value. Check each
+    query with `run_dashboard_query` first. The answer's `panel_problems` lists every saved panel
+    that will not draw, with its `error` or drawing `warning`: when it is not empty, follow its
+    `next_step` (`edit_dashboard` with a `change_panel` per broken panel) until it is.
 
     **Choose the kind from the question.** One figure ("this week's cost", "open tasks"): `number`.
-    A ranking or comparison across labels ("cost per spec", "tasks per agent"): `bar`. Parts of a
-    whole across labels ("send-backs per model, by reason", with one numeric column per part):
-    `stacked_bar`. Change over time ("runs per day"): `line`. Detail rows ("the latest failed
-    runs"): `table`. The app decides colours and motion; you choose only the kind and the query.
+    A ranking or comparison, "X per Y" with one value per label ("cost per spec", "tasks per
+    agent"): `bar`, never a table, even when it reads as a breakdown. A breakdown by two labels,
+    "X per Y by Z" ("send-backs per model by reason", "runs per agent by status"): `stacked_bar`,
+    never a table -- one bar per Y, one stacked part per Z. Change over time, "X per day" ("runs
+    per day"): `line`, even though it says "per". Detail rows to read one by one ("the latest
+    failed runs"): `table`, the only question a table answers. The app draws the chart and
+    decides colours, number formats and motion: you choose only the kind and the query, and
+    write no chart code. Do not load a charting or data
+    visualisation skill for this: those are for drawing a chart yourself, and here the app does.
+
+    **Every value column stays a number.** The app formats the figures, so a query returns them
+    raw: `round(sum(api_equivalent_usd_micros) / 1e6, 2) as "Cost (USD)"`, never
+    `printf('$%.2f', ...)` or `'$' || ...`, which turn the value into text that a number, bar,
+    stacked bar or line cannot draw. Put the unit in the column's alias instead.
+
+    **A stacked bar's query pivots: one row per bar, one numeric column per part.** A query that
+    groups by both labels gives long rows (`model, reason, count`), which do not stack; keep the
+    first label in `group by` and turn each value of the second into its own column with
+    `sum(<column> = '<value>') as "<Value>"`, one per value (run a `select distinct` first to learn
+    them): `select model as "Model", sum(reason = 'defect') as "Defect", sum(reason = 'flaky') as
+    "Flaky" ... group by model`. Reshape the query this way rather than falling back to a table.
 
     **Shape the query so it reads well.** Order the rows as they should be drawn: bars are drawn
     in the query's order, so `order by` the value (largest first) for a ranking. Keep a bar or
@@ -1029,6 +1067,14 @@ def save_dashboard(
     Alias every column to the readable name the legend and tooltip will show (`as "Cost (USD)"`,
     not `sum(api_equivalent_usd_micros)`). The data note (`vault_read("src-27723331ae1d")`) has a
     worked example of each kind.
+
+    **Save exactly the queries you ran.** A query changed after it ran (to widen a filter, rename a
+    column or show other rows) is a query nobody checked: run the changed one again before saving.
+
+    **Saving is this call; nothing is saved until you make it.** Once every query has run, call
+    `save_dashboard` with all the panels at once. Do not write the panels out in your reply in its
+    place, or say you are about to call it and stop: a dashboard you only described does not exist.
+    Your turn is done when this call has answered with the dashboard's `id`.
 
     **To change a dashboard that already exists, use `edit_dashboard`**, which changes only what
     you name. `dashboard_id` replaces that dashboard whole (keep each panel's `id` from
@@ -1093,9 +1139,9 @@ def edit_dashboard(
     - `{"op": "move_panel", "panel_id": "pnl-...", "position": n}`
     - `{"op": "rename", "name": "..."}`, `{"op": "set_description", "description": "..."}`
 
-    Queries are held to `run_dashboard_query`'s rules but not run, so check each new query there
-    first. A refusal changes nothing: 422 `operation_refused` names `operation_index` (from 0) and
-    `reason` (`invalid_chart_kind`, `not_queryable`, `invalid_panel`, `unknown_panel`); 409
+    Check each new query with `run_dashboard_query` first; the answer's `panel_problems` lists
+    every panel that still will not draw. A refusal changes nothing: 422 `operation_refused` names
+    `operation_index` (from 0) and `reason` (`invalid_chart_kind`, `not_queryable`, `invalid_panel`, `unknown_panel`); 409
     `dashboard_name_taken` for a rename to a name in use; 409 `stale_version` when the dashboard
     changed since you read it, with the `current` dashboard to make your change against. Answers
     the dashboard at its new `version`, which the operator can undo in one step.

@@ -115,6 +115,14 @@ class ClaudeAdapter(RunnerAdapter):
         "Your host also has tools with similar names — `SendMessage` continues a subagent you "
         "started — which cannot reach AgentWeave agents or the operator."
     )
+    # FR-9 of `dashboards-that-feel-alive-and-draw-right-the-first-time`: Claude Code defers MCP
+    # tools behind `ToolSearch`, and a Haiku turn called it 21 times, never the tool it loaded.
+    deferred_tool_note = (
+        "Where these tools are listed as deferred, load every one you need with one `ToolSearch` "
+        "call (`select:mcp__agentweave__<name>,mcp__agentweave__<name>`), then call each tool by "
+        "its full name. `ToolSearch` only loads a schema and never runs a tool: once it has "
+        "returned a tool, do not search for it again -- call it."
+    )
     write_tool_kinds = CLAUDE_WRITE_TOOLS
     # `checkpoint_policy.py:24`'s comment: the value today's thresholds were chosen against.
     compaction_percent = 95
@@ -124,6 +132,16 @@ class ClaudeAdapter(RunnerAdapter):
     # unprompted model turn; before it, the command was killed after the reply. With this the
     # model is told the parameter is unsupported, and the run ends at its reply.
     run_env_defaults = {"CLAUDE_CODE_DISABLE_BACKGROUND_TASKS": "1"}
+
+    def run_env(self, model: Optional[str]) -> Dict[str, str]:
+        env = super().run_env(model)
+        # FR-9 of `dashboards-that-feel-alive-and-draw-right-the-first-time`: with the tools
+        # deferred, a Haiku turn called `ToolSearch` 51 times, never once the tool it loaded, then
+        # saved queries over guessed tables; the note above did not stop it. Haiku is given the
+        # tools themselves instead. Other models keep tool search, which saves their context.
+        if model and "haiku" in model.lower():
+            env["ENABLE_TOOL_SEARCH"] = "false"
+        return env
 
     def launchability(self, agent: str, config: Mapping[str, Any]) -> LaunchVerdict:
         cli, present, reason = probe_binary(self.binary, config.get("cli"), agent)
