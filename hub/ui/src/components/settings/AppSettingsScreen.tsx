@@ -8,6 +8,7 @@ import { applyColorMode } from '@/lib/colorMode'
 import type { AppSettingsSection } from '@/lib/navigation'
 import { useConfigStore, type ModeId } from '@/store/configStore'
 import { useWindowsNotifyKinds } from '@/api/notifySettings'
+import { useHubVersion } from '@/api/hubVersion'
 import { loadNotifyPrefs } from '@/lib/notify/prefs'
 import { appChangedSections } from '@/lib/settingsChanged'
 import { NotificationSettings, WindowsNotificationSettings } from './NotificationSettings'
@@ -64,6 +65,7 @@ export function AppSettingsScreen({
       body = (
         <>
           <ConnectionSettings onOpenSetup={onOpenSetup} />
+          <VersionSettings />
           <CloseSettings />
         </>
       )
@@ -129,6 +131,23 @@ function ConnectionSettings({ onOpenSetup }: { onOpenSetup: () => void }) {
               Change
             </Button>
           </div>
+        }
+      />
+    </SettingsGroup>
+  )
+}
+
+function VersionSettings() {
+  const { data } = useHubVersion()
+  if (!data?.version) return null
+  return (
+    <SettingsGroup title="Version" description="The AgentWeave this window is connected to.">
+      <SettingsRow
+        label="AgentWeave version"
+        control={
+          <span className="text-xs tabular-nums" data-testid="hub-version">
+            {data.version}
+          </span>
         }
       />
     </SettingsGroup>

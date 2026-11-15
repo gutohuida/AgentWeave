@@ -172,6 +172,20 @@ describe('appearance and the Hub connection', () => {
   })
 })
 
+describe('the version', () => {
+  it('App settings shows the version /health reports', async () => {
+    const fetchMock = vi.fn(async (url: string) =>
+      String(url).endsWith('/health')
+        ? ({ ok: true, status: 200, json: async () => ({ status: 'ok', version: '2.1.0', install: 'pip' }) } as unknown as Response)
+        : ({ ok: true, status: 200, json: async () => [] } as unknown as Response),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+    window.history.pushState(null, '', '/?project=proj-test&appSettings=connection')
+    mount(<App />)
+    expect(await screen.findByTestId('hub-version')).toHaveTextContent('2.1.0')
+  })
+})
+
 describe('each settings page names whose settings it holds, and links to App settings', () => {
   it('App settings says they are the operator’s, for every project', () => {
     window.history.pushState(null, '', '/?project=proj-test&appSettings=notifications')
