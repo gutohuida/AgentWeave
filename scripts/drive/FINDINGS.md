@@ -41834,3 +41834,19 @@ Given "change the dashboard" with no name, the agent correctly called `ask_user`
 **Tier:** 1
 
 QA sent CDA-4 (`task-c4e700984c45`, the acceptance-drive task) back at 04:39:44, classed `flaky`. The send-back said to re-run only after the fix task CDA-5 (`task-3bb3828adf87`, created by QA's amendment at 04:39:25) had landed. CDA-4 has no `depends_on` link to CDA-5, so the flow treats it as ready work. The flow started QA2's turn on it every ~30 s. Between 04:39:57 and 04:45 there were seven `assigned -> in_progress -> assigned` cycles, each a whole paid Opus turn, and each could only confirm that CDA-5 was still `in_progress`. A sent-back task can only move to `in_progress` or `assigned`, and neither one parks it. Only the operator can set `depends_on`, and an agent cannot. **Expected:** a send-back (or an `amend_spec_document add_task` made during a review) that names a fix task makes the sent-back task wait on that task, and the flow does not staff it until the fix is approved. Alternatively, the holder can mark its task as waiting on a named task. **Test:** review a task, send it back with a fix task created by amendment, and fire the flow twice. The sent-back task's holder gets no turn until the fix task is approved, and then gets exactly one.
+
+## F1177 (B) -- Git Bash under ConPTY drops the first character typed after the panel is resized, about one run in four
+
+**Status:** open -- Hub delivers every key to the pty in order (TSP-6 trace); where it is lost downstream is not established
+**Source:** found by driving -- `scripts/drive/panel_terminal_drive.py`, check ac-interactive-first-key; runs 231921, 183933 (QA), 000749, 001403, 002206 and a further 8 (Developer, 2026-11-14/15)
+**Theme:** Terminal
+**Ready:** no -- needs a ConPTY/readline probe outside the Hub
+**Tier:** 0
+
+The first command typed after dragging the panel wider arrives as `cho AWC...$(tput cols)W` and bash answers "cho: command not found". The drive's `read_cols` retries, so ac-interactive still passes; ac-interactive-first-key fails when a retry was needed (3 of 5 runs, then 2 of 8, on a quiet machine).
+
+**Where it goes.** With a scratch trace in `Session.write` and `Session.resize` (hub/hub/terminal/sessions.py, reverted), run 5 shows the browser's frames reaching the Hub whole and in order: `ESC[I`, then `e`,`c`,`h`,`o`,... each as its own `pty.write` call, 3 s after the last resize (`scripts/drive/evidence/tsp6-pty-trace-failing-run.log`, lines 140-166 are the failing attempt, 167-192 the retry that worked). The `e` is written to the pty and bash still sees `cho`, so the loss is after the Hub: ConPTY or Git Bash's readline. No in-process test reproduces it (`test_terminal.py::*just_after_a_resize*`, and QA's 40-frame resize burst, lose nothing at the socket).
+
+**What does not explain it.** Passing attempts also begin with `ESC[I` (xterm's focus-in report, which our product forwards), and no run with that report filtered out has been recorded, so whether it is involved is untested; a 150 ms settle wait before typing made no measurable difference. Failing attempt 1 carried `ESC[I`, the passing retry did not, in both traced failures; with 2 failures that is a lead, not a cause.
+
+**Effect.** An operator typing straight after a resize may lose the first key of that command. Nothing is lost at the Hub. There are no terminal user docs to carry the note yet; the check's wording and this entry are the record.

@@ -413,6 +413,11 @@ class Shell:
             queue.put_nowait(frame)
 
     def write(self, data: str) -> None:
+        # F1177 (known limitation): Git Bash under ConPTY intermittently loses the first key typed
+        # after focus returns. Every key is sent and written here in order (TSP-6). Dropping xterm's
+        # ESC[I/ESC[O focus reports (DECSET 1004) before this write did NOT stop it (TSP-8: 2 of 6
+        # drive runs still lost the key, the ~1-in-4 baseline), so they are forwarded: filtering
+        # would only cost vim/tmux their focus events (autoread, pane focus) for no gain.
         if self.running and self._pty is not None and data:
             try:
                 self._pty.write(data)
