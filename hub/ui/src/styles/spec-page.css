@@ -662,7 +662,7 @@ button.aw-sp-check-pill:focus-visible { outline: none; box-shadow: 0 0 0 2px var
 .aw-sp-thread[data-state="done"] { stroke: var(--sp-thread); }
 .aw-sp-thread[data-state="in-progress"] { stroke: var(--green); stroke-dasharray: 5 4; animation: dependency-dash-flow 900ms linear infinite; }
 .aw-sp-thread[data-state="waiting"] { stroke: color-mix(in srgb, var(--amber) 60%, var(--border-hi)); }
-.aw-sp-thread[data-state="rejected"] { stroke: color-mix(in srgb, var(--red) 65%, var(--border-hi)); }
+.aw-sp-thread[data-state="rejected"] { stroke: var(--purple); stroke-dasharray: 2 3; }
 .aw-sp-thread[data-lit="on"] { stroke-width: 2.5; }
 .aw-sp-thread[data-lit="dim"], .aw-sp-knot[data-lit="dim"] { opacity: 0.18; }
 .aw-sp-task[data-lit="dim"] { opacity: 0.45; }
@@ -673,4 +673,4 @@ button.aw-sp-check-pill:focus-visible { outline: none; box-shadow: 0 0 0 2px var
 .aw-sp-thread-swatch[data-state="done"] { border-color: var(--sp-thread); }
 .aw-sp-thread-swatch[data-state="in-progress"] { border-color: var(--green); border-top-style: dashed; }
 .aw-sp-thread-swatch[data-state="waiting"] { border-color: color-mix(in srgb, var(--amber) 60%, var(--border-hi)); }
-.aw-sp-thread-swatch[data-state="rejected"] { border-color: color-mix(in srgb, var(--red) 65%, var(--border-hi)); }
+.aw-sp-thread-swatch[data-state="rejected"] { border-color: var(--purple); border-top-style: dotted; }
