@@ -52,7 +52,11 @@ seeded component reads a new one.
    Spec, Vault) use the full width.
 7. **Motion** uses the tokens in `primitives.css` (`--ease-out`, `--dur-pop`, `--dur-overlay`, `--dur-exit`),
    `.aw-delayed` for any loader, and stops under `prefers-reduced-motion`.
-8. **States the data lacks** (an empty vault, an open question) may be simulated in the screen file, marked
+8. **Fixtures are local.** `mock/fixtures/*.json` is recorded from your own project and gitignored. On a
+   fresh checkout `mock/ensureFixtures.mjs` (run by the mock vite config and `npm run typecheck:mock`)
+   copies the minimal tracked stubs from `mock/fixtures-stub/` for any file that is missing; recorded
+   files are never overwritten. Raw `tsc -p tsconfig.mock.json` needs that to have run once.
+9. **States the data lacks** (an empty vault, an open question) may be simulated in the screen file, marked
    `// mock state`. Never edit fixture JSON by hand; add fixtures by dumping a replica route.
 
 ## The Thread page (the loom, approved 2026-10-24/25)
