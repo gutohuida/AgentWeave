@@ -185,10 +185,26 @@ def descendants(root_pid, procs):
 
 
 def shell_processes(hub_pid):
-    """Shell-like processes under the Hub, as {pid: name}."""
+    """Shell-like processes the Hub started for a terminal, as {pid: name}: those whose whole
+    ancestry down from the Hub is shells and console hosts (a terminal shell, its console host,
+    what it launches). Agent runs' Git Bash and cmd tool calls sit under the agent's own process
+    (claude, node ...) and the Hub's `wsl.exe -l -q` detection is filtered, so neither counts. A
+    real terminal spawn is seen through this same filter by control_shell, which is what shows a
+    spawn from a refused request would still be reported."""
     procs = processes()
+
+    def shell_lineage(pid):
+        parent = procs[pid]["ParentProcessId"]
+        while parent != hub_pid:
+            up = procs.get(parent)
+            if up is None or (up["Name"] or "").lower() not in SHELL_NAMES or is_detection(up):
+                return False
+            parent = up["ParentProcessId"]
+        return True
+
     return {pid: procs[pid]["Name"] for pid in descendants(hub_pid, procs)
-            if (procs[pid]["Name"] or "").lower() in SHELL_NAMES and not is_detection(procs[pid])}
+            if (procs[pid]["Name"] or "").lower() in SHELL_NAMES and not is_detection(procs[pid])
+            and shell_lineage(pid)}
 
 
 def is_detection(proc):
