@@ -1,6 +1,7 @@
 import * as React from 'react'
 import type { DashboardRun, DashboardSummary } from '@/api/dashboards'
 import { Icon } from '@/components/common/Icon'
+import { LoadingThread } from '@/components/common/LoadingThread'
 import { PanelChart } from './PanelChart'
 import { usePanelPresence } from './usePanelPresence'
 import { hubDate } from '@/lib/hubTime'
@@ -225,7 +226,7 @@ export function DashboardsView({ dashboards, selectedId, run, refreshing, error,
           {error}
         </div>
       )}
-      {!run && !error && <PanelSkeletons count={selected.panel_count} />}
+      {!run && !error && <PanelPlaceholders count={selected.panel_count} />}
       <div className={`aw-dash-panels grid gap-4${refreshing ? ' is-refreshing' : ''}`}>
         {present.map(({ panel, state }, i) => (
           <section
@@ -253,18 +254,16 @@ export function DashboardsView({ dashboards, selectedId, run, refreshing, error,
   )
 }
 
-/** Stand-ins shaped like panels while a dashboard's queries first run. */
-function PanelSkeletons({ count }: { count: number }) {
+/** Stand-ins shaped like panels while a dashboard's queries first run. The first carries the
+ *  brand's loading thread; the rest are still, so one thing moves (the-thread-is-how-agentweave-
+ *  shows-it-is-loading, which the grey shimmer this replaced broke, operator 2026-11-15). */
+function PanelPlaceholders({ count }: { count: number }) {
   return (
-    <div className="grid gap-4" data-testid="dashboard-skeleton" aria-label="Running its queries" role="status">
+    <div className="grid gap-4" data-testid="dashboard-placeholders" aria-label="Running its queries" role="status">
       {Array.from({ length: Math.max(1, Math.min(count, 4)) }, (_, i) => (
-        <div key={i} className="rounded-lg p-4" style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
-          <div className="aw-dash-skeleton mb-4 h-3.5 w-40" />
-          <div className="flex flex-col gap-2">
-            {[82, 64, 46, 30].map((w) => (
-              <div key={w} className="aw-dash-skeleton h-3" style={{ width: `${w}%` }} />
-            ))}
-          </div>
+        <div key={i} className="aw-dash-placeholder rounded-lg p-4" style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
+          <div className="aw-dash-placeholder-title mb-4 h-3.5 w-40" />
+          {i === 0 ? <LoadingThread label="Running its queries" minHeight={96} /> : <div style={{ height: 96 }} />}
         </div>
       ))}
     </div>

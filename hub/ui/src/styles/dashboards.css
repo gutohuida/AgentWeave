@@ -154,24 +154,11 @@
 }
 
 /* While the queries first run: shimmering stand-ins shaped like panels. */
-.aw-dash-skeleton {
-  position: relative;
-  overflow: hidden;
+/* Placeholders while a dashboard's queries first run: still title bars; the loading thread in the
+   first card is the only motion (LoadingThread). */
+.aw-dash-placeholder-title {
   background: var(--surface-2);
   border-radius: var(--radius-md);
-}
-.aw-dash-skeleton::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  transform: translateX(-100%);
-  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--text) 7%, transparent), transparent);
-  animation: aw-dash-shimmer 1.3s ease-in-out infinite;
-}
-@keyframes aw-dash-shimmer {
-  to {
-    transform: translateX(100%);
-  }
 }
 
 /* Refreshing: the figures dim a little until the new ones arrive. */
@@ -192,7 +179,6 @@
   .aw-dash-dot,
   .aw-dash-mark,
   .aw-dash-tip,
-  .aw-dash-skeleton::after,
   .aw-dash-chart,
   .aw-dash-view,
   .aw-dash-view * {

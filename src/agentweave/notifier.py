@@ -25,6 +25,7 @@ from __future__ import annotations
 import base64
 import contextlib
 import json
+import ntpath
 import os
 import re
 import shlex
@@ -333,7 +334,9 @@ def _read_shortcut(lnk: Path) -> Optional[Tuple[str, str, str]]:
 
 
 def _same_path(a: str, b: str) -> bool:
-    return os.path.normcase(os.path.normpath(a)) == os.path.normcase(os.path.normpath(b))
+    # A shortcut's paths are Windows paths wherever this runs (the tests fake Windows on CI's
+    # Linux and macOS runners), so they compare by Windows' rules: case-insensitive, either slash.
+    return ntpath.normcase(ntpath.normpath(a)) == ntpath.normcase(ntpath.normpath(b))
 
 
 def _shortcut_current(lnk: Path, target: str, arguments: str, icon: Optional[str]) -> bool:

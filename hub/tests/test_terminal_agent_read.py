@@ -92,7 +92,9 @@ async def test_ac_agent_reads_its_conversations_shells_and_no_other(
     first, second = body["shells"]
     assert first["name"] == "Windows PowerShell" and second["name"] == "Ubuntu (WSL)"
     assert first["directory"] == a.directory and second["directory"] == b.directory
-    assert second["directory"].startswith("/mnt/")
+    # A Windows directory is shown as WSL prints it; on CI's Linux runner it is already POSIX.
+    if IS_WINDOWS:
+        assert second["directory"].startswith("/mnt/")
     assert first["running"] is True and first["exit_code"] is None
     assert second["running"] is False and second["exit_code"] == 0
     # The last 500 lines, as plain text: escape sequences gone.

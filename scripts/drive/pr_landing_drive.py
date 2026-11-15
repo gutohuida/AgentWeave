@@ -72,7 +72,13 @@ PORT = int(os.environ.get("AW_DRIVE_PORT") or 8010)
 HUB = f"http://127.0.0.1:{PORT}"
 PROFILE = pathlib.Path.home() / ".agentweave" / "hub" / "profiles" / "trial"
 DB = pathlib.Path(os.environ.get("AW_DRIVE_DB") or PROFILE / "agentweave.db")
-KEY = (PROFILE / "bootstrap-key.txt").read_text(encoding="utf-8").strip()
+
+
+def key():
+    """The trial Hub's key, read when a drive step needs it: importing this module for `is_banned`
+    (tests/test_pr_landing_drive_filter.py) must not need a trial profile on the machine."""
+    return (PROFILE / "bootstrap-key.txt").read_text(encoding="utf-8").strip()
+
 STAMP = time.strftime("%H%M%S")
 TMP = pathlib.Path(tempfile.gettempdir()) / "drive-pr-landing" / STAMP
 # A real turn would race the drive's hand-made commit in the same worktree, so the Hub's PATH
@@ -103,7 +109,7 @@ def api(method, path, body=None, timeout=120):
     data = json.dumps(body).encode() if body is not None else None
     request = urllib.request.Request(
         HUB + "/api/v1" + path, data,
-        {"Authorization": "Bearer " + KEY, "Content-Type": "application/json"}, method=method)
+        {"Authorization": "Bearer " + key(), "Content-Type": "application/json"}, method=method)
     try:
         with urllib.request.urlopen(request, timeout=timeout) as response:
             return response.status, json.loads(response.read() or b"null")
@@ -176,7 +182,7 @@ def start_hub():
             if d and not shutil.which("claude", path=d)]
     env["PATH"] = os.pathsep.join([str(shim), str(stub), *keep])
     env["DATABASE_URL"] = f"sqlite+aiosqlite:///{DB.as_posix()}"
-    env["AW_BOOTSTRAP_API_KEY"] = KEY
+    env["AW_BOOTSTRAP_API_KEY"] = key()
     log = open(TMP / "hub.log", "w", encoding="utf-8")  # noqa: SIM115 -- the child's stdout
     proc = subprocess.Popen(
         ["py", "-3.11", "-m", "uvicorn", "hub.main:app", "--port", str(PORT), "--host", "127.0.0.1"],

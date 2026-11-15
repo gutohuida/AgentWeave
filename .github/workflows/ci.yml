@@ -52,7 +52,9 @@ jobs:
         # 0.52.1, and a test reading `create_app().routes` saw 7 paths here and 161 there. The
         # file is development-only and narrows nothing about what the Hub supports -- see its
         # header, and `tests/test_dev_constraints.py`, which fails if this flag is dropped.
-        pip install -c constraints-dev.txt -e ./hub
+        # The Hub's `dev` extra brings pytest-xdist: the CLI tests drive `scripts/checks/hub_suite.py`
+        # with `-n`, which pytest refuses ("unrecognized arguments: -n") without it.
+        pip install -c constraints-dev.txt -e "./hub[dev]"
         pip install -c constraints-dev.txt -e ".[dev]"
 
     - name: Verify environment

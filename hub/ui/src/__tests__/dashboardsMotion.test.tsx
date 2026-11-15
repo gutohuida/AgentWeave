@@ -217,21 +217,23 @@ describe('tooltip and dimming (ac-tooltip)', () => {
   })
 })
 
-describe('skeleton (ac-skeleton)', () => {
+describe('placeholders (ac-skeleton)', () => {
   it('shows placeholders while the run is being fetched, and none once it arrives', () => {
     const { rerender } = render(view(null))
-    expect(screen.getByTestId('dashboard-skeleton')).toBeTruthy()
-    expect(document.querySelectorAll('.aw-dash-skeleton').length).toBeGreaterThan(0)
+    expect(screen.getByTestId('dashboard-placeholders')).toBeTruthy()
+    expect(document.querySelectorAll('.aw-dash-placeholder').length).toBeGreaterThan(0)
+    // The brand's thread, once, not a grey shimmer per bar.
+    expect(screen.getByTestId('dashboard-placeholders').querySelectorAll('.aw-loading-thread')).toHaveLength(1)
     expect(screen.queryAllByTestId('dashboard-panel')).toHaveLength(0)
     rerender(view([NUMBER, BAR]))
-    expect(screen.queryByTestId('dashboard-skeleton')).toBeNull()
-    expect(document.querySelector('.aw-dash-skeleton')).toBeNull()
+    expect(screen.queryByTestId('dashboard-placeholders')).toBeNull()
+    expect(document.querySelector('.aw-dash-placeholder')).toBeNull()
     expect(screen.getAllByTestId('dashboard-panel')).toHaveLength(2)
   })
 
-  it('shows no skeleton when the run failed', () => {
+  it('shows no placeholders when the run failed', () => {
     render(view(null, { error: 'boom' }))
-    expect(screen.queryByTestId('dashboard-skeleton')).toBeNull()
+    expect(screen.queryByTestId('dashboard-placeholders')).toBeNull()
   })
 })
 
@@ -257,7 +259,7 @@ describe('reduced motion (ac-reduced-motion)', () => {
     expect(block).toContain('animation: none !important')
     expect(block).toContain('transition: none !important')
     const animated = ['.aw-dash-panel', '.aw-dash-panel.is-new', '.aw-dash-panel.is-leaving', '.aw-dash-bar',
-      '.aw-dash-bar rect', '.aw-dash-line', '.aw-dash-dot', '.aw-dash-mark', '.aw-dash-tip', '.aw-dash-skeleton::after', '.aw-dash-chart']
+      '.aw-dash-bar rect', '.aw-dash-line', '.aw-dash-dot', '.aw-dash-mark', '.aw-dash-tip', '.aw-dash-chart']
     for (const sel of animated) expect(block).toContain(sel)
     // The dimming rules sit outside the block, so they still apply.
     expect(block).not.toContain('opacity: 0.35')

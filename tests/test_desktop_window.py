@@ -273,7 +273,7 @@ def real_window():
     )
     user32.CreateWindowExW.argtypes[3] = ctypes.c_uint
     hwnd = user32.CreateWindowExW(
-        0, "STATIC", "aw-test", 0x00CF0000, 140, 90, 1200, 800, None, None, None, None
+        0, "STATIC", "aw-test", 0x00CF0000, 40, 30, 640, 480, None, None, None, None
     )
     assert hwnd, "a test window could be created"
     yield int(hwnd)
@@ -316,7 +316,9 @@ def test_the_placement_reads_the_windows_restored_rectangle(real_window):
     scale = desktop_window._scale_for(real_window)
     assert geometry is not None
     assert geometry["maximized"] is False
-    assert (geometry["width"], geometry["height"]) == (round(1200 / scale), round(800 / scale))
+    # 640x480 fits CI's 1024x768 runner screen: a window larger than the screen is shrunk by
+    # Windows, and the runner then reported 1044x788 for a 1200x800 window.
+    assert (geometry["width"], geometry["height"]) == (round(640 / scale), round(480 / scale))
 
 
 @windows_only

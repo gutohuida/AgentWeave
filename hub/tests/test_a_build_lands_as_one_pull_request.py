@@ -15,6 +15,7 @@ import os
 import shutil
 import sqlite3
 import sys
+from pathlib import Path
 
 import pytest
 
@@ -41,7 +42,18 @@ def _only_git_on_path(monkeypatch, tmp_path, *, gh_exit=None):
     """PATH holding git's directory and, with *gh_exit*, a stub `gh` exiting with it."""
     git_exe = shutil.which("git")
     assert git_exe, "git is needed for these tests"
-    dirs = [os.path.dirname(git_exe)]
+    git_dir = os.path.dirname(git_exe)
+    if shutil.which("gh", path=git_dir):
+        # CI's Ubuntu runner keeps gh beside git in /usr/bin: give git a directory of its own.
+        git_dir = str(tmp_path / "git-only")
+        os.mkdir(git_dir)
+        if sys.platform == "win32":
+            (Path(git_dir) / "git.cmd").write_text(f'@"{git_exe}" %*\r\n', encoding="utf-8")
+        else:
+            wrapper = Path(git_dir) / "git"
+            wrapper.write_text(f'#!/bin/sh\nexec "{git_exe}" "$@"\n', encoding="utf-8")
+            wrapper.chmod(0o755)
+    dirs = [git_dir]
     if gh_exit is not None:
         stub = tmp_path / "gh-stub"
         stub.mkdir()

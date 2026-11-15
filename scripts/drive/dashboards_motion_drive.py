@@ -30,7 +30,7 @@ changes this file, not the spec). Slices 1 and 2's routes, tools and test ids as
 dashboards_drive.py and dashboard_edit_drive.py, and the motion on master:
   dashboard-panel                    data-state shown|new; a removed panel is kept as
                                      dashboard-panel-leaving (data-state leaving) while it fades
-  dashboard-skeleton                 the placeholders while the queries first run
+  dashboard-placeholders               the placeholders while the queries first run
   dashboard-tooltip                  the hovered mark's tooltip: label, series, value
   dashboard-number                   holds the real figure throughout; the count is an aria-hidden
                                      sibling drawn over it while it runs
@@ -543,11 +543,11 @@ class Drive:
             if not self.click_open(page, "draw"):
                 c.judge("the dashboard opened", False, "no dashboard-row")
                 return
-            shown = poll(lambda: page.get_by_test_id("dashboard-skeleton").count(), 3, 0.05)
+            shown = poll(lambda: page.get_by_test_id("dashboard-placeholders").count(), 3, 0.05)
             panels_early = page.get_by_test_id("dashboard-panel").count()
             arrived = poll(lambda: page.get_by_test_id("dashboard-panel").count(), 20, 0.2)
             page.wait_for_timeout(300)
-            left = page.get_by_test_id("dashboard-skeleton").count()
+            left = page.get_by_test_id("dashboard-placeholders").count()
             c.judge("placeholders show until the panels arrive, and none remain after",
                     bool(shown) and panels_early == 0 and bool(arrived) and left == 0,
                     f"skeleton shown {bool(shown)} with {panels_early} panels; panels arrived {bool(arrived)}; "

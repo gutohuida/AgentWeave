@@ -65,11 +65,19 @@ async def _queued_unlooked(app, monkeypatch, tmp_path, task_id=TASK) -> str:
     queue (the kick suppressed): returns its work."""
     work = await _task(tmp_path, task_id, {"feature.py": "x = 1\n"})
     await _checked(task_id)
-    kick = landing_queue.kick
-    monkeypatch.setattr(landing_queue, "kick", lambda project_id: None)
+    # Approval queues the landing through `stage`, whose after-commit hook starts `_process`
+    # itself rather than through `kick`: suppressing `kick` alone left a background look racing
+    # this assertion, which CI's runner lost ('checking' == 'queued', 2026-11-15).
+    process = landing_queue._process
+
+    async def _not_now(project_id, **kwargs):
+        return True
+
+    monkeypatch.setattr(landing_queue, "_process", _not_now)
     approved = await _reviewer_approves(app, task_id)
     assert approved.status_code == 200, approved.text
-    monkeypatch.setattr(landing_queue, "kick", kick)
+    await landing_queue._wait_for_jobs("proj-test")
+    monkeypatch.setattr(landing_queue, "_process", process)
     assert (await _landing(app, task_id))["state"] == "queued"
     return work
 
