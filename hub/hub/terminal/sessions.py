@@ -413,6 +413,9 @@ class Shell:
             queue.put_nowait(frame)
 
     def write(self, data: str) -> None:
+        # Known limitation (F1177): Git Bash under ConPTY intermittently drops the first key typed
+        # after xterm's focus report (ESC [ I), e.g. after a resize. Dropping the report did not
+        # stop it, so the bytes are passed through unchanged.
         if self.running and self._pty is not None and data:
             try:
                 self._pty.write(data)
