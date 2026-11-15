@@ -948,7 +948,7 @@ def check_interactive(page, state):
                 break
             page.keyboard.press("ArrowRight")
         page.wait_for_timeout(1000)
-    cols_before, _ = read_cols(page)
+    cols_before, attempts_before = read_cols(page)
     panel = page.get_by_test_id("document-pane")
     width_before = panel.first.bounding_box()["width"] if panel.count() else 0
     if handle.count():
@@ -970,14 +970,15 @@ def check_interactive(page, state):
     wider = cols_before is not None and cols_after is not None and cols_after > cols_before
     # Run 231921 lost the leading `e` of the first command typed after the drag (`cho ...`) and the
     # retry hid it. Kept apart from ac-interactive, whose then-clauses it does not change.
-    intact = attempts_after == 1
+    intact = attempts_before == 1 and attempts_after == 1
     record("ac-interactive", True, opened and coloured and fills and quit_clean and grew and wider,
            f"{what_is_there(page)}; Git Bash opened={opened}; red text drawn={coloured}; pager "
            f"filled ({len(rows)} rows, first {rows[0] if rows else ''!r})={fills}; quit cleanly={quit_clean}; "
            f"panel {width_before:.0f}px -> {width_after:.0f}px and cols {cols_before} -> {cols_after} "
            f"after {widened}")
     record("ac-interactive-first-key", True, intact,
-           f"the first command typed after the resize arrived whole on attempt {attempts_after}; "
+           f"the first command typed after the terminal was focused arrived whole on attempt "
+           f"{attempts_before}, and the first typed after the resize on attempt {attempts_after}; "
            f"F1177: Git Bash/ConPTY drops its first character in about one run in four, with every key "
            f"sent by the browser and written to the pty by the Hub (TSP-6), so a retry is a failure here")
 
@@ -1354,7 +1355,7 @@ def ends_by_hub_stop(state, hub_proc, kinds):
 # --------------------------------------------------------------------------- main
 
 ORDER = ("ac-remote-refused", "ac-other-site-refused", "ac-docker", "ac-detected", "ac-where",
-         "ac-cap", "ac-interactive", "ac-keeps-running", "ac-send", "ac-env", "ac-agent-reads",
+         "ac-cap", "ac-interactive", "ac-interactive-first-key", "ac-keeps-running", "ac-send", "ac-env", "ac-agent-reads",
          "ac-ends")
 
 
