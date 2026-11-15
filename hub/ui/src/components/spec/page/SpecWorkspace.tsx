@@ -58,6 +58,8 @@ export interface SpecWorkspaceProps extends SpecSurfaceProps {
   layout: 'column' | 'switcher'
   /** Pinned under the list (the evidence entry, the defects report). */
   listFooter?: React.ReactNode
+  /** Leave the document for the list; the Spec tab still reopens this document afterwards. */
+  onShowList?: () => void
 }
 
 /** The body has scrolled away from its top: the header condenses to one line (FR-4). It expands
@@ -155,9 +157,16 @@ export function SpecWorkspace(props: SpecWorkspaceProps) {
           now={props.now}
           leading={props.layout === 'switcher' ? <SpecDocSwitcher title={doc.title}>{list('popover')}</SpecDocSwitcher> : null}
           trailing={
-            <span className="aw-sp-outline-menu-slot">
-              <SpecOutlineMenu doc={doc} findings={findings} builds={props.builds} active={active} onJump={nav.jump} />
-            </span>
+            <>
+              {props.onShowList ? (
+                <button data-slot="icon-button" type="button" className="aw-icon-button" data-testid="spec-list-control" onClick={props.onShowList} aria-label="All documents" title="All documents">
+                  <Icon name="list_tree" size={15} />
+                </button>
+              ) : null}
+              <span className="aw-sp-outline-menu-slot">
+                <SpecOutlineMenu doc={doc} findings={findings} builds={props.builds} active={active} onJump={nav.jump} />
+              </span>
+            </>
           }
           canBack={nav.canBack}
           canForward={nav.canForward}
