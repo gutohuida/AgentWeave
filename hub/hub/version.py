@@ -15,3 +15,31 @@ try:
     __version__ = _pkg_version("agentweave-hub")
 except PackageNotFoundError:  # pragma: no cover - source checkout without install
     __version__ = "0.0.0+dev"
+
+
+def install_kind() -> str:
+    """How this Hub was installed: `pip` (a built release), `editable` or `checkout`.
+
+    Only `pip` may be upgraded by the app (spec `agentweave-updates-itself`, FR-9). An install
+    records where it came from in `direct_url.json`; a `dir_info.editable` entry is an editable
+    install, and any other direct URL (a local path or VCS) is not a published release. No
+    metadata at all means the code runs straight from a checkout.
+    """
+    import json
+
+    try:
+        from importlib.metadata import distribution
+
+        dist = distribution("agentweave-hub")
+    except PackageNotFoundError:
+        return "checkout"
+    raw = dist.read_text("direct_url.json")
+    if not raw:
+        return "pip"
+    try:
+        info = json.loads(raw)
+    except ValueError:
+        return "checkout"
+    if (info.get("dir_info") or {}).get("editable"):
+        return "editable"
+    return "checkout" if "url" in info else "pip"
