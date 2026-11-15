@@ -187,10 +187,50 @@ def descendants(root_pid, procs):
 
 
 def shell_processes(hub_pid):
-    """Shell-like processes under the Hub, as {pid: name}."""
+    """Shell-like processes the Hub started for a terminal, as {pid: name}: those whose whole
+    ancestry down from the Hub is shells and console hosts (a terminal shell, its console host,
+    what it launches). Agent runs' Git Bash and cmd tool calls sit under the agent's own process
+    (claude, node ...) and the Hub's `wsl.exe -l -q` detection is filtered, so neither counts. A
+    real terminal spawn is seen through this same filter by control_shell, which is what shows a
+    spawn from a refused request would still be reported."""
     procs = processes()
+    # `py -3.11 -m uvicorn` is a launcher whose python child is the Hub: the shells hang off that.
+    hub_pids = {hub_pid} | {pid for pid in descendants(hub_pid, procs)
+                            if "uvicorn" in (procs[pid].get("CommandLine") or "")
+                            and (procs[pid]["Name"] or "").lower() in ("py.exe", "python.exe")}
+
+    def shell_lineage(pid):
+        parent = procs[pid]["ParentProcessId"]
+        while parent not in hub_pids:
+            up = procs.get(parent)
+            if up is None or (up["Name"] or "").lower() not in SHELL_NAMES or is_detection(up):
+                return False
+            parent = up["ParentProcessId"]
+        return True
+
     return {pid: procs[pid]["Name"] for pid in descendants(hub_pid, procs)
-            if (procs[pid]["Name"] or "").lower() in SHELL_NAMES}
+            if (procs[pid]["Name"] or "").lower() in SHELL_NAMES and not is_detection(procs[pid])
+            and shell_lineage(pid)}
+
+
+def is_detection(proc):
+    """The Hub's own `wsl.exe -l -q` style refresh (hub/hub/terminal/shells.py): not a terminal shell."""
+    if (proc["Name"] or "").lower() != "wsl.exe":
+        return False
+    args = (proc.get("CommandLine") or "").lower().split()[1:]
+    return bool(args) and all(a.startswith("-") for a in args) and not {"-e", "--exec", "-d", "--distribution"} & set(args)
+
+
+def settled_shells(hub_pid, quiet=3.0, limit=30):
+    """The shell processes once the tree has stopped changing (late children of earlier shells,
+    agent runs' tool calls), so a baseline is not taken mid-spawn."""
+    current, since, deadline = set(shell_processes(hub_pid)), time.time(), time.time() + limit
+    while time.time() < deadline and time.time() - since < quiet:
+        time.sleep(0.5)
+        nxt = set(shell_processes(hub_pid))
+        if nxt != current:
+            current, since = nxt, time.time()
+    return current
 
 
 def with_cmdline(marker):
@@ -609,7 +649,7 @@ def control_shell(state):
 def check_remote_refused(browser, state):
     hub_pid, lan = state["hub_pid"], lan_address()
     tid, control = control_shell(state)
-    baseline = set(shell_processes(hub_pid))
+    baseline = settled_shells(hub_pid)
     attempts = []
     if lan:
         lan_hub = f"http://{lan}:{d.PORT}"
@@ -692,7 +732,7 @@ def check_other_site_refused(browser, state):
     watch = None
     if tid:
         watch, _ = try_attach(state, tid)
-    baseline = set(shell_processes(hub_pid))
+    baseline = settled_shells(hub_pid)
     code_open, _ = open_shell(state, state["pwsh"], origin=FOREIGN_ORIGIN)
     code_null, _ = open_shell(state, state["pwsh"], origin="null")
     att, how = (try_attach(state, tid, origin=FOREIGN_ORIGIN) if tid else (None, "no control shell"))
@@ -1346,11 +1386,42 @@ def guarded(key, fn, *args):
         checks.setdefault(key, (False, False, f"broke before its assertion: {str(exc)[:200]}"))
 
 
+def self_test_shell_filter():
+    """Criterion: a real spawn is still reported, unrelated children are not. This process plays
+    the Hub: a shell it starts directly is counted; the same shell under an agent-like process,
+    and a bare `wsl.exe -l -q` detection (with its console host), are not."""
+    me, sleeper = os.getpid(), ["-NoProfile", "-Command", "Start-Sleep 25"]
+    kids = []
+    try:
+        kids.append(subprocess.Popen(["powershell.exe"] + sleeper))  # a terminal spawn
+        agent = subprocess.Popen([sys.executable, "-c", "import subprocess,time;"
+                                  "subprocess.Popen(['powershell.exe','-NoProfile','-Command','Start-Sleep 25']);"
+                                  "time.sleep(25)"])  # an agent run's tool call
+        kids.append(agent)
+        time.sleep(4)
+        seen = shell_processes(me)
+        procs = processes()
+        direct, via_agent = kids[0].pid, {p for p in descendants(agent.pid, procs)}
+        counted = set(seen)
+        ok = (direct in counted or bool(descendants(direct, procs) & counted)) and not (via_agent & counted)
+        print(f"self-test: spawned shell counted={direct in counted}; agent-run shells counted="
+              f"{sorted(via_agent & counted)}; seen={seen}")
+        print("self-test:", "PASS" if ok else "FAIL")
+        return ok
+    finally:
+        for k in kids:
+            k.kill()
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--no-wsl", action="store_true", help="skip the WSL cases")
+    parser.add_argument("--self-test", action="store_true",
+                        help="check only that shell_processes reports a real spawn and ignores unrelated children")
     parser.add_argument("--only", default="", help="comma-separated check keys to run (iteration)")
     args = parser.parse_args()
+    if args.self_test:
+        sys.exit(0 if self_test_shell_filter() else 1)
     only = {k.strip() for k in args.only.split(",") if k.strip()}
 
     def wanted(key):
