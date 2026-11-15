@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import base64
 import contextlib
+import importlib
 import json
 import ntpath
 import os
@@ -184,7 +185,9 @@ def register_link() -> bool:
     if not supported():
         return False
     try:
-        import winreg
+        # Imported untyped: mypy on CI's Linux runner has no winreg attributes to check against,
+        # and the tests hand in a fake module here.
+        winreg: Any = importlib.import_module("winreg")
 
         base = rf"Software\Classes\{PROTOCOL}"
         with winreg.CreateKey(winreg.HKEY_CURRENT_USER, base) as key:
