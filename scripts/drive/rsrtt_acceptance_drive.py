@@ -806,6 +806,13 @@ def main():
                 checks["ac-retro-waits"] = (False, False, f"setup: {exc}")
                 print(f"SETUP ac-retro-waits: {exc}", flush=True)
         if not only or only - {"ac-retro-waits"}:
+            if only and "ac-retro-waits" not in only:
+                # The browser checks pick B and D among all three titles; without the retro run
+                # "Retro waits" would not exist and ac-url would fail for that, not its behaviour.
+                code, out = api("POST", f"{state['base']}/project/documents",
+                                {"title": TITLE_R, "kind": "change-spec", "path": DOC_R})
+                if code != 201:
+                    raise Setup(f"the stand-in {TITLE_R!r} document: {code} {str(out)[:300]}")
             arrange_graph(state)
             browser_checks(state, only)
     except Setup as exc:
