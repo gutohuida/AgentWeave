@@ -395,9 +395,45 @@ function RequirementCard({
   )
 }
 
+const THREAD_LANE = 10
+type ThreadState = 'done' | 'waiting' | 'in-progress' | 'rejected'
+const THREAD_STATES: ThreadState[] = ['done', 'in-progress', 'waiting', 'rejected']
+const THREAD_LABEL: Record<ThreadState, string> = { done: 'Done', 'in-progress': 'In progress', waiting: 'Waiting', rejected: 'Rejected' }
+// The dependency-edge states in index.css, so a thread reads like an edge on the Tasks board.
+const THREAD_CLASS: Record<ThreadState, string> = {
+  done: 'dependency-edge-normal',
+  'in-progress': 'dependency-edge-live',
+  waiting: 'dependency-edge-gated',
+  rejected: 'dependency-edge-rejected',
+}
+
+function threadState(status: string | null | undefined): ThreadState {
+  if (status === 'approved') return 'done'
+  if (status === 'in_progress') return 'in-progress'
+  if (status === 'rejected' || status === 'revision_needed') return 'rejected'
+  return 'waiting'
+}
+
+/** The task itself plus everything upstream and downstream of it. */
+function chainOf(key: string, all: SpecTaskView[]): Set<string> {
+  const seen = new Set<string>([key])
+  const up = [key]
+  while (up.length) {
+    const k = up.pop()!
+    for (const d of all.find((t) => t.key === k)?.dependsOn ?? []) if (!seen.has(d)) { seen.add(d); up.push(d) }
+  }
+  const down = [key]
+  const downSeen = new Set<string>([key])
+  while (down.length) {
+    const k = down.pop()!
+    for (const t of all) if (t.dependsOn.includes(k) && !downSeen.has(t.key)) { downSeen.add(t.key); seen.add(t.key); down.push(t.key) }
+  }
+  return seen
+}
+
 /** The tasks, in build order with each one's prerequisites drawn as threads in the gutter, or by
  *  status. */
-function TaskList({
+export function TaskList({
   tasks,
   all,
   order,
@@ -418,6 +454,7 @@ function TaskList({
   const list = React.useRef<HTMLOListElement>(null)
   const [nodes, setNodes] = React.useState<Record<string, number>>({})
   const [open, setOpen] = React.useState<string | null>(null)
+  const [hot, setHot] = React.useState<string | null>(null)
   const graph = order === 'build'
 
   // Where each task's knot sits, measured, so the threads follow rows of any height.
@@ -439,33 +476,56 @@ function TaskList({
 
   const maxLevel = Math.max(0, ...tasks.map((t) => levels.get(t.key) ?? 0))
   const x = (key: string) => 10 + (levels.get(key) ?? 0) * 14
-  const gutter = graph ? 20 + maxLevel * 14 : 0
+  // Every edge owns a lane right of the knots, THREAD_LANE px from its neighbours, so no two
+  // threads share a vertical run.
+  const edges = tasks.flatMap((t) =>
+    t.dependsOn.filter((d) => nodes[d] !== undefined && nodes[t.key] !== undefined).map((d) => ({ from: d, to: t.key })),
+  )
+  const laneBase = 20 + maxLevel * 14
+  const gutter = graph ? laneBase + edges.length * THREAD_LANE + 4 : 0
+  const stateOf = (key: string) => threadState(all.find((a) => a.key === key)?.status)
+  const states = THREAD_STATES.filter((s) => edges.some((e) => stateOf(e.from) === s))
+  const chain = React.useMemo(() => (hot ? chainOf(hot, all) : null), [hot, all])
+  const lit = (key: string) => (chain ? (chain.has(key) ? 'on' : 'dim') : undefined)
 
   return (
+    <>
+      {graph && states.length ? (
+        <ul className="aw-sp-thread-legend" data-testid="spec-thread-legend" aria-label="Thread colours">
+          {states.map((s) => (
+            <li key={s} data-state={s}>
+              <span className={`aw-sp-thread-swatch ${THREAD_CLASS[s]}`} data-state={s} />
+              {THREAD_LABEL[s]}
+            </li>
+          ))}
+        </ul>
+      ) : null}
     <ol ref={list} className="aw-sp-tasks" data-graph={graph ? 'true' : 'false'} style={{ '--gutter': `${gutter}px` } as React.CSSProperties}>
       {graph ? (
         <svg className="aw-sp-threads" width={gutter} height="100%" aria-hidden="true">
-          {tasks.flatMap((t) =>
-            t.dependsOn
-              .filter((d) => nodes[d] !== undefined && nodes[t.key] !== undefined)
-              .map((d) => {
-                const x1 = x(d)
-                const y1 = nodes[d]!
-                const x2 = x(t.key)
-                const y2 = nodes[t.key]!
-                const mid = (y1 + y2) / 2
-                return (
-                  <path
-                    key={`${d}->${t.key}`}
-                    d={x1 === x2 ? `M${x1} ${y1} L${x2} ${y2}` : `M${x1} ${y1} C${x1} ${mid} ${x2} ${mid} ${x2} ${y2}`}
-                    className="aw-sp-thread"
-                    data-done={all.find((a) => a.key === d)?.status === 'approved' ? 'true' : 'false'}
-                  />
-                )
-              }),
-          )}
+          {edges.map((e, lane) => {
+            const x1 = x(e.from)
+            const y1 = nodes[e.from]!
+            const x2 = x(e.to)
+            const y2 = nodes[e.to]!
+            const lx = laneBase + lane * THREAD_LANE
+            const state = stateOf(e.from)
+            return (
+              <path
+                key={`${e.from}->${e.to}`}
+                d={`M${x1} ${y1} L${lx} ${y1 + 5} V${y2 - 5} L${x2} ${y2}`}
+                className={`aw-sp-thread ${THREAD_CLASS[state]}`}
+                data-from={e.from}
+                data-to={e.to}
+                data-lane={lx}
+                data-state={state}
+                data-done={state === 'done' ? 'true' : 'false'}
+                data-lit={chain ? (chain.has(e.from) && chain.has(e.to) ? 'on' : 'dim') : undefined}
+              />
+            )
+          })}
           {tasks.map((t) =>
-            nodes[t.key] !== undefined ? <circle key={t.key} cx={x(t.key)} cy={nodes[t.key]} r={4.5} className="aw-sp-knot" data-status={t.status ?? 'pending'} /> : null,
+            nodes[t.key] !== undefined ? <circle key={t.key} cx={x(t.key)} cy={nodes[t.key]} r={4.5} className="aw-sp-knot" data-status={t.status ?? 'pending'} data-lit={lit(t.key)} /> : null,
           )}
         </svg>
       ) : null}
@@ -482,6 +542,11 @@ function TaskList({
             data-task={t.key}
             data-flash={flash === anchor ? 'true' : undefined}
             data-finding={findings.length ? findings[0]!.severity : undefined}
+            data-lit={graph ? lit(t.key) : undefined}
+            onMouseEnter={() => graph && setHot(t.key)}
+            onMouseLeave={() => setHot(null)}
+            onFocus={() => graph && setHot(t.key)}
+            onBlur={() => setHot(null)}
             style={{ '--i': Math.min(i, 12) } as React.CSSProperties}
           >
             <div className="aw-sp-task-row">
@@ -523,6 +588,7 @@ function TaskList({
         )
       })}
     </ol>
+    </>
   )
 }
 
