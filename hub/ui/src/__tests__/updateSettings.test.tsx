@@ -50,7 +50,7 @@ describe('UpdateSettings', () => {
     const api = bridge({ apply_update: vi.fn(async () => ({ state: 'failed', detail: 'migration broke' })) })
     render(<UpdateSettings />)
     fireEvent.click(await screen.findByTestId('auto-update'))
-    expect(api.set_auto_update).toHaveBeenCalledWith(false)
+    expect(api.set_auto_update).toHaveBeenCalledWith(false, 'pip')
     fireEvent.click(screen.getByTestId('update-button'))
     expect((await screen.findByTestId('update-failure')).textContent).toContain('migration broke')
   })
@@ -59,6 +59,54 @@ describe('UpdateSettings', () => {
     bridge({ update_status: vi.fn(async () => ({ ...status, applicable: false })) })
     render(<UpdateSettings />)
     await new Promise((r) => setTimeout(r, 20))
+    expect(screen.queryByTestId('update-button')).toBeNull()
+  })
+
+  // a-development-checkout-updates-the-same-way: a Hub run from a git checkout.
+  const checkout = {
+    ...status, kind: 'checkout', latest: null, auto_checkout: false, commit: 'a'.repeat(40),
+    branch: 'master', master_tip: 'b'.repeat(40), behind: 2, dirty: ['notes.txt'],
+    summary: 'master is 2 commits ahead of this Hub (aaaaaaaaaaaa).',
+    work: { running: false, description: '' },
+  }
+
+  it('a checkout: its own switch, off by default, saved as kind checkout', async () => {
+    const api = bridge({ update_status: vi.fn(async () => checkout) })
+    render(<UpdateSettings />)
+    const toggle = await screen.findByTestId('auto-update-checkout')
+    expect(screen.getByText('Restart onto master automatically when I open AgentWeave')).toBeTruthy()
+    expect(toggle.getAttribute('aria-checked')).toBe('false')
+    fireEvent.click(toggle)
+    expect(api.set_auto_update).toHaveBeenCalledWith(true, 'checkout')
+    expect(screen.queryByTestId('auto-update')).toBeNull()
+  })
+
+  it('a checkout behind master: says how far, and the prompt names the uncommitted file', async () => {
+    const api = bridge({
+      update_status: vi.fn(async () => checkout),
+      apply_update: vi.fn(async (confirmed: boolean) =>
+        confirmed
+          ? { state: 'applied', detail: '' }
+          : { state: 'needs_confirm', detail: 'Uncommitted changes in the checkout stay as they are, and the Hub runs them: notes.txt' }),
+    })
+    render(<UpdateSettings />)
+    expect((await screen.findByTestId('update-button')).textContent).toBe('Update to master (2 commits)')
+    expect(screen.getByTestId('update-summary').textContent).toContain('2 commits ahead')
+    fireEvent.click(screen.getByTestId('update-button'))
+    expect(await screen.findByText(/notes\.txt/)).toBeTruthy()
+    fireEvent.click(screen.getByTestId('update-confirm'))
+    await waitFor(() => expect(api.apply_update).toHaveBeenLastCalledWith(true))
+  })
+
+  it('a checkout off master: shows the switch and the branch, offers no update', async () => {
+    bridge({
+      update_status: vi.fn(async () => ({
+        ...checkout, branch: 'feature', available: false, behind: 1, dirty: [],
+        summary: 'This checkout is on branch feature; updates are offered on master only.',
+      })),
+    })
+    render(<UpdateSettings />)
+    expect((await screen.findByTestId('update-summary')).textContent).toContain('branch feature')
     expect(screen.queryByTestId('update-button')).toBeNull()
   })
 })
