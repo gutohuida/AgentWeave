@@ -163,9 +163,10 @@ async def test_a_dependent_refused_for_a_frozen_merge_is_delivered_when_the_prer
             )
             assert retried.status_code == 200, retried.text
             # Delivery runs in the background, after the route returned; git is slow on Windows.
-            for _ in range(100):
-                if spawn.called:
-                    break
+            # A guard against hanging, not a measure: 10 s ran out at landing on a loaded machine
+            # (AW-157), and whether the turn is delivered does not depend on how soon.
+            deadline = asyncio.get_running_loop().time() + 180
+            while not spawn.called and asyncio.get_running_loop().time() < deadline:
                 await asyncio.sleep(0.1)
         assert spawn.called, "the dependent's turn was never delivered"
         await _await_background_run()

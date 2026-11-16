@@ -246,8 +246,11 @@ async def test_the_predicates_git_is_bounded_and_off_the_loop(
     app, auth_headers, builder, bind_runner, tmp_path
 ):
     """1.6d. The predicate's spawns see the diagnostic timeout and run on another thread; a
-    transition's own evaluation still sees 60."""
+    transition's own evaluation still sees the default (60 in the product; the suite's own in a
+    test, AW-157)."""
     task_id, _run_id = await _held_review(app, auth_headers, builder, bind_runner, tmp_path)
+    default = task_integration.GIT_TIMEOUT_SECONDS.get()
+    assert default != task_integration.DIAGNOSTIC_GIT_TIMEOUT_SECONDS
     seen = []
     real = task_integration._git
 
@@ -269,7 +272,7 @@ async def test_the_predicates_git_is_bounded_and_off_the_loop(
     assert held and all(
         t == task_integration.DIAGNOSTIC_GIT_TIMEOUT_SECONDS and th is not main for t, th in held
     )
-    assert plain and all(t == 60 for t, _ in plain)
+    assert plain and all(t == default for t, _ in plain)
 
 
 async def test_the_flow_waits_for_the_restaffed_review_without_an_evidence_hold(

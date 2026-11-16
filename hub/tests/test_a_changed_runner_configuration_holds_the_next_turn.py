@@ -26,6 +26,7 @@ from hub.db.models import InboundQueueEntry
 from hub.mcp_server import _decide
 
 from ._background_runs import await_background_runs
+from ._git_timeout import GIT_TIMEOUT
 
 _REAL_RESOLVE_AGENT_WORKSPACE = worktrees.resolve_agent_workspace
 _RESULT = '{"type":"result","subtype":"success","is_error":false,"session_id":"s"}\n'
@@ -42,7 +43,9 @@ new file mode 100644
 
 
 def _git(repo: Path, *args: str) -> None:
-    result = subprocess.run(["git", *args], cwd=repo, capture_output=True, text=True, timeout=30)
+    result = subprocess.run(
+        ["git", *args], cwd=repo, capture_output=True, text=True, timeout=GIT_TIMEOUT
+    )
     assert result.returncode == 0, result.stderr
 
 

@@ -11,10 +11,17 @@ from pathlib import Path
 
 from hub.requirement_evidence import work_diff
 
+from ._git_timeout import GIT_TIMEOUT
+
 
 def _git(repo: Path, *args: str) -> str:
     result = subprocess.run(
-        ["git", *args], cwd=repo, capture_output=True, text=True, encoding="utf-8", timeout=30
+        ["git", *args],
+        cwd=repo,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        timeout=GIT_TIMEOUT,
     )
     assert result.returncode == 0, result.stderr
     return result.stdout.strip()

@@ -28,6 +28,7 @@ from hub.review_turn import ReviewTurnRefused, prepare_review_turn
 from hub.scheduler import decide_firing
 from hub.turn_scheduler import other_input_would_have_run_elsewhere
 
+from ._git_timeout import GIT_TIMEOUT
 from .test_a_flow_names_what_it_cannot_staff import _roster
 from .test_a_loop_does_not_staff_its_own_review import _completed_by
 from .test_task_integration import commit_on_branch, git, make_repo, set_main_branch
@@ -181,7 +182,7 @@ async def _prepare(repo, task_id):
 
 def _head_of(path):
     result = subprocess.run(
-        ["git", "rev-parse", "HEAD"], cwd=path, capture_output=True, text=True, timeout=30
+        ["git", "rev-parse", "HEAD"], cwd=path, capture_output=True, text=True, timeout=GIT_TIMEOUT
     )
     assert result.returncode == 0, result.stderr
     return result.stdout.strip()

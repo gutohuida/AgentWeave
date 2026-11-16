@@ -623,10 +623,13 @@ class LagProbe:
         self._judge_unsampled()
         if self.worst:
             self._names[threading.get_native_id()] = "the loop"
-            self.why += f"; after the gap: {self._after_gap_in(*self._worst_window)}"
+            # The observer's account first: a landing check keeps the first 1500 characters of a
+            # failure, and the stacks after the gap ran past them, so the two stalls of 2026-11-16
+            # it could not explain reached the record without who held the GIL (AW-157).
             self.why += (
                 f"; threads: {self._observer.describe(*self._worst_window, names=self._names)}"
             )
+            self.why += f"; after the gap: {self._after_gap_in(*self._worst_window)}"
         gc.unfreeze()
         gc.callbacks.remove(self._on_collection)
         _raise_priority(self._priority)
