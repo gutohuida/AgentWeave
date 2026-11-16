@@ -41933,3 +41933,23 @@ Runs inherit the Hub's environment, so in an agent's shell `python` / `python3` 
 
 `repo_hygiene` writes `.git/info/exclude` entries for each `.agentweave/` subfolder plus `project.json`, but not `hub-writes.json` (`hub_writes.LEDGER`), so on a brand-new project `git status` shows `?? .agentweave/` from the first agent turn. A user tidying up will `git add .` it. **Expected:** nothing under `.agentweave/` is ever untracked-visible. **Test:** after one agent turn on a fresh repository, `git status --porcelain` lists nothing under `.agentweave/`.
 
+
+## F1195 (B) -- under WSL, the Hub resolves the Windows npm `codex` shim from the inherited Windows PATH, and every Codex turn fails
+
+**Status:** open
+**Source:** found by driving -- QA, 2026-11-16, reviewing AW-147 on WSL Ubuntu (Linux codex-cli 0.169.0 in `~/.local/bin`); filed by Architect
+**Theme:** Runners
+**Ready:** yes
+**Tier:** 0
+
+WSL appends the Windows PATH by default, so a user with Codex installed on Windows through npm has `/mnt/c/Users/<u>/AppData/Roaming/npm/codex` on PATH. Where it comes before the Linux binary, the Hub launches it, and the run fails at once with exit 127, "node: not found". The Architect's own WSL drive missed this only because it trimmed PATH. A related trap: an older pipx `agentweave` in `~/.local/bin` shadows the venv's and fails with "No module named hub". **Expected:** on Linux, runner resolution skips Windows executables reached through `/mnt/<drive>/` (or verifies the binary runs), and launchability reports the failure with a remedy rather than offering the provider. **Test:** with a PATH whose first `codex` is a `/mnt/c/...` npm shim and a later Linux `codex`, the resolved binary is the Linux one; with only the shim, the provider is not runnable and says why.
+
+## F1196 (B) -- a hand-started task sent back by its reviewer sits in revision_needed: nothing restarts its builder
+
+**Status:** open
+**Source:** found by driving -- Architect, 2026-11-16: on the fresh-install drive (ALFT-1 on :8030), and again on AW-146 here (QA2 sent it back at 14:16; DeveloperSonnet2 stayed idle until the Architect sent it back by hand)
+**Theme:** Review and merge
+**Ready:** yes
+**Tier:** 0
+
+`review_on_completion` (`a-hand-started-task-reaches-review-and-merge`) gives a hand-started task the step a build's flow gives it on completion: its review starts by itself. The opposite edge has no equivalent. When the review turn moves the task to `revision_needed`, a flow would restart the author (`flow_advance`: `revision_needed -> in_progress` with the author), but a hand-started task simply waits. The operator has to notice and start the builder again. On a fresh install this is the second stop after "who reviews it?" that a new user meets. **Expected:** when a review turn sends a hand-started task back, the author's turn on it is queued with the reviewer's notes, as the review was queued on completion. A task sent back repeatedly is surfaced rather than looped forever (see the cap in AW task). **Test:** a hand-started task completed by A and sent back by reviewer B's review turn ends with a queued or running turn for A on that task, and no operator action.
