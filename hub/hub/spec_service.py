@@ -365,6 +365,19 @@ async def _apply_and_write(
 
     # F1123: the unclaimed-slice advice is for the author naming a slice, so it rides the save
     # result only; Approve, Propose and Check no longer show it to the operator.
+    # A save that fills in what later steps produce moves the step to where the content stands, so
+    # `steps_skipped` is left to missing and custom steps (ready-means-the-same-thing FR-13).
+    reached = spec_journey.step_by_content(payload, document, spec_journey.load(workspace))
+    if reached is not None:
+        move = {"from": document.step, "to": reached}
+        document.step = reached
+        await spec_lifecycle.record_event(
+            session,
+            document,
+            kind="journey",
+            actor=actor,
+            detail={"step": move, "by": "save"},
+        )
     report = await readiness(session, workspace, document, payload, for_save=True, prune=True)
     return SaveResult(
         path=document.path,

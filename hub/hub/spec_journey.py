@@ -363,6 +363,61 @@ def skipped(
     return [s for s in path if order.index(s) > order.index(step)]
 
 
+def _has_requirements(payload: Any) -> bool:
+    return bool(payload.requirements) and bool(payload.scope.non_goals)
+
+
+def _has_acceptance(payload: Any) -> bool:
+    criteria = payload.acceptance_criteria
+    obliged = [r for r in payload.requirements if r.modal.upper() in ("MUST", "SHALL")]
+    covered = {c.requirement for c in criteria}
+    return (
+        all(r.key in covered for r in obliged)
+        and all(c.how_to_check and c.checked_by for c in criteria)
+        and bool(criteria or not obliged)
+    )
+
+
+def _has_tasks(payload: Any) -> bool:
+    return bool(payload.tasks) and all(
+        t.requirements or getattr(t, "from_", None) for t in payload.tasks
+    )
+
+
+#: What each built-in step produces, as a test of the payload (steps-follow-content). A step not
+#: here (intake) asks nothing: a document past it has had its problem and scope written.
+_OUTPUT: Dict[str, Any] = {
+    REQUIREMENTS: _has_requirements,
+    ACCEPTANCE: lambda p: _has_requirements(p) and _has_acceptance(p),
+    REQUIREMENTS_AND_ACCEPTANCE: lambda p: _has_requirements(p) and _has_acceptance(p),
+    APPROACH: lambda p: bool((p.design or "").strip()),
+    TASKS: _has_tasks,
+    BUILD: lambda p: p.delivery is not None,
+}
+
+
+def step_by_content(
+    payload: Any, document: SpecDocument, steps: Optional[ProjectSteps] = None
+) -> Optional[str]:
+    """The furthest step whose output, and every earlier step's, is in `payload` (FR-13), or None
+    when the document should not move.
+
+    Only an exploring change document moves, and only forward. The walk stops at the first built-in
+    step whose output is missing and at the first custom step, whose output the Hub cannot read.
+    """
+    from .spec_lifecycle import EXPLORING
+
+    if not has_journey(document) or document.phase != EXPLORING or document.step is None:
+        return None
+    reached: Optional[str] = None
+    for key in skipped(document.size, document.step, steps):
+        test = _OUTPUT.get(key)
+        if test is None or not test(payload):
+            break
+        reached = key
+    return reached
+
+
 def _require_journey(document: SpecDocument) -> None:
     if not has_journey(document):
         raise JourneyError(
@@ -599,7 +654,9 @@ STEP_DUTIES: Dict[str, str] = {
         "`delivery`, with `reasons`: one sentence for each choice, keyed `mode`, `agent`, "
         "`stop` and `cron`. Each task's builder and checker are recommended on the task, with "
         "their reasons, at the tasks step. Include `delivery` in every later submission. "
-        "The document is then ready for the operator to approve."
+        "Each save returns a verdict: report the document to the operator as ready only when "
+        "the latest save says `ready_to_approve` is true. Otherwise fix each open gap it lists, "
+        "or acknowledge it with a reason (`acknowledge_spec_gap`) where you judge it acceptable."
     ),
 }
 
