@@ -29,8 +29,10 @@ Steps:
            is approved alone. PASS needs: it is sent back (revision_needed, landing sent_back);
            the send-back's note carries its proof -- the batch's base commit and the prefix commit
            both named, the re-run command, the failing test id, and at least two exit codes;
-           and a turn of its author `builder` is queued bound to the task after the send-back,
-           with no operator action. The author's turn is stopped as soon as it is seen.
+           and a turn of its author `builder` bound to the task (a queue entry or a run whose
+           `task_id` is the task, read from the scratch Hub's database -- no route exposes that
+           binding) appears after the send-back, with no operator action. The author's turn is
+           stopped as soon as it is seen. Needs --start-hub.
 
 Ends with one baseline line per criterion the drive covers,
   check ac-drive: reached=<yes|no> failed_at_assertion=<yes|no> -- <first failing assertion>
@@ -294,10 +296,6 @@ class Project:
         if code >= 300:
             note(f"moving {task} to approved -> {code}: {json.dumps(res)[:300]}")
 
-    def queue(self, agent: str) -> list:
-        code, res = self.hub.request("GET", f"/projects/{self.id}/queue/{agent}")
-        return res if code == 200 and isinstance(res, list) else []
-
     def stop(self, agent: str) -> None:
         code, res = self.hub.request("POST", f"/projects/{self.id}/agent/{agent}/stop", {})
         note(f"stopped {agent}'s turn: HTTP {code}" + ("" if code < 300 else f" {res}"))
@@ -340,6 +338,29 @@ def narrowing(db: pathlib.Path | None, batch_id: str | None) -> object:
     finally:
         con.close()
     return json.loads(row[0]) if row and row[0] else None
+
+
+def author_turns(db: pathlib.Path | None, agent: str, task: str) -> list[str] | None:
+    """Every queue entry and run of `agent` bound to `task`, read-only from the scratch Hub's
+    database, in any state (a turn that started at once has left the queue). No route serves this:
+    `GET /queue/{agent}` answers `QueueEntryResponse`, which drops the entry's `task_id`, and runs
+    have no route filtered by task. `None` when the drive does not know the database."""
+    if db is None or not db.exists():
+        return None
+    con = sqlite3.connect(f"file:{db.as_posix()}?mode=ro", uri=True)
+    try:
+        entries = con.execute(
+            "select id, state from inbound_queue_entries where agent=? and task_id=?",
+            (agent, task),
+        ).fetchall()
+        runs = con.execute(
+            "select id, status from runs where agent=? and task_id=?", (agent, task)
+        ).fetchall()
+    except sqlite3.Error as exc:
+        return [f"unreadable: {exc}"]
+    finally:
+        con.close()
+    return [f"queue entry {i} ({st})" for i, st in entries] + [f"run {i} ({st})" for i, st in runs]
 
 
 def brief(view: dict) -> str:
@@ -418,6 +439,19 @@ def drive(hub: Hub, keep: list, db: pathlib.Path | None) -> None:
     )
     for batch_id in sorted(b for b in batch_ids if b):
         note(f"narrowing of {batch_id}: {json.dumps(narrowing(db, batch_id))[:900]}")
+    # The counter is armed to 2 on the premise that the landing runs the full tree twice (the
+    # batch's run and the flake re-run) before it narrows. Should a build change that count, a
+    # prefix probe could spend a failure and blame A or B legitimately: check the premise, so such
+    # a failure reads as the drive's and not the build's.
+    batch_runs = runs_logged(log)[seen:]
+    for r in batch_runs:
+        note(f"  run on {r['head'][:12]} args {r['args']}")
+    spent = [r["head"] for r in batch_runs[:2]]
+    check(
+        "premise: both flaky failures were spent on the batch's full tree, before any probe",
+        len(spent) == 2 and spent[0] == spent[1],
+        f"first two runs on {[h[:12] for h in spent]}",
+    )
     # A landing records the batch that landed it, which a partial land makes a new one: what says
     # they were checked together is a batch whose tasks are both.
     together = [
@@ -440,6 +474,7 @@ def drive(hub: Hub, keep: list, db: pathlib.Path | None) -> None:
 
     # breaks: a task that really breaks a test is sent back with proof, and its author restarts.
     broken = project.task_with_work("Adds a test that always fails", {"test_broken.py": BROKEN})
+    before = author_turns(db, "builder", broken) or []
     project.approve(broken)
     view = wait_for(
         "the breaking task's landing to settle",
@@ -477,21 +512,34 @@ def drive(hub: Hub, keep: list, db: pathlib.Path | None) -> None:
         view.get("state") == "sent_back" and not missing,
         ("missing " + "; ".join(missing) + f" -- note: {proof[:500]!r}") if missing else "",
     )
-    entry = wait_for(
+    # The author's turn is observed where the Hub records it -- a queue entry or a run of the
+    # author bound to the task, in the scratch database -- since no route exposes that binding.
+    # Approval and landing start no turn of `builder` here (one agent, so no reviews), so anything
+    # bound to the task is the restart; `before` guards that anyway.
+    if db is None:
+        check(
+            "breaks: the author's turn on the task is queued, with no operator action",
+            False,
+            "not observable without the Hub's database: run with --start-hub",
+        )
+        return
+    turns = wait_for(
         "a turn of the author bound to the task",
-        lambda: next((e for e in project.queue("builder") if e.get("task_id") == broken), None),
+        lambda: [t for t in author_turns(db, "builder", broken) or [] if t not in before],
         minutes=3,
     )
-    if entry is not None:
+    if turns:
         project.stop("builder")
     check(
         "breaks: the author's turn on the task is queued, with no operator action",
-        entry is not None,
+        bool(turns),
         (
-            f"entry {json.dumps(entry)[:300]}"
-            if entry
-            else f"no queue entry for builder bound to {broken} within 3 minutes of the send-back "
-            f"(task {project.task(broken).get('status')}, waited {int(time.time() - sent_back_at)} s)"
+            f"bound to {broken}: {turns}"
+            if turns
+            else f"no queue entry or run of builder bound to {broken} in the Hub's database within "
+            f"3 minutes of the send-back (before approval: {before}; now: "
+            f"{author_turns(db, 'builder', broken)}; task {project.task(broken).get('status')}, "
+            f"waited {int(time.time() - sent_back_at)} s)"
         ),
     )
 
