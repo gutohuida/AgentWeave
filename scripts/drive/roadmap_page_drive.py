@@ -29,9 +29,12 @@ behaviour):
     document, offers_drafting (bool), waits_for [keys], warning, added_after_approval, added_by}, and
     `progress` {built, total, cost_usd, unpriced_turns}. `state` is one of Not drafted / Drafting /
     Approved / Building / Built;
+  * each slice's page card is `[data-testid=slice-card][data-slice=<key>]`; it holds the link to the
+    slice's document, the tasks-on-main count, cost and the built date (ISO or `Nov 7`);
   * Overview's offers are `GET .../project/next-slice-offers`, each with `roadmap` and
     `next_slice.key` (or `slice`); declined with `POST .../project/documents/next-slice/decline`
-    (`path` = the offer's document, else the roadmap, `slice` = its key);
+    with a JSON body {path (the roadmap), slice (its key)} -- never the query string, which the
+    project's routes refuse with 400 (`_misplaced_query`); the check also asserts it returned 200;
   * move: `POST .../project/documents/slices/move?path=<roadmap>` {slice, position (1-based)};
   * add: `POST .../project/documents/slices/conversation?path=<roadmap>` {agent} opens a conversation
     seeded with the roadmap (`conversation_id`); the agent's tool is
@@ -164,19 +167,35 @@ def header_verdict(text):
     return built and cost and unpriced, f"2-of-5 {built}, $36.38 {cost}, 2 unpriced {unpriced}"
 
 
-def facts_verdict(text, doc_title, links):
-    """`(ok, detail)`: a built slice's card shows its link, 4 of 4 on main, its cost and a date."""
-    low = (text or "").lower()
-    linked = any(doc_title in href or "document=" in href for href in links)
+def date_forms(days_ago, today=None):
+    """The forms a built-at date may take on a page: ISO, `Nov 7`, `7 Nov`, each a day either side
+    (the page may show local time); full month names too."""
+    today = today or datetime.datetime.now(datetime.timezone.utc).date()
+    forms = []
+    for delta in (-1, 0, 1):
+        day = today - datetime.timedelta(days=days_ago + delta)
+        forms += [day.isoformat(), f"{day:%b} {day.day}", f"{day.day} {day:%b}",
+                  f"{day:%B} {day.day}", f"{day.day} {day:%B}"]
+    return forms
+
+
+def facts_verdict(card_text, doc_path, links, built_days=9, today=None):
+    """`(ok, detail)`: slice s1's own card (its text and its links) shows its link, 4 of 4 on main,
+    its cost and the date it was built, `built_days` before `today`. An empty card fails all four."""
+    low = (card_text or "").lower()
+    linked = any(doc_path in href for href in links)
     tasks = bool(re.search(r"\b4\s*(of|/)\s*4\b", low)) and "main" in low
-    cost = any(abs(v - 11.96) < 0.005 for v in money(text))
-    dated = bool(re.search(r"\b(built|landed)\b[^\n]{0,40}\d", low) or re.search(r"\d{4}-\d{2}-\d{2}", low))
-    return linked and tasks and cost and dated, f"link {linked}, 4 of 4 on main {tasks}, $11.96 {cost}, date {dated}"
+    cost = any(abs(v - 11.96) < 0.005 for v in money(card_text))
+    dated = any(re.search(rf"(?<!\d){re.escape(form.lower())}(?!\d)", low) for form in date_forms(built_days, today))
+    return linked and tasks and cost and dated, f"link {linked}, 4 of 4 on main {tasks}, $11.96 {cost}, built date {dated}"
 
 
 def waits_verdict(text):
     """Slice 4's card says it waits for slice 3."""
     return bool(re.search(r"wait\w*[^\n]{0,60}(slice\s*3|\bs3\b|\b3\b)", (text or "").lower()))
+
+
+FAKE_TODAY = datetime.date(2026, 11, 16)
 
 
 def self_test():
@@ -194,9 +213,11 @@ def self_test():
         (header_verdict("2 of 5 built · $36.38 · 2 unpriced turns")[0], True),
         (header_verdict("2 of 5 built · $36.38")[0], False),
         (header_verdict("1 of 5 built · $36.38 · 2 unpriced")[0], False),
-        (facts_verdict("4 of 4 tasks on main · $11.96 · built 2026-11-02", "t", ["?document=t"])[0], True),
-        (facts_verdict("4 of 4 tasks on main · $11.96", "t", ["?document=t"])[0], False),
-        (facts_verdict("4 of 4 tasks on main · $11.96 · built 2026-11-02", "t", [])[0], False),
+        (facts_verdict("4 of 4 tasks on main · $11.96 · built 2026-11-07", "t", ["?document=t"], 9, FAKE_TODAY)[0], True),
+        (facts_verdict("4 of 4 tasks on main · $11.96 · built Nov 7", "t", ["?document=t"], 9, FAKE_TODAY)[0], True),
+        (facts_verdict("4 of 4 tasks on main · $11.96", "t", ["?document=t"], 9, FAKE_TODAY)[0], False),
+        (facts_verdict("All built s1 · 4 of 4 on main · $11.96", "t", ["?document=t"], 9, FAKE_TODAY)[0], False),
+        (facts_verdict("4 of 4 tasks on main · $11.96 · built 2026-11-07", "t", [], 9, FAKE_TODAY)[0], False),
         (waits_verdict("Waits for slice 3"), True), (waits_verdict("Draft this slice"), False),
         (len(ORDER), 11), (ORDER[0], "ac-five-states"),
     ]
@@ -507,11 +528,14 @@ def check_header(fx, page):
 
 def check_facts(fx, page):
     page.goto(spec_url(fx, "cost"))
-    text = body_text(page)
-    links = [a.get_attribute("href") or "" for a in page.locator("a").all()]
-    path = fx.docs[("cost", "s1")][0]
-    ok, detail = facts_verdict(text, urllib.parse.quote(path, safe=""), [urllib.parse.unquote(h) for h in links])
+    body_text(page)
+    card = page.locator("[data-testid=slice-card][data-slice=s1]")
     shot(page, "facts")
+    if card.count() == 0:
+        record("ac-facts", True, False, "no [data-testid=slice-card][data-slice=s1] on the page")
+        return
+    links = [urllib.parse.unquote(a.get_attribute("href") or "") for a in card.first.locator("a").all()]
+    ok, detail = facts_verdict(card.first.inner_text(), fx.docs[("cost", "s1")][0], links)
     record("ac-facts", True, ok, detail)
 
 
@@ -530,10 +554,9 @@ def check_same_offers(fx):
     road = fx.roadmaps["sv"][0]
     before_page, before_overview = offered(read(fx, "sv")), overview_offers(offers(fx), road)
     want = ["s3", "s5"]
-    code, out = api("POST", f"{fx.base}/project/documents/next-slice/decline?path={urllib.parse.quote(road)}"
-                    "&slice=s5", {})
+    code, out = api("POST", f"{fx.base}/project/documents/next-slice/decline", {"path": road, "slice": "s5"})
     after_page, after_overview = offered(read(fx, "sv")), overview_offers(offers(fx), road)
-    ok = (before_page == want and before_overview == want
+    ok = (before_page == want and before_overview == want and code == 200
           and "s5" not in after_page and "s5" not in after_overview)
     record("ac-same-offers", True, ok, f"before: page {before_page}, Overview {before_overview}; decline s5 "
            f"-> {code}; after: page {after_page}, Overview {after_overview}")
