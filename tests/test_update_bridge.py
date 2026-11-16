@@ -37,7 +37,7 @@ def updater(monkeypatch, tmp_path):
     fake.is_newer = lambda a, b: a != b
     fake.installation_kind = lambda: "pip"
     fake.auto_update_on = lambda path: True
-    fake.set_auto_update = lambda path, on: fake.calls.append(("auto", on))
+    fake.set_auto_update = lambda path, on, kind="pip": fake.calls.append(("auto", on))
 
     def apply_update(applier, confirmed, work, describe):
         fake.calls.append(("apply", confirmed))
@@ -55,6 +55,9 @@ def updater(monkeypatch, tmp_path):
     for name in ("_update_check_file", "_update_setting_file", "_update_result_file"):
         monkeypatch.setattr(cli, name, lambda n=name: tmp_path / n, raising=False)
     monkeypatch.setattr(cli, "_update_applier", lambda *a: object(), raising=False)
+    # A pip install: no git checkout behind the Hub package (the checkout half has its own tests,
+    # tests/test_updater_checkout.py).
+    monkeypatch.setattr(cli, "_hub_checkout_root", lambda: None)
     monkeypatch.setattr(cli, "_hub_work_running", lambda port: {"running": True, "turns": 1})
     return fake
 

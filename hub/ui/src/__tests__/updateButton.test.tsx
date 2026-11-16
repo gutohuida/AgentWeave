@@ -52,4 +52,30 @@ describe('UpdateButton', () => {
     render(<UpdateButton />)
     expect((await screen.findByTestId('update-banner-failure')).textContent).toContain('migration broke')
   })
+
+  it('a checkout behind master: names master and how far, asks before restarting', async () => {
+    const api = bridge({
+      update_status: vi.fn(async () => ({
+        ...status, kind: 'checkout', latest: null, behind: 2, branch: 'master', dirty: [],
+      })),
+    })
+    render(<UpdateButton />)
+    const button = await screen.findByTestId('update-banner-button')
+    expect(button.textContent).toBe('Update to master (2 commits)')
+    fireEvent.click(button)
+    expect(await screen.findByText('Restart onto master?')).toBeTruthy()
+    fireEvent.click(screen.getByTestId('update-banner-confirm'))
+    await waitFor(() => expect(api.apply_update).toHaveBeenLastCalledWith(true))
+  })
+
+  it('a checkout off master or unreadable: no button', async () => {
+    bridge({
+      update_status: vi.fn(async () => ({
+        ...status, kind: 'checkout', latest: null, available: false, behind: null,
+      })),
+    })
+    render(<UpdateButton />)
+    await new Promise((r) => setTimeout(r, 20))
+    expect(screen.queryByTestId('update-banner-button')).toBeNull()
+  })
 })

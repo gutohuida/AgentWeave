@@ -15,6 +15,13 @@ Seams, each injectable so a test drives it without pip, a Hub or a network:
 
 Files, under the Hub folder (HUB_DIR): `app-window/update-check.json`, `app-window/update.json`,
 `app-window/update.lock`, and `update-backups/<UTC stamp>/agentweave.db`.
+
+A Hub run from a git checkout (spec `a-development-checkout-updates-the-same-way`) has its own
+half at the end of this module: "newer" is the checkout's local master holding commits the Hub's
+commit lacks (`read_checkout`, read-only git, never a fetch), and applying is prepare the previous
+commit as a worktree, rehearse the migrations on a copy, stop, start from the checkout, verify --
+or restore the database and start the previous commit (`apply_checkout_update`). Its extra files:
+`update-backups/<stamp>/rehearsal.db` and `previous-commit/<sha>/`.
 """
 
 from __future__ import annotations
@@ -262,8 +269,18 @@ def auto_update_on(setting_file: Path) -> bool:
     return value is not False
 
 
-def set_auto_update(setting_file: Path, on: bool) -> bool:
-    write_json(setting_file, {"auto": bool(on)})
+def auto_checkout_on(setting_file: Path) -> bool:
+    """'Restart onto master automatically when I open AgentWeave', a checkout's own switch:
+    absent or unreadable is off (spec `a-development-checkout-updates-the-same-way`, FR-10)."""
+    return read_json(setting_file).get("auto_checkout") is True
+
+
+def set_auto_update(setting_file: Path, on: bool, kind: str = "pip") -> bool:
+    """Save one of the two switches in `update.json`, keeping the other: `auto` for a pip
+    install, `auto_checkout` for a checkout (kind "checkout")."""
+    data = read_json(setting_file)
+    data["auto_checkout" if kind == "checkout" else "auto"] = bool(on)
+    write_json(setting_file, data)
     return bool(on)
 
 
@@ -679,3 +696,512 @@ def _restore(a: Applier, copy: Optional[Path], reason: str) -> ApplyResult:
 def _last_line(output: str) -> str:
     lines = [line.strip() for line in (output or "").splitlines() if line.strip()]
     return lines[-1] if lines else "no output"
+
+
+# --- a checkout (spec `a-development-checkout-updates-the-same-way`) ----------------------------
+#
+# Every git call below reads the local repository or (`worktree add/remove/prune`) changes its
+# list of worktrees only. None fetches, pulls, checks out or touches the working tree (D2, D6).
+
+MASTER = "master"
+MASTER_REF = "refs/heads/master"
+#: FR-2: while the app runs, a checkout is read again at most this often.
+CHECKOUT_RECHECK_SECONDS = 60 * 60
+GIT_SECONDS = 15.0
+#: The previous commit's worktree: the spike took 7 s for the whole tree; leave room.
+WORKTREE_SECONDS = 300.0
+_NO_WINDOW = 0x08000000 if sys.platform == "win32" else 0  # CREATE_NO_WINDOW
+_SHA = re.compile(r"^[0-9a-f]{40}$")
+
+#: (exit code, stdout, stderr); exit code -1 when git could not be run at all.
+GitResult = Tuple[int, str, str]
+GitCall = Callable[..., GitResult]
+
+
+def checkout_root(package_dir: Optional[Path] = None) -> Optional[Path]:
+    """The git checkout the Hub package runs from, or None for an install that is not one.
+
+    Found as the Hub finds its own source (hub/hub/main.py's UI-bundle check): `hub/ui/src` beside
+    the package, plus a `.git` (a directory, or a file in a worktree). `package_dir` is the `hub`
+    package's folder; by default the one this interpreter would import, found without importing."""
+    if package_dir is None:
+        import importlib.util
+
+        try:
+            spec = importlib.util.find_spec("hub")
+        except (ImportError, ValueError):
+            return None
+        locations = [Path(p) for p in ((spec.submodule_search_locations or []) if spec else [])]
+        # From a checkout's root, `hub/` is a namespace package whose `hub/` is the real one.
+        candidates = [p for loc in locations for p in (loc, loc / "hub")]
+        package_dir = next((p for p in candidates if (p / "main.py").is_file()), None)
+        if package_dir is None:
+            return None
+    try:
+        root = package_dir.resolve().parents[1]
+    except (IndexError, OSError):
+        return None
+    if (root / "hub" / "ui" / "src").is_dir() and (root / ".git").exists():
+        return root
+    return None
+
+
+def _git_env() -> Dict[str, str]:
+    env = dict(os.environ)
+    for name in ("GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_COMMON_DIR"):
+        env.pop(name, None)
+    env["GIT_TERMINAL_PROMPT"] = "0"
+    return env
+
+
+def git_call(root: Path, *args: str, timeout: float = GIT_SECONDS) -> GitResult:
+    """`git -C <root> <args>` with no console window and no optional locks (the operator may be
+    working in that checkout). Never raises."""
+    try:
+        done = subprocess.run(
+            ["git", "--no-optional-locks", "-C", str(root), *args],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=timeout,
+            creationflags=_NO_WINDOW,
+            stdin=subprocess.DEVNULL,
+            env=_git_env(),
+        )
+    except (OSError, subprocess.SubprocessError, ValueError) as exc:
+        return -1, "", str(exc)
+    return done.returncode, done.stdout or "", done.stderr or ""
+
+
+@dataclass
+class CheckoutState:
+    """What the checkout says about the Hub that runs from it (FR-2, FR-8)."""
+
+    #: The commit the Hub reports it started from.
+    commit: str
+    #: The branch the checkout has checked out now; None on a detached HEAD.
+    branch: Optional[str]
+    #: The local master's tip; None when the checkout has no master branch.
+    master_tip: Optional[str]
+    #: Commits on local master that `commit` does not contain.
+    behind: int
+    #: Repository-relative paths with uncommitted changes (untracked files included).
+    dirty: List[str] = field(default_factory=list)
+
+    @property
+    def on_master(self) -> bool:
+        return self.branch == MASTER
+
+    @property
+    def available(self) -> bool:
+        """An update is offered: on master, and master holds commits the Hub lacks."""
+        return self.on_master and self.behind > 0 and bool(self.master_tip)
+
+
+def _porcelain_paths(raw: str) -> List[str]:
+    """Paths from `git status --porcelain=v1 -z`: `XY path`, a rename's source following it."""
+    entries = raw.split("\0")
+    paths: List[str] = []
+    i = 0
+    while i < len(entries):
+        entry = entries[i]
+        i += 1
+        if len(entry) < 4:
+            continue
+        paths.append(entry[3:])
+        if entry[0] in "RC":
+            i += 1  # the rename's or copy's source path
+    return paths
+
+
+def read_checkout(
+    root: Path, commit: Optional[str], git: GitCall = git_call
+) -> Optional[CheckoutState]:
+    """The checkout at `root` against the Hub's `commit`, or None when any read failed (FR-2: the
+    caller then offers nothing, and nothing is raised). Local refs only: `behind` counts what
+    local master holds, never what a remote holds that was not fetched."""
+    if not commit or not _SHA.match(commit):
+        return None
+    try:
+        code, out, _ = git(root, "symbolic-ref", "--short", "-q", "HEAD")
+        if code == 0:
+            branch: Optional[str] = out.strip() or None
+        elif code == 1:  # a detached HEAD
+            branch = None
+        else:
+            return None
+        code, out, _ = git(root, "rev-parse", "--verify", "-q", f"{MASTER_REF}^{{commit}}")
+        if code == 0:
+            master_tip: Optional[str] = out.strip()
+        elif code == 1:  # no master branch: nothing is ever newer
+            master_tip = None
+        else:
+            return None
+        behind = 0
+        if master_tip:
+            code, out, _ = git(root, "rev-list", "--count", f"{commit}..{MASTER_REF}")
+            if code != 0:
+                return None  # the Hub's commit is not in this repository, or it is unreadable
+            behind = int(out.strip())
+        code, out, _ = git(root, "status", "--porcelain=v1", "-z")
+        if code != 0:
+            return None
+        dirty = _porcelain_paths(out)
+    except (ValueError, TypeError):
+        return None
+    return CheckoutState(commit, branch, master_tip, behind, dirty)
+
+
+class CheckoutWatch:
+    """What one window knows about its checkout: read at the first ask (the launch), then again
+    only once it is an hour old (FR-2), or as soon as the Hub's commit is another."""
+
+    def __init__(
+        self,
+        recheck: float = CHECKOUT_RECHECK_SECONDS,
+        clock: Callable[[], float] = time.monotonic,
+    ) -> None:
+        self.recheck = recheck
+        self.clock = clock
+        self._key: Optional[Tuple[str, str]] = None
+        self._at = 0.0
+        self._state: Optional[CheckoutState] = None
+
+    def state(
+        self,
+        root: Path,
+        commit: Optional[str],
+        read: Optional[Callable[[Path, Optional[str]], Optional[CheckoutState]]] = None,
+    ) -> Optional[CheckoutState]:
+        if not commit:
+            return None
+        key = (str(root), commit)
+        if key == self._key and self.clock() - self._at < self.recheck:
+            return self._state
+        self._state = (read or read_checkout)(root, commit)
+        self._key, self._at = key, self.clock()
+        return self._state
+
+    def forget(self) -> None:
+        self._key = None
+
+
+def checkout_summary(state: Optional[CheckoutState]) -> Optional[str]:
+    """The words App settings and the Update button show for a checkout (CONTRACT `message`)."""
+    if state is None:
+        return None
+    if not state.on_master:
+        where = f"branch {state.branch}" if state.branch else "a detached HEAD"
+        return f"This checkout is on {where}; updates are offered on master only."
+    if state.behind <= 0:
+        return "This Hub runs the tip of master."
+    commits = "1 commit" if state.behind == 1 else f"{state.behind} commits"
+    return f"master is {commits} ahead of this Hub ({state.commit[:12]})."
+
+
+# --- the launch decision for a checkout (FR-3, FR-4, FR-8, FR-10) ------------------------------
+
+
+@dataclass
+class CheckoutLaunchFacts:
+    state: Optional[CheckoutState]
+    auto: bool = False
+    #: As LaunchFacts.hub: "absent", "idle", "busy" or "silent".
+    hub: str = "absent"
+    window_open: bool = False
+
+
+def decide_checkout_at_launch(facts: CheckoutLaunchFacts) -> Decision:
+    """Restart onto master first, or open as things are. Pure, like `decide_at_launch`; another
+    port's Hub is never a reason either way (FR-9: only this port's Hub is stopped)."""
+    if facts.hub == "absent":
+        return Decision("open", "no Hub runs on this port; it starts from the checkout as it is")
+    state = facts.state
+    if state is None:
+        return Decision("open", "the checkout or the Hub's commit could not be read")
+    if not state.on_master:
+        return Decision("open", f"the checkout is on {state.branch or 'a detached HEAD'}")
+    if not state.available or not state.master_tip:
+        return Decision("open", "the Hub runs the tip of master")
+    if not facts.auto:
+        return Decision("open", "restarting onto master automatically is off")
+    if state.dirty:
+        return Decision("open", "the checkout has uncommitted changes")
+    if facts.hub == "busy":
+        return Decision("open", "work is running")
+    if facts.hub != "idle":
+        return Decision("open", "the running Hub did not answer the work check")
+    if facts.window_open:
+        return Decision("open", "a window is already open on this Hub")
+    return Decision("update", f"{state.commit[:12]} -> {state.master_tip[:12]}", state.master_tip)
+
+
+# --- the previous commit (FR-11; testbed/previous_commit_spike.md) ------------------------------
+
+
+def _same_path(a: str, b: Path) -> bool:
+    try:
+        return os.path.normcase(str(Path(a).resolve())) == os.path.normcase(str(b.resolve()))
+    except OSError:
+        return False
+
+
+def _worktree_at(root: Path, target: Path, commit: str, git: GitCall) -> bool:
+    """Is `target` a registered worktree of `root` at `commit`, with its files present?"""
+    code, out, _ = git(root, "worktree", "list", "--porcelain")
+    if code != 0:
+        return False
+    for block in out.split("\n\n"):
+        fields = {}
+        for line in block.splitlines():
+            key, _, value = line.partition(" ")
+            fields[key] = value
+        if _same_path(fields.get("worktree", ""), target) and fields.get("HEAD") == commit:
+            return (target / "hub" / "hub" / "main.py").is_file()
+    return False
+
+
+def prepare_previous(
+    root: Path, commit: str, previous_root: Path, git: GitCall = git_call
+) -> Tuple[Optional[Path], Optional[str]]:
+    """`previous-commit/<sha>`: a detached worktree of the commit the Hub runs, made before
+    anything is stopped, so the Hub can be started from it again. (folder, None), or (None, why
+    it could not be made). A worktree already there for that commit is reused; a leftover folder
+    or a stale registration is cleared first, so only a real failure is reported."""
+    target = previous_root / commit
+    if _worktree_at(root, target, commit, git):
+        return target, None
+    git(root, "worktree", "prune")
+    if target.is_dir():
+        import shutil
+
+        shutil.rmtree(target, ignore_errors=True)
+    code, _, err = git(
+        root, "worktree", "add", "--detach", str(target), commit, timeout=WORKTREE_SECONDS
+    )
+    if code != 0:
+        return None, _last_line(err) if err.strip() else f"git worktree add exited {code}"
+    return target, None
+
+
+def remove_previous(root: Path, target: Optional[Path], git: GitCall = git_call) -> None:
+    """Drop the previous commit's worktree. Never while a Hub runs from it: on Windows a removal
+    under a running Hub fails half-way (the spike), so after a restore it stays."""
+    if target is None:
+        return
+    git(root, "worktree", "remove", "--force", str(target), timeout=WORKTREE_SECONDS)
+    if target.exists():
+        import shutil
+
+        shutil.rmtree(target, ignore_errors=True)
+    git(root, "worktree", "prune")
+
+
+def rehearsal_copy(db_path: Path, backups_root: Path) -> Optional[Path]:
+    """A copy of the database to rehearse the migrations on (D4): `update-backups/<stamp>/
+    rehearsal.db`, named apart from a restore copy because it gets migrated. None with no
+    database yet."""
+    if not db_path.exists():
+        return None
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
+    folder = backups_root / stamp
+    folder.mkdir(parents=True, exist_ok=True)
+    target = folder / "rehearsal.db"
+    _sqlite_copy(db_path, target)
+    return target
+
+
+# --- applying to a checkout (FR-4 to FR-9, FR-11) -----------------------------------------------
+
+
+@dataclass
+class CheckoutApplier:
+    """The injectable callables a checkout update runs; cli.py binds them to the real Hub."""
+
+    port: int
+    root: Path
+    db_path: Path
+    backups_root: Path
+    previous_root: Path
+    lock: UpdateLock
+    #: The commit the Hub on `port` reports in /health, or None (no Hub, or it does not say).
+    hub_commit: Callable[[], Optional[str]]
+    #: Stop the Hub on `port` only; None when stopped, else why not.
+    stop: Callable[[], Optional[str]]
+    #: Start the Hub on `port` and profile from the checkout; None when started, else why not.
+    start: Callable[[], Optional[str]]
+    #: Start the Hub on `port` and profile from a previous commit's worktree folder.
+    start_previous: Callable[[Path], Optional[str]]
+    #: Run the checkout's migrations on a database copy, in a throwaway process: (ok, output).
+    rehearse: Callable[[Path], Tuple[bool, str]]
+    git: GitCall = git_call
+    healthy_seconds: float = HEALTHY_SECONDS
+    sleep: Callable[[float], None] = time.sleep
+    log: Callable[[str], None] = lambda _m: None
+
+
+def apply_checkout_update(
+    applier: CheckoutApplier,
+    confirmed: bool = True,
+    work: Optional[Callable[[], Optional[Dict[str, Any]]]] = None,
+    describe: Callable[[Dict[str, Any]], str] = lambda w: "work is running",
+) -> ApplyResult:
+    """Restart this port's Hub onto the checkout's master, or say why not.
+
+    Every refusal comes before anything is touched: not on master or nothing newer ("blocked"),
+    work running or uncommitted files and no confirmation ("needs_confirm", naming them), an
+    update already under way ("blocked"). Then, still before the stop, the previous commit is
+    made ready ("blocked" when it cannot be) and the migrations are rehearsed on a copy
+    ("failed", the Hub untouched). Hubs on other ports are neither consulted nor stopped (FR-9).
+    """
+    a = applier
+    commit = a.hub_commit()
+    if not commit:
+        return ApplyResult(
+            "blocked", "This Hub does not report the commit it runs, so it is not updated."
+        )
+    state = read_checkout(a.root, commit, a.git)
+    if state is None:
+        return ApplyResult("blocked", f"The checkout at {a.root} could not be read.")
+    if not state.on_master:
+        return ApplyResult("blocked", checkout_summary(state) or "Not on master.")
+    if not state.available or not state.master_tip:
+        return ApplyResult("blocked", "master holds nothing this Hub lacks.")
+    if not confirmed:
+        asks: List[str] = []
+        if work is not None:
+            answer = work()
+            if work_state(answer) != "idle":
+                asks.append(
+                    f"{describe(answer)}; the restart stops it"
+                    if answer
+                    else "The Hub did not say what is running; the restart stops it"
+                )
+        if state.dirty:
+            more = len(state.dirty) - 10
+            asks.append(
+                "Uncommitted changes in the checkout stay as they are, and the Hub runs them: "
+                + ", ".join(state.dirty[:10])
+                + (f" and {more} more" if more > 0 else "")
+            )
+        if asks:
+            return ApplyResult("needs_confirm", ". ".join(asks))
+    owned = a.lock.held
+    if not owned and not a.lock.acquire(a.port):
+        holder = a.lock.holder() or {}
+        where = f" for port {holder['port']}" if holder.get("port") else ""
+        return ApplyResult("blocked", f"An update is already under way{where}.")
+    try:
+        return _apply_checkout_locked(a, commit, state.master_tip)
+    finally:
+        if not owned:
+            a.lock.release()
+
+
+def _apply_checkout_locked(a: CheckoutApplier, commit: str, tip: str) -> ApplyResult:
+    a.log(f"Restarting onto master: {commit[:12]} -> {tip[:12]}")
+    try:
+        previous, why = prepare_previous(a.root, commit, a.previous_root, a.git)
+    except Exception as exc:
+        previous, why = None, str(exc)
+    if previous is None:
+        return ApplyResult(
+            "blocked",
+            f"The commit this Hub runs ({commit[:12]}) could not be made ready to start again, "
+            f"so nothing was stopped: {why}",
+        )
+    a.log(f"Previous commit ready in {previous}")
+
+    try:
+        rehearsal = rehearsal_copy(a.db_path, a.backups_root)
+    except Exception as exc:
+        remove_previous(a.root, previous, a.git)
+        return ApplyResult(
+            "failed",
+            "The update was not applied: the database could not be copied to rehearse the "
+            f"migrations, so nothing changed: {exc}",
+        )
+    if rehearsal is not None:
+        ok, output = a.rehearse(rehearsal)
+        if not ok:
+            remove_previous(a.root, previous, a.git)
+            return ApplyResult(
+                "failed",
+                "The update was not applied: master's database migrations failed on a copy of "
+                f"the database, so the Hub was left running untouched: {_last_line(output)}",
+                rehearsal,
+            )
+        a.log("Migrations rehearsed on a copy of the database")
+
+    why = a.stop()
+    if why:
+        remove_previous(a.root, previous, a.git)
+        return ApplyResult("failed", f"The Hub could not be stopped, so nothing changed: {why}")
+    try:
+        copy = backup_database(a.db_path, a.backups_root)
+    except Exception as exc:  # no copy: the database is untouched, so start the commit it ran
+        started = a.start_previous(previous)
+        tail = f" (and it did not start again: {started})" if started else ""
+        return ApplyResult(
+            "failed", f"The database could not be copied, so nothing changed: {exc}{tail}"
+        )
+    a.log(f"Database copied to {copy}" if copy else "No database yet; nothing to copy")
+
+    why = a.start()
+    if why:
+        return _restore_checkout(a, copy, previous, commit, f"master did not start: {why}")
+    seen = _wait_for_commit(a, lambda c: c is not None and c != commit)
+    if not seen or seen == commit:
+        what = "it did not answer" if not seen else "the previous Hub still answered"
+        return _restore_checkout(
+            a,
+            copy,
+            previous,
+            commit,
+            f"master did not report healthy within {int(a.healthy_seconds)} s ({what})",
+        )
+    remove_previous(a.root, previous, a.git)
+    a.log(f"The Hub runs {seen[:12]}")
+    return ApplyResult("applied", f"Restarted onto master ({seen[:12]}).", copy)
+
+
+def _wait_for_commit(a: CheckoutApplier, done: Callable[[Optional[str]], bool]) -> Optional[str]:
+    deadline = time.monotonic() + a.healthy_seconds
+    while True:
+        seen = a.hub_commit()
+        if done(seen) or time.monotonic() >= deadline:
+            return seen
+        a.sleep(1.0)
+
+
+def _restore_checkout(
+    a: CheckoutApplier, copy: Optional[Path], previous: Path, commit: str, reason: str
+) -> ApplyResult:
+    """FR-7: the database copy back first (a previous commit's Hub on the migrated database
+    reports healthy all the same -- the spike), then the previous commit started from its
+    worktree, which stays until a later update succeeds."""
+    a.log(f"Restart failed ({reason}); starting {commit[:12]} again")
+    problems: List[str] = []
+    stopped = a.stop()
+    if stopped:
+        problems.append(f"the new Hub could not be stopped: {stopped}")
+    try:
+        restore_database(copy, a.db_path)
+    except Exception as exc:
+        problems.append(f"the database copy {copy} could not be put back: {exc}")
+    why = a.start_previous(previous)
+    if why:
+        problems.append(f"{commit[:12]} did not start again: {why}")
+    elif _wait_for_commit(a, lambda c: c == commit) != commit:
+        problems.append(f"{commit[:12]} did not report healthy again")
+    detail = (
+        f"The restart onto master failed: {reason}. The previous commit {commit[:12]} was "
+        "started again"
+    )
+    if copy is not None:
+        detail += f", with the database as it was before (copy kept in {copy.parent})"
+    detail += "."
+    if problems:
+        detail += " But: " + "; ".join(problems) + "."
+    return ApplyResult("failed", detail, copy)
