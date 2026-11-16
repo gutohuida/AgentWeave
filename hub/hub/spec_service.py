@@ -337,6 +337,13 @@ async def _apply_and_write(
 
     divergence = spec_lifecycle.divergence(document, existing_content)
 
+    # The step moves before the file is written, so the stored hub block carries the step the row
+    # does; written after, a save would leave the file one step behind its row until the next one.
+    reached = spec_journey.step_by_content(payload, document, spec_journey.load(workspace))
+    move = {"from": document.step, "to": reached}
+    if reached is not None:
+        document.step = reached
+
     # Stored as the payload plus the row's hub block (FR-1); the page is rendered when it is read.
     content = spec_documents.write_payload(
         workspace, document.path, stored, hub_block(document, existing_content)
@@ -365,6 +372,16 @@ async def _apply_and_write(
 
     # F1123: the unclaimed-slice advice is for the author naming a slice, so it rides the save
     # result only; Approve, Propose and Check no longer show it to the operator.
+    # A save that fills in what later steps produce moves the step to where the content stands, so
+    # `steps_skipped` is left to missing and custom steps (ready-means-the-same-thing FR-13).
+    if reached is not None:
+        await spec_lifecycle.record_event(
+            session,
+            document,
+            kind="journey",
+            actor=actor,
+            detail={"step": move, "by": "save"},
+        )
     report = await readiness(session, workspace, document, payload, for_save=True, prune=True)
     return SaveResult(
         path=document.path,

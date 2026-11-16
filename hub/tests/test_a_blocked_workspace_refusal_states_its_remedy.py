@@ -35,13 +35,17 @@ from hub import worktrees
 # must reach the real per-task provisioning.
 from hub.worktrees import ensure_task_worktree
 
+from ._git_timeout import GIT_TIMEOUT
+
 AGENT = "remedy-agent"
 TASK = "task-ab12cd34ef56"
 OTHER_TASK = "task-00ff11ee22dd"
 
 
 def _git(repo: Path, *args: str) -> subprocess.CompletedProcess:
-    result = subprocess.run(["git", *args], cwd=repo, capture_output=True, text=True, timeout=30)
+    result = subprocess.run(
+        ["git", *args], cwd=repo, capture_output=True, text=True, timeout=GIT_TIMEOUT
+    )
     assert result.returncode == 0, result.stderr
     return result
 
@@ -139,7 +143,11 @@ def test_a_foreign_registered_worktree_names_its_branch_and_the_stated_remedy_wo
     stated = re.search(r"`git -C .+? (switch [^`]+)`", message)
     assert stated, message
     carried_out = subprocess.run(
-        ["git", *stated.group(1).split()], cwd=path, capture_output=True, text=True, timeout=30
+        ["git", *stated.group(1).split()],
+        cwd=path,
+        capture_output=True,
+        text=True,
+        timeout=GIT_TIMEOUT,
     )
     assert carried_out.returncode == 0, carried_out.stderr
 
@@ -197,7 +205,9 @@ def test_a_mid_merge_task_checkout_asks_for_the_merge_and_says_not_to_remove_it(
     (path / "f.txt").write_text("THE TASK'S OWN WORK\n")
     _git(path, "add", "-A")
     _git(path, "commit", "-q", "-m", "the task's own work")
-    subprocess.run(["git", "merge", conflicting], cwd=path, capture_output=True, timeout=30)
+    subprocess.run(
+        ["git", "merge", conflicting], cwd=path, capture_output=True, timeout=GIT_TIMEOUT
+    )
     assert worktrees._is_mid_merge(path)
 
     with pytest.raises(worktrees.IsolationUnavailableError) as caught:

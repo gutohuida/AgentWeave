@@ -4,6 +4,9 @@ import { useConfigStore } from '@/store/configStore'
 export interface HubVersion {
   version?: string
   install?: string
+  /** Present only for a Hub run from a git checkout. */
+  commit?: string
+  branch?: string
 }
 
 /** What `/health` says about the Hub this window is connected to; it needs no key. */

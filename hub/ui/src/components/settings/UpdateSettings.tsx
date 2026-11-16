@@ -2,13 +2,20 @@ import * as React from 'react'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
 import { SettingsGroup, SettingsRow } from '@/components/ui/settings'
-import { appWindowApi, type UpdateStatus } from '@/hooks/useNotifications'
+import { appWindowApi, updateTarget, type UpdateStatus } from '@/hooks/useNotifications'
+
+/** The checkout's own switch (change `a-development-checkout-updates-the-same-way`, FR-10). */
+const CHECKOUT_AUTO_LABEL = 'Restart onto master automatically when I open AgentWeave'
 
 /**
  * 'Update automatically when I open AgentWeave' and the Update button (change
  * `agentweave-updates-itself`). Everything comes from the launcher's window bridge, so a browser
  * tab, which has none, shows nothing. The button names the work running and applies only after the
  * operator confirms; the launcher reloads this window when the update ends.
+ *
+ * A Hub run from a git checkout (`a-development-checkout-updates-the-same-way`) shows its own
+ * switch, off by default, how far local master is ahead, and offers the restart onto master only
+ * on master; its prompt names any uncommitted files.
  */
 export function UpdateSettings() {
   const [status, setStatus] = React.useState<UpdateStatus | null>(null)
@@ -27,7 +34,7 @@ export function UpdateSettings() {
         .then((s) => {
           if (!live) return
           setStatus(s)
-          setAuto(Boolean(s.auto))
+          setAuto(s.kind === 'checkout' ? Boolean(s.auto_checkout) : Boolean(s.auto))
         })
         .catch(() => {})
     }
@@ -39,12 +46,13 @@ export function UpdateSettings() {
     }
   }, [])
 
-  if (!status || !status.applicable) return null
+  const checkout = status?.kind === 'checkout'
+  if (!status || (!status.applicable && !checkout)) return null
 
   const changeAuto = (on: boolean) => {
     setAuto(on)
     appWindowApi()
-      ?.set_auto_update?.(on)
+      ?.set_auto_update?.(on, checkout ? 'checkout' : 'pip')
       ?.then((saved) => {
         if (!saved) setAuto(!on)
       })
@@ -71,26 +79,50 @@ export function UpdateSettings() {
   }
 
   const failure = status.message?.state === 'failed' ? status.message.detail : null
-  const workText = asking ?? (status.work?.running ? status.work.description : null)
+  const target = updateTarget(status)
+  const label = checkout ? CHECKOUT_AUTO_LABEL : 'Update automatically when I open AgentWeave'
+  let workText: string | null
+  if (checkout) {
+    workText = asking
+  } else {
+    const running = asking ?? (status.work?.running ? status.work.description : null)
+    workText = running ? `${running}. Updating stops it.` : null
+  }
 
   return (
-    <SettingsGroup title="Updates" description="New releases of AgentWeave from PyPI.">
+    <SettingsGroup
+      title="Updates"
+      description={
+        checkout
+          ? 'This AgentWeave runs from a git checkout; updating restarts it onto local master.'
+          : 'New releases of AgentWeave from PyPI.'
+      }
+    >
       <SettingsRow
-        label="Update automatically when I open AgentWeave"
-        description="Opening the app upgrades it first when nothing is running. The Update button stays either way."
+        label={label}
+        description={
+          checkout
+            ? 'Off: opening the app never restarts it. On: it restarts onto master first when master is ahead, the checkout is clean and nothing is running. The Update button stays either way.'
+            : 'Opening the app upgrades it first when nothing is running. The Update button stays either way.'
+        }
         control={
           <Switch
             checked={auto}
             onCheckedChange={changeAuto}
-            aria-label="Update automatically when I open AgentWeave"
-            data-testid="auto-update"
+            aria-label={label}
+            data-testid={checkout ? 'auto-update-checkout' : 'auto-update'}
           />
         }
       />
-      {status.available && status.latest ? (
+      {checkout && status.summary ? (
+        <p className="px-4 pb-3 text-xs text-muted-foreground" data-testid="update-summary">
+          {status.summary}
+        </p>
+      ) : null}
+      {status.available && target ? (
         <SettingsRow
-          label={`Version ${status.latest} is available`}
-          description={workText ? `${workText}. Updating stops it.` : undefined}
+          label={checkout ? `master is ahead: ${target}` : `Version ${target} is available`}
+          description={workText ?? undefined}
           control={
             asking ? (
               <span className="flex gap-2">
@@ -98,12 +130,12 @@ export function UpdateSettings() {
                   Cancel
                 </Button>
                 <Button size="sm" disabled={busy} onClick={() => apply(true)} data-testid="update-confirm">
-                  Stop it and update
+                  {checkout ? 'Restart onto master' : 'Stop it and update'}
                 </Button>
               </span>
             ) : (
               <Button size="sm" disabled={busy} onClick={() => apply(false)} data-testid="update-button">
-                {`Update to ${status.latest}`}
+                {`Update to ${target}`}
               </Button>
             )
           }

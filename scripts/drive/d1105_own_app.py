@@ -60,6 +60,9 @@ import urllib.error
 import urllib.request
 from ctypes import wintypes
 
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+import proc_safe  # noqa: E402
+
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 HUB_HOME = pathlib.Path.home() / ".agentweave" / "hub"
 FORBIDDEN_PORTS = {8000, 8010}
@@ -450,14 +453,10 @@ class App:
             timeout=90,
             creationflags=0x08000000,
         )
-        rows = processes()
-        leftover = descendants(rows, set(hub_pids(self.port, rows)) | self.pids)
-        for pid in leftover:
-            subprocess.run(
-                ["taskkill", "/PID", str(pid), "/T", "/F"],
-                capture_output=True,
-                creationflags=0x08000000,
-            )
+        # The Hub is found by command line (just now); remembered pids may have been reused since
+        # they were noted, so they count only if created after this drive began (F1197).
+        proc_safe.kill_tree(hub_pids(self.port))
+        proc_safe.kill_tree(self.pids, since=proc_safe.DRIVE_START)
         for proc in self.launchers:
             try:
                 proc.wait(timeout=10)

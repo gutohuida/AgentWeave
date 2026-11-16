@@ -18,12 +18,16 @@ from hub import worktrees
 # patch, exactly like `test_launchability.py`'s direct imports of `probe_agent` et al.
 from hub.worktrees import resolve_agent_workspace
 
+from ._git_timeout import GIT_TIMEOUT
+
 # conftest stubs `worktrees.ensure_task_worktree`; the real one is held here from import time.
 _REAL_ENSURE_TASK_WORKTREE = worktrees.ensure_task_worktree
 
 
 def _git(repo: Path, *args: str) -> subprocess.CompletedProcess:
-    result = subprocess.run(["git", *args], cwd=repo, capture_output=True, text=True, timeout=30)
+    result = subprocess.run(
+        ["git", *args], cwd=repo, capture_output=True, text=True, timeout=GIT_TIMEOUT
+    )
     assert result.returncode == 0, result.stderr
     return result
 

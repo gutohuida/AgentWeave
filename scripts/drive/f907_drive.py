@@ -6,11 +6,11 @@
 import json
 import os
 import pathlib
-import subprocess
 import sys
 
 os.environ.setdefault("AW_E2E_STATE", "C:/Users/huida/.agentweave/e2e-f907.json")
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+import proc_safe  # noqa: E402
 import s1022_tr_drive as d  # noqa: E402
 
 PHASE, PROJECT = sys.argv[1], sys.argv[2]
@@ -25,8 +25,8 @@ def main():
         d.say(f"stop {st}", res)
     else:
         hub_pid = int(json.loads(pathlib.Path(os.environ["AW_E2E_STATE"]).read_text())["pid"])
-        for k in d._claude_children(hub_pid):
-            subprocess.run(["taskkill", "/F", "/PID", str(k["ProcessId"])], capture_output=True)
+        before = proc_safe.snapshot()  # a pid the CIM walk names must still be this process
+        proc_safe.kill_candidates([k["ProcessId"] for k in d._claude_children(hub_pid)], before)
     d.say("final", d.wait_run(run, 180))
     d.say("run row", d.ro("select status, exit_code from runs where id=?", (run,)))
 

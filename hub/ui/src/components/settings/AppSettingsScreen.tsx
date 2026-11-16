@@ -152,6 +152,26 @@ function VersionSettings() {
           </span>
         }
       />
+      {data.commit ? (
+        <SettingsRow
+          label="Commit"
+          control={
+            <span className="font-mono text-xs" data-testid="hub-commit" title={data.commit}>
+              {data.commit.slice(0, 12)}
+            </span>
+          }
+        />
+      ) : null}
+      {data.branch ? (
+        <SettingsRow
+          label="Branch"
+          control={
+            <span className="font-mono text-xs" data-testid="hub-branch">
+              {data.branch}
+            </span>
+          }
+        />
+      ) : null}
     </SettingsGroup>
   )
 }

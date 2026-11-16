@@ -41954,12 +41954,52 @@ WSL appends the Windows PATH by default, so a user with Codex installed on Windo
 
 `review_on_completion` (`a-hand-started-task-reaches-review-and-merge`) gives a hand-started task the step a build's flow gives it on completion: its review starts by itself. The opposite edge has no equivalent. When the review turn moves the task to `revision_needed`, a flow would restart the author (`flow_advance`: `revision_needed -> in_progress` with the author), but a hand-started task simply waits. The operator has to notice and start the builder again. On a fresh install this is the second stop after "who reviews it?" that a new user meets. **Expected:** when a review turn sends a hand-started task back, the author's turn on it is queued with the reviewer's notes, as the review was queued on completion. A task sent back repeatedly is surfaced rather than looped forever (see the cap in AW task). **Test:** a hand-started task completed by A and sent back by reviewer B's review turn ends with a queued or running turn for A on that task, and no operator action.
 
-## F1197 (B) -- a stale `index.lock` in an agent's review checkout blocks every review turn for that agent, and nothing clears it
+## F1181 (A) -- a Hub started with `--hub-only` from the Hub folder opens the first profile's database, not its own
 
-**Status:** open
-**Source:** found by the operator, 2026-11-16 ("something stuck in QA2"); diagnosed by Architect on `:8000` (read-only DB)
-**Theme:** Review and merge
+**Status:** fixed 2026-11-16 (in DCUSW-4, `a-development-checkout-updates-the-same-way`). `src/agentweave/cli.py`: the updater's restart (`_hub_start_for_update`) and the previous commit's start (`_hub_start_previous`, via `_hub_child_env`) now pass the profile's `DATABASE_URL` (`_hub_db_url`) in the child's environment, so `load_dotenv()` of HUB_DIR/.env can no longer replace it. The `--hub-only` start run directly from HUB_DIR without that variable still reads HUB_DIR/.env; that path is the operator's own and is not changed here. Test: `tests/test_updater_checkout.py::test_the_restart_names_the_profile_s_database_outright`. End to end: the checkout drive's `serves_own_db` (apply-reload, failed-start), run by DCUSW-5.
+**Source:** found by driving -- DeveloperOpus2, 2026-11-16, writing the acceptance drive of `a-development-checkout-updates-the-same-way` (DCUSW-1, `scripts/drive/d1107_updates_a_checkout.py`)
+**Theme:** Updates
 **Ready:** yes
 **Tier:** 0
 
-At 15:07:13 UTC `review_on_completion` staffed QA2 on AW-146. Preparing QA2's review checkout left a zero-byte `.git/worktrees/QA2/index.lock` (created 15:07:17), with no git process alive afterwards. Every later attempt (`git checkout --force --detach <sha>`) failed 128 with "Unable to create ... index.lock: File exists". The job entry was withdrawn after 3 attempts ("the Hub stopped retrying"), and the operator's two "Review with QA2" clicks were withdrawn at once with the same error. The task sat `completed` for 37 minutes, and no stall was raised for it. Removing the lock by hand fixed it. **Expected:** the Hub owns that checkout, so before a checkout it clears an `index.lock` that no live git process could hold (for example, older than a short threshold with no git child of the Hub running in that checkout) and retries. Where it cannot, the withdrawal raises a stall naming the lock file. **Test:** create a stale `index.lock` in a review checkout's git dir; the next review turn for that agent starts and the lock is gone.
+`agentweave`'s `main()` calls `load_dotenv()` (`src/agentweave/cli.py:3669`), which loads `./.env` from the current directory into the process environment. `HUB_DIR/.env` is scaffolded on the first start with the `DATABASE_URL` of whichever profile started first, and an explicit `DATABASE_URL` wins over `--profile` (`_hub_resolve_database_source`, `cli.py:899`). So `python -m agentweave --hub-only --port P --profile X` run with its working directory at HUB_DIR serves the first profile's database on port P. That is exactly how the updater restarts a Hub: `_hub_start_for_update` (`cli.py:2703`) runs `--hub-only` with `cwd=str(HUB_DIR)`. Seen in a scratch home: four `--hub-only` starts of four profiles all wrote to the first profile's `agentweave.db`, and their own profile folders stayed empty. On this machine `HUB_DIR/.env` names the default profile, so `:8000` gets lucky, but an update of any other profile's Hub (the trial `:8010` included) would come back on the wrong database. **Expected:** a start with `--profile` opens that profile's database whatever its working directory; the updater's restart does not run from a folder whose `.env` names another database. **Test:** with HUB_DIR/.env naming profile A's database, `--hub-only --profile B --port P` run from HUB_DIR creates and serves B's `agentweave.db` (its `/api/v1/projects` matches B's file). The checkout drive's `serves_own_db` check (apply-reload and failed-start) catches it end to end.
+
+## F1182 (A) -- on an editable or checkout install, the window's Update bridge still runs a pip install of the newest release
+
+**Status:** fixed 2026-11-16 (in DCUSW-4, `a-development-checkout-updates-the-same-way`). `_AppWindowApi.apply_update` (`src/agentweave/cli.py`) now sends a Hub run from a git checkout to the checkout updater (restart onto local master, no pip), answers `blocked` without touching anything for any other install that is not a pip release, and answers `failed` (no pip) when the known release is not newer than the installed one. Tests: `tests/test_updater_checkout.py::test_an_editable_install_outside_a_checkout_is_never_pip_installed`, `::test_a_pip_release_equal_to_the_installed_one_is_not_applied`, and the checkout bridge tests there, whose `apply_update`/`known_latest` raise if reached.
+**Source:** found by driving -- DeveloperOpus2, 2026-11-16, the first run of `scripts/drive/d1107_updates_a_checkout.py` (DCUSW-1), before anything of that change was built
+**Theme:** Updates
+**Ready:** yes
+**Tier:** 0
+
+`_AppWindowApi.update_status()` reports `applicable: false` for an editable install, and the launch path refuses it (`_launch_update`: `installation_kind() != "pip"`), but `_AppWindowApi.apply_update()` (`src/agentweave/cli.py:1817`) never looks at the install kind. With the release check's `latest` known (here 2.2.0, equal to the installed 2.2.0, read from PyPI because the drive had not set `AW_UPDATE_INDEX_URL`), `apply_update(false)` from the page of an editable scratch Hub stopped that Hub, copied its database, ran `pip install agentweave-ai==2.2.0 agentweave-hub==2.2.0` from PyPI over the editable install, and started it again. Twice in one run: once confirmed, once with `confirmed` false and nothing running. On the operator's `:8000`, which runs an editable install of this checkout, one call to the bridge would replace that install with the PyPI release and restart the live Hub. **Expected:** `apply_update` refuses (state `blocked`, nothing stopped) when the install is not a pip release, until `a-development-checkout-updates-the-same-way` gives a checkout its own path, and it never offers to install a version equal to the one installed. **Test:** with an editable install and `update-check.json` naming the installed version, `apply_update(true)` answers `blocked`, the Hub's pid is unchanged and pip is not called.
+
+## F1198 (A) -- creating or opening a project does file and git work on the Hub's event loop
+
+**Status:** fixed 2026-11-16 (in AW-157, task-35bd0a635f1e). Each call below now runs through `asyncio.to_thread`. `test_a_slow_share_does_not_freeze_the_hub::test_a_slow_project_create_does_not_block_other_requests` now also fails deterministically, on any machine, when a file call on the project's folder runs on the loop thread: it failed that way on the pre-fix code and passes after.
+**Source:** found by a landing check -- the test above (on the steady set) failed at landing with a 399 ms stall, 2026-11-16. Diagnosed by DeveloperOpus while building AW-157; filed by the Architect under development-test-suite FR-15 (a real stall becomes a finding).
+**Theme:** Hub responsiveness
+**Ready:** yes
+**Tier:** 0
+
+`project_lifecycle` ran blocking file and git work on the event loop during project create and open. Every other request waited behind it, so a project on a slow share froze the Hub. On the loop were:
+- the marker read, write and undo (`_write_marker_and_commit`);
+- `seed_repo_excludes` (4 sites);
+- the charter reads in `_seed_new_project`;
+- `_require_marker`;
+- `_repair_checkout_registrations` (git);
+- `mkdir` and cleanup in `create_new`.
+
+**Expected:** creating or opening a project never blocks other requests on its folder's file or git I/O. **Not covered here:** `/health` also reads files on the loop on every call. The turn-start freeze test's 131 ms and 172 ms stalls (0 ms of process CPU) are not explained yet: AW-157 reordered `_loop_lag`'s message so the next failure names who held the GIL.
+
+## F1183 (A) -- an expired Claude sign-in that cannot be renewed is reported runnable
+
+Launchability showed claude `present/authorized/runnable` while every turn failed with "this login reached its time limit and cannot be renewed. Run `claude auth login`".
+
+**Status:** fixed -- `hub/hub/claude_signin.py`: a run ending with that text marks the sign-in unrenewable until the credentials file changes (`CLAUDE_CONFIG_DIR` respected); an expired token with no refresh token also counts. `expiresAt` alone does not.
+
+## F1197 (A) -- a stale `index.lock` in a review checkout while a drive's cleanup could kill reused pids
+
+On `:8000` the Hub's `git checkout` in QA2's review checkout died after about 1 s with exit 1 and empty stderr, which is what `taskkill /F` / `TerminateProcess(h, 1)` leaves, and left a stale `index.lock`. AW-152 traced the lock to the only live run at 15:07:17 UTC (DCUSW-4).
+
+**Status:** hazard closed (AW-159); cause **suspected, not proven**. Drive cleanups walked `ParentProcessId` from a seconds-old `Get-CimInstance` table and from remembered pids, then `taskkill /T /F`'d each, so a reused pid could have been ended. Now `scripts/drive/proc_safe.py` walks a Toolhelp table with creation times through `hub/hub/process_job.descendants` (a child counts only if created no earlier than its parent), drops remembered roots older than the drive, and ends processes only through handles whose creation time matches the snapshot. Converted: `d1105_own_app`, `d1107_updates_itself`, `d1108_windows_notifications`, `s1022_tr_drive`, `s1023_tc_drive`, `f907_drive`, `s1023_rn_busy`, `s1023_rn_stop_tree`; `test_pty_runner` no longer tree-kills a pid it has already seen exit. Left alone: drives that `taskkill` only a `Popen` they still hold (the handle keeps the pid from being reused), `panel_terminal_drive`/`t_row19_crash`/`t_sweep_row5_runs` (they only observe; `t_row19_crash` stops the Hub it started by pid from its own state), and `d1_0909_shutdown` (one CIM pipeline kills each pid it just listed). **Test:** `tests/test_drive_proc_safe.py`.

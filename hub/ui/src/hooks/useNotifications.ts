@@ -24,18 +24,43 @@ interface AppWindowApi {
   set_close_keeps_running?: (on: boolean) => Promise<boolean>
   /** Updating (cli._AppWindowApi): what App settings shows, the switch, and the apply itself. */
   update_status?: () => Promise<UpdateStatus>
-  set_auto_update?: (on: boolean) => Promise<boolean>
+  /** `kind` 'checkout' saves the checkout's own switch (`auto_checkout`); otherwise `auto`. */
+  set_auto_update?: (on: boolean, kind?: 'pip' | 'checkout') => Promise<boolean>
   apply_update?: (confirmed: boolean) => Promise<UpdateAnswer>
+  /** The operator has seen this Hub's last update result: the launcher stops showing it. */
+  dismiss_update_message?: () => Promise<boolean>
 }
 
 export interface UpdateStatus {
+  /** 'pip', 'editable', or 'checkout' for a Hub run from a git checkout (change
+   *  `a-development-checkout-updates-the-same-way`), whose update restarts it onto local master. */
+  kind?: string | null
   current: string | null
   latest: string | null
   available: boolean
   applicable: boolean
   auto: boolean
+  /** A checkout's 'Restart onto master automatically when I open AgentWeave' (default off). */
+  auto_checkout?: boolean
+  /** A checkout: the Hub's commit, the checkout's branch, local master's tip, how many commits
+   *  master holds that the Hub lacks, the uncommitted paths, and the words to show. */
+  commit?: string | null
+  branch?: string | null
+  master_tip?: string | null
+  behind?: number | null
+  dirty?: string[]
+  summary?: string | null
   work: { running: boolean; description: string } | null
   message: { state?: string; detail?: string; at?: string } | null
+}
+
+/** What the Update button says: the release for a pip install, master and how far for a checkout. */
+export function updateTarget(status: UpdateStatus): string | null {
+  if (status.kind === 'checkout') {
+    const n = status.behind ?? 0
+    return n > 0 ? `master (${n} ${n === 1 ? 'commit' : 'commits'})` : null
+  }
+  return status.latest
 }
 
 export interface UpdateAnswer {

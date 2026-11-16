@@ -584,6 +584,9 @@ def test_install_kind_reads_direct_url(monkeypatch):
 @pytest.fixture
 def hub_dir(tmp_path, monkeypatch):
     monkeypatch.setattr(cli, "HUB_DIR", tmp_path / "hub")
+    # These are the pip install's launches: no git checkout behind the Hub package (this suite
+    # runs from one). A checkout's launch is tests/test_updater_checkout.py's.
+    monkeypatch.setattr(cli, "_hub_checkout_root", lambda: None)
     (tmp_path / "hub").mkdir()
     return tmp_path / "hub"
 
@@ -692,7 +695,7 @@ def test_a_launch_that_updates_does_it_behind_the_splash_holding_the_lock(hub_di
     assert [a.target for a in applied] == ["2.1.1"]
     assert seen["url"] == "http://127.0.0.1:8190" and seen["warm"] is False
     assert cli._update_lock().holder() is None  # released once the window was shown
-    result = json.loads(cli._update_result_file().read_text(encoding="utf-8"))
+    result = json.loads(cli._update_result_file(8190, "d1107").read_text(encoding="utf-8"))
     assert result["state"] == "applied"
 
 
@@ -707,7 +710,7 @@ def test_a_failed_update_at_launch_is_recorded_for_the_window_to_say(hub_dir, mo
     monkeypatch.setattr(updater, "hub_health", lambda _port, timeout=2.0: {"version": "2.1.0"})
     monkeypatch.setattr(cli, "_hub_resolve_launch_url", lambda port, cwd: "http://x")
     assert cli._launch_update(8190, "d1107", None) == 0  # the restored version opens
-    result = json.loads(cli._update_result_file().read_text(encoding="utf-8"))
+    result = json.loads(cli._update_result_file(8190, "d1107").read_text(encoding="utf-8"))
     assert result == {
         "state": "failed",
         "detail": "The update to 2.1.1 failed: boom.",

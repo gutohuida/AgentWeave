@@ -203,7 +203,11 @@ async def test_advancing_to_a_named_step_and_past_the_end(
     end = await app.post(f"{ACTIONS}/advance", json={"path": PATH}, headers=run_headers)
     assert end.status_code == 200, end.text
     assert end.json()["step"] == "build"
-    assert "last step" in end.json()["message"]
+    message = end.json()["message"]
+    assert "last step" in message
+    # FR-8: the answer never declares the document ready; it defers to the save's verdict.
+    assert "document is ready" not in message
+    assert "only when the latest save's ready_to_approve is true" in message
 
 
 @pytest.mark.asyncio

@@ -28,6 +28,8 @@ from hub.db.engine import async_session_factory
 from hub.db.models import Agent, RequirementEvidence, Run, Task
 from hub.spec_payload import SCHEMA_VERSION
 
+from ._git_timeout import GIT_TIMEOUT
+
 BASE = "/api/v1/projects/proj-test/project"
 SUBMIT = "/api/v1/agent-actions/spec/documents"
 AGENT_EVIDENCE = "/api/v1/agent-actions/spec/evidence"
@@ -41,7 +43,9 @@ OTHER_TASK_ID = "task-dupe-other"
 
 
 def git(repo: Path, *args: str) -> subprocess.CompletedProcess:
-    return subprocess.run(["git", *args], cwd=repo, capture_output=True, text=True, timeout=30)
+    return subprocess.run(
+        ["git", *args], cwd=repo, capture_output=True, text=True, timeout=GIT_TIMEOUT
+    )
 
 
 def init_repo(path: Path, branch: str = "master") -> Path:

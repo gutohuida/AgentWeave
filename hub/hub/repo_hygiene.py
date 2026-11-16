@@ -28,7 +28,11 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
+from .hub_writes import LEDGER as _LEDGER
+
 logger = logging.getLogger(__name__)
+
+_HUB_WRITES_LEDGER = _LEDGER.as_posix()
 
 #: Delimiters for the block this module owns. Everything outside them belongs to whoever wrote it and
 #: is never reordered or removed. Having markers rather than blind appends is also what lets a later
@@ -86,6 +90,15 @@ EXCLUDE_PATTERNS = [
     # checkout would, and because `workspace_paths` offered it in the `@path` picker (F170). It binds
     # a project ID to this machine's database and means nothing in anyone else's history.
     ".agentweave/project.json",
+    # The ledger of files the Hub wrote into the checkout (`hub_writes`, F1185): a file, not a folder,
+    # so none of the folder rules above reach it, and it appeared as `?? .agentweave/` from the first
+    # turn. Derived from the ledger's own constant; `hub_writes` imports only the stdlib.
+    _HUB_WRITES_LEDGER,
+    # The scratch checkouts the project's checks and the generated-file rebuild run in
+    # (`project_checks.CHECKS_DIR`, `generated_files.GENERATED_DIR`; a test keeps them in step,
+    # since those modules cannot be imported here).
+    ".agentweave/checks/",
+    ".agentweave/generated/",
     "__pycache__/",
     "*.pyc",
     "node_modules/",

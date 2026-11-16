@@ -33,6 +33,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+from . import claude_signin
+from .claude_signin import UNRENEWABLE_REASON
 from .model_catalog import model_context_window
 from .runner_events import (
     AccountingSample,
@@ -65,12 +67,20 @@ class ParsedLine:
     message_accounting: Optional[Tuple[str, AccountingSample]] = None
     # The CLI said it is signed out (AW-126). Retrying the same input fails the same way.
     auth_failure: bool = False
+    # F1183: the sign-in exists but cannot be renewed (`claude auth login` is the only remedy).
+    login_unrenewable: bool = False
+    # A Claude turn that completed without error: the sign-in works, whatever was recorded.
+    claude_turn_ok: bool = False
 
 
 #: What the operator reads when Claude Code is signed out, in place of Claude's own text.
 CLAUDE_SIGNED_OUT_MESSAGE = (
     "Claude Code is not signed in. Run `claude` in a terminal and sign in, then send again."
 )
+
+
+def is_login_unrenewable_text(text: str) -> bool:
+    return claude_signin.is_login_unrenewable_text(text)
 
 
 def is_claude_signed_out_text(text: str) -> bool:
@@ -80,7 +90,9 @@ def is_claude_signed_out_text(text: str) -> bool:
     as the CLI refusing the turn.
     """
     stripped = text.strip()
-    return stripped.startswith("Not logged in") and "/login" in stripped
+    return (
+        stripped.startswith("Not logged in") and "/login" in stripped
+    ) or is_login_unrenewable_text(stripped)
 
 
 #: Restated from `usage_accounting.SESSION_TOTAL_FIELDS` (a test asserts they agree): this module
@@ -463,12 +475,18 @@ def parse_claude_line(line: str, *, source: str = "claude") -> ParsedLine:
                 name: getattr(totals, name) for name in _SESSION_TOTAL_FIELDS
             }
         signed_out = False
+        unrenewable = False
         if data.get("is_error") is True or str(subtype).startswith("error"):
             message_text = _claude_result_error_message(data, str(subtype))
-            signed_out = is_claude_signed_out_text(message_text)
+            unrenewable = is_login_unrenewable_text(message_text)
+            signed_out = unrenewable or is_claude_signed_out_text(message_text)
             event = error_event(
                 code="claude_not_signed_in" if signed_out else "claude_result_error",
-                message=CLAUDE_SIGNED_OUT_MESSAGE if signed_out else message_text,
+                message=(
+                    UNRENEWABLE_REASON
+                    if unrenewable
+                    else CLAUDE_SIGNED_OUT_MESSAGE if signed_out else message_text
+                ),
             )
         else:
             # The cost of a single turn is not what a reader of a conversation is there for, and
@@ -482,6 +500,8 @@ def parse_claude_line(line: str, *, source: str = "claude") -> ParsedLine:
             accounting=accounting,
             session_id=session_id,
             auth_failure=signed_out,
+            login_unrenewable=unrenewable,
+            claude_turn_ok=not signed_out and event.kind != "error",
         )
 
     if msg_type == "system" and data.get("subtype") == "init":

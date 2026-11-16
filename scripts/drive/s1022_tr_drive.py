@@ -24,6 +24,9 @@ ROOT = pathlib.Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / ".claude" / "skills" / "e2e-loop"))
 import e2e  # noqa: E402
 
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+import proc_safe  # noqa: E402
+
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
@@ -146,10 +149,10 @@ def phase_fail():
     save()
     say("tool call seen", wait_tool_call(run))
     hub_pid = json.loads(pathlib.Path(os.environ["AW_E2E_STATE"]).read_text())["pid"]
+    before = proc_safe.snapshot()  # a pid the CIM walk below names must still be this process
     kids = _claude_children(int(hub_pid))
     say("claude processes under the Hub", [(k["ProcessId"], k["Name"]) for k in kids])
-    for k in kids:
-        subprocess.run(["taskkill", "/F", "/PID", str(k["ProcessId"])], capture_output=True)
+    proc_safe.kill_candidates([k["ProcessId"] for k in kids], before)
     say("final", wait_run(run, 180))
     say("run row", ro("select status, exit_code, error from runs where id=?", (run,)))
 

@@ -1295,6 +1295,17 @@ async def apply_transition(
         from . import assigned_task_start
 
         assigned_task_start.start_after_commit(session, task.id, actor.run_id)
+    # A review's send-back of work no flow owns restarts its author (F1196); a flow's own firing
+    # does that for its tasks, and the operator's send-back needs no nudge.
+    if (
+        to_status == "revision_needed"
+        and from_status == "under_review"
+        and not actor.is_operator
+        and not task.loop_id
+    ):
+        from . import send_back_restart
+
+        send_back_restart.ask_after_commit(session, task.id)
 
     if origin != ORIGIN_RUNTIME:
         # A divergence is an open condition, not a verdict: work reaching the ledger closes it,

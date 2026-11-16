@@ -37,6 +37,8 @@ from hub.db.models import Conversation, InboundQueueEntry, Project
 from hub.inbound_queue import DELIVERY_ATTEMPT_LIMIT, new_entry
 from hub.turn_scheduler import schedule_agent
 
+from ._git_timeout import GIT_TIMEOUT
+
 TRIGGER = "hub.api.v1.agent_trigger.trigger_agent_directly"
 
 #: What `agent_trigger.py`'s **agent arm** raises when `resolve_turn_workspace` cannot provision the
@@ -183,7 +185,9 @@ async def test_no_runner_holds_the_same_message_under_the_same_schedules(app, au
 
 
 def _git(repo: Path, *args: str) -> subprocess.CompletedProcess:
-    result = subprocess.run(["git", *args], cwd=repo, capture_output=True, text=True, timeout=30)
+    result = subprocess.run(
+        ["git", *args], cwd=repo, capture_output=True, text=True, timeout=GIT_TIMEOUT
+    )
     assert result.returncode == 0, result.stderr
     return result
 

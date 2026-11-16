@@ -1696,6 +1696,9 @@ class _AppWindowApi:
         self._window: Any = None
         self._watching = False
         self._closer = closer
+        #: The checkout read once at the first ask and then at most hourly (FR-2 of
+        #: a-development-checkout-updates-the-same-way); forgotten after an update.
+        self._checkout_watch: Any = None
 
     def close_choice(self, choice: Any) -> bool:
         """The close prompt's answer: `stop`, `keep` or `cancel` (D4)."""
@@ -1763,13 +1766,21 @@ class _AppWindowApi:
     def update_status(self) -> Dict[str, Any]:
         """What App settings and the Update button show: the installed and the newest version,
         whether an update applies to this install, the automatic-update switch, and the last
-        update's result (a failure's reason included). Never raises."""
+        update's result (a failure's reason included). Never raises.
+
+        For a Hub run from a git checkout (`kind` "checkout", spec a-development-checkout-
+        updates-the-same-way) it also says the Hub's `commit`, the checkout's `branch`, local
+        `master_tip`, how many commits the Hub is `behind`, the `dirty` paths, the checkout's own
+        switch `auto_checkout`, and `summary`, the words to show; `available` is false off
+        master and whenever the checkout could not be read (FR-2, FR-8)."""
         status: Dict[str, Any] = {
+            "kind": None,
             "current": None,
             "latest": None,
             "available": False,
             "applicable": False,
             "auto": True,
+            "auto_checkout": False,
             "work": None,
             "message": None,
         }
@@ -1778,12 +1789,17 @@ class _AppWindowApi:
 
             port = self._closer.port if self._closer is not None else DEFAULT_HUB_PORT
             current = updater.installed_version("agentweave-hub")
-            latest, _ = updater.known_latest(_update_check_file())
             status["current"] = current
-            status["latest"] = latest
-            status["available"] = bool(latest and current and updater.is_newer(latest, current))
-            status["applicable"] = updater.installation_kind() == "pip"
             status["auto"] = bool(updater.auto_update_on(_update_setting_file()))
+            root = _hub_checkout_root()
+            if root is not None:
+                self._checkout_status(status, port, root)
+            else:
+                latest, _ = updater.known_latest(_update_check_file())
+                status["kind"] = updater.installation_kind()
+                status["latest"] = latest
+                status["available"] = bool(latest and current and updater.is_newer(latest, current))
+                status["applicable"] = status["kind"] == "pip"
             work = _hub_work_running(port)
             if work is not None:
                 status["work"] = {
@@ -1797,19 +1813,56 @@ class _AppWindowApi:
                     "running": True,
                     "description": "AgentWeave could not say what is running",
                 }
-            with contextlib.suppress(Exception):
-                result = json.loads(_update_result_file().read_text(encoding="utf-8"))
-                if isinstance(result, dict):
-                    status["message"] = result
+            status["message"] = _update_result_for(port, self._profile())
         except Exception:
             pass
         return status
 
-    def set_auto_update(self, on: Any) -> bool:
+    def _profile(self) -> str:
+        return self._closer.profile if self._closer is not None else "default"
+
+    def dismiss_update_message(self) -> bool:
+        """The operator has seen this Hub's last update result: it is not shown again (DCUSW-6).
+        Never raises."""
+        port = self._closer.port if self._closer is not None else DEFAULT_HUB_PORT
+        try:
+            _update_result_file(port, self._profile()).unlink(missing_ok=True)
+        except OSError:
+            return False
+        return True
+
+    def _checkout_status(self, status: Dict[str, Any], port: int, root: Path) -> None:
+        """`update_status`'s checkout half: the Hub's commit against local master, read through
+        this window's watch (at the first ask, then at most hourly)."""
+        status["kind"] = "checkout"
+        status["auto_checkout"] = bool(updater.auto_checkout_on(_update_setting_file()))
+        health = updater.hub_health(port) or {}
+        commit = health.get("commit") if isinstance(health.get("commit"), str) else None
+        branch = health.get("branch") if isinstance(health.get("branch"), str) else None
+        if self._checkout_watch is None:
+            self._checkout_watch = updater.CheckoutWatch()
+        state = self._checkout_watch.state(root, commit)
+        status.update(
+            {
+                "commit": commit,
+                "branch": state.branch if state is not None else branch,
+                "master_tip": state.master_tip if state is not None else None,
+                "behind": state.behind if state is not None else None,
+                "dirty": list(state.dirty) if state is not None else [],
+                "available": bool(state is not None and state.available),
+                "applicable": state is not None,
+                "summary": updater.checkout_summary(state),
+            }
+        )
+
+    def set_auto_update(self, on: Any, kind: Any = None) -> bool:
+        """Save 'Update automatically' (kind "pip", the default) or a checkout's 'Restart onto
+        master automatically' (kind "checkout"); each keeps the other."""
         try:
             from agentweave import updater
 
-            updater.set_auto_update(_update_setting_file(), bool(on))
+            which = "checkout" if kind == "checkout" else "pip"
+            updater.set_auto_update(_update_setting_file(), bool(on), which)
         except Exception:
             return False
         return True
@@ -1823,33 +1876,56 @@ class _AppWindowApi:
             if closer is None:
                 return {"state": "failed", "detail": "This window is not tied to a Hub."}
             port = closer.port
-            current = updater.installed_version("agentweave-hub")
-            latest, _ = updater.known_latest(_update_check_file())
-            if not current or not latest:
-                return {"state": "failed", "detail": "No newer version is known."}
-            applier = _update_applier(port, closer.profile, current, latest)
-            if applier is None:
-                return {
-                    "state": "failed",
-                    "detail": "This Hub's database is not a local file, so it cannot be updated here.",
-                }
-            result = updater.apply_update(
-                applier,
-                confirmed=bool(confirmed),
-                work=lambda: _hub_work_running(port),
-                describe=desktop_window.describe_work,
-            )
+            root = _hub_checkout_root()
+            if root is not None:
+                # A checkout restarts onto its master (a-development-checkout-updates-the-same-way).
+                checkout = _checkout_applier(port, closer.profile, root)
+                if checkout is None:
+                    return {
+                        "state": "failed",
+                        "detail": "This Hub's database is not a local file, so it cannot be updated here.",
+                    }
+                if self._checkout_watch is not None:
+                    self._checkout_watch.forget()
+                result = updater.apply_checkout_update(
+                    checkout,
+                    confirmed=bool(confirmed),
+                    work=lambda: _hub_work_running(port),
+                    describe=desktop_window.describe_work,
+                )
+            else:
+                if updater.installation_kind() != "pip":
+                    # F1182: never pip-install a release over an editable install.
+                    return {
+                        "state": "blocked",
+                        "detail": "This AgentWeave is not a pip-installed release, so the app does not update it.",
+                    }
+                current = updater.installed_version("agentweave-hub")
+                latest, _ = updater.known_latest(_update_check_file())
+                if not current or not latest or not updater.is_newer(latest, current):
+                    return {"state": "failed", "detail": "No newer version is known."}
+                applier = _update_applier(port, closer.profile, current, latest)
+                if applier is None:
+                    return {
+                        "state": "failed",
+                        "detail": "This Hub's database is not a local file, so it cannot be updated here.",
+                    }
+                result = updater.apply_update(
+                    applier,
+                    confirmed=bool(confirmed),
+                    work=lambda: _hub_work_running(port),
+                    describe=desktop_window.describe_work,
+                )
             answer = {"state": result.state, "detail": result.detail}
             if result.state in ("applied", "failed"):
                 # The reload below drops the page's own state, so the result is what the
                 # reloaded window reads to say the update failed and why (FR-7).
-                _record_update_result(result)
+                _record_update_result(port, closer.profile, result.state, result.detail)
         except Exception as exc:
             answer = {"state": "failed", "detail": f"The update could not run: {exc}"}
-            with contextlib.suppress(OSError):
-                updater.write_json(
-                    _update_result_file(),
-                    {"state": "failed", "detail": answer["detail"], "at": now_iso()},
+            if self._closer is not None:
+                _record_update_result(
+                    self._closer.port, self._closer.profile, "failed", answer["detail"]
                 )
         if answer["state"] in ("applied", "failed") and self._window is not None:
             with contextlib.suppress(Exception):
@@ -2605,22 +2681,39 @@ def _update_lock() -> updater.UpdateLock:
     return updater.UpdateLock(HUB_DIR / "app-window" / "update.lock")
 
 
-def _update_result_file() -> Path:
-    """The last update's outcome, {"state", "detail", "at"}: what the window says after a
-    launch's update, the failure and why included (FR-7)."""
-    return HUB_DIR / "app-window" / "update-result.json"
+def _update_result_file(port: int, profile: str = "default") -> Path:
+    """The last update's outcome for the Hub of `port` and `profile`, {"state", "detail", "at"}:
+    what that Hub's window says after its update, the failure and why included (FR-7). One file
+    per Hub, so a failure on one Hub is never shown in another's window (DCUSW-6)."""
+    return HUB_DIR / "app-window" / f"update-result-{port}-{profile or 'default'}.json"
+
+
+def _update_result_for(port: int, profile: str) -> Optional[Dict[str, Any]]:
+    """The recorded result of this Hub's last update, until the operator dismisses it or a later
+    update replaces it; None when there is none or it cannot be read."""
+    try:
+        result = json.loads(_update_result_file(port, profile).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    return result if isinstance(result, dict) else None
 
 
 def _update_backups_root() -> Path:
     return HUB_DIR / "update-backups"
 
 
+def _hub_db_url(profile: str) -> str:
+    """The DATABASE_URL the Hub of `profile` runs on, as `_hub_native_start` resolves it."""
+    default = _hub_profile_data_dir(profile) / "agentweave.db"
+    url, _ = _hub_resolve_database_source(os.environ.get("DATABASE_URL"), profile, default)
+    return str(url)
+
+
 def _hub_db_file(profile: str) -> Optional[Path]:
     """The SQLite file the Hub of `profile` uses, as `_hub_native_start` resolves it, or None
     when DATABASE_URL names something that is not a local SQLite file (then nothing is copied,
     so nothing is updated)."""
-    default = _hub_profile_data_dir(profile) / "agentweave.db"
-    url, _ = _hub_resolve_database_source(os.environ.get("DATABASE_URL"), profile, default)
+    url = _hub_db_url(profile)
     match = re.match(r"^sqlite(?:\+\w+)?:///(.+)$", url)
     if not match:
         return None
@@ -2704,9 +2797,13 @@ def _hub_start_for_update(port: int, profile: str) -> Optional[str]:
     """Start the Hub on `port` and `profile` from what is installed now, in a fresh interpreter
     (`--hub-only`): this process still holds the code it started with, and the version just
     installed must run its own migrations. None when it started, else why not."""
-    command = [sys.executable, "-m", "agentweave", "--hub-only", "--port", str(port)]
+    command = [_console_python(), "-m", "agentweave", "--hub-only", "--port", str(port)]
     command += ["--profile", profile]
     flags = 0x08000000 if sys.platform == "win32" else 0  # CREATE_NO_WINDOW
+    # The profile's database named outright: run from HUB_DIR, `agentweave` loads HUB_DIR/.env,
+    # whose DATABASE_URL is the first profile's and would win over --profile (F1181).
+    env = os.environ.copy()
+    env["DATABASE_URL"] = _hub_db_url(profile)
     try:
         done = subprocess.run(
             command,
@@ -2718,6 +2815,7 @@ def _hub_start_for_update(port: int, profile: str) -> Optional[str]:
             creationflags=flags,
             stdin=subprocess.DEVNULL,
             cwd=str(HUB_DIR),
+            env=env,
         )
     except (OSError, subprocess.SubprocessError) as exc:
         return str(exc)
@@ -2727,6 +2825,134 @@ def _hub_start_for_update(port: int, profile: str) -> Optional[str]:
     reasons = [ln for ln in lines if "fail" in ln.lower() or "error" in ln.lower()]
     tail = (reasons or [ln for ln in lines if ln] or ["no output"])[-1]
     return f"exit code {done.returncode}: {tail}"
+
+
+def _console_python() -> str:
+    """This interpreter, as `python.exe` when it is `pythonw.exe`: a Hub needs a console of its
+    own (with no window), or pywinpty opens a terminal per agent turn (F341)."""
+    exe = Path(sys.executable)
+    if exe.name.lower() == "pythonw.exe" and exe.with_name("python.exe").is_file():
+        return str(exe.with_name("python.exe"))
+    return sys.executable
+
+
+# --- updating a checkout (spec a-development-checkout-updates-the-same-way) --------------------
+
+
+def _hub_checkout_root() -> Optional[Path]:
+    """The git checkout this launcher's Hub package runs from, or None (a pip install)."""
+    return updater.checkout_root()
+
+
+def _update_previous_root() -> Path:
+    return HUB_DIR / "previous-commit"
+
+
+def _hub_commit(port: int) -> Optional[str]:
+    """The commit the Hub on `port` reports it started from (GET /health `commit`), or None."""
+    commit = (updater.hub_health(port) or {}).get("commit")
+    return commit if isinstance(commit, str) and commit else None
+
+
+def _hub_child_env(port: int, profile: str) -> Dict[str, str]:
+    """A Hub process's environment, as `_hub_native_start` builds it: the profile's database
+    named outright (F1181), the port, the Hub folder's `.env` for the rest; no PYTHONPATH, so
+    `hub` is imported from the working directory the caller chooses."""
+    env = os.environ.copy()
+    env.pop("PYTHONPATH", None)
+    env["DATABASE_URL"] = _hub_db_url(profile)
+    env["AW_PORT"] = str(port)
+    _hub_load_env_into(env, HUB_DIR / ".env")
+    return env
+
+
+def _hub_rehearse_migrations(root: Path, copy: Path) -> Tuple[bool, str]:
+    """FR-5: the checkout's migrations, the same Alembic upgrade to head a Hub start runs
+    (`_hub_run_migrations`), on a copy of the database, in a throwaway process whose working
+    directory is the checkout's `hub/`, so the checkout's code is what runs."""
+    script = (
+        "from pathlib import Path\n"
+        "from alembic import command\n"
+        "from alembic.config import Config\n"
+        "import hub\n"
+        "cfg = Config()\n"
+        "cfg.set_main_option('script_location', str(Path(hub.__file__).parent / 'migrations'))\n"
+        "command.upgrade(cfg, 'head')\n"
+    )
+    env = os.environ.copy()
+    env.pop("PYTHONPATH", None)
+    env["DATABASE_URL"] = f"sqlite+aiosqlite:///{copy.as_posix()}"
+    try:
+        done = subprocess.run(
+            [_console_python(), "-c", script],
+            cwd=str(root / "hub"),
+            env=env,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=600,
+            creationflags=0x08000000 if sys.platform == "win32" else 0,
+            stdin=subprocess.DEVNULL,
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        return False, str(exc)
+    return done.returncode == 0, ((done.stdout or "") + (done.stderr or ""))[-4000:]
+
+
+def _hub_start_previous(port: int, profile: str, worktree: Path) -> Optional[str]:
+    """Start the Hub on `port` from a previous commit's worktree (testbed/previous_commit_spike.md):
+    uvicorn run with the worktree's `hub/` as its working directory, so `hub` is imported from
+    there and not from the install, which is the checkout's newer code. None when it answers."""
+    command = [_console_python(), "-m", "uvicorn", "hub.main:app", "--host", "127.0.0.1"]
+    command += ["--port", str(port)]
+    kwargs: Dict[str, Any] = {}
+    if sys.platform == "win32":
+        kwargs["creationflags"] = 0x08000000 | 0x00000200  # CREATE_NO_WINDOW, NEW_PROCESS_GROUP
+    else:
+        kwargs["start_new_session"] = True
+    try:
+        proc = subprocess.Popen(
+            command,
+            cwd=str(worktree / "hub"),
+            env=_hub_child_env(port, profile),
+            close_fds=True,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            **kwargs,
+        )
+    except OSError as exc:
+        return str(exc)
+    _hub_pid_file(port, profile).write_text(f"{proc.pid}\n{port}", encoding="utf-8")
+    if not _hub_health_check(port=port, timeout=60):
+        _hub_kill_pid(proc.pid)
+        with contextlib.suppress(OSError):
+            _hub_pid_file(port, profile).unlink()
+        return "it did not answer within 60 seconds"
+    return None
+
+
+def _checkout_applier(port: int, profile: str, root: Path) -> Optional[updater.CheckoutApplier]:
+    """The real Hub bound into an `updater.CheckoutApplier`, or None when its database is not a
+    local SQLite file (it could not be copied, rehearsed or restored, so it is not updated)."""
+    db_path = _hub_db_file(profile)
+    if db_path is None:
+        return None
+    return updater.CheckoutApplier(
+        port=port,
+        root=root,
+        db_path=db_path,
+        backups_root=_update_backups_root(),
+        previous_root=_update_previous_root(),
+        lock=_update_lock(),
+        hub_commit=lambda: _hub_commit(port),
+        stop=lambda: _hub_stop_for_update(port, profile),
+        start=lambda: _hub_start_for_update(port, profile),
+        start_previous=lambda worktree: _hub_start_previous(port, profile, worktree),
+        rehearse=lambda copy: _hub_rehearse_migrations(root, copy),
+        log=print_info,
+    )
 
 
 def _app_window_open_on(port: int) -> bool:
@@ -2776,11 +3002,12 @@ def _update_applier(
     )
 
 
-def _record_update_result(result: updater.ApplyResult) -> None:
+def _record_update_result(port: int, profile: str, state: str, detail: str) -> None:
+    """Record an update's outcome for the Hub of `port` and `profile` (`_update_result_file`)."""
     with contextlib.suppress(OSError):
         updater.write_json(
-            _update_result_file(),
-            {"state": result.state, "detail": result.detail, "at": now_iso()},
+            _update_result_file(port, profile),
+            {"state": state, "detail": detail, "at": now_iso()},
         )
 
 
@@ -2788,9 +3015,12 @@ def _launch_update(port: int, profile: str, cwd: Optional[Path]) -> Optional[int
     """At a launch: update first when a newer release is out, automatic updating is on and no
     work runs (FR-3), then open the window on the new version. Returns the launch's exit code
     when it handled the launch, or None to open as things are -- every refusal (FR-4, FR-8,
-    FR-9, FR-11), an offline check (FR-2) and a lost race (FR-10) is None."""
-    if updater.installation_kind() != "pip":  # FR-9: a checkout or editable install is not ours
-        return None
+    FR-9, FR-11), an offline check (FR-2) and a lost race (FR-10) is None.
+
+    A Hub run from a git checkout has its own rules (`_launch_checkout_update`)."""
+    root = _hub_checkout_root()
+    if root is None and updater.installation_kind() != "pip":
+        return None  # FR-9: an editable install outside a checkout is not ours to replace
     lock = _update_lock()
     holder = lock.holder()
     if holder is not None:
@@ -2799,6 +3029,8 @@ def _launch_update(port: int, profile: str, cwd: Optional[Path]) -> Optional[int
             print_info("AgentWeave is being updated by another launch; it opens the window.")
             return 0
         lock.wait_released(_UPDATE_WAIT_SECONDS)
+    if root is not None:
+        return _launch_checkout_update(port, profile, cwd, root)
     latest = updater.check_and_record(_update_check_file())
     current = updater.installed_version("agentweave-hub")
     if not updater.is_newer(latest, current) or not current:
@@ -2822,17 +3054,73 @@ def _launch_update(port: int, profile: str, cwd: Optional[Path]) -> Optional[int
     if applier is None:
         print_info("Not updating: the Hub's database is not a local SQLite file to copy first.")
         return None
-    if not applier.lock.acquire(port):
-        holder = applier.lock.holder() or {}
+    return _launch_apply(
+        port,
+        profile,
+        cwd,
+        applier.lock,
+        lambda: updater.apply_update(applier),
+        f"Updating AgentWeave {current} -> {decision.target} before opening...",
+    )
+
+
+def _launch_checkout_update(
+    port: int, profile: str, cwd: Optional[Path], root: Path
+) -> Optional[int]:
+    """At a launch, for a Hub run from a git checkout (spec a-development-checkout-updates-the-
+    same-way): restart onto master first only when the checkout's own switch is on, the Hub on
+    this port is behind on a clean master and idle (FR-3, FR-4, FR-8, FR-10). Read-only git,
+    never a fetch (FR-2). None opens the window as things are, where the Update button is."""
+    hub, _ = _hub_launch_state(port)
+    state = None
+    if hub != "absent":
+        state = updater.read_checkout(root, _hub_commit(port))
+    facts = updater.CheckoutLaunchFacts(
+        state=state,
+        auto=updater.auto_checkout_on(_update_setting_file()),
+        hub=hub,
+        window_open=hub != "absent" and _app_window_open_on(port),
+    )
+    decision = updater.decide_checkout_at_launch(facts)
+    if decision.action != "update" or not decision.target:
+        if state is not None and state.available:
+            print_info(f"{updater.checkout_summary(state)} Not restarting now: {decision.reason}.")
+        return None
+    applier = _checkout_applier(port, profile, root)
+    if applier is None:
+        print_info("Not restarting: the Hub's database is not a local SQLite file to copy first.")
+        return None
+    return _launch_apply(
+        port,
+        profile,
+        cwd,
+        applier.lock,
+        lambda: updater.apply_checkout_update(applier),
+        f"Restarting AgentWeave onto master ({decision.reason}) before opening...",
+    )
+
+
+def _launch_apply(
+    port: int,
+    profile: str,
+    cwd: Optional[Path],
+    lock: updater.UpdateLock,
+    run: Callable[[], updater.ApplyResult],
+    intro: str,
+) -> Optional[int]:
+    """Run a launch's update behind the splash under `lock`, then open the window on whatever
+    Hub answers -- the new one, or the previous one put back with the failure recorded."""
+    if not lock.acquire(port):
+        holder = lock.holder() or {}
         if holder.get("port") in (port, None):
             print_info("AgentWeave is being updated by another launch; it opens the window.")
             return 0
         return None
-    held = applier.lock
+    held = lock
 
     def _update_and_url() -> Tuple[Optional[str], Optional[str]]:
-        result = updater.apply_update(applier)
-        _record_update_result(result)
+        result = run()
+        _record_update_result(port, profile, result.state, result.detail)
         if result.state != "applied":
             print_error(result.detail)
         if updater.hub_health(port) is None:
@@ -2840,7 +3128,7 @@ def _launch_update(port: int, profile: str, cwd: Optional[Path]) -> Optional[int
         return _hub_resolve_launch_url(port, cwd), None
 
     try:
-        print_info(f"Updating AgentWeave {current} -> {decision.target} before opening...")
+        print_info(intro)
         code = _open_app_with_splash(
             _update_and_url, warm=False, port=port, profile=profile, after_shown=held.release
         )

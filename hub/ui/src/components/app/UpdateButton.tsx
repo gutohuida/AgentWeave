@@ -1,7 +1,10 @@
 import * as React from 'react'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent } from '@/components/ui/dialog'
-import { appWindowApi, type UpdateStatus } from '@/hooks/useNotifications'
+import { appWindowApi, updateTarget, type UpdateStatus } from '@/hooks/useNotifications'
+
+/** How often the window asks again; the launcher reads a checkout at most hourly (FR-2). */
+const RECHECK_MS = 15 * 60 * 1000
 
 /**
  * The Update button (change `agentweave-updates-itself`, FR-4, FR-5): shown in the app window
@@ -9,7 +12,8 @@ import { appWindowApi, type UpdateStatus } from '@/hooks/useNotifications'
  * Pressed with work running it names the work and applies only after the operator confirms; the
  * launcher reloads the window when the update ends, and a failed update is stated here from the
  * result the launcher recorded. Mounted once beside ClosePrompt; a browser tab has no bridge, so
- * shows nothing.
+ * shows nothing. For a Hub run from a git checkout (`a-development-checkout-updates-the-same-way`)
+ * it offers master when master is ahead, and its prompt names any uncommitted files too.
  */
 export function UpdateButton() {
   const [status, setStatus] = React.useState<UpdateStatus | null>(null)
@@ -30,8 +34,10 @@ export function UpdateButton() {
     }
     read()
     window.addEventListener('pywebviewready', read)
+    const timer = window.setInterval(read, RECHECK_MS)
     return () => {
       live = false
+      window.clearInterval(timer)
       window.removeEventListener('pywebviewready', read)
     }
   }, [])
@@ -58,7 +64,9 @@ export function UpdateButton() {
   }
 
   const failure = status.message?.state === 'failed' ? status.message.detail : null
-  const showButton = status.available && status.latest
+  const target = updateTarget(status)
+  const checkout = status.kind === 'checkout'
+  const showButton = status.available && target
   if (!showButton && !failure && !note) return null
 
   return (
@@ -71,22 +79,25 @@ export function UpdateButton() {
           <p
             className="rounded-md border bg-background p-3 text-xs text-destructive shadow"
             data-testid="update-banner-failure"
-            onClick={() => setDismissed(true)}
+            onClick={() => {
+              setDismissed(true)
+              if (failure && !note) void appWindowApi()?.dismiss_update_message?.().catch(() => {})
+            }}
           >
             {note ? `The update did not finish: ${note}` : `The last update failed: ${failure}`}
           </p>
         ) : null}
         {showButton ? (
           <Button size="sm" disabled={busy} onClick={() => apply(false)} data-testid="update-banner-button">
-            {`Update to ${status.latest}`}
+            {`Update to ${target}`}
           </Button>
         ) : null}
       </div>
       <Dialog open={asking !== null} onOpenChange={(open) => (open ? undefined : setAsking(null))}>
         {asking !== null ? (
           <DialogContent
-            title={`Update to ${status.latest}?`}
-            description={`${asking}. Updating stops it.`}
+            title={checkout ? 'Restart onto master?' : `Update to ${target}?`}
+            description={checkout ? `${asking}.` : `${asking}. Updating stops it.`}
             footer={
               <div className="flex justify-end gap-2">
                 <Button variant="ghost" onClick={() => setAsking(null)} data-testid="update-banner-cancel">
@@ -98,7 +109,7 @@ export function UpdateButton() {
                   onClick={() => apply(true)}
                   data-testid="update-banner-confirm"
                 >
-                  Stop it and update
+                  {checkout ? 'Restart onto master' : 'Stop it and update'}
                 </Button>
               </div>
             }

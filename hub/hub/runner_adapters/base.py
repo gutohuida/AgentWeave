@@ -83,6 +83,12 @@ def probe_binary(
         # Remembered per PATH (`binaries`, D4); a patched `shutil.which` is still asked directly.
         present = binaries.which(cli) is not None
         reason = None if present else f"Runner CLI {cli!r} was not found in PATH."
+        windows = None if present else binaries.windows_copy(cli)
+        if windows:
+            reason = (
+                f"Runner CLI {cli!r} was found only as a Windows copy ({windows}), which cannot "
+                f"run here. Install the Linux {cli} CLI inside WSL."
+            )
     return cli, present, reason
 
 
@@ -149,6 +155,10 @@ class RpcTurnRequest:
     # Codex's app-server (F325): the run's whole canonical context, sent as the thread's developer
     # instructions because this transport reads no argv for `model_instructions_file` to ride on.
     developer_instructions: Optional[str] = None
+    # D9, for a transport that `tests_mcp_before_first_prompt` and sends the whole context itself
+    # (Codex's app-server, F1191): each surface's `notice` and canonical `context`, read once the
+    # run's own test has decided which it is told.
+    surfaces: Optional[Mapping[str, Mapping[str, str]]] = None
 
 
 @dataclass(frozen=True)

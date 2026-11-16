@@ -102,10 +102,10 @@ class ProjectLifecycleService:
             select(Project).where(Project.path_key == canonical.path_key)
         )
         if existing_by_path is not None:
-            _require_marker(canonical.path, existing_by_path.id)
+            await asyncio.to_thread(_require_marker, canonical.path, existing_by_path.id)
             _observe(existing_by_path, canonical)
             await self.session.commit()
-            seed_repo_excludes(canonical.path)
+            await asyncio.to_thread(seed_repo_excludes, canonical.path)
             await seed_data_notes(self.session, existing_by_path.id, canonical.path)
             return existing_by_path
 
@@ -121,14 +121,14 @@ class ProjectLifecycleService:
                     moved = marked_project.path_key != canonical.path_key
                     _observe(marked_project, canonical)
                     await self.session.commit()
-                    seed_repo_excludes(canonical.path)
+                    await asyncio.to_thread(seed_repo_excludes, canonical.path)
                     await seed_data_notes(self.session, marked_project.id, canonical.path)
                     # This is the spec's relocation scenario — "an unavailable project's marked
                     # directory is opened at a new path" — reached through open, not through the
                     # relocate route. Guarded on an actual move so an ordinary re-open does not
                     # pay for two git subprocesses.
                     if moved:
-                        _repair_checkout_registrations(canonical.path)
+                        await asyncio.to_thread(_repair_checkout_registrations, canonical.path)
                     return marked_project
             elif not register_copy_as_new and await self._was_deleted(marker["project_id"]):
                 if implicit:
@@ -154,7 +154,7 @@ class ProjectLifecycleService:
                 await self._seed_new_project(project)
                 _observe(project, canonical)
                 await self._write_marker_and_commit(project, canonical.path)
-                seed_repo_excludes(canonical.path)
+                await asyncio.to_thread(seed_repo_excludes, canonical.path)
                 await seed_data_notes(self.session, project.id, canonical.path)
                 logger.info(
                     "project_adopted project_id=%s path=%s",
@@ -189,7 +189,7 @@ class ProjectLifecycleService:
 
         _observe(project, canonical)
         await self._write_marker_and_commit(project, canonical.path)
-        seed_repo_excludes(canonical.path)
+        await asyncio.to_thread(seed_repo_excludes, canonical.path)
         await seed_data_notes(self.session, project.id, canonical.path)
         return project
 
@@ -205,7 +205,7 @@ class ProjectLifecycleService:
         parent = (await self._canonicalize(target.parent)).path
         target = parent / target.name
         try:
-            target.mkdir()
+            await asyncio.to_thread(target.mkdir)
         except OSError as exc:
             raise ProjectPathError(
                 f"could not create project directory: {exc}", code="project_create_failed"
@@ -219,10 +219,10 @@ class ProjectLifecycleService:
             # A Hub with no git (its Docker image) still creates projects, as it did before: an
             # empty folder, the same as opening a folder that is not a repository.
             logger.warning("project_created_without_git path=%s", target, exc_info=True)
-            _remove_created_repository(target)
+            await asyncio.to_thread(_remove_created_repository, target)
             branch = None
         except project_repository.RepositoryInitError as exc:
-            _remove_created_project_directory(target)
+            await asyncio.to_thread(_remove_created_project_directory, target)
             raise ProjectPathError(
                 f"could not make the new project folder a git repository: {exc}",
                 code="project_create_failed",
@@ -233,7 +233,7 @@ class ProjectLifecycleService:
                 target, name=name, register_copy_as_new=False, _allow_legacy_binding=False
             )
         except Exception:
-            _remove_created_project_directory(target)
+            await asyncio.to_thread(_remove_created_project_directory, target)
             raise
 
         if branch:
@@ -593,38 +593,57 @@ class ProjectLifecycleService:
                 )
             )
 
-        charters_dir = Path(__file__).parent / "data" / "charters"
-        manifest = json.loads((charters_dir / "charters.json").read_text(encoding="utf-8"))
-        for key, metadata in manifest["charters"].items():
+        for charter_name, content in await asyncio.to_thread(_shipped_charters):
             self.session.add(
                 Charter(
                     id=f"charter-{short_id()}",
                     project_id=project.id,
-                    name=metadata["name"],
-                    content=(charters_dir / f"{key}.md").read_text(encoding="utf-8"),
+                    name=charter_name,
+                    content=content,
                 )
             )
         project.charters_seeded = True
 
     async def _write_marker_and_commit(self, project: Project, root: Path) -> None:
+        # Every file call here runs off the loop: on a slow disk or a share each waits as long as
+        # the disk does, and on the loop the whole Hub waited with it (AW-157: 399 ms in `mkdir`).
         marker_path = root / PROJECT_MARKER_PATH
-        previous = marker_path.read_bytes() if marker_path.is_file() else None
+        previous = await asyncio.to_thread(_marker_bytes, marker_path)
         try:
-            _write_marker(root, project.id)
+            await asyncio.to_thread(_write_marker, root, project.id)
             await self.session.commit()
         except OSError as exc:
             await self.session.rollback()
-            _restore_marker(marker_path, previous)
-            if previous is None:
-                with contextlib.suppress(OSError):
-                    marker_path.parent.rmdir()
+            await asyncio.to_thread(_undo_marker, marker_path, previous)
             raise ProjectPathError(
                 f"could not write project marker: {exc}", code="project_marker_write_failed"
             ) from exc
         except Exception:
             await self.session.rollback()
-            _restore_marker(marker_path, previous)
+            await asyncio.to_thread(_restore_marker, marker_path, previous)
             raise
+
+
+def _shipped_charters() -> list[tuple[str, str]]:
+    """The charters a new project is seeded with, as `(name, content)`, read from the package."""
+    charters_dir = Path(__file__).parent / "data" / "charters"
+    manifest = json.loads((charters_dir / "charters.json").read_text(encoding="utf-8"))
+    return [
+        (metadata["name"], (charters_dir / f"{key}.md").read_text(encoding="utf-8"))
+        for key, metadata in manifest["charters"].items()
+    ]
+
+
+def _marker_bytes(marker_path: Path) -> Optional[bytes]:
+    return marker_path.read_bytes() if marker_path.is_file() else None
+
+
+def _undo_marker(marker_path: Path, previous: Optional[bytes]) -> None:
+    """Put back the marker a failed write replaced, and remove the folder it made if it made one."""
+    _restore_marker(marker_path, previous)
+    if previous is None:
+        with contextlib.suppress(OSError):
+            marker_path.parent.rmdir()
 
 
 def _project_scoped_tables() -> list[Table]:

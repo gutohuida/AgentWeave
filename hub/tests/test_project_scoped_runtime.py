@@ -23,6 +23,7 @@ from hub.db.engine import async_session_factory
 from hub.project_lifecycle import ProjectLifecycleService
 
 from ._background_runs import await_background_runs
+from ._git_timeout import GIT_TIMEOUT
 
 # Captured at collection time, before conftest.py's `_no_real_worktree_provision`
 # autouse fixture (per-test) monkeypatches the module attribute — mirrors
@@ -31,7 +32,9 @@ _REAL_RESOLVE_AGENT_WORKSPACE = worktrees.resolve_agent_workspace
 
 
 def _git(repo: Path, *args: str) -> None:
-    result = subprocess.run(["git", *args], cwd=repo, capture_output=True, text=True, timeout=30)
+    result = subprocess.run(
+        ["git", *args], cwd=repo, capture_output=True, text=True, timeout=GIT_TIMEOUT
+    )
     assert result.returncode == 0, result.stderr
 
 

@@ -12,7 +12,7 @@ import hub.main as hub_main
 from hub import project_lifecycle
 from hub.api.v1 import fs_browse
 
-from ._loop_lag import STALL_LIMIT, LagProbe, slow_git
+from ._loop_lag import STALL_LIMIT, LagProbe, disk_on_loop, slow_git
 
 # Only a blocked loop ever waits this out, so it can be far above any delay a loaded machine adds.
 _STALL = 60.0
@@ -40,19 +40,27 @@ class _Stall:
         return wrapper
 
 
-async def _health_answers_during(app, stall: _Stall, slow_request) -> bool:
+async def _health_answers_during(app, stall: _Stall, slow_request, share) -> bool:
     """Whether /health answered while the slow call was held, with the call made off the loop and
     the loop never held past the probe's limit meanwhile: a share's call made on the loop holds it
-    for as long as the share does, and a 250 ms hold anywhere in the request still counts."""
+    for as long as the share does, and a 250 ms hold anywhere in the request still counts.
+
+    No file call on the share (*share*, the folder the request is about) is made on the loop's
+    thread either (AW-157). Each waits as long as the share does, so the probe saw them only when
+    the machine's disk was slow (399 ms in a `mkdir` writing the marker, at landing); whether a
+    call is made on the loop does not depend on the machine."""
     async with LagProbe() as probe:
-        task = asyncio.create_task(slow_request())
-        while not stall.entered.is_set():
-            await asyncio.sleep(0.01)
-        response = await app.get("/health")
-        assert response.status_code == 200
-        stall.answered.set()
-        await task
+        with disk_on_loop() as disk:
+            task = asyncio.create_task(slow_request())
+            while not stall.entered.is_set():
+                await asyncio.sleep(0.01)
+            response = await app.get("/health")
+            assert response.status_code == 200
+            stall.answered.set()
+            await task
     assert stall.on_loop and not any(stall.on_loop), "the slow call ran on the loop"
+    on_share = [call for call in disk if str(share) in call]
+    assert not on_share, on_share
     assert probe.worst < STALL_LIMIT, f"the loop stalled {probe.worst * 1000:.0f} ms: {probe.why}"
     return stall.health_answered_during_it
 
@@ -68,6 +76,7 @@ async def test_a_slow_folder_listing_does_not_block_other_requests(
         app,
         stall,
         lambda: app.get("/api/v1/fs/list", params={"path": str(tmp_path)}, headers=auth_headers),
+        tmp_path,
     )
 
     assert answered
@@ -90,6 +99,7 @@ async def test_a_slow_project_open_does_not_block_other_requests(
         app,
         stall,
         lambda: app.post("/api/v1/projects/open", json={"path": str(target)}, headers=auth_headers),
+        target,
     )
 
     assert answered
@@ -114,6 +124,7 @@ async def test_a_slow_project_create_does_not_block_other_requests(
             json={"path": str(tmp_path / "fresh")},
             headers=auth_headers,
         ),
+        tmp_path / "fresh",
     )
 
     assert answered
@@ -144,6 +155,7 @@ async def test_a_slow_project_relocate_does_not_block_other_requests(
             json={"path": str(original)},
             headers=auth_headers,
         ),
+        original,
     )
 
     assert answered
