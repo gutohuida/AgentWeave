@@ -35,12 +35,11 @@ _recorded: Optional[Tuple[str, Tuple[int, int]]] = None  # (credentials path, fi
 
 def is_login_unrenewable_text(text: str) -> bool:
     """Claude's own words when the login cannot be renewed: "Failed to authenticate: this login
-    reached its time limit and cannot be renewed. Run `claude auth login`". Requires the remedy
-    and one of the two causes, so a reply that merely mentions authentication is not read as it."""
-    lowered = text.lower()
-    return "claude auth login" in lowered and (
-        "cannot be renewed" in lowered or "failed to authenticate" in lowered
-    )
+    reached its time limit and cannot be renewed. Run `claude auth login`". Anchored to the start
+    and requires the remedy, so a reply that merely quotes or discusses the message is not read as
+    the CLI refusing the turn."""
+    stripped = text.strip()
+    return stripped.startswith("Failed to authenticate") and "claude auth login" in stripped
 
 
 def credentials_path() -> Path:

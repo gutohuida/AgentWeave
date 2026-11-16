@@ -89,3 +89,15 @@ def test_a_completed_turn_clears_the_mark(_claude_home):
     assert ok.claude_turn_ok
     claude_signin.forget()
     assert _verdict()["runnable"]
+
+
+def test_assistant_text_quoting_the_error_stays_in_the_transcript():
+    text = (
+        'F1183: when the login dies Claude prints "Failed to authenticate: this login reached '
+        'its time limit and cannot be renewed. Run `claude auth login`". I will detect that.'
+    )
+    line = json.dumps(
+        {"type": "assistant", "message": {"content": [{"type": "text", "text": text}]}}
+    )
+    parsed = parse_claude_line(line)
+    assert not parsed.auth_failure and len(parsed.events) == 1
