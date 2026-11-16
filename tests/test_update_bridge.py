@@ -52,8 +52,10 @@ def updater(monkeypatch, tmp_path):
 
     monkeypatch.setattr(agentweave, "updater", fake, raising=False)
     monkeypatch.setattr(cli, "updater", fake)
-    for name in ("_update_check_file", "_update_setting_file", "_update_result_file"):
+    for name in ("_update_check_file", "_update_setting_file"):
         monkeypatch.setattr(cli, name, lambda n=name: tmp_path / n, raising=False)
+    monkeypatch.setattr(cli, "HUB_DIR", tmp_path)
+    (tmp_path / "app-window").mkdir()
     monkeypatch.setattr(cli, "_update_applier", lambda *a: object(), raising=False)
     # A pip install: no git checkout behind the Hub package (the checkout half has its own tests,
     # tests/test_updater_checkout.py).
@@ -62,8 +64,8 @@ def updater(monkeypatch, tmp_path):
     return fake
 
 
-def _bridge():
-    bridge = cli._AppWindowApi(cli._AppWindowCloser(8171))
+def _bridge(port=8171, profile="default"):
+    bridge = cli._AppWindowApi(cli._AppWindowCloser(port, profile))
     bridge._window = _Window()
     return bridge
 
@@ -81,10 +83,39 @@ def test_unanswered_work_check_counts_as_work(updater, monkeypatch):
 
 
 def test_status_reads_the_last_failure(updater, tmp_path):
-    (tmp_path / "_update_result_file").write_text(
+    cli._update_result_file(8171).write_text(
         '{"state": "failed", "detail": "migration broke"}', encoding="utf-8"
     )
     assert _bridge().update_status()["message"]["detail"] == "migration broke"
+
+
+def test_a_failure_on_one_hub_is_not_shown_in_another_hubs_window(updater):
+    """DCUSW-6: the drive's dirty-step Hub, on its own port and profile, read the failed-start
+    step's failure from the other Hub."""
+    updater.apply_update = lambda applier, confirmed, work, describe: _Result(
+        "failed", "master did not start"
+    )
+    assert _bridge(8171, "d1107a").apply_update(True)["state"] == "failed"
+    assert _bridge(8171, "d1107a").update_status()["message"]["detail"] == "master did not start"
+    assert _bridge(8172, "d1107b").update_status()["message"] is None  # another port and profile
+    assert _bridge(8172, "d1107a").update_status()["message"] is None  # another port
+    assert _bridge(8171, "default").update_status()["message"] is None  # another profile
+
+
+def test_a_failure_stops_showing_once_seen_or_a_later_update_succeeds(updater):
+    updater.apply_update = lambda applier, confirmed, work, describe: _Result("failed", "boom")
+    bridge = _bridge()
+    bridge.apply_update(True)
+    assert bridge.update_status()["message"]["state"] == "failed"
+    assert bridge.dismiss_update_message() is True
+    assert _bridge().update_status()["message"] is None  # seen: not shown at the next launch
+    assert bridge.dismiss_update_message() is True  # nothing left to dismiss is not an error
+
+    bridge.apply_update(True)
+    assert _bridge().update_status()["message"]["state"] == "failed"
+    updater.apply_update = lambda applier, confirmed, work, describe: _Result("applied")
+    bridge.apply_update(True)
+    assert _bridge().update_status()["message"]["state"] == "applied"  # no failure shown
 
 
 def test_apply_asks_then_applies_and_reloads(updater):
@@ -104,7 +135,9 @@ def test_failed_apply_is_recorded_before_the_reload_so_the_window_states_it(upda
     bridge = _bridge()
     assert bridge.apply_update(True)["state"] == "failed"
     assert bridge._window.js == ["window.location.reload()"]
-    assert json.loads(cli._update_result_file().read_text(encoding="utf-8"))["state"] == "failed"
+    assert (
+        json.loads(cli._update_result_file(8171).read_text(encoding="utf-8"))["state"] == "failed"
+    )
     assert bridge.update_status()["message"]["detail"] == "migration broke"
 
 

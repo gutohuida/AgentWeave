@@ -1,1 +1,0 @@
-import{u as r,j as a,ai as u,d9 as l}from"./index-taB2UWnL.js";function p({document:n,identifier:o,children:i="history",testId:s}){const e=r(t=>t.selectedProjectId);return e?a.jsx("button",{type:"button",className:"aw-link aw-link-inline","data-testid":s,onClick:t=>{t.stopPropagation(),u(l(e,n,o))},children:i}):null}export{p as R};
