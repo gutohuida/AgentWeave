@@ -87,6 +87,7 @@ import os
 import pathlib
 import re
 import shutil
+import sqlite3
 import subprocess
 import sys
 import tempfile
@@ -814,7 +815,9 @@ def step_idle(ctx: Ctx) -> None:
         watch = d.ConsoleWatch(lambda: app.pids).start()
         try:
             hwnd = app.open_app(APPLY_LIMIT)
-            healthy = hwnd is not None and app.wait_healthy()
+            # The window appears at once on the splash while the restart runs behind it, with
+            # the old Hub still answering: the app's page loads only once the launch is done.
+            healthy = hwnd is not None and app.page_ready(APPLY_LIMIT) and app.wait_healthy()
             at_open = app.commit()
             time.sleep(3.0)
         finally:
@@ -905,6 +908,42 @@ def step_busy(ctx: Ctx) -> None:
         app.cleanup()
 
 
+def dump_parts(path: pathlib.Path) -> dict:
+    """`u.stable_dump`'s parts, each by name, so a moved checksum says what moved."""
+    connection = sqlite3.connect(f"file:{path.as_posix()}?mode=ro", uri=True)
+    queries = {
+        "schema": "select name, sql from sqlite_master where type in ('table','index') order by name",
+        "revision": "select * from alembic_version",
+        "projects": "select id from projects order by id",
+        "agents": "select id from agents order by id",
+        "runners": "select id from runners order by id",
+    }
+    try:
+        parts = {}
+        for name, query in queries.items():
+            try:
+                parts[name] = connection.execute(query).fetchall()
+            except sqlite3.Error:
+                parts[name] = None
+        return parts
+    finally:
+        connection.close()
+
+
+def settled_dump(app: App, limit: float = 60.0) -> str:
+    """`u.stable_dump` once two readings 5 s apart agree (or after `limit`)."""
+    deadline = time.monotonic() + limit
+    last = u.stable_dump(app.db_path)
+    while time.monotonic() < deadline:
+        time.sleep(5.0)
+        now = u.stable_dump(app.db_path)
+        if now == last:
+            return now
+        note(f"database still settling: {last[:12]} -> {now[:12]}")
+        last = now
+    return last
+
+
 def step_rehearsal(ctx: Ctx) -> None:
     c = CRITS["c-rehearsal"]
     set_settings(None)
@@ -926,10 +965,13 @@ def step_rehearsal(ctx: Ctx) -> None:
             hwnd is not None and app.wait_healthy() and app.page_ready(),
         ):
             return
-        before = u.stable_dump(app.db_path)
+        # A just-opened window's Hub may still be writing its first rows (QA, DCUSW-4: the
+        # checksum moved under an apply that changed nothing): measure from a settled database.
+        before = settled_dump(app)
+        parts_before = dump_parts(app.db_path)
         answer, why = u.bridge_try(app, "apply_update", True, timeout=APPLY_LIMIT)
         note(f"apply_update(true): {answer if answer is not None else why}")
-        if why:  # the page reloaded under the call: read the result it recorded
+        if answer is None or why:  # the page reloaded under the call: read what it recorded
             app.page_ready()
             status, _ = app.status()
             answer = status.get("message") if isinstance(status.get("message"), dict) else {}
@@ -945,10 +987,12 @@ def step_rehearsal(ctx: Ctx) -> None:
             app.hub_pids() == pids and app.commit() == old,
             f"{pids} -> {app.hub_pids()}, commit {app.commit()!r}",
         )
+        parts_after = dump_parts(app.db_path)
         c.check(
             "the database checksum is unchanged (schema, revision, projects, agents, runners)",
             u.stable_dump(app.db_path) == before,
-            f"{before[:12]} -> {u.stable_dump(app.db_path)[:12]}",
+            f"{before[:12]} -> {u.stable_dump(app.db_path)[:12]}; changed: "
+            + ", ".join(k for k in parts_after if parts_after[k] != parts_before.get(k)),
         )
         c.check(
             "no trace of the failed migration's table",
@@ -1085,10 +1129,13 @@ def step_apply_reload(ctx: Ctx) -> None:
             f"projects {len(projects)} -> {len(u.ids(app, 'projects'))},"
             f" runs {len(runs)} -> {len(u.ids(app, 'runs'))}",
         )
+        # Removed after the new commit answers healthy, which is what the steps above waited
+        # for: a whole tree takes seconds to delete, so give the apply time to finish.
+        leftover = HUB_DIR / "previous-commit" / old[:12]
         c.check(
             "the previous-commit worktree is removed after the healthy start",
-            not (HUB_DIR / "previous-commit" / old[:12]).exists(),
-            str(HUB_DIR / "previous-commit" / old[:12]),
+            bool(d.wait_for(lambda: not leftover.exists(), 120, 2.0)),
+            str(leftover),
         )
     finally:
         app.cleanup()
