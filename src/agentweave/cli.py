@@ -16,7 +16,7 @@ import urllib.request
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
-from . import __version__, desktop_window, notifier
+from . import __version__, desktop_window, notifier, updater
 from .utils import load_dotenv, now_iso, print_error, print_info, print_success, print_warning
 
 logger = logging.getLogger(__name__)
@@ -1897,6 +1897,7 @@ def _open_app_with_splash(
     warm: bool,
     port: int = DEFAULT_HUB_PORT,
     profile: str = "default",
+    after_shown: Optional[Callable[[], None]] = None,
 ) -> Optional[int]:
     """Open the app window on the splash at once, run `start` behind it, then show the app.
 
@@ -1904,6 +1905,9 @@ def _open_app_with_splash(
     spawning the Hub and waiting for it -- and returns `(launch_url, None)`, or `(None, reason)`
     when it failed. It runs on pywebview's worker thread (`webview.start(func=...)`), so the
     window's thread is free to animate while the operator waits.
+
+    `after_shown` runs once the app's window is registered (or the start is over without one):
+    an update holds its lock until then, so a second launch finds this window, not none.
 
     Returns None when no native window can be opened (pywebview missing or unusable, or the
     splash asset absent) *before* anything was started, so the caller keeps its old order.
@@ -1969,6 +1973,9 @@ def _open_app_with_splash(
         try:
             _start_and_show()
         finally:
+            if after_shown is not None:
+                with contextlib.suppress(Exception):
+                    after_shown()
             work_done.set()
 
     def _start_and_show() -> None:
@@ -2009,6 +2016,9 @@ def _open_app_with_splash(
                 return
             state["marker"] = _app_window_register(url, window)
             closer.marker = state["marker"]
+        if after_shown is not None:
+            with contextlib.suppress(Exception):
+                after_shown()
         with contextlib.suppress(Exception):
             window.load_url(url)
 
@@ -2481,6 +2491,277 @@ def _wait_and_open_app(port: int, cwd: Optional[Path]) -> None:
         _open_app_window(_hub_resolve_launch_url(port, cwd))
 
 
+# --- updating (spec agentweave-updates-itself) --------------------------------------------------
+
+#: How long a launch waits for an update under way for another port before it opens anyway.
+_UPDATE_WAIT_SECONDS = 600
+
+
+def _update_check_file() -> Path:
+    return HUB_DIR / "app-window" / "update-check.json"
+
+
+def _update_setting_file() -> Path:
+    return HUB_DIR / "app-window" / "update.json"
+
+
+def _update_lock() -> updater.UpdateLock:
+    return updater.UpdateLock(HUB_DIR / "app-window" / "update.lock")
+
+
+def _update_result_file() -> Path:
+    """The last update's outcome, {"state", "detail", "at"}: what the window says after a
+    launch's update, the failure and why included (FR-7)."""
+    return HUB_DIR / "app-window" / "update-result.json"
+
+
+def _update_backups_root() -> Path:
+    return HUB_DIR / "update-backups"
+
+
+def _hub_db_file(profile: str) -> Optional[Path]:
+    """The SQLite file the Hub of `profile` uses, as `_hub_native_start` resolves it, or None
+    when DATABASE_URL names something that is not a local SQLite file (then nothing is copied,
+    so nothing is updated)."""
+    default = _hub_profile_data_dir(profile) / "agentweave.db"
+    url, _ = _hub_resolve_database_source(os.environ.get("DATABASE_URL"), profile, default)
+    match = re.match(r"^sqlite(?:\+\w+)?:///(.+)$", url)
+    if not match:
+        return None
+    return Path(match.group(1))
+
+
+def _process_image(pid: int) -> Optional[str]:
+    """The executable a process runs, or None where it cannot be read."""
+    if sys.platform != "win32":
+        return None
+    import ctypes
+
+    kernel32 = ctypes.windll.kernel32  # type: ignore[attr-defined]
+    handle = kernel32.OpenProcess(0x1000, False, pid)  # PROCESS_QUERY_LIMITED_INFORMATION
+    if not handle:
+        return None
+    try:
+        size = ctypes.c_ulong(32768)
+        buf = ctypes.create_unicode_buffer(size.value)
+        if not kernel32.QueryFullProcessImageNameW(handle, 0, buf, ctypes.byref(size)):
+            return None
+        return str(buf.value)
+    finally:
+        kernel32.CloseHandle(handle)
+
+
+def _same_install(image: Optional[str]) -> bool:
+    """Does a process running `image` run from this installation? Unknown counts as yes: a Hub
+    whose package files an upgrade would replace is the risk FR-8 avoids, so doubt blocks."""
+    if not image:
+        return True
+    try:
+        Path(image).resolve().relative_to(Path(sys.prefix).resolve())
+    except (ValueError, OSError):
+        return False
+    return True
+
+
+def _hub_other_install_hubs(port: int) -> List[int]:
+    """Ports of the other running Hubs of this installation (FR-8): a live PID file in the Hub
+    folder, a Hub answering on its port, and its process running from this install."""
+    found = set()
+    for path in HUB_DIR.glob("hub*.pid"):
+        match = re.match(r"^hub(?:-(.+))?-(\d+)\.pid$", path.name)
+        if match:
+            profile, other = match.group(1) or "default", int(match.group(2))
+        elif path.name == "hub.pid":
+            profile, other = "default", DEFAULT_HUB_PORT
+        else:
+            continue
+        if other == port:
+            continue
+        pid = _hub_pid_running(port=other, profile=profile)
+        if pid is None or updater.hub_health(other) is None:
+            continue
+        if _same_install(_process_image(pid)):
+            found.add(other)
+    return sorted(found)
+
+
+def _hub_stop_for_update(port: int, profile: str) -> Optional[str]:
+    """Stop the Hub on `port` only, the way `agentweave stop` does; None when none runs now."""
+    import time as _time
+
+    pid = _hub_pid_running(port=port, profile=profile)
+    if pid is not None:
+        _hub_kill_pid(pid)
+        with contextlib.suppress(OSError):
+            _hub_pid_file(port, profile).unlink()
+    elif _hub_port_accepts(port) and updater.hub_health(port) is not None:
+        return f"the Hub on port {port} was not started by this launcher (no PID file)"
+    deadline = _time.monotonic() + 30
+    while _hub_port_accepts(port):
+        if _time.monotonic() >= deadline:
+            return f"port {port} is still held 30 s after the Hub was stopped"
+        _time.sleep(0.5)
+    return None
+
+
+def _hub_start_for_update(port: int, profile: str) -> Optional[str]:
+    """Start the Hub on `port` and `profile` from what is installed now, in a fresh interpreter
+    (`--hub-only`): this process still holds the code it started with, and the version just
+    installed must run its own migrations. None when it started, else why not."""
+    command = [sys.executable, "-m", "agentweave", "--hub-only", "--port", str(port)]
+    command += ["--profile", profile]
+    flags = 0x08000000 if sys.platform == "win32" else 0  # CREATE_NO_WINDOW
+    try:
+        done = subprocess.run(
+            command,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=300,
+            creationflags=flags,
+            stdin=subprocess.DEVNULL,
+            cwd=str(HUB_DIR),
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        return str(exc)
+    if done.returncode == 0:
+        return None
+    lines = [ln.strip() for ln in ((done.stdout or "") + (done.stderr or "")).splitlines()]
+    reasons = [ln for ln in lines if "fail" in ln.lower() or "error" in ln.lower()]
+    tail = (reasons or [ln for ln in lines if ln] or ["no output"])[-1]
+    return f"exit code {done.returncode}: {tail}"
+
+
+def _app_window_open_on(port: int) -> bool:
+    """Is an app window open on the Hub at `port` (without bringing it forward)?"""
+    for marker in _app_window_markers(port):
+        pid = _marker_pid(marker)
+        if pid is not None and desktop_window.find_app_window(pid) is not None:
+            return True
+    return False
+
+
+def _hub_launch_state(port: int) -> Tuple[str, Optional[str]]:
+    """("absent" | "idle" | "busy" | "silent", the running Hub's version) for a launch on `port`.
+    A port held by something that does not answer as a Hub, or a Hub that does not answer the
+    work check, is "silent": not idle (D3)."""
+    if not _hub_port_accepts(port):
+        return "absent", None
+    health = updater.hub_health(port)
+    if health is None:
+        return "silent", None
+    version = health.get("version")
+    return updater.work_state(_hub_work_running(port)), (
+        version if isinstance(version, str) else None
+    )
+
+
+def _update_applier(
+    port: int, profile: str, current: str, target: str
+) -> Optional[updater.Applier]:
+    """The real Hub's stop/start/version bound into an `updater.Applier`, or None when this
+    install's database cannot be copied (so it is not updated)."""
+    db_path = _hub_db_file(profile)
+    if db_path is None:
+        return None
+    return updater.Applier(
+        port=port,
+        current=current,
+        target=target,
+        db_path=db_path,
+        backups_root=_update_backups_root(),
+        lock=_update_lock(),
+        other_hubs=lambda: _hub_other_install_hubs(port),
+        stop=lambda: _hub_stop_for_update(port, profile),
+        start=lambda: _hub_start_for_update(port, profile),
+        version=lambda: updater.hub_version(port),
+        log=print_info,
+    )
+
+
+def _record_update_result(result: updater.ApplyResult) -> None:
+    with contextlib.suppress(OSError):
+        updater.write_json(
+            _update_result_file(),
+            {"state": result.state, "detail": result.detail, "at": now_iso()},
+        )
+
+
+def _launch_update(port: int, profile: str, cwd: Optional[Path]) -> Optional[int]:
+    """At a launch: update first when a newer release is out, automatic updating is on and no
+    work runs (FR-3), then open the window on the new version. Returns the launch's exit code
+    when it handled the launch, or None to open as things are -- every refusal (FR-4, FR-8,
+    FR-9, FR-11), an offline check (FR-2) and a lost race (FR-10) is None."""
+    if updater.installation_kind() != "pip":  # FR-9: a checkout or editable install is not ours
+        return None
+    lock = _update_lock()
+    holder = lock.holder()
+    if holder is not None:
+        if holder.get("port") in (port, None):
+            # FR-10: another launch is updating this very Hub and will open its window.
+            print_info("AgentWeave is being updated by another launch; it opens the window.")
+            return 0
+        lock.wait_released(_UPDATE_WAIT_SECONDS)
+    latest = updater.check_and_record(_update_check_file())
+    current = updater.installed_version("agentweave-hub")
+    if not updater.is_newer(latest, current) or not current:
+        return None
+    hub, hub_version = _hub_launch_state(port)
+    facts = updater.LaunchFacts(
+        current=current,
+        latest=latest,
+        kind="pip",
+        auto=updater.auto_update_on(_update_setting_file()),
+        hub=hub,
+        hub_version=hub_version,
+        window_open=hub != "absent" and _app_window_open_on(port),
+        other_hubs=_hub_other_install_hubs(port),
+    )
+    decision = updater.decide_at_launch(facts)
+    if decision.action != "update" or not decision.target:
+        print_info(f"AgentWeave {latest} is available; not updating now: {decision.reason}.")
+        return None
+    applier = _update_applier(port, profile, current, decision.target)
+    if applier is None:
+        print_info("Not updating: the Hub's database is not a local SQLite file to copy first.")
+        return None
+    if not applier.lock.acquire(port):
+        holder = applier.lock.holder() or {}
+        if holder.get("port") in (port, None):
+            print_info("AgentWeave is being updated by another launch; it opens the window.")
+            return 0
+        return None
+    held = applier.lock
+
+    def _update_and_url() -> Tuple[Optional[str], Optional[str]]:
+        result = updater.apply_update(applier)
+        _record_update_result(result)
+        if result.state != "applied":
+            print_error(result.detail)
+        if updater.hub_health(port) is None:
+            return None, result.detail
+        return _hub_resolve_launch_url(port, cwd), None
+
+    try:
+        print_info(f"Updating AgentWeave {current} -> {decision.target} before opening...")
+        code = _open_app_with_splash(
+            _update_and_url, warm=False, port=port, profile=profile, after_shown=held.release
+        )
+        if code is not None:
+            return code
+        url, failure = _update_and_url()
+        held.release()
+        if url is None:
+            print_error(failure or "AgentWeave could not start.")
+            return 1
+        if not _open_app_window_native(url, profile=profile):
+            _open_app_window(url)
+        return 0
+    finally:
+        held.release()
+
+
 def _hub_native_start(
     port: int,
     detach: bool = True,
@@ -2504,6 +2785,13 @@ def _hub_native_start(
         print_error("agentweave-hub is not installed.")
         print_info("Install it with: pip install agentweave-hub")
         return 1
+
+    # 1b. A newer release, nothing running and automatic updating on: update first, then open
+    # (spec agentweave-updates-itself, FR-3). Every other answer opens as things are.
+    if app and detach:
+        updated = _launch_update(port, profile, cwd)
+        if updated is not None:
+            return updated
 
     # 2. Check if Hub is already running (asking /health only of a port someone holds)
     health_url = _hub_health_url(port)
@@ -2723,7 +3011,7 @@ def cmd_hub_start(args: argparse.Namespace) -> int:
             port=port,
             detach=not no_detach,
             app=app,
-            cwd=Path.cwd(),
+            cwd=None if getattr(args, "hub_only", False) is True else Path.cwd(),
             profile=profile,
             desktop_shortcut=getattr(args, "desktop_shortcut", False),
         )
@@ -3149,6 +3437,12 @@ For more help: https://github.com/gutohuida/AgentWeave
         metavar="PORT",
         help=argparse.SUPPRESS,  # the watcher a close starts while no window is open (D3)
     )
+    parser.add_argument(
+        "--hub-only",
+        action="store_true",
+        dest="hub_only",
+        help=argparse.SUPPRESS,  # start the Hub detached with no window: what an update starts
+    )
 
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
 
@@ -3299,8 +3593,10 @@ def main(args: Optional[List[str]] = None) -> int:
                 return _open_from_link(parsed_args.open_link)
             if getattr(parsed_args, "watch_notices", None):
                 return _run_notice_watcher(parsed_args.watch_notices)
-            # Bare invocation is the app's primary entry point: launch it, in app mode.
-            parsed_args.app = True
+            # Bare invocation is the app's primary entry point: launch it, in app mode. An
+            # update starts the Hub it installed with `--hub-only`, in a fresh interpreter, so the
+            # new version's own code runs its migrations (spec agentweave-updates-itself, D4).
+            parsed_args.app = getattr(parsed_args, "hub_only", False) is not True
             return cmd_hub_start(parsed_args)
         elif parsed_args.command == "doctor":
             return cmd_doctor(parsed_args)
