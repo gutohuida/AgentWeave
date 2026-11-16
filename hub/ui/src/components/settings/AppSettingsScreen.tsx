@@ -11,6 +11,7 @@ import { useWindowsNotifyKinds } from '@/api/notifySettings'
 import { useHubVersion } from '@/api/hubVersion'
 import { loadNotifyPrefs } from '@/lib/notify/prefs'
 import { appChangedSections } from '@/lib/settingsChanged'
+import { UpdateSettings } from './UpdateSettings'
 import { NotificationSettings, WindowsNotificationSettings } from './NotificationSettings'
 import { SettingsNavLayout } from './SettingsNavLayout'
 
@@ -66,6 +67,7 @@ export function AppSettingsScreen({
         <>
           <ConnectionSettings onOpenSetup={onOpenSetup} />
           <VersionSettings />
+          <UpdateSettings />
           <CloseSettings />
         </>
       )
