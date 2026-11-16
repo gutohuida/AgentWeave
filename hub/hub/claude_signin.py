@@ -60,6 +60,10 @@ def mark_unrenewable() -> None:
     """Record that a run just failed because the login cannot be renewed."""
     global _recorded
     path = credentials_path()
+    if not path.exists():
+        # Nothing to fingerprint (keychain, env token, another config dir): a mark here could never
+        # be lifted by a re-login, so none is made.
+        return
     _recorded = (str(path), _fingerprint(path))
 
 

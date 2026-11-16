@@ -3586,6 +3586,8 @@ async def _execute_run(
                 runner_version = parsed.runner_version
             if getattr(parsed, "auth_failure", False):
                 signed_out = True
+            if getattr(parsed, "claude_turn_ok", False):
+                claude_signin.forget()  # a turn completed: the mark was lifted another way
             if getattr(parsed, "login_unrenewable", False):
                 claude_signin.mark_unrenewable()  # F1183: launchability says so until re-login
             # Resolve session_id from *this* line before writing its own events, so the row

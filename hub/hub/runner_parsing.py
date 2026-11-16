@@ -69,6 +69,8 @@ class ParsedLine:
     auth_failure: bool = False
     # F1183: the sign-in exists but cannot be renewed (`claude auth login` is the only remedy).
     login_unrenewable: bool = False
+    # A Claude turn that completed without error: the sign-in works, whatever was recorded.
+    claude_turn_ok: bool = False
 
 
 #: What the operator reads when Claude Code is signed out, in place of Claude's own text.
@@ -499,6 +501,7 @@ def parse_claude_line(line: str, *, source: str = "claude") -> ParsedLine:
             session_id=session_id,
             auth_failure=signed_out,
             login_unrenewable=unrenewable,
+            claude_turn_ok=not signed_out and event.kind != "error",
         )
 
     if msg_type == "system" and data.get("subtype") == "init":

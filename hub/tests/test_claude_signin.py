@@ -72,3 +72,20 @@ def test_failed_run_marks_unrenewable_until_credentials_change(_claude_home):
 
 def test_no_credentials_file_is_left_alone(_claude_home):
     assert _verdict()["runnable"]
+
+
+def test_no_file_mark_is_not_made_and_cannot_lock_out(_claude_home):
+    claude_signin.mark_unrenewable()  # keychain / env-token setup: no credentials file
+    assert _verdict()["runnable"]
+    _write(_claude_home, accessToken="new", refreshToken="r", expiresAt=1)  # re-login
+    assert _verdict()["runnable"]
+
+
+def test_a_completed_turn_clears_the_mark(_claude_home):
+    _write(_claude_home, accessToken="x", refreshToken="r", expiresAt=1)
+    claude_signin.mark_unrenewable()
+    assert not _verdict()["runnable"]
+    ok = parse_claude_line(json.dumps({"type": "result", "subtype": "success", "result": "hi"}))
+    assert ok.claude_turn_ok
+    claude_signin.forget()
+    assert _verdict()["runnable"]
