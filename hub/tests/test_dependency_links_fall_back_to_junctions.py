@@ -19,6 +19,8 @@ import pytest
 
 from hub import worktrees
 
+from ._git_timeout import GIT_TIMEOUT
+
 TASK = "task-ab12cd34ef56"
 
 _REAL_ENSURE_TASK_WORKTREE = worktrees.ensure_task_worktree
@@ -28,7 +30,9 @@ _PRIVILEGE = "[WinError 1314] A required privilege is not held by the client"
 
 
 def _git(repo: Path, *args: str) -> subprocess.CompletedProcess:
-    result = subprocess.run(["git", *args], cwd=repo, capture_output=True, text=True, timeout=30)
+    result = subprocess.run(
+        ["git", *args], cwd=repo, capture_output=True, text=True, timeout=GIT_TIMEOUT
+    )
     assert result.returncode == 0, result.stderr
     return result
 

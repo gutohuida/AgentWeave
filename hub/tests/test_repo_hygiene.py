@@ -14,9 +14,13 @@ from pathlib import Path
 
 from hub import repo_hygiene, requirement_evidence
 
+from ._git_timeout import GIT_TIMEOUT
+
 
 def git(repo: Path, *args: str) -> subprocess.CompletedProcess:
-    return subprocess.run(["git", *args], cwd=repo, capture_output=True, text=True, timeout=30)
+    return subprocess.run(
+        ["git", *args], cwd=repo, capture_output=True, text=True, timeout=GIT_TIMEOUT
+    )
 
 
 def init_repo(path: Path) -> Path:

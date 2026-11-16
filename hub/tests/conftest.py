@@ -860,6 +860,38 @@ def _a_diagnostic_git_is_not_timed_by_the_machines_load(monkeypatch):
     monkeypatch.setattr(task_integration, "DIAGNOSTIC_GIT_TIMEOUT_SECONDS", 50)
 
 
+#: The bound a Hub module's own git gets in the suite (AW-157), the same as a test's own
+#: (`_git_timeout.GIT_TIMEOUT`).
+SUITE_GIT_TIMEOUT_SECONDS = 300
+
+
+@pytest.fixture(autouse=True)
+def _the_hubs_own_git_is_not_timed_by_the_machines_load(monkeypatch):
+    """The same reasoning as the diagnostic's above, for the Hub's other git bounds (AW-157). In
+    one landing batch the Hub's own `git status --porcelain`, `worktree add` and `rev-parse` ran past
+    `worktrees`' 30 s, a footprint's past its 15 s (so it fell back to `paths` and the test read
+    that instead of `git`), and an approval's `merge-tree` past `task_integration`'s 60 s; each test
+    passed re-run serially. What these tests decide is what the Hub does with git's answer, not how
+    fast a loaded machine gives it. A test of what a timeout does sets its own, after this.
+
+    `task_integration.GIT_TIMEOUT_SECONDS` is a context variable that a diagnostic sets lower for
+    its own spawns, so it is replaced with one whose default is the suite's, rather than set."""
+    import contextvars
+
+    from hub import project_repository, requirement_evidence, task_integration, worktrees
+
+    monkeypatch.setattr(worktrees, "_GIT_TIMEOUT_SECONDS", SUITE_GIT_TIMEOUT_SECONDS)
+    monkeypatch.setattr(project_repository, "_GIT_TIMEOUT_SECONDS", SUITE_GIT_TIMEOUT_SECONDS)
+    monkeypatch.setattr(
+        requirement_evidence, "FOOTPRINT_GIT_TIMEOUT_SECONDS", SUITE_GIT_TIMEOUT_SECONDS
+    )
+    monkeypatch.setattr(
+        task_integration,
+        "GIT_TIMEOUT_SECONDS",
+        contextvars.ContextVar("git_timeout_seconds", default=SUITE_GIT_TIMEOUT_SECONDS),
+    )
+
+
 @pytest.fixture(autouse=True)
 async def _a_flow_fires_early_only_where_a_test_asks():
     """`flow_advance` asks for a flow's firing a few seconds after its work moves. In a test that

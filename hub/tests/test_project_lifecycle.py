@@ -15,6 +15,8 @@ from hub.db.models import RUNNER_CLIS, Charter, EventLog, Project, Run, Runner
 from hub.project_lifecycle import ProjectLifecycleService
 from hub.project_workspace import PROJECT_MARKER_PATH, ProjectIdentityConflict, ProjectPathError
 
+from ._git_timeout import GIT_TIMEOUT
+
 
 def _marker(directory) -> dict:
     return json.loads((directory / PROJECT_MARKER_PATH).read_text(encoding="utf-8"))
@@ -222,12 +224,16 @@ async def test_active_run_blocks_relocation(app, tmp_path) -> None:
 
 
 def _git(repo, *args) -> None:
-    result = subprocess.run(["git", *args], cwd=repo, capture_output=True, text=True, timeout=30)
+    result = subprocess.run(
+        ["git", *args], cwd=repo, capture_output=True, text=True, timeout=GIT_TIMEOUT
+    )
     assert result.returncode == 0, result.stderr
 
 
 def _git_out(repo, *args) -> subprocess.CompletedProcess:
-    return subprocess.run(["git", *args], cwd=repo, capture_output=True, text=True, timeout=30)
+    return subprocess.run(
+        ["git", *args], cwd=repo, capture_output=True, text=True, timeout=GIT_TIMEOUT
+    )
 
 
 def _repo_with_agent_checkout(root):

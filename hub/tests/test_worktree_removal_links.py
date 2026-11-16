@@ -22,6 +22,8 @@ import pytest
 
 from hub import project_checks, worktrees
 
+from ._git_timeout import GIT_TIMEOUT
+
 TASK = "task-ab12cd34ef56"
 AGENT = "alice"
 
@@ -33,7 +35,9 @@ IS_WINDOWS = sys.platform == "win32"
 
 
 def _git(repo: Path, *args: str) -> subprocess.CompletedProcess:
-    result = subprocess.run(["git", *args], cwd=repo, capture_output=True, text=True, timeout=30)
+    result = subprocess.run(
+        ["git", *args], cwd=repo, capture_output=True, text=True, timeout=GIT_TIMEOUT
+    )
     assert result.returncode == 0, result.stderr
     return result
 

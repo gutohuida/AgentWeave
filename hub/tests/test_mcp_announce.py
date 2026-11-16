@@ -18,8 +18,11 @@ from hub.db.engine import async_session_factory
 from hub.db.models import Run
 from hub.launchability import record_harness_mcp_status
 
-#: Far longer than any load stretches a request: a wait that reaches it missed the notification.
-SLOW = 30.0
+#: Far enough out that only a wait the notification missed ever reaches it. 30 s was not: at
+#: landing the announce's own request (auth, commit) took longer than that on a machine running
+#: twenty suite workers beside live agents (AW-157), and the wait ended `False` with the
+#: notification still to come.
+SLOW = 120.0
 
 
 async def _run(run_id: str, *, token: str | None = None, stamped: bool = False) -> dict[str, str]:
@@ -192,9 +195,10 @@ async def test_wait_returns_soon_after_the_announce_arrives_during_it(app, monke
         announced["at"] = asyncio.get_running_loop().time()
 
     task = asyncio.create_task(announce_once_waiting())
-    assert await mcp_announce.wait("run-wait-live", SLOW) is True
+    woke = await mcp_announce.wait("run-wait-live", SLOW)
     seen = asyncio.get_running_loop().time()
-    await task
+    await task  # first, so an announce that failed says how rather than reading as a missed wake
+    assert woke is True
     # The notify runs inside the route, so the wait can end before the request has returned.
     assert seen - announced["at"] < SLOW / 3
 

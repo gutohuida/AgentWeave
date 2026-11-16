@@ -55,6 +55,7 @@ from hub.task_transition_service import apply_transition
 from hub.task_transitions import operator
 from hub.turn_scheduler import schedule_agent
 
+from ._git_timeout import GIT_TIMEOUT
 from .test_a_flow_names_what_it_cannot_staff import _roster
 from .test_agent_trigger import _init_repo
 
@@ -90,7 +91,7 @@ def _which():
 
 def _head_of(repo: Path) -> str:
     result = subprocess.run(
-        ["git", "rev-parse", "HEAD"], cwd=repo, capture_output=True, text=True, timeout=30
+        ["git", "rev-parse", "HEAD"], cwd=repo, capture_output=True, text=True, timeout=GIT_TIMEOUT
     )
     assert result.returncode == 0, result.stderr
     return result.stdout.strip()

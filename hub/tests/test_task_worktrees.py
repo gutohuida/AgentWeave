@@ -22,6 +22,8 @@ from hub import worktrees
 # real function. This file is one of the two that must have the real one.
 from hub.worktrees import ensure_task_worktree
 
+from ._git_timeout import GIT_TIMEOUT
+
 #: Captured at import, before conftest's autouse fixture replaces the attribute. `resolve_turn_workspace`
 #: reaches both of its implementations through the *module*, so restoring the named import alone is
 #: not enough for the two tests that exercise the resolver itself.
@@ -32,7 +34,9 @@ OTHER = "task-00ff11ee22dd"
 
 
 def _git(repo: Path, *args: str) -> subprocess.CompletedProcess:
-    result = subprocess.run(["git", *args], cwd=repo, capture_output=True, text=True, timeout=30)
+    result = subprocess.run(
+        ["git", *args], cwd=repo, capture_output=True, text=True, timeout=GIT_TIMEOUT
+    )
     assert result.returncode == 0, result.stderr
     return result
 
@@ -86,7 +90,7 @@ def _branch_exists(repo: Path, branch: str) -> bool:
         cwd=repo,
         capture_output=True,
         text=True,
-        timeout=30,
+        timeout=GIT_TIMEOUT,
     )
     return result.returncode == 0
 
@@ -220,7 +224,7 @@ def test_a_prerequisite_not_reachable_from_the_base_is_merged_in(repo):
             ["git", "merge-base", "--is-ancestor", prerequisite, "HEAD"],
             cwd=path,
             capture_output=True,
-            timeout=30,
+            timeout=GIT_TIMEOUT,
         ).returncode
         == 0
     )
@@ -308,7 +312,9 @@ def test_a_task_checkout_left_mid_merge_is_refused_rather_than_handed_over(repo)
     _git(path, "commit", "-q", "-m", "the task's own work")
 
     # Reproduce the interrupted state: a merge that conflicted and was never cleaned up.
-    subprocess.run(["git", "merge", conflicting], cwd=path, capture_output=True, timeout=30)
+    subprocess.run(
+        ["git", "merge", conflicting], cwd=path, capture_output=True, timeout=GIT_TIMEOUT
+    )
     assert _git(path, "rev-parse", "--verify", "MERGE_HEAD").stdout.strip()
 
     with pytest.raises(worktrees.IsolationUnavailableError, match="unfinished merge"):

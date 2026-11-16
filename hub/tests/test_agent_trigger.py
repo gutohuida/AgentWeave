@@ -21,6 +21,7 @@ from hub.inbound_queue import DELIVERY_ATTEMPT_LIMIT
 from hub.sse import sse_manager
 
 from ._background_runs import await_background_runs as _await_background_run
+from ._git_timeout import GIT_TIMEOUT
 
 _REAL_RESOLVE_AGENT_WORKSPACE = worktrees.resolve_agent_workspace
 
@@ -33,7 +34,7 @@ def _git(repo: Path, *args: str) -> subprocess.CompletedProcess:
     for attempt in range(attempts):
         try:
             result = subprocess.run(
-                ["git", *args], cwd=repo, capture_output=True, text=True, timeout=120
+                ["git", *args], cwd=repo, capture_output=True, text=True, timeout=GIT_TIMEOUT
             )
             break
         except subprocess.TimeoutExpired:

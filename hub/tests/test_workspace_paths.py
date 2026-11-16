@@ -15,9 +15,13 @@ import pytest
 
 from hub.workspace_paths import list_workspace_paths
 
+from ._git_timeout import GIT_TIMEOUT
+
 
 def _git(repo: Path, *args: str) -> subprocess.CompletedProcess:
-    result = subprocess.run(["git", *args], cwd=repo, capture_output=True, text=True, timeout=30)
+    result = subprocess.run(
+        ["git", *args], cwd=repo, capture_output=True, text=True, timeout=GIT_TIMEOUT
+    )
     assert result.returncode == 0, result.stderr
     return result
 

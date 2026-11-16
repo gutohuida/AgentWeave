@@ -234,11 +234,19 @@ async def test_ac_large_list_fast_binary_marked_and_big_diff_truncated(
     # their number, which must not grow with the file count: a branch listing, one diff per scope.
     assert len(spawns) <= 4, spawns
 
-    started = time.monotonic()  # warmed: first-use import and process-cache costs are paid
-    body = await get(app, auth_headers)
-    elapsed = time.monotonic() - started
+    # Warmed: first-use import and process-cache costs are paid. The fastest of up to three reads
+    # is held to the budget (AW-157: one read took 2.016 s at landing, on a machine running twenty
+    # suite workers beside live agents). A listing that is slow because of its own work is slow on
+    # every read; one the machine delayed is not.
+    elapsed = float("inf")
+    for _ in range(3):
+        started = time.monotonic()
+        body = await get(app, auth_headers)
+        elapsed = min(elapsed, time.monotonic() - started)
+        assert len(body["turn"]) == 200
+        if elapsed < 2.0:
+            break
 
-    assert len(body["turn"]) == 200
     assert elapsed < 2.0
     files = by_path(body["turn"])
     assert files["blob.bin"]["binary"] is True

@@ -146,6 +146,9 @@ COVERS = ("full", "partial")
 OUTPUT_TAIL = 4000
 OUTPUT_CUT_MARKER = "[earlier output cut]\n"
 COMMAND_MAX = 2000
+#: How long one git a footprint asks (where the evidence's commit is, whether a branch holds it) may
+#: take. Past it the footprint falls back to what the locator names, with no commit.
+FOOTPRINT_GIT_TIMEOUT_SECONDS = 15
 
 
 def check_covers(covers: Optional[str]) -> Optional[str]:
@@ -804,7 +807,7 @@ def _git(root: Path, *args: str) -> Optional[str]:
             text=True,
             encoding="utf-8",
             errors="replace",
-            timeout=15,
+            timeout=FOOTPRINT_GIT_TIMEOUT_SECONDS,
             check=False,
             **no_console_kwargs(),
         )
@@ -1173,7 +1176,7 @@ def is_reachable_from(root: Path, commit: str, branch: str) -> Optional[bool]:
                 ["git", "merge-base", "--is-ancestor", commit, tip],
                 cwd=str(root),
                 capture_output=True,
-                timeout=15,
+                timeout=FOOTPRINT_GIT_TIMEOUT_SECONDS,
                 check=False,
                 **no_console_kwargs(),
             )

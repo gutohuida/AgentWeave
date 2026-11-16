@@ -320,9 +320,10 @@ async def test_request_on_unfinished_build_and_a_second_press(app, auth_headers,
 
     first = await _press(app, auth_headers)
     assert first.status_code == 202, first.text
-    for _ in range(100):
-        if fake.calls:
-            break
+    # A guard against hanging, not a measure: the firing reaches the worker from a background task,
+    # and the 1 s this allowed ran out at landing on a loaded machine (AW-157).
+    deadline = asyncio.get_running_loop().time() + 120
+    while not fake.calls and asyncio.get_running_loop().time() < deadline:
         await asyncio.sleep(0.01)
     assert len(fake.calls) == 1
 
@@ -1003,10 +1004,11 @@ async def test_failure_does_not_block_approval_or_archive(
         task_id = task.id
         await session.commit()
 
-    await asyncio.wait_for(_approve(app, auth_headers, task_id), 30)
-    for _ in range(100):
-        if fake.calls:
-            break
+    # Guards against hanging, not measures (AW-157): an approval runs git, and the firing reaches
+    # the worker from a background task, both slower on a loaded machine.
+    await asyncio.wait_for(_approve(app, auth_headers, task_id), 300)
+    deadline = asyncio.get_running_loop().time() + 120
+    while not fake.calls and asyncio.get_running_loop().time() < deadline:
         await asyncio.sleep(0.01)
     assert len(fake.calls) == 1 and await _firings_now() == []
 

@@ -45,6 +45,7 @@ from hub.scheduler import JobScheduler
 from hub.task_transition_service import apply_transition
 from hub.task_transitions import ACTOR_OPERATOR, run_actor
 
+from ._git_timeout import GIT_TIMEOUT
 from .test_agent_trigger import _await_background_run, _fake_pty, _init_repo
 from .test_review_turn import _REAL_ENSURE_REVIEW_CHECKOUT, _author_commit, _roster
 
@@ -431,6 +432,6 @@ async def test_the_repo_helper_actually_hides_the_work(tmp_path):
         cwd=repo,
         capture_output=True,
         text=True,
-        timeout=30,
+        timeout=GIT_TIMEOUT,
     ).stdout
     assert "agentweave/builder" in branches

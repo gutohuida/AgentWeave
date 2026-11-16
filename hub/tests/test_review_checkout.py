@@ -20,9 +20,13 @@ from hub.worktrees import (
     resolve_review_commit,
 )
 
+from ._git_timeout import GIT_TIMEOUT
+
 
 def _git(repo: Path, *args: str) -> subprocess.CompletedProcess:
-    result = subprocess.run(["git", *args], cwd=repo, capture_output=True, text=True, timeout=30)
+    result = subprocess.run(
+        ["git", *args], cwd=repo, capture_output=True, text=True, timeout=GIT_TIMEOUT
+    )
     assert result.returncode == 0, result.stderr
     return result
 
@@ -99,7 +103,11 @@ def test_review_checkout_is_created_detached_at_the_named_commit(repo):
     # than a branch name. This is design D2 — the environment states the reviewing role.
     assert _git(path, "rev-parse", "--abbrev-ref", "HEAD").stdout.strip() == "HEAD"
     symbolic = subprocess.run(
-        ["git", "symbolic-ref", "HEAD"], cwd=path, capture_output=True, text=True, timeout=30
+        ["git", "symbolic-ref", "HEAD"],
+        cwd=path,
+        capture_output=True,
+        text=True,
+        timeout=GIT_TIMEOUT,
     )
     assert symbolic.returncode != 0
 

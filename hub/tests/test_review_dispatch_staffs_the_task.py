@@ -38,6 +38,8 @@ from hub.scheduler import enter_selected_task
 from hub.task_transition_service import apply_transition
 from hub.task_transitions import run_actor
 
+from ._git_timeout import GIT_TIMEOUT
+
 pytestmark = pytest.mark.asyncio
 
 AUTHOR = "rd-author"
@@ -58,10 +60,14 @@ def _init_repo(path):
         ("config", "user.email", "test@example.com"),
         ("config", "user.name", "test"),
     ):
-        subprocess.run(["git", *args], cwd=path, capture_output=True, text=True, timeout=30)
+        subprocess.run(
+            ["git", *args], cwd=path, capture_output=True, text=True, timeout=GIT_TIMEOUT
+        )
     (path / "seed.txt").write_text("base")
-    subprocess.run(["git", "add", "-A"], cwd=path, capture_output=True, timeout=30)
-    subprocess.run(["git", "commit", "-q", "-m", "base"], cwd=path, capture_output=True, timeout=30)
+    subprocess.run(["git", "add", "-A"], cwd=path, capture_output=True, timeout=GIT_TIMEOUT)
+    subprocess.run(
+        ["git", "commit", "-q", "-m", "base"], cwd=path, capture_output=True, timeout=GIT_TIMEOUT
+    )
     return path
 
 
