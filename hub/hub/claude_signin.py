@@ -60,7 +60,8 @@ _parsed: Dict[str, Tuple[Tuple[int, int], Any]] = {}  # path -> (fingerprint, cl
 
 def _read_oauth(path: Path) -> Any:
     """The file's `claudeAiOauth`, read again only when the file changed: launchability is asked
-    on the event loop (every turn start), where a file open is a stall (F1111), and a stat is not."""
+    on the event loop (every turn start), where a file open is a stall (F1111), and a stat is not.
+    """
     key = str(path)
     fingerprint = _fingerprint(path)
     cached = _parsed.get(key)
