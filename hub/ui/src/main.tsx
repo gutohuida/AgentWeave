@@ -11,6 +11,7 @@ import './styles/shell.css'
 import App from './App.tsx'
 import { ErrorBoundary } from './components/common/ErrorBoundary'
 import { ClosePrompt } from './components/app/ClosePrompt'
+import { UpdateButton } from './components/app/UpdateButton'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -30,5 +31,6 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
     </ErrorBoundary>
     {/* Outside the boundary: a page that crashed can still answer the window's close. */}
     <ClosePrompt />
+    <UpdateButton />
   </React.StrictMode>,
 )

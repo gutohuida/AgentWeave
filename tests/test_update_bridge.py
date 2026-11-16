@@ -5,6 +5,7 @@ bridge's own seam: what it asks the updater, what it hands the page, and that it
 window after an update ends and never raises.
 """
 
+import json
 import sys
 import types
 
@@ -45,10 +46,12 @@ def updater(monkeypatch, tmp_path):
         return _Result("applied")
 
     fake.apply_update = apply_update
+    fake.write_json = lambda path, data: path.write_text(json.dumps(data), encoding="utf-8")
     monkeypatch.setitem(sys.modules, "agentweave.updater", fake)
     import agentweave
 
     monkeypatch.setattr(agentweave, "updater", fake, raising=False)
+    monkeypatch.setattr(cli, "updater", fake)
     for name in ("_update_check_file", "_update_setting_file", "_update_result_file"):
         monkeypatch.setattr(cli, name, lambda n=name: tmp_path / n, raising=False)
     monkeypatch.setattr(cli, "_update_applier", lambda *a: object(), raising=False)
@@ -89,6 +92,17 @@ def test_apply_asks_then_applies_and_reloads(updater):
     assert bridge.apply_update(True)["state"] == "applied"
     assert bridge._window.js == ["window.location.reload()"]
     assert updater.calls == [("apply", False), ("apply", True)]
+
+
+def test_failed_apply_is_recorded_before_the_reload_so_the_window_states_it(updater):
+    updater.apply_update = lambda applier, confirmed, work, describe: _Result(
+        "failed", "migration broke"
+    )
+    bridge = _bridge()
+    assert bridge.apply_update(True)["state"] == "failed"
+    assert bridge._window.js == ["window.location.reload()"]
+    assert json.loads(cli._update_result_file().read_text(encoding="utf-8"))["state"] == "failed"
+    assert bridge.update_status()["message"]["detail"] == "migration broke"
 
 
 def test_apply_with_no_applier_fails_and_set_auto_saves(updater, monkeypatch):

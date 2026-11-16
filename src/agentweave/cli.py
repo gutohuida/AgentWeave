@@ -1819,8 +1819,6 @@ class _AppWindowApi:
         `needs_confirm` (with the work named) until `confirmed`, then `applied`, `failed` or
         `blocked`, each with its `detail`. After applied or failed the same window reloads."""
         try:
-            from agentweave import updater
-
             closer = self._closer
             if closer is None:
                 return {"state": "failed", "detail": "This window is not tied to a Hub."}
@@ -1842,8 +1840,17 @@ class _AppWindowApi:
                 describe=desktop_window.describe_work,
             )
             answer = {"state": result.state, "detail": result.detail}
+            if result.state in ("applied", "failed"):
+                # The reload below drops the page's own state, so the result is what the
+                # reloaded window reads to say the update failed and why (FR-7).
+                _record_update_result(result)
         except Exception as exc:
             answer = {"state": "failed", "detail": f"The update could not run: {exc}"}
+            with contextlib.suppress(OSError):
+                updater.write_json(
+                    _update_result_file(),
+                    {"state": "failed", "detail": answer["detail"], "at": now_iso()},
+                )
         if answer["state"] in ("applied", "failed") and self._window is not None:
             with contextlib.suppress(Exception):
                 self._window.evaluate_js("window.location.reload()")
