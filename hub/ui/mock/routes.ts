@@ -14,6 +14,8 @@ export type MockRoute =
   | { kind: 'task-redesign' }
   /** The spec page's task threads, three layouts to choose from (operator, 2026-11-16). */
   | { kind: 'task-threads' }
+  /** A roadmap's own page, with the slice-3 choices open (operator, 2026-11-16). */
+  | { kind: 'roadmap' }
   | { kind: 'thread' }
   /** The traces view: a fourth view inside Activity (operator, 2026-11-02). */
   | { kind: 'traces' }
