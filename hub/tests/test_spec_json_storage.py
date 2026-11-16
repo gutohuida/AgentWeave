@@ -46,7 +46,7 @@ async def test_a_submitted_document_is_stored_as_its_payload_and_the_hub_block(
     assert stored["title"] == "Demo"
     assert stored["hub"] == {
         "phase": "exploring",
-        "step": "intake",
+        "step": "requirements",  # the save moves the step to where the content stands (FR-13)
         "size": None,
     }
     assert not (tmp_path / "spec/changes/demo/spec.html").exists()

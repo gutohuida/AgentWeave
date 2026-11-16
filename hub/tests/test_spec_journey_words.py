@@ -104,7 +104,8 @@ def test_the_last_step_recommends_a_build_with_reasons():
 
     assert spec_journey.marker("build") in text
     assert "recommend" in text.lower() and "`reasons`" in text
-    assert "ready for the operator to approve" in text
+    assert "ready for the operator to approve" not in text
+    assert "ready_to_approve" in text
     assert spec_journey.missing(spec_journey.BUILD, {"delivery": {"mode": "none"}}, None) == [
         "delivery.reasons"
     ]
