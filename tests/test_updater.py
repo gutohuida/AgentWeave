@@ -584,6 +584,9 @@ def test_install_kind_reads_direct_url(monkeypatch):
 @pytest.fixture
 def hub_dir(tmp_path, monkeypatch):
     monkeypatch.setattr(cli, "HUB_DIR", tmp_path / "hub")
+    # These are the pip install's launches: no git checkout behind the Hub package (this suite
+    # runs from one). A checkout's launch is tests/test_updater_checkout.py's.
+    monkeypatch.setattr(cli, "_hub_checkout_root", lambda: None)
     (tmp_path / "hub").mkdir()
     return tmp_path / "hub"
 

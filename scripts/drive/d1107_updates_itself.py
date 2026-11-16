@@ -1003,7 +1003,9 @@ def stable_dump(path: pathlib.Path) -> str:
         parts = [
             repr(
                 connection.execute(
-                    "select name, sql from sqlite_master where type in ('table','index') order by name"
+                    # sqlite_stat*: the Hub's own ANALYZE 30 s after a start (db_maintenance.py)
+                    "select name, sql from sqlite_master where type in ('table','index')"
+                    " and name not like 'sqlite_stat%' order by name"
                 ).fetchall()
             )
         ]

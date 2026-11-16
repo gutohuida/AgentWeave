@@ -41883,7 +41883,7 @@ Open a conversation, open the side panel's Specs tab, open a spec that has messa
 
 ## F1181 (A) -- a Hub started with `--hub-only` from the Hub folder opens the first profile's database, not its own
 
-**Status:** open
+**Status:** fixed 2026-11-16 (in DCUSW-4, `a-development-checkout-updates-the-same-way`). `src/agentweave/cli.py`: the updater's restart (`_hub_start_for_update`) and the previous commit's start (`_hub_start_previous`, via `_hub_child_env`) now pass the profile's `DATABASE_URL` (`_hub_db_url`) in the child's environment, so `load_dotenv()` of HUB_DIR/.env can no longer replace it. The `--hub-only` start run directly from HUB_DIR without that variable still reads HUB_DIR/.env; that path is the operator's own and is not changed here. Test: `tests/test_updater_checkout.py::test_the_restart_names_the_profile_s_database_outright`. End to end: the checkout drive's `serves_own_db` (apply-reload, failed-start), run by DCUSW-5.
 **Source:** found by driving -- DeveloperOpus2, 2026-11-16, writing the acceptance drive of `a-development-checkout-updates-the-same-way` (DCUSW-1, `scripts/drive/d1107_updates_a_checkout.py`)
 **Theme:** Updates
 **Ready:** yes
@@ -41893,7 +41893,7 @@ Open a conversation, open the side panel's Specs tab, open a spec that has messa
 
 ## F1182 (A) -- on an editable or checkout install, the window's Update bridge still runs a pip install of the newest release
 
-**Status:** open
+**Status:** fixed 2026-11-16 (in DCUSW-4, `a-development-checkout-updates-the-same-way`). `_AppWindowApi.apply_update` (`src/agentweave/cli.py`) now sends a Hub run from a git checkout to the checkout updater (restart onto local master, no pip), answers `blocked` without touching anything for any other install that is not a pip release, and answers `failed` (no pip) when the known release is not newer than the installed one. Tests: `tests/test_updater_checkout.py::test_an_editable_install_outside_a_checkout_is_never_pip_installed`, `::test_a_pip_release_equal_to_the_installed_one_is_not_applied`, and the checkout bridge tests there, whose `apply_update`/`known_latest` raise if reached.
 **Source:** found by driving -- DeveloperOpus2, 2026-11-16, the first run of `scripts/drive/d1107_updates_a_checkout.py` (DCUSW-1), before anything of that change was built
 **Theme:** Updates
 **Ready:** yes
