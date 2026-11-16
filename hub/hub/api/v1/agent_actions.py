@@ -2999,6 +2999,10 @@ async def acknowledge_spec_gap(
             status_code=exc.status, detail={"message": str(exc), "code": exc.code}
         ) from exc
     await session.commit()
+    # The list's cached ready_to_approve must not lag the acknowledgement (as the operator route).
+    from .spec import _READY_VERDICTS
+
+    _READY_VERDICTS.clear()
     await sse_manager.broadcast(
         actor.project_id, "spec_updated", {"path": document.path, "phase": document.phase}
     )

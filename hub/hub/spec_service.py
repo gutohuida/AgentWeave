@@ -1694,10 +1694,7 @@ async def render_page(
         corpus = spec_documents.build_corpus_context(manifest, path, summaries)
     # The gaps its author or the operator left on purpose, beside the payload (FR-5).
     acknowledged = (
-        [
-            spec_acknowledgements.entry({"code": row.code, "where": row.place}, row)
-            for row in (await spec_acknowledgements.rows_for(session, document)).values()
-        ]
+        (await readiness(session, workspace, document, payload)).acknowledged
         if document is not None
         else []
     )
