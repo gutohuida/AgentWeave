@@ -53,6 +53,20 @@ describe('UpdateButton', () => {
     expect((await screen.findByTestId('update-banner-failure')).textContent).toContain('migration broke')
   })
 
+  it('a failure the operator dismisses is reported seen, so the launcher stops showing it', async () => {
+    const dismiss = vi.fn(async () => true)
+    bridge({
+      update_status: vi.fn(async () => ({
+        ...status, available: false, message: { state: 'failed', detail: 'migration broke' },
+      })),
+      dismiss_update_message: dismiss,
+    })
+    render(<UpdateButton />)
+    fireEvent.click(await screen.findByTestId('update-banner-failure'))
+    expect(dismiss).toHaveBeenCalledTimes(1)
+    await waitFor(() => expect(screen.queryByTestId('update-banner-failure')).toBeNull())
+  })
+
   it('a checkout behind master: names master and how far, asks before restarting', async () => {
     const api = bridge({
       update_status: vi.fn(async () => ({

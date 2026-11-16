@@ -79,7 +79,10 @@ export function UpdateButton() {
           <p
             className="rounded-md border bg-background p-3 text-xs text-destructive shadow"
             data-testid="update-banner-failure"
-            onClick={() => setDismissed(true)}
+            onClick={() => {
+              setDismissed(true)
+              if (failure && !note) void appWindowApi()?.dismiss_update_message?.().catch(() => {})
+            }}
           >
             {note ? `The update did not finish: ${note}` : `The last update failed: ${failure}`}
           </p>

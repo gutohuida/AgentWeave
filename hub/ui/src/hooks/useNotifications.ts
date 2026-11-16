@@ -27,6 +27,8 @@ interface AppWindowApi {
   /** `kind` 'checkout' saves the checkout's own switch (`auto_checkout`); otherwise `auto`. */
   set_auto_update?: (on: boolean, kind?: 'pip' | 'checkout') => Promise<boolean>
   apply_update?: (confirmed: boolean) => Promise<UpdateAnswer>
+  /** The operator has seen this Hub's last update result: the launcher stops showing it. */
+  dismiss_update_message?: () => Promise<boolean>
 }
 
 export interface UpdateStatus {

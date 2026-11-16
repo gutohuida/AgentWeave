@@ -1813,13 +1813,23 @@ class _AppWindowApi:
                     "running": True,
                     "description": "AgentWeave could not say what is running",
                 }
-            with contextlib.suppress(Exception):
-                result = json.loads(_update_result_file().read_text(encoding="utf-8"))
-                if isinstance(result, dict):
-                    status["message"] = result
+            status["message"] = _update_result_for(port, self._profile())
         except Exception:
             pass
         return status
+
+    def _profile(self) -> str:
+        return self._closer.profile if self._closer is not None else "default"
+
+    def dismiss_update_message(self) -> bool:
+        """The operator has seen this Hub's last update result: it is not shown again (DCUSW-6).
+        Never raises."""
+        port = self._closer.port if self._closer is not None else DEFAULT_HUB_PORT
+        try:
+            _update_result_file(port, self._profile()).unlink(missing_ok=True)
+        except OSError:
+            return False
+        return True
 
     def _checkout_status(self, status: Dict[str, Any], port: int, root: Path) -> None:
         """`update_status`'s checkout half: the Hub's commit against local master, read through
@@ -1910,13 +1920,12 @@ class _AppWindowApi:
             if result.state in ("applied", "failed"):
                 # The reload below drops the page's own state, so the result is what the
                 # reloaded window reads to say the update failed and why (FR-7).
-                _record_update_result(result)
+                _record_update_result(port, closer.profile, result.state, result.detail)
         except Exception as exc:
             answer = {"state": "failed", "detail": f"The update could not run: {exc}"}
-            with contextlib.suppress(OSError):
-                updater.write_json(
-                    _update_result_file(),
-                    {"state": "failed", "detail": answer["detail"], "at": now_iso()},
+            if self._closer is not None:
+                _record_update_result(
+                    self._closer.port, self._closer.profile, "failed", answer["detail"]
                 )
         if answer["state"] in ("applied", "failed") and self._window is not None:
             with contextlib.suppress(Exception):
@@ -2672,10 +2681,21 @@ def _update_lock() -> updater.UpdateLock:
     return updater.UpdateLock(HUB_DIR / "app-window" / "update.lock")
 
 
-def _update_result_file() -> Path:
-    """The last update's outcome, {"state", "detail", "at"}: what the window says after a
-    launch's update, the failure and why included (FR-7)."""
-    return HUB_DIR / "app-window" / "update-result.json"
+def _update_result_file(port: int, profile: str = "default") -> Path:
+    """The last update's outcome for the Hub of `port` and `profile`, {"state", "detail", "at"}:
+    what that Hub's window says after its update, the failure and why included (FR-7). One file
+    per Hub, so a failure on one Hub is never shown in another's window (DCUSW-6)."""
+    return HUB_DIR / "app-window" / f"update-result-{port}-{profile or 'default'}.json"
+
+
+def _update_result_for(port: int, profile: str) -> Optional[Dict[str, Any]]:
+    """The recorded result of this Hub's last update, until the operator dismisses it or a later
+    update replaces it; None when there is none or it cannot be read."""
+    try:
+        result = json.loads(_update_result_file(port, profile).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    return result if isinstance(result, dict) else None
 
 
 def _update_backups_root() -> Path:
@@ -2982,11 +3002,12 @@ def _update_applier(
     )
 
 
-def _record_update_result(result: updater.ApplyResult) -> None:
+def _record_update_result(port: int, profile: str, state: str, detail: str) -> None:
+    """Record an update's outcome for the Hub of `port` and `profile` (`_update_result_file`)."""
     with contextlib.suppress(OSError):
         updater.write_json(
-            _update_result_file(),
-            {"state": result.state, "detail": result.detail, "at": now_iso()},
+            _update_result_file(port, profile),
+            {"state": state, "detail": detail, "at": now_iso()},
         )
 
 
@@ -3099,7 +3120,7 @@ def _launch_apply(
 
     def _update_and_url() -> Tuple[Optional[str], Optional[str]]:
         result = run()
-        _record_update_result(result)
+        _record_update_result(port, profile, result.state, result.detail)
         if result.state != "applied":
             print_error(result.detail)
         if updater.hub_health(port) is None:
