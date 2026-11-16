@@ -201,12 +201,9 @@ function MockBar({
 /** The Tasks screen's controls: the Dependencies view as a map or as today's list, and a wider
  *  build than the recorded ones. */
 function TasksMockBar() {
-  const { deps, wide } = useTasksMockControls()
+  const { wide } = useTasksMockControls()
   return (
     <>
-      <button type="button" className="mock-bar-button" onClick={() => setTasksMockControls({ deps: deps === 'map' ? 'list' : 'map' })}>
-        {deps === 'map' ? 'Dependencies: map' : 'Dependencies: list (today)'}
-      </button>
       <button type="button" className="mock-bar-button" onClick={() => setTasksMockControls({ wide: !wide })}>
         {wide ? 'Wide build: shown' : 'Wide build: hidden'}
       </button>

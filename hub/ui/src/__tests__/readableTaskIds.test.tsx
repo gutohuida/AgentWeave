@@ -4,7 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 
 import type { Task } from '@/api/tasks'
 import { TasksScreen } from '@/components/tasks/TasksScreen'
-import { DependencyListView } from '@/components/tasks/DependencyListView'
+import { DependencyMapView } from '@/components/tasks/DependencyMapView'
 import { AcronymEditor } from '@/components/spec/page/SpecDocumentFacts'
 import { useTaskFilterStore } from '@/store/taskFilterStore'
 import { ApiError } from '@/api/client'
@@ -88,7 +88,7 @@ describe('the board names a task by its readable id', () => {
   })
 })
 
-describe('the dependency list names prerequisites by readable id', () => {
+describe('the dependency map names prerequisites by readable id', () => {
   it('reads BPS-3 beside the prerequisite title', () => {
     const waiting = makeTask({
       id: 'task-2',
@@ -97,8 +97,8 @@ describe('the dependency list names prerequisites by readable id', () => {
       status: 'pending',
       prerequisites: [{ id: 'task-5a9efc6d2670', readable_id: 'BPS-3', title: 'First', status: 'in_progress' }],
     })
-    renderWith(<DependencyListView tasks={[waiting]} documents={[]} onOpenTask={vi.fn()} onOpenDocument={vi.fn()} />)
-    expect(screen.getByText(/Waits on BPS-3 First/)).toBeInTheDocument()
+    renderWith(<DependencyMapView tasks={[waiting]} documents={[]} onOpenTask={vi.fn()} onOpenDocument={vi.fn()} />)
+    expect(screen.getByText('BPS-3')).toBeInTheDocument()
   })
 })
 

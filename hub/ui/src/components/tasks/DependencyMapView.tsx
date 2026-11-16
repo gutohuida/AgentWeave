@@ -2,9 +2,15 @@ import { Button } from '@/components/ui/button'
 import { Icon } from '@/components/common/Icon'
 import type { Task } from '@/api/tasks'
 import { FlowGraph, type FlowNode } from '@/components/spec/page/threads/FlowMap'
-import { THREAD_STATES, ThreadLegend, threadState } from '@/components/spec/page/threads/shared'
-import type { DependencyDocument } from './DependencyListView'
+import { THREAD_STATES, threadState } from '@/components/spec/page/threads/threadModel'
+import { ThreadLegend } from '@/components/spec/page/threads/shared'
 import '@/styles/board.css'
+
+export interface DependencyDocument {
+  id: string
+  title: string
+  path: string
+}
 
 /** Dependencies as a map, one per spec document: tasks in columns by when they can start, left to
  *  right, with each thread coloured by its prerequisite's state. Hovering a task lights its chain;

@@ -1,7 +1,6 @@
 import * as React from 'react'
 import type { Task } from '@/api/tasks'
 import { BoardView, type TasksView } from '@/components/tasks/BoardView'
-import { DependencyListView } from '@/components/tasks/DependencyListView'
 import { DependencyMapView } from '@/components/tasks/DependencyMapView'
 import type { RequirementTally } from '@/components/tasks/TaskCardCompact'
 import { toast } from '@/lib/toast'
@@ -97,7 +96,7 @@ function wideBuild(): Task[] {
 const WIDE = wideBuild()
 
 export default function Tasks({ now, go }: ScreenProps) {
-  const { deps, wide } = useTasksMockControls()
+  const { wide } = useTasksMockControls()
   const [view, setView] = React.useState<TasksView>(() => (window.location.hash.includes('deps=') ? 'dependencies' : 'board'))
   const tasks = wide ? [...TASKS, ...WIDE] : TASKS
   const documents = wide ? [...RECORDED_DOCUMENTS, VAULT] : RECORDED_DOCUMENTS
@@ -122,11 +121,7 @@ export default function Tasks({ now, go }: ScreenProps) {
       onRetryIntegration={() => toast({ title: 'Merging again…', description: 'If it fails again, commit or stash the checkout’s changes first.' })}
       now={now}
     >
-      {deps === 'map' ? (
-        <DependencyMapView tasks={tasks} documents={documents} onOpenTask={open} onOpenDocument={() => go({ kind: 'tab', tab: 'spec' })} />
-      ) : (
-        <DependencyListView tasks={tasks} documents={documents} onOpenTask={open} onOpenDocument={() => go({ kind: 'tab', tab: 'spec' })} />
-      )}
+      <DependencyMapView tasks={tasks} documents={documents} onOpenTask={open} onOpenDocument={() => go({ kind: 'tab', tab: 'spec' })} />
     </BoardView>
   )
 }
