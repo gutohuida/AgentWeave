@@ -409,6 +409,20 @@ async def get_spec(
         recommended = _recommended_build(document, stored_payload)
         if recommended is not None:
             payload["recommended_build"] = recommended
+        # The gaps somebody chose to leave, so the page shows them on load, not only after Check
+        # (`ready-means-the-same-thing`, FR-5).
+        if stored_payload is not None and document.phase != spec_lifecycle.ARCHIVED:
+            try:
+                payload["acknowledged"] = (
+                    await spec_service.readiness(
+                        session,
+                        workspace,
+                        document,
+                        spec_service._stored_payload(workspace, document),
+                    )
+                ).acknowledged
+            except spec_service.SaveRefusedError:
+                payload["acknowledged"] = []
         # Every build of this document, newest first: how it was built, by whom, within what.
         payload["builds"] = [
             await builds.view(session, row) for row in await builds.builds_of(session, document.id)

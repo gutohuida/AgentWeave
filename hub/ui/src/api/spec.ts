@@ -419,6 +419,8 @@ export interface SpecDocument {
   path: string
   content: string
   updated_at?: string
+  /** Gaps somebody chose to leave, read with the document so the page shows them on load. */
+  acknowledged?: SpecAcknowledgedGap[]
   delivery_status?: SpecDeliveryStatus
   fold_state?: SpecFoldState
   approval_outcome?: SpecApprovalOutcome
@@ -922,6 +924,14 @@ export interface SpecBlockingFinding {
   message: string
 }
 
+/** A gap somebody chose to leave, with why, who and when (`ready-means-the-same-thing`, FR-5). */
+export interface SpecAcknowledgedGap extends SpecBlockingFinding {
+  reason: string
+  by: string
+  by_kind?: string
+  at: string | null
+}
+
 export function useSpecDocuments() {
   const { isConfigured, selectedProjectId: projectId } = useConfigStore()
   return useQuery<{ documents: SpecDocumentRecord[] }>({
@@ -1025,10 +1035,32 @@ export function useCheckSpecDocument() {
         SpecDocumentRecord & {
           blocking: SpecBlockingFinding[]
           warnings: SpecBlockingFinding[]
+          notes?: SpecBlockingFinding[]
+          acknowledged?: SpecAcknowledgedGap[]
           ready: boolean
           content_version: string
         }
       >(`/api/v1/projects/${projectId}/project/documents/check?path=${encodeURIComponent(path)}`),
+  })
+}
+
+/** The operator acknowledges a gap Check lists, with a reason; they are recorded as its author.
+ *  Answers the document's readiness after it, so Check's verdict updates at once. */
+export function useAcknowledgeSpecGap() {
+  const { selectedProjectId: projectId } = useConfigStore()
+  return useMutation({
+    mutationFn: ({ path, code, where, reason }: { path: string; code: string; where: string; reason: string }) =>
+      postJson<{
+        blocking: SpecBlockingFinding[]
+        warnings: SpecBlockingFinding[]
+        notes: SpecBlockingFinding[]
+        acknowledged: SpecAcknowledgedGap[]
+        ready: boolean
+      }>(`/api/v1/projects/${projectId}/project/documents/acknowledge?path=${encodeURIComponent(path)}`, {
+        code,
+        where,
+        reason,
+      }),
   })
 }
 
@@ -1100,6 +1132,7 @@ export function useApproveAndBuildSpecDocument() {
           approval_outcome?: SpecApprovalOutcome
           build_outcome: SpecBuildOutcome
           approval_notes?: SpecBlockingFinding[]
+          acknowledged?: SpecAcknowledgedGap[]
         }
       >(
         `/api/v1/projects/${projectId}/project/documents/approve-and-build?path=${encodeURIComponent(path)}`,
@@ -1356,6 +1389,8 @@ export function useSetSpecPhase() {
           approval_outcome?: SpecApprovalOutcome
           /** F704: what approval told and did not gate on (an unclaimed roadmap slice). */
           approval_notes?: SpecBlockingFinding[]
+          /** The acknowledged gaps approval went over without stopping (FR-6). */
+          acknowledged?: SpecAcknowledgedGap[]
         }
       >(
         `/api/v1/projects/${projectId}/project/documents/phase?path=${encodeURIComponent(path)}&to=${encodeURIComponent(to)}`,
