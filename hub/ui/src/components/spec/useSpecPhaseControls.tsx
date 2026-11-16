@@ -24,14 +24,16 @@ import { Segmented } from '@/components/ui/segmented'
 import { formatAgoLong } from '@/lib/format'
 import { toast } from '@/lib/toast'
 import type { SpecPrimaryAction } from './SpecDocumentHeader'
-import { GapLines, ReviewerLine } from './SpecPhaseParts'
+import { AcknowledgeGapControls, AcknowledgedGapLines, GapLines, ReviewerLine } from './SpecPhaseParts'
 import { NextSliceOfferNotice } from './NextSliceOfferNotice'
 import type { HeaderNotice } from './page/SpecNotices'
 import { offerTitle, useNextSliceOffers } from '@/api/nextSlice'
 import {
   useApproveAndBuildSpecDocument,
   useBuildSpecDocument,
+  useAcknowledgeSpecGap,
   useCheckSpecDocument,
+  type SpecAcknowledgedGap,
   useDeleteSpecDocument,
   useSetSpecJourney,
   useSetSpecPhase,
@@ -65,6 +67,8 @@ interface Refusal {
   gaps: SpecBlockingFinding[]
   /** `approval_warnings`: the only refusal Approve anyway answers. */
   overridable: boolean
+  /** Gaps already acknowledged, listed beside the refusal. */
+  acknowledged?: SpecAcknowledgedGap[]
   /** `document_changed`: the document changed since it was loaded (`approve-what-was-seen`). */
   stale?: boolean
 }
@@ -92,6 +96,7 @@ function readRefusal(error: unknown, fallback: string): Refusal {
           message?: string
           blocking?: SpecBlockingFinding[]
           warnings?: SpecBlockingFinding[]
+          acknowledged?: SpecAcknowledgedGap[]
         }
       }
     ).detail
@@ -105,9 +110,11 @@ function readRefusal(error: unknown, fallback: string): Refusal {
     }
     const gaps = detail?.warnings ?? []
     if (detail?.code === 'approval_warnings' && gaps.length) {
-      return { blocking: [], gaps, overridable: true }
+      return { blocking: [], gaps, overridable: true, acknowledged: detail.acknowledged }
     }
-    if (detail?.blocking?.length) return { blocking: detail.blocking, gaps, overridable: false }
+    if (detail?.blocking?.length) {
+      return { blocking: detail.blocking, gaps, overridable: false, acknowledged: detail.acknowledged }
+    }
   } catch {
     // not JSON: fall through to the readable message
   }
@@ -191,6 +198,7 @@ export function useSpecPhaseControls(
   const setJourney = useSetSpecJourney()
   const [journeyRefusal, setJourneyRefusal] = useState<string | null>(null)
   const check = useCheckSpecDocument()
+  const acknowledge = useAcknowledgeSpecGap()
   const build = useBuildSpecDocument()
   const approveAndBuild = useApproveAndBuildSpecDocument()
   const setPhase = useSetSpecPhase()
@@ -201,6 +209,8 @@ export function useSpecPhaseControls(
   // anyway`). Only an `approval_warnings` refusal makes them overridable: the one Approve anyway answers.
   const [gaps, setGaps] = useState<SpecBlockingFinding[]>([])
   const [gapsOverridable, setGapsOverridable] = useState(false)
+  // Gaps somebody chose to leave, shown apart from the open ones (FR-5).
+  const [acknowledged, setAcknowledged] = useState<SpecAcknowledgedGap[]>([])
   // What an approval told and did not gate on (F704: an unclaimed roadmap slice).
   const [approvalNotes, setApprovalNotes] = useState<SpecBlockingFinding[]>([])
   const [confirmingArchive, setConfirmingArchive] = useState(false)
@@ -292,6 +302,7 @@ export function useSpecPhaseControls(
   function showRefusal(refusal: Refusal) {
     setBlocking(refusal.blocking)
     setGaps(refusal.gaps)
+    setAcknowledged(refusal.acknowledged ?? [])
     setGapsOverridable(refusal.overridable)
     // The page then shows what the document holds now; the operator reads it and approves again.
     if (refusal.stale) void reloadSpec()
@@ -301,6 +312,7 @@ export function useSpecPhaseControls(
     setBlocking([])
     setGaps([])
     setGapsOverridable(false)
+    setAcknowledged([])
     setApprovalNotes([])
     setCheckedClean(false)
     setCheckedOnce(false)
@@ -317,11 +329,22 @@ export function useSpecPhaseControls(
       setCheckedOnce(true)
       setBlocking(result.blocking ?? [])
       setGaps(result.warnings ?? [])
+      setAcknowledged(result.acknowledged ?? [])
       setCheckedClean((result.blocking ?? []).length === 0 && (result.warnings ?? []).length === 0)
     } catch (error) {
       // 422 (no payload / payload invalid) is said, not swallowed.
       showRefusal(readRefusal(error, 'The Hub could not check this document.'))
     }
+  }
+
+  /** The operator leaves a gap open on purpose; Check's verdict is read again from the answer. */
+  async function onAcknowledge(gap: SpecBlockingFinding, reason: string) {
+    const result = await acknowledge.mutateAsync({ path, code: gap.code, where: gap.where, reason })
+    setBlocking(result.blocking ?? [])
+    setGaps(result.warnings ?? [])
+    setAcknowledged(result.acknowledged ?? [])
+    setCheckedOnce(true)
+    setCheckedClean((result.blocking ?? []).length === 0 && (result.warnings ?? []).length === 0)
   }
 
   /** The version of what the page shows: an approval names it (`approve-what-was-seen`). */
@@ -341,6 +364,7 @@ export function useSpecPhaseControls(
       {
         onSuccess: (result) => {
           setApprovalNotes(result.approval_notes ?? [])
+          setAcknowledged(result.acknowledged ?? [])
         },
         // F207: approval runs the completeness checks again. Gaps alone answer `approval_warnings`,
         // which Approve anyway gets past; a refusal answers `document_incomplete`; a document that
@@ -366,6 +390,7 @@ export function useSpecPhaseControls(
         onSuccess: (result) => {
           setBuilding(null)
           setApprovalNotes(result.approval_notes ?? [])
+          setAcknowledged(result.acknowledged ?? [])
           setBuildMessages(buildOutcomeMessages(result.build_outcome))
         },
         // Refused exactly as Approve is (FR-7): the gaps and Approve anyway show in the header.
@@ -778,6 +803,7 @@ export function useSpecPhaseControls(
     <div className="aw-spec-message" data-tone="warn" data-stack="true" data-testid="approval-warnings">
       <span className="aw-spec-message-text">{gapsSummary}</span>
       <GapLines gaps={gaps} />
+      {document.phase === 'exploring' && <AcknowledgeGapControls gaps={gaps} onAcknowledge={onAcknowledge} />}
       {offersApproveAnyway && (
         <Button variant="primary" size="xs" data-testid="spec-approve-anyway" disabled={busy} onClick={onApproveAnyway}>
           {approveAnywayLabel}
@@ -785,6 +811,16 @@ export function useSpecPhaseControls(
       )}
     </div>
   ) : null
+
+  // Acknowledged gaps, apart from the open ones (FR-5, FR-6): after Check, in a refusal, and in
+  // what an approval went over without stopping.
+  const acknowledgedList =
+    acknowledged.length > 0 ? (
+      <div className="aw-spec-message" data-testid="acknowledged-gaps-list">
+        <span className="aw-spec-message-text">Acknowledged gaps:</span>
+        <AcknowledgedGapLines gaps={acknowledged} />
+      </div>
+    ) : null
 
   const notes =
     approvalNotes.length > 0 ? (
@@ -845,6 +881,7 @@ export function useSpecPhaseControls(
       {journey}
       {journeyRefused}
       {gapList}
+      {acknowledgedList}
       {notes}
       {overridden}
       {blockingList}
@@ -904,10 +941,20 @@ export function useSpecPhaseControls(
         <>
           <p>{gapsSummary}</p>
           <GapLines gaps={gaps} />
+          {document.phase === 'exploring' && <AcknowledgeGapControls gaps={gaps} onAcknowledge={onAcknowledge} />}
         </>
       ),
       defaultOpen: true,
       action: offersApproveAnyway ? { label: approveAnywayLabel, onClick: onApproveAnyway, disabled: busy } : undefined,
+    })
+  }
+  if (acknowledgedList) {
+    notices.push({
+      id: 'acknowledged-gaps',
+      tone: 'info',
+      summary: `${plural(acknowledged.length, 'gap', 'gaps')} acknowledged`,
+      body: acknowledgedList,
+      defaultOpen: true,
     })
   }
   if (notes) {

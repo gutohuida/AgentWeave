@@ -1,0 +1,1 @@
+import{ai as a,cT as s,E as o}from"./index-Btp6dMZ5.js";let n=0;const r=o(e=>({request:null,ask:t=>e({request:{...t,nonce:++n}}),clear:()=>e({request:null})}));function u(e,t){r.getState().ask(t),a(s(e,"activity"))}export{u as o,r as u};
