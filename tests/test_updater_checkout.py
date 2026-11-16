@@ -277,7 +277,7 @@ def test_the_previous_commit_is_prepared_as_a_worktree_and_reused(repo: Path, tm
     _commit(repo, "new.txt")
     previous = tmp_path / "hubdir" / "previous-commit"
     target, why = updater.prepare_previous(repo, hub, previous)
-    assert why is None and target == previous / hub
+    assert why is None and target == previous / hub[:12]
     assert (target / "hub" / "hub" / "main.py").is_file() and not (target / "new.txt").exists()
     again, why = updater.prepare_previous(repo, hub, previous)
     assert why is None and again == target
@@ -297,10 +297,39 @@ def test_leftovers_are_cleared_before_a_failure_is_believed(repo: Path, tmp_path
     target, why = updater.prepare_previous(repo, hub, previous)
     assert why is None and target is not None and target.is_dir()
     updater.remove_previous(repo, target)
-    (previous / hub).mkdir(parents=True)  # a plain leftover folder
-    (previous / hub / "junk.txt").write_text("x", encoding="utf-8")
+    (previous / hub[:12]).mkdir(parents=True)  # a plain leftover folder
+    (previous / hub[:12] / "junk.txt").write_text("x", encoding="utf-8")
     target, why = updater.prepare_previous(repo, hub, previous)
     assert why is None and target is not None and (target / "hub" / "hub" / "main.py").is_file()
+
+
+def test_a_deep_hub_dir_and_a_long_tracked_path_still_make_the_previous_commit(
+    repo: Path, tmp_path: Path
+):
+    # QA's drive (DCUSW-4): under a deep HUB_DIR, git refused a tracked path past Windows' 260
+    # characters ("Filename too long") and every apply was blocked. The blob is added by plumbing,
+    # so this test does not itself need to write a long path into the source checkout.
+    long_dir = "/".join(["a-rather-long-folder-name-like-the-archive-has"] * 3)
+    long_path = f"{long_dir}/specs/some-capability-with-a-long-name/spec.md"
+    blob = subprocess.run(
+        ["git", "-C", str(repo), "hash-object", "-w", "--stdin"],
+        input="x\n",
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.strip()
+    _git(repo, "update-index", "--add", "--cacheinfo", f"100644,{blob},{long_path}")
+    _git(repo, "commit", "-q", "-m", "a long tracked path")
+    hub = _head(repo)
+    previous = tmp_path / ("deep-hub-dir-" + "x" * 60) / ".agentweave" / "hub" / "previous-commit"
+    assert len(str(previous)) + 1 + 12 + 1 + len(long_path) > 260
+    target, why = updater.prepare_previous(repo, hub, previous)
+    assert why is None and target is not None
+    assert target == previous / hub[:12]
+    full = os.path.normpath(str(target / long_path))
+    assert os.path.exists("\\\\?\\" + full if os.name == "nt" else full)
+    updater.remove_previous(repo, target)
+    assert not target.exists()
 
 
 def test_an_unwritable_previous_location_is_a_reason(repo: Path, tmp_path: Path):
@@ -335,6 +364,7 @@ class _Hub:
 
     def __init__(self, commit: str, new: str, db: Path) -> None:
         self.commit: Optional[str] = commit
+        self.old = commit
         self.new = new
         self.db = db
         self.calls: List[str] = []
@@ -363,7 +393,8 @@ class _Hub:
         self.calls.append("start_previous")
         self.started_previous = worktree
         self.db_at_previous_start = _checksum(self.db)
-        self.commit = worktree.name
+        # The folder is named by the commit's first 12 characters (`updater.previous_folder`).
+        self.commit = self.old if self.old and self.old.startswith(worktree.name) else worktree.name
         return None
 
 
@@ -413,7 +444,9 @@ def test_apply_restarts_onto_master_and_drops_the_previous_worktree(behind, tmp_
     assert hub.commit == hub.new and hub.calls == ["stop", "start"]
     assert a.rehearsed and a.rehearsed[0].name == "rehearsal.db"  # type: ignore[attr-defined]
     assert result.backup is not None and result.backup.name == "agentweave.db"
-    assert not (a.previous_root / _git(repo, "rev-parse", "HEAD~1")).exists()
+    assert not (
+        updater.previous_folder(a.previous_root, _git(repo, "rev-parse", "HEAD~1"))
+    ).exists()
     assert not a.lock.path.exists()
 
 
@@ -482,7 +515,9 @@ def test_a_failed_rehearsal_leaves_the_hub_and_database_untouched(behind, tmp_pa
     assert result.state == "failed"
     assert "migrations failed" in result.detail and "boom" in result.detail
     assert hub.calls == [] and _checksum(hub.db) == before
-    assert not (a.previous_root / _git(repo, "rev-parse", "HEAD~1")).exists()
+    assert not (
+        updater.previous_folder(a.previous_root, _git(repo, "rev-parse", "HEAD~1"))
+    ).exists()
 
 
 def test_a_start_that_fails_restores_the_database_then_starts_the_previous_commit(
@@ -497,10 +532,14 @@ def test_a_start_that_fails_restores_the_database_then_starts_the_previous_commi
     assert result.state == "failed"
     assert "restart onto master failed" in result.detail and "lifespan raised" in result.detail
     assert hub.calls == ["stop", "start", "stop", "start_previous"]
-    assert hub.started_previous == a.previous_root / old and hub.commit == old
+    assert (
+        hub.started_previous == updater.previous_folder(a.previous_root, old) and hub.commit == old
+    )
     assert hub.db_at_previous_start == before  # restored before the previous Hub started
     assert result.backup is not None and _checksum(result.backup) == before
-    assert (a.previous_root / old / "hub" / "hub" / "main.py").is_file()  # kept: it runs there
+    assert (
+        updater.previous_folder(a.previous_root, old) / "hub" / "hub" / "main.py"
+    ).is_file()  # kept: it runs there
 
 
 def test_a_hub_that_never_reports_healthy_is_restored_too(behind, tmp_path: Path):

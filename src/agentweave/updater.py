@@ -21,7 +21,7 @@ half at the end of this module: "newer" is the checkout's local master holding c
 commit lacks (`read_checkout`, read-only git, never a fetch), and applying is prepare the previous
 commit as a worktree, rehearse the migrations on a copy, stop, start from the checkout, verify --
 or restore the database and start the previous commit (`apply_checkout_update`). Its extra files:
-`update-backups/<stamp>/rehearsal.db` and `previous-commit/<sha>/`.
+`update-backups/<stamp>/rehearsal.db` and `previous-commit/<12-character sha>/`.
 """
 
 from __future__ import annotations
@@ -962,6 +962,18 @@ def _worktree_at(root: Path, target: Path, commit: str, git: GitCall) -> bool:
     return False
 
 
+#: Git on Windows refuses a path past 260 characters unless told otherwise, and the repository
+#: tracks paths of ~140: under a deep HUB_DIR the worktree could not be made at all (QA, DCUSW-4).
+_LONG_PATHS = ("-c", "core.longpaths=true")
+#: The folder is named by this much of the commit: the full 40 characters only spend path length.
+PREVIOUS_SHA_CHARS = 12
+
+
+def previous_folder(previous_root: Path, commit: str) -> Path:
+    """Where the previous commit's worktree goes: `previous-commit/<12-character sha>`."""
+    return previous_root / commit[:PREVIOUS_SHA_CHARS]
+
+
 def prepare_previous(
     root: Path, commit: str, previous_root: Path, git: GitCall = git_call
 ) -> Tuple[Optional[Path], Optional[str]]:
@@ -969,7 +981,7 @@ def prepare_previous(
     anything is stopped, so the Hub can be started from it again. (folder, None), or (None, why
     it could not be made). A worktree already there for that commit is reused; a leftover folder
     or a stale registration is cleared first, so only a real failure is reported."""
-    target = previous_root / commit
+    target = previous_folder(previous_root, commit)
     if _worktree_at(root, target, commit, git):
         return target, None
     git(root, "worktree", "prune")
@@ -978,7 +990,14 @@ def prepare_previous(
 
         shutil.rmtree(target, ignore_errors=True)
     code, _, err = git(
-        root, "worktree", "add", "--detach", str(target), commit, timeout=WORKTREE_SECONDS
+        root,
+        *_LONG_PATHS,
+        "worktree",
+        "add",
+        "--detach",
+        str(target),
+        commit,
+        timeout=WORKTREE_SECONDS,
     )
     if code != 0:
         return None, _last_line(err) if err.strip() else f"git worktree add exited {code}"
@@ -990,7 +1009,7 @@ def remove_previous(root: Path, target: Optional[Path], git: GitCall = git_call)
     under a running Hub fails half-way (the spike), so after a restore it stays."""
     if target is None:
         return
-    git(root, "worktree", "remove", "--force", str(target), timeout=WORKTREE_SECONDS)
+    git(root, *_LONG_PATHS, "worktree", "remove", "--force", str(target), timeout=WORKTREE_SECONDS)
     if target.exists():
         import shutil
 

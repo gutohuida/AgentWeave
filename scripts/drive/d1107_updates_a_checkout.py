@@ -1087,8 +1087,8 @@ def step_apply_reload(ctx: Ctx) -> None:
         )
         c.check(
             "the previous-commit worktree is removed after the healthy start",
-            not (HUB_DIR / "previous-commit" / old).exists(),
-            str(HUB_DIR / "previous-commit" / old),
+            not (HUB_DIR / "previous-commit" / old[:12]).exists(),
+            str(HUB_DIR / "previous-commit" / old[:12]),
         )
     finally:
         app.cleanup()
