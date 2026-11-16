@@ -657,3 +657,20 @@ button.aw-sp-check-pill:focus-visible { outline: none; box-shadow: 0 0 0 2px var
 .aw-sp-plain-path { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--font-mono, monospace); font-size: 12px; }
 .aw-sp-plain-note { margin: 0; color: var(--text-3); font-size: 12px; }
 .aw-sp-plain-text { white-space: pre-wrap; color: var(--text); font-size: 13px; line-height: 1.55; }
+
+/* Threads: one lane per edge, coloured by the prerequisite's state, the hovered chain lit. */
+.aw-sp-thread[data-state="done"] { stroke: var(--sp-thread); }
+.aw-sp-thread[data-state="in-progress"] { stroke: var(--green); stroke-dasharray: 5 4; animation: dependency-dash-flow 900ms linear infinite; }
+.aw-sp-thread[data-state="waiting"] { stroke: color-mix(in srgb, var(--amber) 60%, var(--border-hi)); }
+.aw-sp-thread[data-state="rejected"] { stroke: var(--purple); stroke-dasharray: 2 3; }
+.aw-sp-thread[data-lit="on"] { stroke-width: 2.5; }
+.aw-sp-thread[data-lit="dim"], .aw-sp-knot[data-lit="dim"] { opacity: 0.18; }
+.aw-sp-task[data-lit="dim"] { opacity: 0.45; }
+.aw-sp-task[data-lit="on"] { border-color: var(--ring); }
+.aw-sp-thread-legend { display: flex; flex-wrap: wrap; gap: 4px 14px; margin: 0 0 8px; padding: 0; list-style: none; font-size: 12px; color: var(--text-2); }
+.aw-sp-thread-legend li { display: inline-flex; align-items: center; gap: 6px; }
+.aw-sp-thread-swatch { display: inline-block; width: 18px; height: 0; border-top: 2px solid var(--border-hi); }
+.aw-sp-thread-swatch[data-state="done"] { border-color: var(--sp-thread); }
+.aw-sp-thread-swatch[data-state="in-progress"] { border-color: var(--green); border-top-style: dashed; }
+.aw-sp-thread-swatch[data-state="waiting"] { border-color: color-mix(in srgb, var(--amber) 60%, var(--border-hi)); }
+.aw-sp-thread-swatch[data-state="rejected"] { border-color: var(--purple); border-top-style: dotted; }
