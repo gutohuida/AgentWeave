@@ -139,6 +139,20 @@ async def attach_stages(session: AsyncSession, responses: list, *, project_id: s
         if isinstance(data, dict) and data.get("task_id") in ids:
             unstaffed[data["task_id"]] = (at, data.get("reason"))
 
+    # The author a send-back would restart but the cap held back (`send_back_restart`).
+    held_back: Dict[str, Tuple[datetime, Optional[str]]] = {}
+    for data, at in await session.execute(
+        select(EventLog.data, EventLog.timestamp)
+        .where(
+            EventLog.project_id == project_id,
+            EventLog.event_type == "send_back_held",
+            EventLog.data["task_id"].as_string().in_(ids),
+        )
+        .order_by(EventLog.timestamp)
+    ):
+        if isinstance(data, dict) and data.get("task_id") in ids:
+            held_back[data["task_id"]] = (at, data.get("reason"))
+
     held_on = {
         landing.waits_on
         for landing in landings.values()
@@ -181,6 +195,10 @@ async def attach_stages(session: AsyncSession, responses: list, *, project_id: s
             detail = _one_line(cancelled.get(r.id))
         elif r.status == "revision_needed":
             stage = SENT_BACK
+            why = held_back.get(r.id)
+            entered_at = entered.get((r.id, "revision_needed"))
+            if why is not None and (entered_at is None or _aware(why[0]) >= _aware(entered_at)):
+                detail = _one_line(why[1], limit=400)
         elif r.status == "blocked" or r.awaiting_answer_reason:
             stage = WAITING_FOR_ANSWER
             waits = askers.get(r.id)

@@ -750,6 +750,7 @@ def _forget_module_level_background_state() -> None:
     import hub.project_checks as _project_checks
     import hub.pull_requests as _pull_requests
     import hub.review_on_completion as _review_on_completion
+    import hub.send_back_restart as _send_back_restart
 
     for registry in (
         _project_checks._inflight,
@@ -771,6 +772,8 @@ def _forget_module_level_background_state() -> None:
         _known_failing._pending,
         _assigned_task_start._in_flight,
         _assigned_task_start._locks,
+        _send_back_restart._in_flight,
+        _send_back_restart._locks,
         _pull_requests._asking,
         _pull_requests._watching,
         _pull_requests._rewatch,
