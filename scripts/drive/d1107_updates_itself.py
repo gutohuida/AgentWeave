@@ -898,8 +898,16 @@ class App:
     const item = document.querySelectorAll('[data-slot="settings-nav-item"]')[i];
     if (!item) continue;
     item.click(); await sleep(700);
-    const s = document.querySelector('[data-testid^="app-settings-"]');
-    text += '\\n' + (s ? s.innerText : '');
+    // A section's groups read the window bridge on mount (update_status, ~4 s on this machine),
+    // so read it once its text has held still for 6 s (at most ~25 s), not the moment it is clicked.
+    let last = null, cur = '', still = 0;
+    for (let k = 0; k < 25 && still < 6; k++) {
+      const s = document.querySelector('[data-testid^="app-settings-"]');
+      cur = s ? s.innerText : '';
+      still = cur === last ? still + 1 : 0;
+      last = cur; await sleep(1000);
+    }
+    text += '\\n' + cur;
   }
   return text;
 })()""",
@@ -1280,6 +1288,8 @@ def step_auto_off(ctx: Ctx) -> None:
         )
         c.check("nothing was upgraded (the install is 2.1.0)", installed() == OLD, installed())
         app.page_ready()
+        # The button reads update_status() through the bridge once the page is up: allow it that.
+        wait_for(lambda: app.update_button(), 15, 1.0)
         button = app.update_button()
         c.check("the Update button names 2.1.1", bool(button) and NEW in button, repr(button))
         app.cleanup()
@@ -1408,6 +1418,7 @@ def step_after_work(ctx: Ctx) -> None:
         )
         if not c.need("a real Haiku turn is in progress", running, why or str(run_id)):
             return
+        wait_for(lambda: app.update_button(), 15, 1.0)  # update_status() through the bridge
         button = app.update_button()
         c.check("the Update button is shown while the work runs", bool(button), repr(button))
         ended = wait_for(
@@ -1472,8 +1483,10 @@ def step_migration(ctx: Ctx) -> None:
             if app.version() != OLD:
                 return False
             status, _ = bridge_try(app, "update_status", timeout=10)
-            message = (status or {}).get("message", "") if isinstance(status, dict) else ""
-            text = message + "\n" + app.body_text()
+            message = (status or {}).get("message") if isinstance(status, dict) else None
+            if isinstance(message, dict):  # the bridge answers {"state", "detail", "at"}
+                message = f"{message.get('state', '')}: {message.get('detail', '')}"
+            text = (message or "") + "\n" + app.body_text()
             found = re.search(r"[^\n]{0,80}fail[^\n]{0,120}", text, re.I)
             stated["text"] = found.group(0) if found else ""
             return bool(found)
