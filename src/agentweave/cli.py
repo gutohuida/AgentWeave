@@ -1760,6 +1760,93 @@ class _AppWindowApi:
         except Exception:
             return False
 
+    def update_status(self) -> Dict[str, Any]:
+        """What App settings and the Update button show: the installed and the newest version,
+        whether an update applies to this install, the automatic-update switch, and the last
+        update's result (a failure's reason included). Never raises."""
+        status: Dict[str, Any] = {
+            "current": None,
+            "latest": None,
+            "available": False,
+            "applicable": False,
+            "auto": True,
+            "work": None,
+            "message": None,
+        }
+        try:
+            from agentweave import updater
+
+            port = self._closer.port if self._closer is not None else DEFAULT_HUB_PORT
+            current = updater.installed_version("agentweave-hub")
+            latest, _ = updater.known_latest(_update_check_file())
+            status["current"] = current
+            status["latest"] = latest
+            status["available"] = bool(latest and current and updater.is_newer(latest, current))
+            status["applicable"] = updater.installation_kind() == "pip"
+            status["auto"] = bool(updater.auto_update_on(_update_setting_file()))
+            work = _hub_work_running(port)
+            if work is not None:
+                status["work"] = {
+                    "running": bool(work.get("running")),
+                    "description": (
+                        desktop_window.describe_work(work) if work.get("running") else ""
+                    ),
+                }
+            else:
+                status["work"] = {
+                    "running": True,
+                    "description": "AgentWeave could not say what is running",
+                }
+            with contextlib.suppress(Exception):
+                result = json.loads(_update_result_file().read_text(encoding="utf-8"))
+                if isinstance(result, dict):
+                    status["message"] = result
+        except Exception:
+            pass
+        return status
+
+    def set_auto_update(self, on: Any) -> bool:
+        try:
+            from agentweave import updater
+
+            updater.set_auto_update(_update_setting_file(), bool(on))
+        except Exception:
+            return False
+        return True
+
+    def apply_update(self, confirmed: Any = False) -> Dict[str, Any]:
+        """Apply the update to this window's Hub, off the UI thread's reach of the page: answers
+        `needs_confirm` (with the work named) until `confirmed`, then `applied`, `failed` or
+        `blocked`, each with its `detail`. After applied or failed the same window reloads."""
+        try:
+            from agentweave import updater
+
+            closer = self._closer
+            if closer is None:
+                return {"state": "failed", "detail": "This window is not tied to a Hub."}
+            port = closer.port
+            current = updater.installed_version("agentweave-hub")
+            latest, _ = updater.known_latest(_update_check_file())
+            applier = _update_applier(port, closer.profile, current, latest)
+            if applier is None:
+                return {
+                    "state": "failed",
+                    "detail": "This Hub's database is not a local file, so it cannot be updated here.",
+                }
+            result = updater.apply_update(
+                applier,
+                confirmed=bool(confirmed),
+                work=lambda: _hub_work_running(port),
+                describe=desktop_window.describe_work,
+            )
+            answer = {"state": result.state, "detail": result.detail}
+        except Exception as exc:
+            answer = {"state": "failed", "detail": f"The update could not run: {exc}"}
+        if answer["state"] in ("applied", "failed") and self._window is not None:
+            with contextlib.suppress(Exception):
+                self._window.evaluate_js("window.location.reload()")
+        return answer
+
     def sound(self, enabled: Any) -> bool:
         path = _app_sound_setting()
         try:

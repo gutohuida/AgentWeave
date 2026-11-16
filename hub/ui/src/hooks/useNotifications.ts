@@ -22,6 +22,25 @@ interface AppWindowApi {
   /** App settings' 'Closing the window leaves AgentWeave running', kept by the launcher. */
   close_keeps_running?: () => Promise<boolean>
   set_close_keeps_running?: (on: boolean) => Promise<boolean>
+  /** Updating (cli._AppWindowApi): what App settings shows, the switch, and the apply itself. */
+  update_status?: () => Promise<UpdateStatus>
+  set_auto_update?: (on: boolean) => Promise<boolean>
+  apply_update?: (confirmed: boolean) => Promise<UpdateAnswer>
+}
+
+export interface UpdateStatus {
+  current: string | null
+  latest: string | null
+  available: boolean
+  applicable: boolean
+  auto: boolean
+  work: { running: boolean; description: string } | null
+  message: { state?: string; detail?: string; at?: string } | null
+}
+
+export interface UpdateAnswer {
+  state: 'needs_confirm' | 'applied' | 'failed' | 'blocked'
+  detail: string
 }
 
 export function appWindowApi(): AppWindowApi | null {
