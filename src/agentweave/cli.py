@@ -1827,6 +1827,8 @@ class _AppWindowApi:
             port = closer.port
             current = updater.installed_version("agentweave-hub")
             latest, _ = updater.known_latest(_update_check_file())
+            if not current or not latest:
+                return {"state": "failed", "detail": "No newer version is known."}
             applier = _update_applier(port, closer.profile, current, latest)
             if applier is None:
                 return {
