@@ -13,7 +13,7 @@ from __future__ import annotations
 import os
 from typing import Any, Dict, List, Literal, Mapping, Optional, Sequence, Tuple
 
-from .. import runner_commands
+from .. import claude_signin, runner_commands
 from ..file_mentions import neutralise_file_mentions
 from ..model_catalog import render_control_args
 from ..runner_parsing import AccountingSample, ParsedLine, parse_claude_line
@@ -145,13 +145,15 @@ class ClaudeAdapter(RunnerAdapter):
 
     def launchability(self, agent: str, config: Mapping[str, Any]) -> LaunchVerdict:
         cli, present, reason = probe_binary(self.binary, config.get("cli"), agent)
+        # F1183: a sign-in that cannot be renewed fails every turn; say so before one is spent.
+        signin = claude_signin.unrenewable_reason() if present else None
         return LaunchVerdict(
             runner=self.name,
             cli=cli,
             present=present,
-            authorized=True,
-            runnable=present,
-            reason=reason,
+            authorized=signin is None,
+            runnable=present and signin is None,
+            reason=reason if reason else signin,
         )
 
     def collaboration(
