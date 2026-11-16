@@ -9,6 +9,7 @@ import {
   type DraftRule,
   type RoadmapSliceView,
 } from '@/components/spec/page/RoadmapSlices'
+import { ScopeList, Section } from '@/components/spec/page/SpecDocumentBody'
 import { toast } from '@/lib/toast'
 import '@/styles/spec-page.css'
 
@@ -55,6 +56,50 @@ const BASE: Array<Omit<RoadmapSliceView, 'state'>> = [
     buildsAfter: [],
   },
 ]
+
+
+// The roadmap's other sections, as its document holds them (spec.json, 2026-11-16).
+const PROBLEM: string = "Operator, 2026-11-15, with AgentWeave about to be released for other people:\n1. A roadmap reads like any other spec, though it never builds and has its own job: nothing on its page shows slice progress, and drafting the next slice is only offered on Overview.\n2. The corpus is hard to navigate: filters help, but reaching capabilities, seeing what is being built or was built recently, and how documents relate is hard. No view shows roadmap → slice → change → capability relations.\n3. The spec page's task threads are drawn in 14px lanes per dependency depth with every edge from one task sharing one column (SpecDocumentBody.tsx:440-468), so edges sit on top of each other.\n4. The Spec tab forgets the last document opened: only list filters are stored (aw.spec.list.<project>).\n5. A project with no specs is shown \"No documents match.\" and nothing offers to start a corpus; baseline/system-map kinds exist but nothing creates them.\n6. The build retrospective fires when the last task is approved (task_transition_service.py:1333-1344), before its work has landed on main.\n7. An authoring agent reports a document ready to approve while the operator's Check shows many warnings. Three different readiness computations disagree: the save's ready_to_approve counts only three warning codes (agent_actions.py:3016, spec_completeness.py:364-366) and never computes steps_skipped, amendments_unreviewed or vault_warning; Check (spec_service.py:1590-1623) adds those and is clean only with no warnings; Approve (spec_service.py:1554-1587) uses a third list. The BUILD step text says the document \"is then ready for the operator to approve\" unconditionally (spec_journey.py:602). A warning the author judged acceptable leaves no trace on the document. The operator names steps_skipped as the noisiest."
+const SCOPE = {
+  "in_scope": [
+    "The Spec tab and spec page in the app",
+    "One readiness verdict shared by the author's save, the operator's Check and Approve, and explicit acknowledgement of warnings",
+    "The roadmap document's page and its marker in the spec list",
+    "A corpus view of what is building, recently built, and how documents relate",
+    "Offering a spec start to a project whose corpus is empty, for existing code and for greenfield",
+    "The automatic build retrospective's trigger"
+  ],
+  "non_goals": [
+    "Changing the spec document format or lifecycle phases",
+    "Removing the operator's 'approve anyway'",
+    "Detecting deploys outside AgentWeave: 'done' means approved and landed on the main branch",
+    "Migrating this repository's own corpus (already imported)",
+    "The Tasks screen's dependency list view, beyond sharing the thread colours"
+  ]
+}
+const QUESTIONS = [
+  {
+    "question": "Slice 4 (empty-corpus start) is independent of the visual slices and the largest; should it stay in this roadmap or become its own? Operator, 2026-11-15: it stays in this roadmap.",
+    "resolved": true
+  },
+  {
+    "question": "May an author acknowledge a warning instead of fixing it? Operator, 2026-11-15: yes, and the spec must state explicitly that it was acknowledged.",
+    "resolved": true
+  }
+]
+const RESTS_ON = {
+  "checked": [
+    "hub/ui/src/components/spec/page/SpecDocumentBody.tsx:88-121 (roadmap slices section), :440-468 (task threads)",
+    "hub/ui/src/components/spec/useSpecPhaseControls.tsx:467 (build controls only for change-spec)",
+    "hub/ui/src/components/spec/page/hooks.ts:7-22 (only list prefs persisted)",
+    "hub/hub/task_transition_service.py:1311-1344 and hub/hub/chapters_job.py:585-599 (retrospective at last approval)",
+    "hub/hub/spec_adoption.py (only adoption of on-disk files exists)",
+    "hub/hub/api/v1/agent_actions.py:3009-3020, hub/hub/spec_service.py:413-448, 1554-1623, hub/hub/spec_completeness.py:43-51, 364-366, hub/hub/spec_journey.py:602 (three readiness computations)"
+  ],
+  "limits": [
+    "The UI was not run for this roadmap; findings come from reading the code"
+  ]
+}
 
 type Scenario = 'today' | 'mid'
 const SCENARIOS: Record<Scenario, Record<string, Partial<RoadmapSliceView> & Pick<RoadmapSliceView, 'state'>>> = {
@@ -140,7 +185,7 @@ export default function Roadmap() {
             onMove={move}
             onAdd={() => toast({ title: 'Slice added', description: 'Saved to the roadmap at once and listed in its history.' })}
           />
-          <p className="mock-threads-note">Below the track the page keeps Summary, Problem and Scope, folded, as on any document.</p>
+          <RoadmapSections />
         </div>
 
         <aside className="mock-rm-list">
@@ -167,5 +212,52 @@ export default function Roadmap() {
         </aside>
       </div>
     </div>
+  )
+}
+
+/** Everything else a roadmap holds, below its track, in the page's own sections. The problem's
+ *  numbered points are shown as a list (today the page runs them into one paragraph). */
+function RoadmapSections() {
+  const [lead, ...rest] = PROBLEM.split('\n')
+  const points = rest.map((line) => line.replace(/^\d+\.\s*/, '')).filter(Boolean)
+  const noop = () => toast({ title: 'Link copied' })
+  return (
+    <>
+      <Section id="problem" title="Problem" findings={[]} flash={null} onCopyLink={noop}>
+        <p className="aw-sp-prose">{lead}</p>
+        <ol className="mock-rm-points">
+          {points.map((p) => (
+            <li key={p}>{p}</li>
+          ))}
+        </ol>
+      </Section>
+      <Section id="scope" title="Scope" findings={[]} flash={null} onCopyLink={noop}>
+        <div className="aw-sp-scope">
+          <ScopeList title="In scope" icon="check" items={SCOPE.in_scope} />
+          <ScopeList title="Not in this roadmap" icon="remove_circle" items={SCOPE.non_goals} />
+        </div>
+      </Section>
+      <Section id="questions" title="Decisions and open questions" findings={[]} flash={null} onCopyLink={noop}>
+        <ul className="aw-sp-questions">
+          {QUESTIONS.map((q) => (
+            <li key={q.question} data-resolved={q.resolved ? 'true' : 'false'}>
+              <Icon name={q.resolved ? 'check_circle' : 'help_circle'} size={14} />
+              <span>{q.question}</span>
+            </li>
+          ))}
+        </ul>
+      </Section>
+      <Section id="rests-on" title="What this rests on" findings={[]} flash={null} onCopyLink={noop}>
+        <p className="aw-sp-prose">What the author read to write it, and where it stops.</p>
+        <ul className="mock-rm-points" data-plain="true">
+          {RESTS_ON.checked.map((c) => (
+            <li key={c}><code>{c}</code></li>
+          ))}
+        </ul>
+        {RESTS_ON.limits.map((l) => (
+          <p key={l} className="aw-rm-warn" data-inline="true"><Icon name="alert_triangle" size={12} />{l}</p>
+        ))}
+      </Section>
+    </>
   )
 }

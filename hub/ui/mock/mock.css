@@ -55,3 +55,6 @@
 .mock-rm-caption { margin: 10px 0 4px; font-size: 11.5px; color: var(--text-3); }
 .mock-rm-sub { padding-left: 18px; }
 .mock-rm-sub .aw-rm-state { height: 18px; font-size: 10.5px; }
+.mock-rm-points { margin: 8px 0 0; padding-left: 22px; list-style: decimal; display: flex; flex-direction: column; gap: 6px; max-width: 76ch; font-size: 13px; line-height: 1.55; color: var(--text-2); }
+.mock-rm-points[data-plain="true"] { list-style: none; padding-left: 0; }
+.mock-rm-points code { font-size: 11.5px; color: var(--text-2); word-break: break-word; }

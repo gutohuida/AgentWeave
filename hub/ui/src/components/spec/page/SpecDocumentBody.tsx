@@ -265,7 +265,7 @@ function Finding({ finding }: { finding: CheckFinding }) {
   )
 }
 
-function ScopeList({ title, icon, items }: { title: string; icon: string; items: string[] }) {
+export function ScopeList({ title, icon, items }: { title: string; icon: string; items: string[] }) {
   return (
     <div className="aw-sp-scope-col">
       <h3 className="aw-sp-scope-title">{title}</h3>
