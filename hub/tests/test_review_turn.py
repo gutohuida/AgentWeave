@@ -742,3 +742,84 @@ async def test_a_review_turn_seeds_the_repository_excludes(
         )
 
     assert ".agentweave/reviews/" in exclude.read_text(encoding="utf-8")
+
+
+# ---------------------------------------------------------------------------
+# F1197 — a stale index.lock in the reviewer's checkout does not stop the next review turn
+# ---------------------------------------------------------------------------
+
+
+def _review_checkout_lock(repo: Path, agent: str) -> Path:
+    path = worktrees.review_path(repo, agent)
+    return Path(_git(path, "rev-parse", "--absolute-git-dir").stdout.strip()) / "index.lock"
+
+
+@pytest.mark.asyncio
+async def test_a_stale_index_lock_in_the_review_checkout_does_not_stop_the_next_review(
+    app, auth_headers, bind_runner, bind_project_workspace, tmp_path, monkeypatch
+):
+    import os
+    import time
+
+    repo = _init_repo(tmp_path / "repo")
+    await bind_project_workspace(repo)
+    monkeypatch.setattr(worktrees, "ensure_review_checkout", _REAL_ENSURE_REVIEW_CHECKOUT)
+    await _roster(app, auth_headers, bind_runner, "critic")
+    earlier = _author_commit(repo, filename="earlier.py", body="x = 1\n", branch="agentweave/a")
+    worktrees.ensure_review_checkout(repo, "critic", earlier)
+    lock = _review_checkout_lock(repo, "critic")
+    lock.write_bytes(b"")
+    then = time.time() - worktrees.STALE_INDEX_LOCK_SECONDS - 5
+    os.utime(lock, (then, then))
+    sha = _author_commit(repo, filename="ledger.py", body="BALANCE = 0\n")
+    await _reviewable_task(commit=sha)
+
+    async with async_session_factory() as session:
+        context = await review_turn.prepare_review_turn(
+            session, project_id="proj-test", reviewer="critic", task_id="task-1", repo_root=repo
+        )
+
+    assert context.commit_sha == sha
+    assert (context.workspace / "ledger.py").exists()
+    assert not lock.exists()
+
+
+@pytest.mark.asyncio
+async def test_a_lock_the_hub_may_not_clear_raises_a_stall_naming_it(
+    app, auth_headers, bind_runner, bind_project_workspace, tmp_path, monkeypatch
+):
+    from sqlalchemy import select
+
+    from hub import stalls
+    from hub.db.models import Stall
+
+    repo = _init_repo(tmp_path / "repo")
+    await bind_project_workspace(repo)
+    monkeypatch.setattr(worktrees, "ensure_review_checkout", _REAL_ENSURE_REVIEW_CHECKOUT)
+    monkeypatch.setattr(stalls, "wake", _no_wake)
+    await _roster(app, auth_headers, bind_runner, "critic")
+    earlier = _author_commit(repo, filename="earlier.py", body="x = 1\n", branch="agentweave/a")
+    worktrees.ensure_review_checkout(repo, "critic", earlier)
+    lock = _review_checkout_lock(repo, "critic")
+    lock.write_bytes(b"")  # young: a live git's, as far as the Hub can tell
+    sha = _author_commit(repo, filename="ledger.py", body="BALANCE = 0\n")
+    await _reviewable_task(commit=sha)
+
+    async with async_session_factory() as session:
+        with pytest.raises(review_turn.ReviewTurnRefused) as excinfo:
+            await review_turn.prepare_review_turn(
+                session, project_id="proj-test", reviewer="critic", task_id="task-1", repo_root=repo
+            )
+    await stalls.drain()
+
+    assert str(lock) in str(excinfo.value)
+    assert lock.exists()
+    async with async_session_factory() as session:
+        stall = (await session.execute(select(Stall))).scalar_one()
+    assert stall.key == "review_unstaffed:task-1"
+    assert stall.task_id == "task-1"
+    assert str(lock) in stall.reason
+
+
+async def _no_wake(db, stall) -> bool:
+    return False
