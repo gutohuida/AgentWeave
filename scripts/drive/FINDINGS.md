@@ -41900,3 +41900,21 @@ Open a conversation, open the side panel's Specs tab, open a spec that has messa
 **Tier:** 0
 
 `_AppWindowApi.update_status()` reports `applicable: false` for an editable install, and the launch path refuses it (`_launch_update`: `installation_kind() != "pip"`), but `_AppWindowApi.apply_update()` (`src/agentweave/cli.py:1817`) never looks at the install kind. With the release check's `latest` known (here 2.2.0, equal to the installed 2.2.0, read from PyPI because the drive had not set `AW_UPDATE_INDEX_URL`), `apply_update(false)` from the page of an editable scratch Hub stopped that Hub, copied its database, ran `pip install agentweave-ai==2.2.0 agentweave-hub==2.2.0` from PyPI over the editable install, and started it again. Twice in one run: once confirmed, once with `confirmed` false and nothing running. On the operator's `:8000`, which runs an editable install of this checkout, one call to the bridge would replace that install with the PyPI release and restart the live Hub. **Expected:** `apply_update` refuses (state `blocked`, nothing stopped) when the install is not a pip release, until `a-development-checkout-updates-the-same-way` gives a checkout its own path, and it never offers to install a version equal to the one installed. **Test:** with an editable install and `update-check.json` naming the installed version, `apply_update(true)` answers `blocked`, the Hub's pid is unchanged and pip is not called.
+
+## F1198 (A) -- creating or opening a project does file and git work on the Hub's event loop
+
+**Status:** fixed 2026-11-16 (in AW-157, task-35bd0a635f1e). Each call below now runs through `asyncio.to_thread`. `test_a_slow_share_does_not_freeze_the_hub::test_a_slow_project_create_does_not_block_other_requests` now also fails deterministically, on any machine, when a file call on the project's folder runs on the loop thread: it failed that way on the pre-fix code and passes after.
+**Source:** found by a landing check -- the test above (on the steady set) failed at landing with a 399 ms stall, 2026-11-16. Diagnosed by DeveloperOpus while building AW-157; filed by the Architect under development-test-suite FR-15 (a real stall becomes a finding).
+**Theme:** Hub responsiveness
+**Ready:** yes
+**Tier:** 0
+
+`project_lifecycle` ran blocking file and git work on the event loop during project create and open. Every other request waited behind it, so a project on a slow share froze the Hub. On the loop were:
+- the marker read, write and undo (`_write_marker_and_commit`);
+- `seed_repo_excludes` (4 sites);
+- the charter reads in `_seed_new_project`;
+- `_require_marker`;
+- `_repair_checkout_registrations` (git);
+- `mkdir` and cleanup in `create_new`.
+
+**Expected:** creating or opening a project never blocks other requests on its folder's file or git I/O. **Not covered here:** `/health` also reads files on the loop on every call. The turn-start freeze test's 131 ms and 172 ms stalls (0 ms of process CPU) are not explained yet: AW-157 reordered `_loop_lag`'s message so the next failure names who held the GIL.
