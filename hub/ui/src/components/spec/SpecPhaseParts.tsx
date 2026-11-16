@@ -114,6 +114,7 @@ export function AcknowledgeGapControls({
               variant="ghost"
               size="xs"
               data-testid="acknowledge-open"
+              className="!h-auto min-w-0 max-w-full !justify-start !whitespace-normal py-1 text-left"
               onClick={() => {
                 setRefusal(null)
                 setReason('')

@@ -574,11 +574,21 @@ def browser_checks(ctx, only):
                 check_button.click()
                 page.wait_for_timeout(3000)
             check_ack_text = ack_text(page)
+            # The Acknowledge controls must fit the notices popover: no sideways scroll, no clipping.
+            fit = page.evaluate("""() => {
+                const pop = document.querySelector('[data-testid=spec-notices]');
+                const note = document.querySelector('[data-testid=check-acknowledge]');
+                if (!pop || !note) return null;
+                return {pop: pop.clientWidth, popScroll: pop.scrollWidth,
+                        note: note.getBoundingClientRect().width,
+                        buttons: Math.max(0, ...[...note.querySelectorAll('[data-testid=acknowledge-open]')]
+                                  .map(b => b.getBoundingClientRect().width))};
+            }""")
             open_text = " | ".join(page.locator(".aw-sp-finding").all_inner_texts())
             page.screenshot(path=shot + "_check.png", full_page=True)
             code, rendered = api("GET", f"{ctx.base}/project/spec?path={GAPPY}")
             rendered = json.dumps(rendered) if not isinstance(rendered, str) else rendered
-            rows["visible"] = (shown, page_ack, check_ack_text, open_text, rendered)
+            rows["visible"] = (shown, page_ack, check_ack_text, open_text, rendered, fit)
         if not only or "ac-approve-acks" in only:
             ack_codes = []
             for code_, where in (("criterion_without_check", "acceptance_criteria[0]"),
@@ -616,15 +626,18 @@ def browser_checks(ctx, only):
             rows["approve"] = (shown, dialog, stopped, ctx.view(GAPPY).get("phase"))
         browser.close()
     if "visible" in rows:
-        shown, page_ack, check_text, open_text, rendered = rows["visible"]
+        shown, page_ack, check_text, open_text, rendered, fit = rows["visible"]
+        fits = fit is None or (fit["popScroll"] <= fit["pop"] + 1 and fit["note"] <= fit["pop"] + 1
+                               and fit["buttons"] <= fit["pop"] + 1)
         both = [a for a in ("criterion_without_check", "amendments_unreviewed")
                 if a in page_ack and a in check_text]
-        ok = (len(both) == 2 and "Drive" not in open_text
+        ok = (len(both) == 2 and fits and "Drive" not in open_text
               and all(w in page_ack for w in ("scribe", "operator"))
               and "acknowledged" in rendered.lower() and "criterion_without_check" in rendered)
         record("ac-ack-visible", shown, ok,
                f"page lists {page_ack[:160]!r}; Check lists {check_text[:160]!r}; open findings "
-               f"{open_text[:120]!r}; rendered holds 'acknowledged': {'acknowledged' in rendered.lower()}")
+               f"{open_text[:120]!r}; rendered holds 'acknowledged': {'acknowledged' in rendered.lower()}; "
+               f"Acknowledge controls fit the popover: {fits} {fit}")
     if "approve" in rows:
         shown, dialog, stopped, phase = rows["approve"]
         ok = shown and not stopped and bool(dialog) and "criterion_without_check" in dialog
