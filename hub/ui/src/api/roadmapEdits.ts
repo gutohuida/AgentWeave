@@ -14,7 +14,7 @@ function useRoadmapEdit<TArgs>(
   return useMutation({
     mutationFn: (args: TArgs) => call(projectId ?? "", args),
     onSettled: () =>
-      queryClient.invalidateQueries({ queryKey: ["project", projectId] }),
+      queryClient.invalidateQueries({ queryKey: ['project', projectId] }),
   });
 }
 
