@@ -484,6 +484,20 @@ def _slices(payload: SpecPayload, states: Optional[Dict[str, SliceState]] = None
     return "<ol>" + "".join(items) + "</ol>"
 
 
+def _acknowledged(entries: Optional[List[Dict[str, Any]]]) -> str:
+    """The gaps somebody chose to leave, apart from the ones still open (FR-5)."""
+    if not entries:
+        return ""
+    items = "".join(
+        f'<li data-testid="acknowledged-gap-{_e(entry.get("code", ""))}">'
+        f'<span class="aw-chip">acknowledged</span><code>{_e(entry.get("code", ""))}</code> '
+        f'at {_e(entry.get("where", ""))}: {_e(entry.get("reason", ""))} '
+        f'<span class="aw-note">({_e(entry.get("by", ""))}, {_e(entry.get("at", ""))})</span></li>'
+        for entry in entries
+    )
+    return f'<div data-testid="spec-acknowledged"><ul>{items}</ul></div>'
+
+
 def _open_questions(payload: SpecPayload) -> str:
     # An absent section left a reader unable to tell a document whose questions
     # were asked and answered from one where none were ever asked — which is the
@@ -636,6 +650,7 @@ def render_document(
     corpus: Optional[CorpusContext] = None,
     slice_of: Optional[SliceOf] = None,
     slice_states: Optional[Dict[str, SliceState]] = None,
+    acknowledged: Optional[List[Dict[str, Any]]] = None,
 ) -> str:
     """A self-contained document: inline style only, no external resource.
 
@@ -678,6 +693,7 @@ def render_document(
             _section("Tasks", "tasks", _tasks(payload, identifiers)),
             _section("Delivery", "delivery", _delivery(payload)),
             _section("Open questions", "open-questions", _open_questions(payload)),
+            _section("Acknowledged gaps", "acknowledged", _acknowledged(acknowledged)),
         ]
     )
 

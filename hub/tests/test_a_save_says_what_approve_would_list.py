@@ -22,6 +22,7 @@ async def test_a_criterion_with_no_check_is_a_warning_and_not_ready(app, auth_he
 @pytest.mark.asyncio
 async def test_a_criterion_with_its_check_is_ready(app, auth_headers, run_headers):
     await _create(app, auth_headers)
+    await _place_at_the_end()
     criteria = [
         {
             "key": "c1",
@@ -61,6 +62,7 @@ async def test_an_unresolved_question_is_not_ready_until_it_is_resolved(
 ):
     """AW-125: the warning said `unresolved_question` while `ready_to_approve` said true."""
     await _create(app, auth_headers)
+    await _place_at_the_end()
 
     open_q = await _submit(
         app,
@@ -84,3 +86,11 @@ async def test_an_unresolved_question_is_not_ready_until_it_is_resolved(
         ),
     )
     assert answered.json()["ready_to_approve"] is True
+
+
+async def _place_at_the_end():
+    """The document's step is the journey's last, so `steps_skipped` does not colour what this
+    test asks (a save moving the step by content is the steps slice)."""
+    from .test_spec_journey_briefing import _place
+
+    await _place(step="build", size="large")

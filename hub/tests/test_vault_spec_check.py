@@ -634,10 +634,12 @@ async def test_each_warning_is_a_vault_warning_gap_and_approve_anyway_still_appr
     app, auth_headers, run_headers  # noqa: F811
 ) -> None:
     await _create(app, auth_headers)
+    await _place_at_the_end()
     await _saved(app, run_headers, _requirement("alpha", "It responds within 200ms", [MISSING]))
 
     checked = await _check(app, auth_headers)
-    assert checked["ready"] is True and checked["blocking"] == []
+    # A vault warning is a gap Approve lists, so Check does not call the document ready.
+    assert checked["ready"] is False and checked["blocking"] == []
 
     phase = f"{DOCS}/documents/phase"
     refused = await app.post(
@@ -668,3 +670,11 @@ async def test_each_warning_is_a_vault_warning_gap_and_approve_anyway_still_appr
     row = next(d for d in listed.json()["documents"] if d["path"] == PATH)
     assert row["phase"] == "approved"
     assert "vault_warning" in {w["code"] for w in row["approval_warnings_overridden"]}
+
+
+async def _place_at_the_end():
+    """The document's step is the journey's last, so `steps_skipped` does not colour what this
+    test asks (a save moving the step by content is the steps slice)."""
+    from .test_spec_journey_briefing import _place
+
+    await _place(step="build", size="large")
