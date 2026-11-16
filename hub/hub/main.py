@@ -46,7 +46,7 @@ from .subprocess_windows import no_console_kwargs
 from .task_transition_service import TransitionRefusedError
 from .trace_requests import RequestTraceMiddleware
 from .traces import install_log_handler
-from .version import install_kind
+from .version import checkout_state, install_kind
 
 logger = logging.getLogger(__name__)
 
@@ -883,6 +883,7 @@ def create_app() -> FastAPI:
             "runtime": _runtime_kind(),
             "version": __version__,
             "install": install_kind(),
+            **checkout_state(),
         }
         warning = await _ui_staleness_warning_off_loop()
         if warning:

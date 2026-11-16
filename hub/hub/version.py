@@ -6,8 +6,11 @@ package, and `from . import __version__` then fails (the CLI suite imports `hub.
 which imports `traces`, from there).
 """
 
+import subprocess
 from importlib.metadata import PackageNotFoundError
 from importlib.metadata import version as _pkg_version
+from pathlib import Path
+from typing import Dict
 
 try:
     # Authoritative source is hub/pyproject.toml; read it from installed
@@ -15,6 +18,48 @@ try:
     __version__ = _pkg_version("agentweave-hub")
 except PackageNotFoundError:  # pragma: no cover - source checkout without install
     __version__ = "0.0.0+dev"
+
+
+def _read_checkout(root: Path) -> Dict[str, str]:
+    """The commit and branch of the git checkout at `root`; empty when it is not one.
+
+    Every failure (no `.git`, no `git` on PATH, an unreadable repository) ends quietly with
+    whatever was read, so a Hub outside a checkout simply omits the fields.
+    """
+    if not (root / ".git").exists():
+        return {}
+
+    def git(*args: str) -> str:
+        try:
+            out = subprocess.run(
+                ["git", "-C", str(root), *args],
+                capture_output=True,
+                text=True,
+                timeout=10,
+                check=False,
+            )
+        except (OSError, subprocess.SubprocessError):
+            return ""
+        return out.stdout.strip() if out.returncode == 0 else ""
+
+    state: Dict[str, str] = {}
+    commit = git("rev-parse", "HEAD")
+    if commit:
+        state["commit"] = commit
+        branch = git("symbolic-ref", "--short", "-q", "HEAD")  # empty on a detached HEAD
+        if branch:
+            state["branch"] = branch
+    return state
+
+
+# Recorded once, when the Hub starts: the working tree can move on under a running Hub, and
+# "behind" (spec `a-development-checkout-updates-the-same-way`) needs the commit it started from.
+CHECKOUT: Dict[str, str] = _read_checkout(Path(__file__).resolve().parents[2])
+
+
+def checkout_state() -> Dict[str, str]:
+    """`commit` and `branch` the Hub started from; absent keys when not run from a checkout."""
+    return dict(CHECKOUT)
 
 
 def install_kind() -> str:
