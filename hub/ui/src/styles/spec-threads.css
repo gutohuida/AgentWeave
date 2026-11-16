@@ -1,5 +1,6 @@
 /* Task threads on the spec page: the three layouts compared in the mock (task-threads). Tokens only. */
-.aw-st {
+/* The legend can sit outside a map (the Tasks tab draws one for all of them). */
+.aw-st, .aw-st-legend {
   --st-done: var(--green);
   --st-active: var(--blue);
   --st-waiting: var(--text-3);
@@ -100,3 +101,10 @@
 @media (prefers-reduced-motion: reduce) {
   .aw-st-thread[data-state="active"] { animation: none; }
 }
+
+/* Nodes a map draws only so a thread has a start: a prerequisite in another document. */
+.aw-st-node[data-outside="true"] { border-style: dashed; border-left-style: solid; background: transparent; cursor: default; opacity: 0.7; }
+.aw-st-node[data-outside="true"]:hover { background: transparent; }
+.aw-st-node-ref { margin-right: 6px; font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 11px; font-weight: 500; color: var(--text-3); }
+.aw-st-node-flag { font-weight: 500; color: var(--amber); }
+.aw-st-node-meta .aw-sp-muted { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }

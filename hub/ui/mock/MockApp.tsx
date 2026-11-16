@@ -9,6 +9,7 @@ import { SCREENS, screenFor } from './screens'
 import { useSetupTitles } from './setupMock'
 import { NOTICE_LEVELS } from './specBanner'
 import { SPEC_MOCK_STATES, setSpecMockControls, useSpecMockControls } from './specMock'
+import { setTasksMockControls, useTasksMockControls } from './tasksMock'
 
 const BEFORE = import.meta.glob('./before/*.webp', { eager: true, query: '?url', import: 'default' }) as Record<string, string>
 
@@ -189,10 +190,27 @@ function MockBar({
       {(route.kind === 'tab' && route.tab === 'spec') || (route.kind === 'conversation' && (route.panel === 'spec' || route.panel === 'specs')) ? (
         <SpecMockBar showLayout={route.kind === 'tab'} />
       ) : null}
+      {route.kind === 'tab' && route.tab === 'tasks' ? <TasksMockBar /> : null}
       <button type="button" className="mock-bar-button" disabled={!hasBefore} data-on={before ? 'true' : 'false'} onClick={onBefore}>
         {before ? 'Showing today' : 'Compare with today'}
       </button>
     </div>
+  )
+}
+
+/** The Tasks screen's controls: the Dependencies view as a map or as today's list, and a wider
+ *  build than the recorded ones. */
+function TasksMockBar() {
+  const { deps, wide } = useTasksMockControls()
+  return (
+    <>
+      <button type="button" className="mock-bar-button" onClick={() => setTasksMockControls({ deps: deps === 'map' ? 'list' : 'map' })}>
+        {deps === 'map' ? 'Dependencies: map' : 'Dependencies: list (today)'}
+      </button>
+      <button type="button" className="mock-bar-button" onClick={() => setTasksMockControls({ wide: !wide })}>
+        {wide ? 'Wide build: shown' : 'Wide build: hidden'}
+      </button>
+    </>
   )
 }
 

@@ -229,3 +229,9 @@ input.aw-board-search-input { height: 28px; padding: 0 10px 0 28px; font-size: 1
 
 .aw-board-finished-switch { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; cursor: pointer; }
 .aw-board-hidden-count { padding: 2px 4px 6px; font-size: 12px; opacity: 0.7; }
+
+/* Dependencies as a map (DependencyMapView): wider than the list, so a five-stage build fits. */
+.aw-deps[data-layout="map"] { width: min(100%, 1240px); }
+.aw-deps-legend { margin-top: 14px; }
+.aw-deps-legend .aw-st-legend { margin: 0; }
+.aw-deps-map { padding-top: 14px; }
