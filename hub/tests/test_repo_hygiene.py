@@ -245,3 +245,35 @@ def test_an_unwritable_target_is_not_fatal(tmp_path, monkeypatch):
 
     monkeypatch.setattr(Path, "write_text", refuse)
     repo_hygiene.seed_repo_excludes(repo)  # must not raise
+
+
+def test_git_status_lists_nothing_under_agentweave_after_the_hubs_writes(tmp_path):
+    """F1185: every file the Hub writes in `.agentweave/` is ignored, not just its subfolders.
+
+    The ledger `hub-writes.json` sits directly in `.agentweave/`, so the folder rules missed it and
+    a fresh project showed `?? .agentweave/` from the first agent turn.
+    """
+    from hub import generated_files, hub_writes, project_checks
+
+    repo = init_repo(tmp_path / "repo")
+    repo_hygiene.seed_repo_excludes(repo)
+
+    hub_writes.record(repo, "spec/index.json", b"{}")
+    for relative in (
+        hub_writes.LEDGER,
+        project_checks.CHECKS_DIR / "t" / "x",
+        generated_files.GENERATED_DIR / "t" / "x",
+    ):
+        target = repo / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text("x", encoding="utf-8")
+
+    status = git(repo, "status", "--porcelain", "--untracked-files=all").stdout
+    assert ".agentweave" not in status, status
+
+
+def test_the_scratch_folder_rules_match_the_modules_that_make_them():
+    from hub import generated_files, project_checks
+
+    assert f"{project_checks.CHECKS_DIR.as_posix()}/" in repo_hygiene.EXCLUDE_PATTERNS
+    assert f"{generated_files.GENERATED_DIR.as_posix()}/" in repo_hygiene.EXCLUDE_PATTERNS
