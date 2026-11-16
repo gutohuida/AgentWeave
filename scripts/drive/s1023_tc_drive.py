@@ -17,6 +17,7 @@ import subprocess
 import sys
 import time
 
+import proc_safe
 from s1023_tc_lib import DIR, GH, HALF1, HALF2, KEY, S, q, req, save, say, trigger, wait_run, wait_tool_call
 
 SLEEP = (
@@ -144,10 +145,10 @@ def phase_fail():
     save()
     say("tool call seen", wait_tool_call(run))
     hub_pid = int(json.loads(open(os.environ["AW_E2E_STATE"]).read())["pid"])
+    before = proc_safe.snapshot()  # a pid the CIM walk below names must still be this process
     kids = _claude_children(hub_pid)
     say("claude processes", [(k["ProcessId"], k["Name"]) for k in kids])
-    for k in kids:
-        subprocess.run(["taskkill", "/F", "/PID", str(k["ProcessId"])], capture_output=True)
+    proc_safe.kill_pids([k["ProcessId"] for k in kids], before)
     say("final", wait_run(run, 180))
     say("run row", q("select status, exit_code, error from runs where id=?", run))
 

@@ -10,10 +10,10 @@ refuses it), and kills survivors unless --keep.
 
 import json
 import os
-import subprocess
 import sys
 import time
 
+import proc_safe
 from s1023_rn_lib import B, procs, descendants, q, req, trigger, wait_run
 
 agent = sys.argv[1] if len(sys.argv) > 1 else "alpha"
@@ -63,6 +63,7 @@ for c in chain:
     print("   ", c)
 root = run["pid"]
 tree = [root] + descendants(table, root) if root in table else []
+before = proc_safe.snapshot()  # creation times of `tree`, so a later kill spares a reused pid
 print(f"run pid {root} in table: {root in table}; tree size {len(tree)}")
 for p in tree:
     print("    tree", p, table[p]["name"], table[p]["cmd"][:100])
@@ -91,8 +92,7 @@ if ws and os.path.isdir(ws):
 row = q("select status, error, exit_code, ended_at from runs where id=?", run_id)[0]
 print("run row:", row)
 if alive and not keep:
-    for p in alive:
-        subprocess.run(["taskkill", "/F", "/T", "/PID", str(p)], capture_output=True)
+    proc_safe.kill_tree(alive, before=before)
     time.sleep(2)
     left = procs()
     print("after taskkill, still alive:", [p for p in alive if p in left])
