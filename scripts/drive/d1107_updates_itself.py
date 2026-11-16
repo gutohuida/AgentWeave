@@ -101,6 +101,7 @@ ROOT = pathlib.Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts" / "drive"))
 import d1105_own_app as d  # noqa: E402
 import d1108_windows_notifications as w  # noqa: E402
+import proc_safe  # noqa: E402
 
 user32 = d.user32
 user32.IsZoomed.argtypes = [wintypes.HWND]
@@ -263,11 +264,10 @@ def editable(package: str = "agentweave-hub") -> bool:
     return done.stdout.strip() == "True"
 
 
-def kill_tree(pids) -> None:
-    for pid in pids:
-        subprocess.run(
-            ["taskkill", "/PID", str(pid), "/T", "/F"], capture_output=True, creationflags=NO_WINDOW
-        )
+def kill_tree(pids, since: int | None = None) -> None:
+    """End `pids` and what is under them -- only processes whose creation times say they are
+    these ones and not a reused pid's (F1197)."""
+    proc_safe.kill_tree(list(pids), since=since)
 
 
 def kill_venv_processes() -> None:
@@ -949,8 +949,8 @@ class App:
                 env=self.env(""),
                 cwd=self.cwd,
             )
-        rows = d.processes()
-        kill_tree(d.descendants(rows, set(d.hub_pids(self.port, rows)) | self.pids))
+        kill_tree(d.hub_pids(self.port))
+        kill_tree(self.pids, since=proc_safe.DRIVE_START)
         for proc in self.launchers:
             try:
                 proc.wait(timeout=10)

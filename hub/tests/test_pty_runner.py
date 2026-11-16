@@ -480,17 +480,18 @@ class TestTerminateProcessTree:
             # already going away. `session.terminate(force=True)` signals via `os.kill`, and on
             # Windows that raises `PermissionError` (WinError 5) while the ConPTY child the test
             # just killed is still tearing down but `isalive()` has not yet turned false.
-            terminate_process_tree(pid, force=True)
+            # Only while the session still reports itself alive: once it has exited its pid may
+            # be someone else's, and a tree-kill on it would end that process (F1197).
+            if session.isalive():
+                terminate_process_tree(pid, force=True)
 
     def test_already_dead_pid_does_not_raise(self):
-        session = PtySession.spawn([sys.executable, "-c", "pass"])
-        pid = session.pid
-        session.wait()
-        for _ in range(50):
-            if not session.isalive():
-                break
-            time.sleep(0.1)
-        terminate_process_tree(pid, force=True)  # must not raise
+        # Not a pid this test has just seen exit: Windows reuses pids, and `taskkill /F /T` on a
+        # reused one ends whatever owns it now (F1197). 2**22 + 4 is beyond what either platform
+        # hands out (Linux pid_max is at most 2**22; Windows pids are small multiples of 4).
+        impossible = 2**22 + 4
+        assert pid_alive(impossible) is False
+        terminate_process_tree(impossible, force=True)  # must not raise
 
 
 @pytest.mark.skipif(not IS_WINDOWS, reason="Windows .cmd shim resolution only applies on Windows")

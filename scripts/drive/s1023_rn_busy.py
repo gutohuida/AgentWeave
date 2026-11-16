@@ -13,11 +13,11 @@
 
 import json
 import pathlib
-import subprocess
 import sys
 import time
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+import proc_safe  # noqa: E402
 from s1023_rn_lib import B, P, descendants, e2e, procs, q, req, trigger, wait_run  # noqa: E402
 
 agent, idle, old_conv = sys.argv[1], sys.argv[2], sys.argv[3]
@@ -74,6 +74,7 @@ for _ in range(80):
     time.sleep(3)
 print("sleeper:", sleeper)
 pid = q("select pid from runs where id=?", run_id)[0]["pid"]
+before = proc_safe.snapshot()  # before the slow read, so a later kill spares a reused pid
 table = procs()
 tree = [pid] + descendants(table, pid) if pid in table else []
 
@@ -122,8 +123,7 @@ time.sleep(6)
 after = procs()
 alive = [p for p in tree if p in after and after[p]["name"] == table[p]["name"]]
 print("survivors:", [(p, after[p]["name"]) for p in alive])
-for p in alive:
-    subprocess.run(["taskkill", "/F", "/T", "/PID", str(p)], capture_output=True)
+proc_safe.kill_tree(alive, before=before)
 time.sleep(2)
 print("after kill, alive:", [p for p in alive if p in procs()])
 runs = q("select id, conversation_id, status, started_at from runs where agent=? order by started_at", agent)
