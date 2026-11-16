@@ -5,7 +5,6 @@ import {
   RoadmapProgress,
   RoadmapSlices,
   SliceStateChip,
-  type AddMode,
   type DraftRule,
   type RoadmapSliceView,
 } from '@/components/spec/page/RoadmapSlices'
@@ -128,7 +127,6 @@ export default function Roadmap() {
   const params = new URLSearchParams(window.location.hash.split('?')[1] ?? '')
   const [scenario, setScenario] = React.useState<Scenario>((params.get('scenario') as Scenario) || 'today')
   const [rule, setRule] = React.useState<DraftRule>((params.get('draft') as DraftRule) || 'ready')
-  const [addMode, setAddMode] = React.useState<AddMode>((params.get('add') as AddMode) || 'form')
   const [editing, setEditing] = React.useState(params.get('edit') === '1')
   const [slices, setSlices] = React.useState(() => slicesFor(scenario))
   React.useEffect(() => setSlices(slicesFor(scenario)), [scenario])
@@ -156,7 +154,6 @@ export default function Roadmap() {
             { value: 'any', label: 'Any, warn if early' },
           ]}
         />
-        <Segmented label="Add a slice" value={addMode} onChange={setAddMode} options={[{ value: 'form', label: 'Write it myself (recommended)' }, { value: 'agent', label: 'Ask an agent' }]} />
       </div>
       <p className="mock-threads-note">
         The roadmap&apos;s page with its own layout: progress and cost at the top, then each slice on a track with its state, its document, its tasks on
@@ -176,14 +173,13 @@ export default function Roadmap() {
           <RoadmapSlices
             slices={slices}
             draftRule={rule}
-            addMode={addMode}
             editing={editing}
             now={NOW}
             onEditingChange={setEditing}
             onDraft={(key) => toast({ title: 'Starts drafting this slice', description: `Picks the agent, then opens its conversation on “${slices.find((s) => s.key === key)?.title}”.` })}
             onOpenDocument={() => toast({ title: 'Opens the slice’s change document' })}
             onMove={move}
-            onAdd={() => toast({ title: 'Slice added', description: 'Saved to the roadmap at once and listed in its history.' })}
+            onAddWithAgent={() => toast({ title: 'Opens a conversation to add a slice', description: 'Pick the agent (the roadmap’s author by default); it talks the slice through with you and adds it, marked as added after approval.' })}
           />
           <RoadmapSections />
         </div>

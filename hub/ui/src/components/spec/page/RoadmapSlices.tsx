@@ -1,7 +1,5 @@
-import * as React from 'react'
 import { Icon } from '@/components/common/Icon'
 import { Button } from '@/components/ui/button'
-import { Input, Textarea } from '@/components/ui/input'
 import { formatAgo, formatMoney } from '@/lib/format'
 import '@/styles/roadmap.css'
 
@@ -38,14 +36,6 @@ export interface RoadmapSliceView {
  *  `first`: only the first of those, in roadmap order. `any`: every undrafted slice, with a warning
  *  on one whose prerequisites are not built yet. */
 export type DraftRule = 'ready' | 'first' | 'any'
-export type AddMode = 'form' | 'agent'
-
-export interface NewSlice {
-  title: string
-  intent: string
-  done: string
-  buildsAfter: string[]
-}
 
 function unbuiltPrerequisites(slice: RoadmapSliceView, slices: RoadmapSliceView[]): RoadmapSliceView[] {
   return slice.buildsAfter.map((k) => slices.find((s) => s.key === k)).filter((s): s is RoadmapSliceView => !!s && s.state !== 'built')
@@ -85,14 +75,14 @@ export function SliceStateChip({ state }: { state: SliceState }) {
 export interface RoadmapSlicesProps {
   slices: RoadmapSliceView[]
   draftRule: DraftRule
-  addMode: AddMode
   editing: boolean
   now: Date
   onEditingChange: (editing: boolean) => void
   onDraft: (key: string) => void
   onOpenDocument: (path: string) => void
   onMove: (key: string, to: number) => void
-  onAdd: (slice: NewSlice | { describe: string }) => void
+  /** Opens a conversation with the agent the operator picks, seeded with the roadmap; the agent adds the slice (operator, 2026-11-16: agent only). */
+  onAddWithAgent: () => void
 }
 
 /** A roadmap's slices as a track: what each slice is, where it is, what it cost, and what to do
@@ -102,7 +92,6 @@ export function RoadmapSlices(props: RoadmapSlicesProps) {
   const offers = draftOffers(slices, props.draftRule)
   const cost = slices.reduce((sum, s) => sum + (s.costUsd ?? 0), 0)
   const unpriced = slices.reduce((sum, s) => sum + (s.unpriced ?? 0), 0)
-  const [adding, setAdding] = React.useState(false)
 
   return (
     <section className="aw-rm" aria-label="Slices">
@@ -222,70 +211,12 @@ export function RoadmapSlices(props: RoadmapSlicesProps) {
             <span className="aw-rm-node" data-state="new" aria-hidden>
               <Icon name="add" size={12} />
             </span>
-            {adding ? (
-              <AddSlice mode={props.addMode} slices={slices} onCancel={() => setAdding(false)} onAdd={(s) => { props.onAdd(s); setAdding(false) }} />
-            ) : (
-              <button data-slot="rm-add" type="button" className="aw-rm-add" onClick={() => setAdding(true)}>
-                Add a slice
-              </button>
-            )}
+            <button data-slot="rm-add" type="button" className="aw-rm-add" onClick={props.onAddWithAgent}>
+              <Icon name="sparkles" size={12} /> Add a slice with an agent
+            </button>
           </li>
         ) : null}
       </ol>
     </section>
-  )
-}
-
-function AddSlice({ mode, slices, onAdd, onCancel }: { mode: AddMode; slices: RoadmapSliceView[]; onAdd: (s: NewSlice | { describe: string }) => void; onCancel: () => void }) {
-  const [title, setTitle] = React.useState('')
-  const [intent, setIntent] = React.useState('')
-  const [done, setDone] = React.useState('')
-  const [after, setAfter] = React.useState<string[]>([])
-  const [describe, setDescribe] = React.useState('')
-  if (mode === 'agent') {
-    return (
-      <div className="aw-rm-card aw-rm-form">
-        <label className="aw-rm-label" htmlFor="rm-describe">What should the slice do?</label>
-        <Textarea id="rm-describe" rows={3} value={describe} onChange={(e) => setDescribe(e.target.value)} placeholder="A sentence or two. The roadmap's author writes it in, with its done-when and where it builds, for you to look over." />
-        <div className="aw-rm-form-actions">
-          <Button variant="ghost" size="xs" onClick={onCancel}>Cancel</Button>
-          <Button variant="primary" size="xs" disabled={!describe.trim()} onClick={() => onAdd({ describe })}>
-            <Icon name="sparkles" size={12} />
-            Ask Architect to write it
-          </Button>
-        </div>
-      </div>
-    )
-  }
-  return (
-    <div className="aw-rm-card aw-rm-form">
-      <label className="aw-rm-label" htmlFor="rm-title">Title</label>
-      <Input id="rm-title" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="What the operator will see working" />
-      <label className="aw-rm-label" htmlFor="rm-intent">Intent</label>
-      <Textarea id="rm-intent" rows={2} value={intent} onChange={(e) => setIntent(e.target.value)} />
-      <label className="aw-rm-label" htmlFor="rm-done">Done when</label>
-      <Textarea id="rm-done" rows={2} value={done} onChange={(e) => setDone(e.target.value)} />
-      <span className="aw-rm-label">Builds after</span>
-      <span className="aw-rm-after">
-        {slices.map((s) => (
-          <button
-            key={s.key}
-            data-slot="rm-after"
-            type="button"
-            className="aw-sp-chip"
-            aria-pressed={after.includes(s.key)}
-            onClick={() => setAfter((a) => (a.includes(s.key) ? a.filter((k) => k !== s.key) : [...a, s.key]))}
-          >
-            {s.title}
-          </button>
-        ))}
-      </span>
-      <div className="aw-rm-form-actions">
-        <Button variant="ghost" size="xs" onClick={onCancel}>Cancel</Button>
-        <Button variant="primary" size="xs" disabled={!title.trim()} onClick={() => onAdd({ title, intent, done, buildsAfter: after })}>
-          Add slice
-        </Button>
-      </div>
-    </div>
   )
 }
