@@ -103,3 +103,15 @@ export function plainGap(code: string, group: SpecBlockingFinding[]): string {
   const message = scrub(group[0].message)
   return group.length > 1 ? `${humanize(code)} (${group.length}): ${message}` : `${humanize(code)}: ${message}`
 }
+
+/** Codes the Hub tells and never gates (`NOTE_CODES` in spec_service.py): nothing to acknowledge. */
+export const NOTE_GAP_CODES = new Set([
+  'roadmap_slice_unclaimed',
+  'capability_unnamed',
+  'import_not_approved',
+  'delivery_unanswered',
+  'delivery_flow_incomplete',
+  'test_only_task',
+  'reviewer_undeclared',
+  'recommended_people',
+])

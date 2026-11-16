@@ -253,6 +253,7 @@ async def test_checking_a_flow_with_no_stop_condition_warns(app, auth_headers, r
 @pytest.mark.asyncio
 async def test_a_none_delivery_checks_clean(app, auth_headers, run_headers):
     await _create(app, auth_headers)
+    await _place_at_the_end()
     await _submit_document(app, run_headers, _document(delivery={"mode": "none"}))
 
     response = await _check(app, auth_headers)
@@ -260,7 +261,8 @@ async def test_a_none_delivery_checks_clean(app, auth_headers, run_headers):
     assert response.status_code == 200, response.text
     assert response.json()["phase"] == "exploring"
     assert response.json()["blocking"] == []
-    assert response.json()["ready"] is True
+    listed = {w["code"] for w in response.json()["warnings"]}
+    assert not {"delivery_unanswered", "delivery_flow_incomplete"} & listed
 
 
 def test_a_roadmap_with_no_delivery_gets_neither_code():
@@ -1078,3 +1080,11 @@ async def test_1_12_submit_spec_document_round_trips_delivery_through_the_http_r
         "stop_at": None,
         "cron": "*/5 * * * *",
     }
+
+
+async def _place_at_the_end():
+    """The document's step is the journey's last, so `steps_skipped` does not colour what this
+    test asks (a save moving the step by content is the steps slice)."""
+    from .test_spec_journey_briefing import _place
+
+    await _place(step="build", size="large")

@@ -44,6 +44,7 @@ from ... import (
     run_divergence,
     run_liveness,
     slice_drafting,
+    spec_acknowledgements,
     spec_adoption,
     spec_capability_links,
     spec_conversion,
@@ -408,6 +409,20 @@ async def get_spec(
         recommended = _recommended_build(document, stored_payload)
         if recommended is not None:
             payload["recommended_build"] = recommended
+        # The gaps somebody chose to leave, so the page shows them on load, not only after Check
+        # (`ready-means-the-same-thing`, FR-5).
+        if stored_payload is not None and document.phase != spec_lifecycle.ARCHIVED:
+            try:
+                payload["acknowledged"] = (
+                    await spec_service.readiness(
+                        session,
+                        workspace,
+                        document,
+                        spec_service._stored_payload(workspace, document),
+                    )
+                ).acknowledged
+            except spec_service.SaveRefusedError:
+                payload["acknowledged"] = []
         # Every build of this document, newest first: how it was built, by whom, within what.
         payload["builds"] = [
             await builds.view(session, row) for row in await builds.builds_of(session, document.id)
@@ -3610,7 +3625,7 @@ async def check_document(
     workspace = await _workspace(session, project_id)
     document = await _require_document(session, project_id, path)
     try:
-        found_blocking, warnings = await spec_service.check(session, workspace, document)
+        report = await spec_service.check(session, workspace, document)
     except spec_service.SaveRefusedError as exc:
         raise HTTPException(
             status_code=422,
@@ -3620,7 +3635,7 @@ async def check_document(
     version = spec_documents.content_version(content)
     # A model run per press would be a cost the operator cannot see (F1053): only a document with
     # no blocking gap, and only a content version the newest firing has not already checked.
-    if not found_blocking and not await vault_spec_check.already_checked(
+    if not report.refusals and not await vault_spec_check.already_checked(
         session, project_id, document.path, version
     ):
         background.add_task(
@@ -3632,10 +3647,74 @@ async def check_document(
         )
     return {
         **await _project_document_view(session, project_id, document),
-        "blocking": found_blocking,
-        "warnings": warnings,
-        "ready": not found_blocking,
+        "blocking": report.refusals,
+        "warnings": report.warnings,
+        "notes": report.notes,
+        "acknowledged": report.acknowledged,
+        # The one verdict (FR-2): true exactly when Approve would not stop.
+        "ready": report.ready,
         "content_version": version,
+    }
+
+
+class GapAcknowledgement(RequestModel):
+    """The operator acknowledging a gap Check lists: which one, and why it may stay."""
+
+    code: str = Field(max_length=64)
+    where: str = Field(default="", max_length=255)
+    reason: str = Field(default="", max_length=10000)
+
+
+@router.post("/documents/acknowledge")
+async def acknowledge_gap(
+    body: GapAcknowledgement,
+    path: str = Query(...),
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    """The operator leaves a gap open on purpose, with a reason; recorded with them as its author.
+
+    Any gap may be acknowledged here, including the operator-only `amendments_unreviewed` and
+    `vault_warning`; a refusal and a note may not (`spec_acknowledgements`). Answers the recorded
+    acknowledgement and the document's readiness after it, so Check's verdict updates at once.
+    """
+    project_id, _ = project
+    workspace = await _workspace(session, project_id)
+    document = await _require_document(session, project_id, path)
+    try:
+        payload = spec_service._stored_payload(workspace, document)
+        before = await spec_service.readiness(session, workspace, document, payload)
+        recorded = await spec_acknowledgements.acknowledge(
+            session,
+            document,
+            before,
+            code=body.code,
+            where=body.where,
+            reason=body.reason,
+            actor=_operator(),
+        )
+    except spec_service.SaveRefusedError as exc:
+        raise HTTPException(
+            status_code=422, detail={"message": str(exc), "code": exc.code}
+        ) from exc
+    except spec_acknowledgements.AcknowledgementRefusedError as exc:
+        raise HTTPException(
+            status_code=exc.status, detail={"message": str(exc), "code": exc.code}
+        ) from exc
+    report = await spec_service.readiness(session, workspace, document, payload)
+    await session.commit()
+    _READY_VERDICTS.clear()
+    await sse_manager.broadcast(
+        project_id, "spec_updated", {"path": document.path, "phase": document.phase}
+    )
+    return {
+        "acknowledgement": recorded,
+        **recorded,
+        "blocking": report.refusals,
+        "warnings": report.warnings,
+        "notes": report.notes,
+        "acknowledged": report.acknowledged,
+        "ready": report.ready,
     }
 
 
@@ -3730,6 +3809,7 @@ class _Moved:
     payload: Optional[Dict[str, Any]] = None
     created_count: int = 0
     notes: List[Dict[str, Any]] = dataclasses.field(default_factory=list)
+    acknowledged: List[Dict[str, Any]] = dataclasses.field(default_factory=list)
 
 
 def _already_built_offer(
@@ -3798,9 +3878,16 @@ async def _move_phase(
             detail["blocking"] = exc.blocking
         if exc.warnings:
             detail["warnings"] = exc.warnings
+        if exc.notes:
+            detail["notes"] = exc.notes
+        if exc.acknowledged:
+            detail["acknowledged"] = exc.acknowledged
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=detail) from exc
 
-    moved = _Moved(notes=list((phase_event.detail or {}).get("notes") or []))
+    moved = _Moved(
+        notes=list((phase_event.detail or {}).get("notes") or []),
+        acknowledged=list((phase_event.detail or {}).get("acknowledged") or []),
+    )
     if document.phase != "approved":
         return moved
     payload = _read_payload(workspace, document.path)
@@ -3872,6 +3959,9 @@ async def _phase_response(
     # F704: what approval told and did not gate on (an unclaimed roadmap slice).
     if moved.notes:
         response["approval_notes"] = moved.notes
+    # What the operator approved over by acknowledgement: shown, and never a stop (FR-5, FR-6).
+    if moved.acknowledged:
+        response["acknowledged"] = moved.acknowledged
     return response
 
 

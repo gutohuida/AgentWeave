@@ -1554,6 +1554,20 @@ def _operations(*, can_admin_specs: bool = False) -> List[_Operation]:
             ),
         ),
         _Operation(
+            tool="acknowledge_spec_gap",
+            args="path, code, where, reason",
+            method="POST",
+            path="/spec/documents/acknowledge",
+            fields=("path", "code", "where", "reason"),
+            required=("path", "code", "where", "reason"),
+            text=(
+                "leave one gap of a document you wrote open on purpose, saying why: it stays "
+                "visible to the operator, marked acknowledged with your reason, and the save's "
+                "`ready_to_approve` counts it as handled. Not for a refusal or a note, and never "
+                "for `amendments_unreviewed` or `vault_warning`, which are the operator's."
+            ),
+        ),
+        _Operation(
             tool="list_checkpoints",
             args="agent=None",
             method="GET",

@@ -93,6 +93,8 @@ class PhaseError(RuntimeError):
         code: str = "phase_refused",
         blocking: Optional[List[Dict[str, Any]]] = None,
         warnings: Optional[List[Dict[str, Any]]] = None,
+        notes: Optional[List[Dict[str, Any]]] = None,
+        acknowledged: Optional[List[Dict[str, Any]]] = None,
     ) -> None:
         self.code = code
         # Set only for `document_incomplete`: every reason the move is not yet possible.
@@ -100,6 +102,10 @@ class PhaseError(RuntimeError):
         # Set for `approval_warnings` (the gaps the operator may approve over) and, beside
         # `blocking`, for a `document_incomplete` that also found gaps.
         self.warnings: List[Dict[str, Any]] = list(warnings or [])
+        # What Approve would tell beside them: notes that gate nothing, and gaps already
+        # acknowledged (`ready-means-the-same-thing-to-the-author-and-the-operator`).
+        self.notes: List[Dict[str, Any]] = list(notes or [])
+        self.acknowledged: List[Dict[str, Any]] = list(acknowledged or [])
         super().__init__(message)
 
 
@@ -408,6 +414,7 @@ async def transition(
 
     gaps: List[Dict[str, Any]] = []
     notes: List[Dict[str, Any]] = []
+    acknowledged: List[Dict[str, Any]] = []
     if to_phase == APPROVED:
         # Required `workspace`: a caller with none cannot move a document at all, rather than
         # moving it unchecked (F207). Imported here because `spec_service` imports this module.
@@ -421,6 +428,8 @@ async def transition(
                 code="document_incomplete",
                 blocking=found.refusals,
                 warnings=found.gaps + found.notes,
+                notes=found.notes,
+                acknowledged=found.acknowledged,
             )
         if found.gaps and not approve_anyway:
             raise PhaseError(
@@ -430,8 +439,11 @@ async def transition(
                 "request body (not as a query parameter)",
                 code="approval_warnings",
                 warnings=found.gaps,
+                notes=found.notes,
+                acknowledged=found.acknowledged,
             )
         gaps = found.gaps
+        acknowledged = found.acknowledged
         # Told, never gating (F704): approval passes them without approve_anyway.
         notes = found.notes
 
@@ -467,6 +479,8 @@ async def transition(
         detail["warnings_overridden"] = gaps
         if notes:
             detail["notes"] = notes
+        if acknowledged:
+            detail["acknowledged"] = acknowledged
     if previous == CURRENT:
         detail["absorbed_by"] = absorbed_by
     return await record_event(session, document, kind="phase", actor=actor, detail=detail)

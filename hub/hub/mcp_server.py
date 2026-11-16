@@ -5623,9 +5623,10 @@ def submit_spec_document(
     Returns the path, the phase, the identifier assigned to each requirement key, `blocking` —
     what would refuse its approval right now — `warnings`, which include what approval lists as
     missing (a criterion with no `how_to_check`/`checked_by`, a first task that is not the
-    acceptance drive) — and `ready_to_approve`, which is false while anything blocks or any such
-    approval gap is present. A saved document is not a ready one: say it is ready only when that field is
-    true.
+    acceptance drive) — and `ready_to_approve`, which is true exactly when Approve would not stop: nothing blocks and no
+    gap is open (`warnings`). `notes` never gate. A gap you judge acceptable, you leave open with
+    `acknowledge_spec_gap(path, code, where, reason)`; it then shows under `acknowledged`. A saved
+    document is not a ready one: say it is ready only when that field is true.
     """
     document: Dict[str, Any] = {
         "schema_version": schema_version,
@@ -5868,6 +5869,33 @@ def record_evidence(
             **({"output": output} if output else {}),
             **({"covers": covers} if covers else {}),
         },
+    )
+
+
+@_tool()
+def acknowledge_spec_gap(path: str, code: str, where: str, reason: str) -> Dict[str, Any]:
+    """Leave one gap of a specification document you wrote open on purpose, saying why.
+
+    A gap the last save listed under `warnings` stays visible to the operator, marked
+    acknowledged with your reason, your name and the time; the save's `ready_to_approve` then
+    counts it as handled. It holds while a gap with the same `code` and `where` is still reported,
+    and is dropped once you fix it, so a gap that comes back is open again.
+
+    Not for a refusal (`blocking`), not for a note, and never for `amendments_unreviewed` or
+    `vault_warning`: those are the operator's to clear. A reason is required.
+
+    Args:
+        path: The document, e.g. `spec/changes/<name>/spec.json`.
+        code: The gap's `code`, as the save listed it.
+        where: The gap's `where`, as the save listed it.
+        reason: Why this gap is acceptable to leave.
+
+    Returns the recorded `{code, where, reason, by, at}`.
+    """
+    return _hub_request(
+        "POST",
+        "/spec/documents/acknowledge",
+        {"path": path, "code": code, "where": where, "reason": reason},
     )
 
 

@@ -37,7 +37,7 @@ ALEMBIC_INI = Path(__file__).parent.parent / "hub" / "alembic.ini"
 # The revision `alembic upgrade head` must land on. Named once so the assertion and its failure
 # message cannot disagree — they did, for two head bumps, telling anyone debugging a failure to go
 # read the wrong migration.
-HEAD_REVISION = "0178"
+HEAD_REVISION = "0179"
 
 
 # ---------------------------------------------------------------------------
@@ -6168,3 +6168,33 @@ def test_migration_0178_makes_existing_dashboards_version_1_and_rolls_back(tmp_p
             "SELECT name, version, edited_by, edited_at FROM dashboards WHERE id = 'dash-m'"
         ).fetchone() == ("Old", 1, None, None)
         assert conn.execute("SELECT count(*) FROM dashboard_versions").fetchone() == (0,)
+
+
+def test_migration_0179_adds_and_drops_only_the_acknowledgement_table(tmp_path) -> None:
+    """`ready-means-the-same-thing-to-the-author-and-the-operator`: 0179 creates one table and the
+    downgrade drops it, touching no document."""
+    db_file = tmp_path / "gap-acks.db"
+    db_url = f"sqlite+aiosqlite:///{db_file}"
+    _run(_create_all_at(db_url))
+    _upgrade_to(db_url, "head")
+    _downgrade_to(db_url, "0178")
+    with sqlite3.connect(db_file) as conn:
+        tables = {
+            row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
+        }
+        assert "spec_gap_acknowledgements" not in tables
+        assert "spec_documents" in tables
+
+    _upgrade_to(db_url, "0179")
+
+    with sqlite3.connect(db_file) as conn:
+        columns = {row[1] for row in conn.execute("PRAGMA table_info(spec_gap_acknowledgements)")}
+        assert {
+            "document_id",
+            "code",
+            "place",
+            "reason",
+            "actor_kind",
+            "actor",
+            "created_at",
+        } <= columns
