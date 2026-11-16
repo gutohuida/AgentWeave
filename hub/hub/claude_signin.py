@@ -20,7 +20,7 @@ import json
 import os
 import time
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Any, Dict, Optional, Tuple
 
 LOGIN_COMMAND = "claude auth login"
 
@@ -55,6 +55,25 @@ def _fingerprint(path: Path) -> Tuple[int, int]:
     return (stat.st_mtime_ns, stat.st_size)
 
 
+_parsed: Dict[str, Tuple[Tuple[int, int], Any]] = {}  # path -> (fingerprint, claudeAiOauth)
+
+
+def _read_oauth(path: Path) -> Any:
+    """The file's `claudeAiOauth`, read again only when the file changed: launchability is asked
+    on the event loop (every turn start), where a file open is a stall (F1111), and a stat is not."""
+    key = str(path)
+    fingerprint = _fingerprint(path)
+    cached = _parsed.get(key)
+    if cached is not None and cached[0] == fingerprint:
+        return cached[1]
+    try:
+        oauth = json.loads(path.read_text(encoding="utf-8")).get("claudeAiOauth")
+    except (OSError, ValueError, AttributeError):
+        oauth = None  # no file (API key, env token, keychain): nothing to say
+    _parsed[key] = (fingerprint, oauth)
+    return oauth
+
+
 def mark_unrenewable() -> None:
     """Record that a run just failed because the login cannot be renewed."""
     global _recorded
@@ -69,6 +88,7 @@ def mark_unrenewable() -> None:
 def forget() -> None:
     global _recorded
     _recorded = None
+    _parsed.clear()
 
 
 def unrenewable_reason(now_ms: Optional[int] = None) -> Optional[str]:
@@ -76,10 +96,7 @@ def unrenewable_reason(now_ms: Optional[int] = None) -> Optional[str]:
     path = credentials_path()
     if _recorded is not None and _recorded == (str(path), _fingerprint(path)):
         return UNRENEWABLE_REASON
-    try:
-        oauth = json.loads(path.read_text(encoding="utf-8")).get("claudeAiOauth")
-    except (OSError, ValueError, AttributeError):
-        return None  # no file (API key, env token, keychain): nothing to say
+    oauth = _read_oauth(path)
     if not isinstance(oauth, dict):
         return None
     expires_at = oauth.get("expiresAt")
