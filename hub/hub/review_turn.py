@@ -28,7 +28,7 @@ from typing import List, Optional, Set, Tuple
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from . import blocking, drive_baseline, requirement_evidence, traces, worktrees
+from . import blocking, drive_baseline, requirement_evidence, stalls, traces, worktrees
 from .db.models import Agent, Project, SpecDocument, Task
 from .project_workspace import ProjectWorkspaceError, resolve_project_workspace
 from .repo_hygiene import seed_repo_excludes
@@ -764,6 +764,18 @@ async def prepare_review_turn(
         # or evidence carried over from a different checkout. Stated, never worked around: putting
         # the reviewer on some *nearby* commit would produce a verdict about code nobody wrote.
         raise ReviewTurnRefused(str(exc)) from exc
+    except worktrees.ReviewCheckoutLockedError as exc:
+        # F1197: a lock the Hub may not clear blocks every later review by this reviewer, whoever
+        # asks for it, and the refusal alone withdrew the input and left the task sitting silent.
+        # A stall names the file for the mender; the same lock seen again is the same stall.
+        text = (
+            f"{reviewer} cannot review {task.display_id} ({task.title!r}): {exc.lock} blocks "
+            f"preparing {reviewer}'s review checkout. {exc}"
+        )
+        stalls.report(
+            project_id, cause="review_unstaffed", subject=task_id, text=text, task_id=task_id
+        )
+        raise ReviewTurnRefused(f"could not prepare {reviewer}'s review checkout: {exc}") from exc
     except (worktrees.GitCommandError, worktrees.IsolationUnavailableError) as exc:
         raise ReviewTurnRefused(f"could not prepare {reviewer}'s review checkout: {exc}") from exc
 

@@ -42,6 +42,7 @@ from ... import (
     blocking,
     bound_address,
     build_retrospective,
+    claude_signin,
     flow_advance,
     instance_identity,
     mcp_announce,
@@ -1577,6 +1578,15 @@ async def _trigger_agent_directly(
         creating = takes_task and not await blocking.run(
             lambda: worktrees.task_worktree_path(repo_root, turn_workspace.task_id).exists()
         )
+        # F1197 (AW-152): a stale `index.lock` in the checkout this turn gets is the Hub's to clear
+        # only while no run of this agent or bound to this task is live -- agents run their own git
+        # there. The per-agent refusal above already holds for the agent; this asks the task too.
+        clear_stale_lock = not await run_liveness.has_running_turn(
+            session,
+            project_id,
+            agent=agent,
+            task_id=turn_workspace.task_id if takes_task else None,
+        )
         try:
             with traces.work(
                 "worktree_create",
@@ -1596,8 +1606,17 @@ async def _trigger_agent_directly(
                     approved=turn_workspace.approved,
                     names=turn_workspace.names,
                     catch_up_to=catch_up_to,
+                    clear_stale_lock=clear_stale_lock,
                 )
         except (worktrees.GitCommandError, worktrees.IsolationUnavailableError) as exc:
+            if isinstance(exc, worktrees.CheckoutLockedError):
+                _report_locked_checkout(
+                    project_id,
+                    agent=agent,
+                    task_id=turn_workspace.task_id if takes_task else None,
+                    lock=exc.lock,
+                    detail=f"{agent}'s turn could not start: {exc}",
+                )
             # Which workspace failed? `resolve_turn_workspace` prepares the **task's** checkout or
             # the **agent's** own, and both arms raise these two exception types carrying no scope.
             # So ask the predicate the resolver itself obeys — the same call the one-turn-per-task
@@ -3305,6 +3324,67 @@ async def _queue_decision_notes(
             )
 
 
+def _report_locked_checkout(
+    project_id: str, *, agent: str, task_id: Optional[str], lock: Path, detail: str
+) -> None:
+    """A lock the Hub may not clear blocks an agent's or task's checkout (F1197, AW-152): a stall
+    names the file for the mender, as a review checkout's does (`review_turn`). The same checkout
+    blocked again is the same stall, counted."""
+    from ... import stalls
+
+    stalls.report(
+        project_id,
+        cause="delivery_refused",
+        subject=task_id or agent,
+        text=f"{lock} blocks the checkout of {task_id or agent}. {detail}",
+        task_id=task_id,
+    )
+
+
+async def _snapshot_turn(
+    *, project_id: str, agent: str, run_id: str, worktree: Path
+) -> Optional[str]:
+    """Commit what the turn left in *worktree* (task 5.3), and return the commit, or `None`.
+
+    Best-effort: a git failure here must not turn a completed or failed run into something worse
+    than it already is. A stale `index.lock` is cleared first when no other run of this agent or
+    bound to this checkout's task is live (F1197, AW-152); one that stays raises a stall naming it.
+    `blocking.run` carries the run's trace into the thread, so the snapshot's git is in the run's
+    trace (trace-hub-wide D2).
+    """
+    task_id = worktrees.task_id_of(worktree)
+    try:
+        async with async_session_factory() as db:
+            busy = await run_liveness.has_running_turn(
+                db, project_id, agent=agent, task_id=task_id, excluding_run_id=run_id
+            )
+    except Exception:  # noqa: BLE001 -- not knowing keeps the lock, and the snapshot still runs
+        logger.warning("Could not ask whether %s's checkout is in use", agent, exc_info=True)
+        busy = True
+    try:
+        return await blocking.run(
+            worktrees.snapshot_worktree,
+            worktree,
+            agent,
+            message=await readable_ids.snapshot_message(worktree, agent),
+            clear_stale_lock=not busy,
+        )
+    except worktrees.CheckoutLockedError as exc:
+        logger.warning("Could not snapshot %r's worktree after run %s: %s", agent, run_id, exc)
+        _report_locked_checkout(
+            project_id,
+            agent=agent,
+            task_id=task_id,
+            lock=exc.lock,
+            detail=f"The Hub could not commit what {agent}'s run {run_id} left there: {exc}",
+        )
+    except worktrees.GitCommandError:
+        logger.warning(
+            "Could not snapshot %r's worktree after run %s", agent, run_id, exc_info=True
+        )
+    return None
+
+
 async def _execute_run(
     *,
     project_id: str,
@@ -3602,6 +3682,10 @@ async def _execute_run(
                 runner_version = parsed.runner_version
             if getattr(parsed, "auth_failure", False):
                 signed_out = True
+            if getattr(parsed, "claude_turn_ok", False):
+                claude_signin.forget()  # a turn completed: the mark was lifted another way
+            if getattr(parsed, "login_unrenewable", False):
+                claude_signin.mark_unrenewable()  # F1183: launchability says so until re-login
             # Resolve session_id from *this* line before writing its own events, so the row
             # that establishes the session carries it too, not just subsequent rows. Once this run
             # is bound to the session a line names, binding it again writes nothing and was a
@@ -3752,19 +3836,9 @@ async def _execute_run(
             # an agent's turn just ends with dirty files in its worktree otherwise, which
             # a conflict check has nothing to diff against. Best-effort: a git failure here
             # must not turn a completed/failed run into something worse than it already is.
-            try:
-                # `blocking.run` carries the run's trace into the thread, as `to_thread` did, so
-                # the snapshot's git is in the run's trace (trace-hub-wide D2).
-                snapshot_sha = await blocking.run(
-                    worktrees.snapshot_worktree,
-                    worktree,
-                    agent,
-                    message=await readable_ids.snapshot_message(worktree, agent),
-                )
-            except worktrees.GitCommandError:
-                logger.warning(
-                    "Could not snapshot %r's worktree after run %s", agent, run_id, exc_info=True
-                )
+            snapshot_sha = await _snapshot_turn(
+                project_id=project_id, agent=agent, run_id=run_id, worktree=worktree
+            )
 
         # A deliberate stop (task 3.7) also exits the read loop and reaches this same
         # point — force-terminating a process rarely yields exit code 0, so without this
@@ -4870,19 +4944,9 @@ async def _execute_rpc_run(
         if worktree is not None:
             # Same best-effort snapshot as `_execute_run` — a git failure here must not turn
             # a completed/failed run into something worse than it already is.
-            try:
-                # `blocking.run` carries the run's trace into the thread, as `to_thread` did, so
-                # the snapshot's git is in the run's trace (trace-hub-wide D2).
-                snapshot_sha = await blocking.run(
-                    worktrees.snapshot_worktree,
-                    worktree,
-                    agent,
-                    message=await readable_ids.snapshot_message(worktree, agent),
-                )
-            except worktrees.GitCommandError:
-                logger.warning(
-                    "Could not snapshot %r's worktree after run %s", agent, run_id, exc_info=True
-                )
+            snapshot_sha = await _snapshot_turn(
+                project_id=project_id, agent=agent, run_id=run_id, worktree=worktree
+            )
 
         # A deliberate stop reaches here as `TurnOutcome.status == "interrupted"` (run_turn's
         # own `should_interrupt` handling), the app-server equivalent of exec's

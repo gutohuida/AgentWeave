@@ -83,6 +83,12 @@ def probe_binary(
         # Remembered per PATH (`binaries`, D4); a patched `shutil.which` is still asked directly.
         present = binaries.which(cli) is not None
         reason = None if present else f"Runner CLI {cli!r} was not found in PATH."
+        windows = None if present else binaries.windows_copy(cli)
+        if windows:
+            reason = (
+                f"Runner CLI {cli!r} was found only as a Windows copy ({windows}), which cannot "
+                f"run here. Install the Linux {cli} CLI inside WSL."
+            )
     return cli, present, reason
 
 

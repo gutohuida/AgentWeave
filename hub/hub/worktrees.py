@@ -39,6 +39,7 @@ import re
 import shutil
 import stat
 import subprocess
+import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -70,6 +71,11 @@ SHARED_DEPENDENCY_DIRS = ("node_modules", ".venv", "venv")
 TASK_BRANCH_PREFIX = BRANCH_PREFIX + "task/"
 
 _GIT_TIMEOUT_SECONDS = 30
+#: F1197: an `index.lock` in a review checkout's own git dir at least this old is stale. No git the
+#: Hub starts there outlives `_GIT_TIMEOUT_SECONDS` (it is killed at it, which is how such a lock
+#: is left behind), and `ensure_review_checkout` runs serialized with every other worktree change
+#: while the reviewer has no turn running, so nothing of the Hub's can be holding it.
+STALE_INDEX_LOCK_SECONDS = _GIT_TIMEOUT_SECONDS
 _AGENT_NAME_RE = re.compile(r"^[a-zA-Z0-9_-]{1,32}$")
 #: Restated by the CLI as `RESERVED_AGENT_NAMES` (`src/agentweave/constants.py`); change together.
 #: `operator` is `schemas.messages.OPERATOR_SENDER` (F415): an agent of that name would be hidden
@@ -96,6 +102,21 @@ class GitCommandError(RuntimeError):
 
 class IsolationUnavailableError(RuntimeError):
     """A writing agent cannot be given the isolated checkout the spec requires."""
+
+
+class CheckoutLockedError(IsolationUnavailableError):
+    """An `index.lock` in one of the Hub's own checkouts blocks it, and the Hub may not clear it.
+
+    Carries the lock's path so the refusal, and the stall raised for it, name the file to remove.
+    """
+
+    def __init__(self, lock: Path, detail: str) -> None:
+        self.lock = lock
+        super().__init__(detail)
+
+
+class ReviewCheckoutLockedError(CheckoutLockedError):
+    """A review checkout's `index.lock` blocks re-pointing it, and it is not stale enough to clear."""
 
 
 class ReviewCommitUnavailableError(RuntimeError):
@@ -1467,6 +1488,107 @@ def existing_review_checkout(repo_root: Path, agent: str) -> Optional[Path]:
     return path
 
 
+def _index_lock(checkout: Path) -> Optional[Path]:
+    """The `index.lock` path in *checkout*'s own git dir (`.git/worktrees/<name>`), or `None`.
+
+    `None` for anything but a linked worktree: the operator's main checkout (`.git` a directory,
+    its git dir the repository's own) is never the Hub's to clear a lock in.
+    """
+    if not (checkout / ".git").is_file():
+        return None
+    try:
+        git_dir = _run_git(checkout, "rev-parse", "--absolute-git-dir").stdout.strip()
+    except (GitCommandError, OSError, subprocess.SubprocessError):
+        return None
+    if not git_dir or Path(git_dir).parent.name != "worktrees":
+        return None
+    return Path(git_dir) / "index.lock"
+
+
+def _clear_if_stale(lock: Path) -> bool:
+    """Remove *lock* if it is stale; return whether it is gone (F1197).
+
+    The rule: at least `STALE_INDEX_LOCK_SECONDS` old, and deleting it succeeds -- on Windows a
+    lock a live git still holds open cannot be deleted, which refuses the one case the age cannot
+    see. Only a linked worktree's lock is ever passed here (`_index_lock`), never the operator's
+    main checkout's: a review checkout's, or an agent's or task's while no run of it is live
+    (`clear_stale_index_lock`).
+    """
+    try:
+        age = time.time() - lock.stat().st_mtime
+    except FileNotFoundError:
+        return True
+    except OSError:
+        return False
+    if age < STALE_INDEX_LOCK_SECONDS:
+        return False
+    try:
+        lock.unlink()
+    except FileNotFoundError:
+        return True
+    except OSError:
+        return False
+    logger.warning("removed a stale %s (%.0fs old)", lock, age)
+    return True
+
+
+def clear_stale_index_lock(checkout: Path) -> None:
+    """Clear a stale `index.lock` in an agent's or task's checkout before the Hub's git there
+    (F1197, AW-152); refuse naming the file when one stays.
+
+    The caller asks only while **no run of that agent or task is live**: agents run their own git
+    in these checkouts, so until their turns are over a lock may be a live git's and is not the
+    Hub's to judge. With none live, and the Hub's own worktree work serialized, a lock left is a
+    killed git's -- which blocks the Hub's snapshot and catch-up, and then the next turn's own
+    first commit. One `_clear_if_stale` will not remove (younger than the threshold, or held open)
+    is refused as `CheckoutLockedError`, so it is named rather than failing every later step.
+    """
+    if not checkout.is_dir():
+        return
+    lock = _index_lock(checkout)
+    if lock is None or _clear_if_stale(lock):
+        return
+    raise CheckoutLockedError(
+        lock,
+        f"{lock} blocks the Hub's git in {checkout}, and no run of it is live. The Hub removes that "
+        f"lock itself once it is {STALE_INDEX_LOCK_SECONDS}s old and no process holds it open; if "
+        "no git is running in that checkout, delete the file.",
+    )
+
+
+def _repoint_review_checkout(path: Path, commit: str) -> None:
+    """`checkout --force --detach` at *commit*, past a stale `index.lock` (F1197).
+
+    A stale lock is cleared before the checkout; a checkout that still fails on the lock clears it
+    again and is retried once. A lock that stays is refused as `ReviewCheckoutLockedError`, which
+    names the file.
+    """
+    lock = _index_lock(path)
+    if lock is not None:
+        _clear_if_stale(lock)
+    try:
+        _run_git(path, "checkout", "--force", "--detach", commit)
+        return
+    except GitCommandError as exc:
+        if lock is None or "index.lock" not in (exc.stderr or ""):
+            raise
+        failure = exc
+    if _clear_if_stale(lock):
+        try:
+            _run_git(path, "checkout", "--force", "--detach", commit)
+            return
+        except GitCommandError as exc:
+            if "index.lock" not in (exc.stderr or ""):
+                raise
+            failure = exc
+    raise ReviewCheckoutLockedError(
+        lock,
+        f"{lock} blocks re-pointing the review checkout at {path}. The Hub removes that lock "
+        f"itself once it is {STALE_INDEX_LOCK_SECONDS}s old and no process holds it open; if no "
+        f"git is running in that checkout, delete the file. ({failure.stderr.strip()})",
+    )
+
+
 def ensure_review_checkout(repo_root: Path, agent: str, sha: str) -> Path:
     """Provision *agent*'s review checkout, detached at *sha*. Idempotent (task 1.2).
 
@@ -1493,7 +1615,7 @@ def ensure_review_checkout(repo_root: Path, agent: str, sha: str) -> Path:
                 f"refusing existing path {path}: it is not a detached git worktree registered for "
                 f"{agent}'s reviews"
             )
-        _run_git(path, "checkout", "--force", "--detach", commit)
+        _repoint_review_checkout(path, commit)
     else:
         # Same reason as `ensure_worktree`: git's own `.git/worktrees/<name>` metadata can outlive
         # a directory removed by something other than `release_review_checkout`, and `worktree add`
@@ -1581,9 +1703,15 @@ def resolve_turn_workspace(
     approved: Sequence[Tuple[str, str]] = (),
     catch_up_to: Optional[str] = None,
     names: Optional[Mapping[str, str]] = None,
+    clear_stale_lock: bool = False,
 ) -> ResolvedWorkspace:
     """Return the directory a spawned process should use as its cwd, for *this turn* (design D3),
     with the notes its prompt carries about that checkout (`ResolvedWorkspace`, F695).
+
+    *clear_stale_lock* (F1197, AW-152): the caller found no run of this agent or task live, so a
+    stale `index.lock` in the checkout this turn gets is cleared before the Hub's own git there --
+    the switch back, the catch-up merges, their snapshot -- and one that stays is refused naming
+    it (`clear_stale_index_lock`). Off, the checkout's locks are left to whoever holds them.
 
     *catch_up_to* (F607): on the agent arm, the integration base the agent's own worktree is
     brought up to first (`catch_up_agent_worktree`). Ignored for a task checkout, a read-only
@@ -1615,6 +1743,8 @@ def resolve_turn_workspace(
     is precisely the option D1 rejected.
     """
     if not takes_task_workspace(repo_root, config, task_id):
+        if clear_stale_lock and is_writing_agent(config):
+            clear_stale_index_lock(worktree_path(repo_root, agent))
         workspace = resolve_agent_workspace(repo_root, agent, config)
         if catch_up_to and workspace != repo_root:
             left_behind = catch_up_agent_worktree(repo_root, workspace, catch_up_to)
@@ -1627,6 +1757,8 @@ def resolve_turn_workspace(
     # rather than only at registration. The task path is the same funnel and needs the same
     # seeding, before there is anything to ignore.
     seed_repo_excludes(repo_root)
+    if clear_stale_lock:
+        clear_stale_index_lock(task_worktree_path(repo_root, task_id))
     path = ensure_task_worktree(repo_root, task_id, base, prerequisites, approved, names=names)
     # F695: an approved prerequisite whose merge conflicted was left for the author, who is told --
     # and told differently when it started that merge and left it unfinished.
@@ -1695,7 +1827,7 @@ def _unstage_new_gitlinks(worktree: Path) -> None:
 
 
 def snapshot_worktree(
-    worktree: Path, agent: str, *, message: Optional[str] = None
+    worktree: Path, agent: str, *, message: Optional[str] = None, clear_stale_lock: bool = False
 ) -> Optional[str]:
     """Commit any dirty working-tree state in *worktree* onto the agent's own branch.
 
@@ -1728,6 +1860,10 @@ def snapshot_worktree(
     untracked files on master. There `.git` is absent, and in a main checkout it is a directory; a
     linked worktree's is a file. A nested repository would be committed as a gitlink to a commit
     nobody else has, so it stays out; a submodule the project already tracks is the turn's to move.
+
+    *clear_stale_lock* (F1197, AW-152): the caller found no other run of this agent or task live,
+    so a stale `index.lock` is cleared before `add -A`, and one that stays is refused naming it
+    (`CheckoutLockedError`) rather than failing as an anonymous git error.
     """
     if not (worktree / ".git").is_file():
         logger.warning("not snapshotting %s: it is not a linked worktree of its own", worktree)
@@ -1745,6 +1881,8 @@ def snapshot_worktree(
     concluding = _is_mid_merge(worktree)
     if not concluding and not _has_uncommitted_changes(worktree):
         return None
+    if clear_stale_lock:
+        clear_stale_index_lock(worktree)
     _run_git(worktree, "add", "-A")
     _unstage_new_gitlinks(worktree)
     staged = _run_git(worktree, "diff", "--cached", "--name-only")

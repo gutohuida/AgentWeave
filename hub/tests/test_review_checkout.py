@@ -316,3 +316,79 @@ def test_a_review_checkout_does_not_appear_as_an_agent_branch(repo):
     # And not as a workspace of any kind: task checkouts joined this listing in phase 6A, and a
     # detached review checkout must not have been swept in alongside them.
     assert worktrees.list_workspace_branches(repo) == []
+
+
+# --------------------------------------------------------------------------------------
+# F1197 — a stale `index.lock` in the review checkout's git dir does not block the next review
+# --------------------------------------------------------------------------------------
+
+
+def _review_lock(repo: Path, agent: str) -> Path:
+    path = worktrees.review_path(repo, agent)
+    git_dir = _git(path, "rev-parse", "--absolute-git-dir").stdout.strip()
+    return Path(git_dir) / "index.lock"
+
+
+def _age(path: Path, seconds: float) -> None:
+    import os
+    import time
+
+    then = time.time() - seconds
+    os.utime(path, (then, then))
+
+
+def test_a_stale_index_lock_is_cleared_and_the_review_checkout_repoints(repo):
+    first = _commit_on_branch(repo, "agentweave/builder", "one.txt", "first\n")
+    second = _commit_on_branch(repo, "agentweave/other", "two.txt", "second\n")
+    path = ensure_review_checkout(repo, "critic", first)
+    lock = _review_lock(repo, "critic")
+    # What F1197 found live: a zero-byte lock no git process was holding.
+    lock.write_bytes(b"")
+    _age(lock, worktrees.STALE_INDEX_LOCK_SECONDS + 5)
+
+    ensure_review_checkout(repo, "critic", second)
+
+    assert _head(path) == second
+    assert not lock.exists()
+
+
+def test_a_young_index_lock_is_left_alone_and_the_refusal_names_it(repo):
+    """A lock younger than any git the Hub starts can live is treated as a live git's."""
+    first = _commit_on_branch(repo, "agentweave/builder", "one.txt", "first\n")
+    second = _commit_on_branch(repo, "agentweave/other", "two.txt", "second\n")
+    ensure_review_checkout(repo, "critic", first)
+    lock = _review_lock(repo, "critic")
+    lock.write_bytes(b"")
+
+    with pytest.raises(worktrees.ReviewCheckoutLockedError) as excinfo:
+        ensure_review_checkout(repo, "critic", second)
+
+    assert lock.exists()
+    assert excinfo.value.lock == lock
+    assert str(lock) in str(excinfo.value)
+
+
+@pytest.mark.skipif(__import__("sys").platform != "win32", reason="Windows refuses the delete")
+def test_a_lock_a_live_process_holds_open_is_not_removed(repo):
+    first = _commit_on_branch(repo, "agentweave/builder", "one.txt", "first\n")
+    second = _commit_on_branch(repo, "agentweave/other", "two.txt", "second\n")
+    ensure_review_checkout(repo, "critic", first)
+    lock = _review_lock(repo, "critic")
+    with open(lock, "wb") as held:
+        _age(lock, worktrees.STALE_INDEX_LOCK_SECONDS + 5)
+        with pytest.raises(worktrees.ReviewCheckoutLockedError):
+            ensure_review_checkout(repo, "critic", second)
+        assert lock.exists()
+        held.write(b"")
+
+
+def test_the_main_checkouts_index_lock_is_never_touched(repo):
+    first = _commit_on_branch(repo, "agentweave/builder", "one.txt", "first\n")
+    main_lock = repo / ".git" / "index.lock"
+    main_lock.write_bytes(b"")
+    _age(main_lock, worktrees.STALE_INDEX_LOCK_SECONDS + 5)
+
+    ensure_review_checkout(repo, "critic", first)
+    ensure_review_checkout(repo, "critic", first)
+
+    assert main_lock.exists()

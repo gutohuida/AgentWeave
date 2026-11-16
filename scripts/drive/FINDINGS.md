@@ -41918,3 +41918,9 @@ Open a conversation, open the side panel's Specs tab, open a spec that has messa
 - `mkdir` and cleanup in `create_new`.
 
 **Expected:** creating or opening a project never blocks other requests on its folder's file or git I/O. **Not covered here:** `/health` also reads files on the loop on every call. The turn-start freeze test's 131 ms and 172 ms stalls (0 ms of process CPU) are not explained yet: AW-157 reordered `_loop_lag`'s message so the next failure names who held the GIL.
+
+## F1183 (A) -- an expired Claude sign-in that cannot be renewed is reported runnable
+
+Launchability showed claude `present/authorized/runnable` while every turn failed with "this login reached its time limit and cannot be renewed. Run `claude auth login`".
+
+**Status:** fixed -- `hub/hub/claude_signin.py`: a run ending with that text marks the sign-in unrenewable until the credentials file changes (`CLAUDE_CONFIG_DIR` respected); an expired token with no refresh token also counts. `expiresAt` alone does not.
