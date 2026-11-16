@@ -91,7 +91,9 @@ ORDER = ["ac-same-list", "ac-verdict", "ac-verdict-false", "ac-ack", "ac-operato
          "ac-ack-visible", "ac-approve-acks"]
 # What is told and never gates, whichever list carries it.
 NOTES = {"import_not_approved", "delivery_unanswered", "delivery_flow_incomplete",
-         "capability_unnamed", "roadmap_slice_unclaimed"}
+         "capability_unnamed", "roadmap_slice_unclaimed",
+         # advisory since they were written: told on a save and a Check, never a gate
+         "test_only_task", "reviewer_undeclared", "recommended_people"}
 OUT = [REPO / "testbed" / "one-readiness-drive" / STAMP]
 
 checks = {}  # key -> (reached, failed, detail)

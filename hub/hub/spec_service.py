@@ -20,6 +20,7 @@ from . import (
     readable_ids,
     requirement_coverage,
     requirement_links,
+    spec_acknowledgements,
     spec_capability_links,
     spec_completeness,
     spec_digest,
@@ -62,6 +63,11 @@ class SaveResult:
     blocking: List[Dict[str, Any]] = field(default_factory=list)
     divergence: Optional[Dict[str, str]] = None
     warnings: List[Dict[str, Any]] = field(default_factory=list)
+    # `ready-means-the-same-thing-to-the-author-and-the-operator`: the one verdict, the notes that
+    # never gate, and the gaps the author or the operator chose to leave.
+    ready_to_approve: bool = False
+    notes: List[Dict[str, Any]] = field(default_factory=list)
+    acknowledged: List[Dict[str, Any]] = field(default_factory=list)
     # Set by a fold only: the capability's warnings from before the fold, which `warnings` no
     # longer repeats, so the change is not reported for gaps it did not introduce (F754).
     standing_warnings: List[Dict[str, Any]] = field(default_factory=list)
@@ -357,20 +363,19 @@ async def _apply_and_write(
         source=spec_index.SOURCE_HUB,
     )
 
-    blocking, warnings = await _completeness_report(session, workspace, document, payload)
     # F1123: the unclaimed-slice advice is for the author naming a slice, so it rides the save
     # result only; Approve, Propose and Check no longer show it to the operator.
-    warnings.extend(
-        f.to_dict()
-        for f in await _unclaimed_slices(session, workspace, document.project_id, payload)
-    )
+    report = await readiness(session, workspace, document, payload, for_save=True, prune=True)
     return SaveResult(
         path=document.path,
         phase=document.phase,
         identifiers=identifiers,
-        blocking=blocking,
+        blocking=report.refusals,
         divergence=({"recorded": divergence[0], "found": divergence[1]} if divergence else None),
-        warnings=warnings,
+        warnings=report.warnings,
+        ready_to_approve=report.ready,
+        notes=report.notes,
+        acknowledged=report.acknowledged,
     )
 
 
@@ -410,42 +415,96 @@ async def served_keys(session: AsyncSession, document: SpecDocument, payload: Sp
     return served
 
 
-async def _completeness_report(
+@dataclass(frozen=True)
+class Readiness:
+    """What a document reports at one moment, the one list the save result, Check and Approve share
+    (`ready-means-the-same-thing-to-the-author-and-the-operator` FR-1, FR-2).
+
+    `refusals` nothing passes; `gaps` are open, the operator may approve over them; `notes` gate
+    nothing (`NOTE_CODES`); `acknowledged` are gaps somebody chose to leave, with their reason.
+    """
+
+    refusals: List[Dict[str, Any]]
+    gaps: List[Dict[str, Any]]
+    notes: List[Dict[str, Any]]
+    acknowledged: List[Dict[str, Any]]
+
+    @property
+    def ready(self) -> bool:
+        """True exactly when Approve would not stop: no refusal and no unacknowledged gap."""
+        return not self.refusals and not self.gaps
+
+    @property
+    def warnings(self) -> List[Dict[str, Any]]:
+        """The open gaps and the notes, as a save's and a Check's `warnings` have always held them."""
+        return [*self.gaps, *self.notes]
+
+
+async def readiness(
     session: AsyncSession,
     workspace: ProjectWorkspace,
     document: SpecDocument,
     payload: SpecPayload,
-) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
-    """What a write of `payload` to `document` reports: `(blocking, warnings)`."""
+    *,
+    for_save: bool = False,
+    prune: bool = False,
+) -> Readiness:
+    """The single computation of a document's refusals, gaps, notes and acknowledged gaps.
+
+    `for_save` adds the unclaimed-slice advice that only the author's save carries (F1123).
+    `prune` drops the acknowledgements whose gap is no longer reported (FR-4); only a write
+    passes it, so a Check stays read-only.
+    """
     board_served = await served_keys(session, document, payload)
     approved_paths = await spec_lifecycle.approved_document_paths(session, document.project_id)
     roadmaps = await roadmap_states(session, workspace, document.project_id, payload)
-    # F703: split exactly as a proposal splits them, so a write and a propose of the same
-    # payload agree on what blocks. A gap is a warning here too; calling it `blocking` told
-    # agents a proposal would be refused when it would pass.
-    refusals, gaps = spec_completeness.split(
-        spec_completeness.check(
+    findings = [
+        *spec_completeness.check(
             payload,
             board_served=board_served,
             approved_document_paths=approved_paths,
             roadmaps=roadmaps,
-        )
-    )
-    return [finding.to_dict() for finding in refusals], [
-        f.to_dict()
-        for f in (
-            *gaps,
-            # F1124: what Approve would list, so an author is not told "ready" and then stopped.
-            *spec_completeness.approval_gaps(payload),
-            *spec_completeness.overlap_warnings(payload),
-            *spec_completeness.undeclared_files_warnings(payload),
-            *spec_completeness.test_only_task_warnings(payload),
-            *spec_completeness.reviewer_undeclared_warnings(payload),
-            *spec_completeness.recommended_people_warnings(payload),
-            # `a-change-names-the-capabilities-it-changes` FR-3: told on save and on Check alike.
-            *capability_link_notes(payload),
-        )
+        ),
+        *spec_completeness.approval_gaps(payload),
+        # Same-file tasks with no order between them run in parallel and collide (F694).
+        *spec_completeness.overlap_warnings(payload),
+        # F1014: tasks that declare no files hide any overlap.
+        *spec_completeness.undeclared_files_warnings(payload),
+        *spec_completeness.test_only_task_warnings(payload),
+        *spec_completeness.reviewer_undeclared_warnings(payload),
+        *spec_completeness.recommended_people_warnings(payload),
+        *capability_link_notes(payload),
+        *_steps_skipped(workspace, document),
+        *await _amendments_unreviewed(session, document),
+        *await _vault_warnings(session, workspace, document),
     ]
+    if for_save:
+        findings.extend(await _unclaimed_slices(session, workspace, document.project_id, payload))
+    seen: set = set()
+    unique = []
+    for finding in findings:
+        identity = (finding.code, finding.where, finding.message)
+        if identity not in seen:
+            seen.add(identity)
+            unique.append(finding)
+    refusals, rest = spec_completeness.split(unique)
+    notes = [f.to_dict() for f in rest if f.code in NOTE_CODES]
+    gaps = [f for f in rest if f.code not in NOTE_CODES]
+
+    rows = await spec_acknowledgements.rows_for(session, document)
+    if prune:
+        await spec_acknowledgements.prune(
+            session, document, rows, [(f.code, f.where) for f in gaps]
+        )
+    open_gaps: List[Dict[str, Any]] = []
+    acknowledged: List[Dict[str, Any]] = []
+    for gap in gaps:
+        row = rows.get((gap.code, gap.where))
+        if row is None:
+            open_gaps.append(gap.to_dict())
+        else:
+            acknowledged.append(spec_acknowledgements.entry(gap.to_dict(), row))
+    return Readiness([f.to_dict() for f in refusals], open_gaps, notes, acknowledged)
 
 
 async def merge_document(
@@ -1013,8 +1072,8 @@ async def _standing_warnings(
         payload = validate_payload(_read(workspace, capability))
     except PayloadError:
         return set()
-    _, warnings = await _completeness_report(session, workspace, capability, payload)
-    return {_identity(w) for w in warnings}
+    report = await readiness(session, workspace, capability, payload)
+    return {_identity(w) for w in (*report.warnings, *report.acknowledged)}
 
 
 async def rename_document(
@@ -1396,7 +1455,21 @@ async def _unclaimed_slices(
 #: Findings that are told and never gate (F704, "warn, don't gate"): neither a refusal nor a gap the
 #: operator must approve over. A proposal returns them among its warnings; an approval records them
 #: as the phase event's `notes` and answers them as `approval_notes`.
-NOTE_CODES = frozenset({"roadmap_slice_unclaimed", spec_capability_links.CAPABILITY_UNNAMED})
+NOTE_CODES = frozenset(
+    {
+        "roadmap_slice_unclaimed",
+        spec_capability_links.CAPABILITY_UNNAMED,
+        # Approve has always passed these three without stopping; under one list they are notes,
+        # shown everywhere and never affecting the verdict (FR-10).
+        "import_not_approved",
+        "delivery_unanswered",
+        "delivery_flow_incomplete",
+        # Advisory since they were written: told on a save and a Check, never a gate.
+        "test_only_task",
+        "reviewer_undeclared",
+        "recommended_people",
+    }
+)
 
 
 def capability_link_notes(payload: SpecPayload) -> List[spec_completeness.Finding]:
@@ -1414,21 +1487,17 @@ def capability_link_notes(payload: SpecPayload) -> List[spec_completeness.Findin
 @dataclass(frozen=True)
 class PhaseFindings:
     """What an approval finds: refusals, which nothing passes, gaps, which the
-    operator may approve over (approve-lists-what-is-missing-and-can-approve-anyway, FR-2/3), and
-    notes, which gate nothing (`NOTE_CODES`)."""
+    operator may approve over (approve-lists-what-is-missing-and-can-approve-anyway, FR-2/3),
+    notes, which gate nothing (`NOTE_CODES`), and the gaps already acknowledged."""
 
     refusals: List[Dict[str, Any]]
     gaps: List[Dict[str, Any]]
     notes: List[Dict[str, Any]] = field(default_factory=list)
+    acknowledged: List[Dict[str, Any]] = field(default_factory=list)
 
 
-async def _completeness(
-    session: AsyncSession,
-    workspace: ProjectWorkspace,
-    document: SpecDocument,
-    to_phase: str,
-) -> Tuple[SpecPayload, List[spec_completeness.Finding]]:
-    """The document's payload and what `spec_completeness.check` finds for `to_phase`.
+def _stored_payload(workspace: ProjectWorkspace, document: SpecDocument) -> SpecPayload:
+    """The document's payload on disk, validated.
 
     A document whose file carries no payload, or one that no longer validates, raises
     `SaveRefusedError`: there is nothing to check.
@@ -1439,36 +1508,10 @@ async def _completeness(
             "this document carries no payload to check; it has not been written by the Hub",
             code="no_payload",
         )
-
     try:
-        payload = validate_payload(stored)
+        return validate_payload(stored)
     except PayloadError as exc:
         raise SaveRefusedError(str(exc), code="payload_invalid", field_path=exc.field) from exc
-
-    board_served = await served_keys(session, document, payload)
-    approved_paths = await spec_lifecycle.approved_document_paths(session, document.project_id)
-    roadmaps = await roadmap_states(session, workspace, document.project_id, payload)
-    findings = spec_completeness.check(
-        payload,
-        board_served=board_served,
-        approved_document_paths=approved_paths,
-        roadmaps=roadmaps,
-    )
-    if to_phase == spec_lifecycle.APPROVED:
-        # A document whose import source is not approved is approved anyway and the reference
-        # recorded as `document_not_approved` (task-dependencies, settled). A document whose
-        # delivery answer is absent or incomplete is approved anyway: it just means Build creates
-        # no flow, and the build report says so (D4) — it is not a reason to refuse approval.
-        excluded_at_approval = {
-            "import_not_approved",
-            "delivery_unanswered",
-            "delivery_flow_incomplete",
-        }
-        findings = [f for f in findings if f.code not in excluded_at_approval]
-
-    # No `explore_not_closed` here any more: the journey step replaced the operator's "exploration
-    # is complete" boolean (`a-spec-is-written-one-step-at-a-time` FR-11).
-    return payload, findings
 
 
 def _steps_skipped(
@@ -1557,70 +1600,29 @@ async def phase_findings(
     document: SpecDocument,
     to_phase: str,
 ) -> PhaseFindings:
-    """Every finding for `to_phase`, as refusals and gaps (FR-2, FR-3).
+    """Every finding for `to_phase`, as refusals and gaps (FR-2, FR-3): `readiness`, unchanged.
 
-    The gaps add what only proposal and approval report: `spec_completeness.approval_gaps` and
-    `steps_skipped`. A payload that is missing or invalid raises `SaveRefusedError`, a refusal.
+    A payload that is missing or invalid raises `SaveRefusedError`, a refusal.
     """
     if to_phase != spec_lifecycle.APPROVED:
         return PhaseFindings([], [])
-    payload, findings = await _completeness(session, workspace, document, to_phase)
-    findings = [
-        *findings,
-        *spec_completeness.approval_gaps(payload),
-        # Same-file tasks with no order between them run in parallel and collide (F694): the save
-        # result's advisory alone never reached the operator, so proposal and approval say it too.
-        *spec_completeness.overlap_warnings(payload),
-        # F1014: tasks that declare no files hide any overlap; a warning, not a note, because the
-        # operator should weigh it before approving, as with the overlap it stands in for.
-        *spec_completeness.undeclared_files_warnings(payload),
-        *_steps_skipped(workspace, document),
-        *await _amendments_unreviewed(session, document),
-        *await _vault_warnings(session, workspace, document),
-        *capability_link_notes(payload),
-    ]
-    refusals, gaps = spec_completeness.split(findings)
-    return PhaseFindings(
-        [f.to_dict() for f in refusals],
-        [f.to_dict() for f in gaps if f.code not in NOTE_CODES],
-        [f.to_dict() for f in gaps if f.code in NOTE_CODES],
-    )
+    report = await readiness(session, workspace, document, _stored_payload(workspace, document))
+    return PhaseFindings(report.refusals, report.gaps, report.notes, report.acknowledged)
 
 
 async def check(
     session: AsyncSession,
     workspace: ProjectWorkspace,
     document: SpecDocument,
-) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
-    """The document's readiness, `(blocking, warnings)`, exactly as the agent's last save of the
-    stored payload reported it, and nothing moved (`exploring-ends-at-an-approved-plan`, FR-1).
+) -> Readiness:
+    """The document's readiness over the stored payload: the same `readiness` a save and Approve
+    use, and nothing moved (`exploring-ends-at-an-approved-plan`, FR-1).
 
     Read-only: no phase, file, digest or event is written, so the operator can check at any time
-    while an agent keeps saving. It is the save's own report (`_completeness_report`) over the
-    payload on disk, so the two cannot disagree. A document whose file carries no payload, or one
-    that no longer validates, raises `SaveRefusedError`: there is nothing to check.
+    while an agent keeps saving. A document whose file carries no payload, or one that no longer
+    validates, raises `SaveRefusedError`: there is nothing to check.
     """
-    stored = spec_documents.read_payload(workspace, document.path)
-    if stored is None:
-        raise SaveRefusedError(
-            "this document carries no payload to check; it has not been written by the Hub",
-            code="no_payload",
-        )
-    try:
-        payload = validate_payload(stored)
-    except PayloadError as exc:
-        raise SaveRefusedError(str(exc), code="payload_invalid", field_path=exc.field) from exc
-    blocking, warnings = await _completeness_report(session, workspace, document, payload)
-    # AW-127: what Approve would list beyond a save's own report, so Check never says "ready" and
-    # Approve then lists gaps. Only a change document walks the journey; the others have none.
-    seen = {(w.get("code"), w.get("where")) for w in warnings}
-    extra = [
-        *_steps_skipped(workspace, document),
-        *await _amendments_unreviewed(session, document),
-        *await _vault_warnings(session, workspace, document),
-    ]
-    warnings.extend(f.to_dict() for f in extra if (f.code, f.where) not in seen)
-    return blocking, warnings
+    return await readiness(session, workspace, document, _stored_payload(workspace, document))
 
 
 async def rerender_phase(
@@ -1690,11 +1692,18 @@ async def render_page(
     if manifest is not None and path in manifest.by_path():
         summaries = spec_documents.corpus_summaries(workspace, manifest)
         corpus = spec_documents.build_corpus_context(manifest, path, summaries)
+    # The gaps its author or the operator left on purpose, beside the payload (FR-5).
+    acknowledged = (
+        (await readiness(session, workspace, document, payload)).acknowledged
+        if document is not None
+        else []
+    )
     return render_document(
         payload,
         identifiers,
         phase=phase,
         stored_payload=stored,
+        acknowledged=acknowledged,
         corpus=corpus,
         slice_of=slice_of(workspace, payload),
         # A roadmap's page says where each slice stands (F579); only a read can, since the state

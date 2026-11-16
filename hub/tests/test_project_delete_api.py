@@ -59,6 +59,7 @@ from hub.db.models import (
     SpecDocument,
     SpecDocumentEvent,
     SpecDocumentMerge,
+    SpecGapAcknowledgement,
     SpecRequirement,
     SpecRequirementRevision,
     SpecRigorEvent,
@@ -112,6 +113,7 @@ PROJECT_SCOPED_TABLE_NAMES = [
     "spec_rigor_events",
     "spec_requirements",
     "spec_document_events",
+    "spec_gap_acknowledgements",
     "spec_document_merges",
     "runs",
     "run_divergences",
@@ -388,6 +390,17 @@ async def _seed_full_project(session, project_id: str, tag: str) -> None:
             kind="created",
             actor_kind="operator",
             origin="control",
+        )
+    )
+    session.add(
+        SpecGapAcknowledgement(
+            id=f"specgapack-{tag}",
+            document_id=f"specdoc-{tag}",
+            project_id=project_id,
+            code="criterion_without_check",
+            place="FR-1",
+            reason="left on purpose",
+            actor_kind="operator",
         )
     )
     session.add(
