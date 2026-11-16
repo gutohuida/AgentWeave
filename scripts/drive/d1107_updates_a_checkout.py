@@ -912,7 +912,8 @@ def dump_parts(path: pathlib.Path) -> dict:
     """`u.stable_dump`'s parts, each by name, so a moved checksum says what moved."""
     connection = sqlite3.connect(f"file:{path.as_posix()}?mode=ro", uri=True)
     queries = {
-        "schema": "select name, sql from sqlite_master where type in ('table','index') order by name",
+        "schema": "select name, sql from sqlite_master where type in ('table','index')"
+        " and name not like 'sqlite_stat%' order by name",
         "revision": "select * from alembic_version",
         "projects": "select id from projects order by id",
         "agents": "select id from agents order by id",
