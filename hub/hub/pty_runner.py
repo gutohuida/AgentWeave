@@ -27,6 +27,7 @@ import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+from . import binaries
 from .subprocess_windows import ensure_windowless_console, no_console_kwargs
 
 IS_WINDOWS = sys.platform == "win32"
@@ -165,7 +166,7 @@ def resolve_executable(cmd: List[str]) -> List[str]:
     if Path(cmd[0]).is_absolute():
         resolved: Optional[str] = cmd[0]
     else:
-        resolved = shutil.which(cmd[0])
+        resolved = binaries.native_which(cmd[0])
     if not resolved:
         raise FileNotFoundError(f"{cmd[0]!r} was not found in PATH")
     if IS_WINDOWS and Path(resolved).suffix.lower() in (".cmd", ".bat"):
