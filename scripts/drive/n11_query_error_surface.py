@@ -145,6 +145,7 @@ CLASSIFIED: list[tuple[str, str, int, str, str, str]] = [
     ('components/projects/DirectoryPicker.tsx', 'useFilesystemRoots', 1, 'MISREPORT', 'PICKER', '`roots = rootsData?.roots ?? []` (:47) leaves the roots strip empty'),
     ('components/projects/ProjectManagerModal.tsx', 'useNativeDialogAvailability', 1, 'BLANK', '', '`nativeAvailability?.available` (:141, :169) falls back to the manual path — deliberate degradation'),
     ('components/questions/QuestionsPanel.tsx', 'useAgents', 1, 'BLANK', '', 'the per-agent timeout lookup (:143)'),
+    ('components/settings/AppSettingsScreen.tsx', 'useHubVersion', 1, 'BLANK', '', '`if (!data?.version) return null` (:141): the version row is absent'),
     ('components/spec/SpecCoverageBar.tsx', 'useSpecCoverage', 1, 'BLANK', '', '`if (!data …) return null` (:87)'),
     ('components/tasks/TaskDetailDrawer.tsx', 'useTaskIntegrationPreview', 1, 'SUPPRESSED', '', "`if (!canApprove || !data) return null` (:36) drops the 'Approving will not merge anything' warning"),
     ('components/tasks/TaskDetailDrawer.tsx', 'useAllowedTransitions', 1, 'SUPPRESSED', '', '`moves = allowed?.transitions?.[status] ?? []` (:191) — every status button disappears'),
