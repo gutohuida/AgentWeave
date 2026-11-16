@@ -259,3 +259,41 @@ async def test_a_startup_timeout_leaves_a_run_error_that_says_what_timed_out(
             )
         assert run.status == "failed"
         assert expect in run.error, run.error
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("surface", ["mcp", "shim"])
+async def test_a_spec_turns_sentence_follows_the_surface_its_own_test_decided(
+    app, auth_headers, bind_runner, surface
+):
+    """F1191: a run that tests itself is told its surface after the test, and so is the spec
+    turn's sentence about its one write (F1161). Composed before the test it was worded for the
+    pre-spawn guess, and told a run the opposite of the access notice beside it."""
+    document = "spec/changes/f1191-copilot-spec/spec.json"
+    await _copilot_agent(app, auth_headers, bind_runner)
+    created = await app.post(
+        "/api/v1/projects/proj-test/project/documents",
+        json={"path": document, "title": "F1191"},
+        headers=auth_headers,
+    )
+    assert created.status_code == 201, created.text
+    told = []
+
+    async def _run(**kwargs):
+        told.extend(await kwargs["render_surface"](surface, True, None))
+        await kwargs["on_session"]("sess-spec")
+        return TurnOutcome(session_id="sess-spec", status="completed")
+
+    fake = AsyncMock(side_effect=_run)
+    with patch("hub.copilot_acp.run_turn", fake):
+        response = await _trigger(app, auth_headers, session_mode="new", spec_document=document)
+        assert response.status_code == 200, response.text
+        await await_background_runs()
+
+    notice = told[0]
+    no_write = "You have no file-write tool this turn."
+    assert "SPECIFICATION TURN" in notice
+    assert (no_write in notice) is (surface == "mcp")
+    assert (".agentweave/calls/" in notice) is (surface == "shim")
+    # Not also composed before the test, for the guess.
+    assert "SPECIFICATION TURN" not in fake.call_args.kwargs["prompt"]
