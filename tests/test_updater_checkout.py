@@ -308,8 +308,10 @@ def test_a_deep_hub_dir_and_a_long_tracked_path_still_make_the_previous_commit(
 ):
     # QA's drive (DCUSW-4): under a deep HUB_DIR, git refused a tracked path past Windows' 260
     # characters ("Filename too long") and every apply was blocked. The blob is added by plumbing,
-    # so this test does not itself need to write a long path into the source checkout.
-    long_dir = "/".join(["a-rather-long-folder-name-like-the-archive-has"] * 3)
+    # so this test does not itself need to write a long path into the source checkout. The length
+    # is in the tracked path, not the folder: git still caps the worktree's own `.git` at 260
+    # whatever core.longpaths says, which pytest-xdist's deeper tmp_path alone came close to.
+    long_dir = "/".join(["a-rather-long-folder-name-like-the-archive-has"] * 5)
     long_path = f"{long_dir}/specs/some-capability-with-a-long-name/spec.md"
     blob = subprocess.run(
         ["git", "-C", str(repo), "hash-object", "-w", "--stdin"],
@@ -321,7 +323,7 @@ def test_a_deep_hub_dir_and_a_long_tracked_path_still_make_the_previous_commit(
     _git(repo, "update-index", "--add", "--cacheinfo", f"100644,{blob},{long_path}")
     _git(repo, "commit", "-q", "-m", "a long tracked path")
     hub = _head(repo)
-    previous = tmp_path / ("deep-hub-dir-" + "x" * 60) / ".agentweave" / "hub" / "previous-commit"
+    previous = tmp_path / "home" / ".agentweave" / "hub" / "previous-commit"
     assert len(str(previous)) + 1 + 12 + 1 + len(long_path) > 260
     target, why = updater.prepare_previous(repo, hub, previous)
     assert why is None and target is not None
