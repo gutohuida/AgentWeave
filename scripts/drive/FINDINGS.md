@@ -40922,6 +40922,8 @@ Repro: Architect submitted the document; the answer was `blocking: []`, `ready_t
 
 **Also (2026-10-29, Architect):** an unresolved open question only warns. `submit_spec_document` answered `blocking: []` and `ready_to_approve: true` for `a-task-s-checks-and-merges-use-its-own-work-and-a-live-run-is-never-reset`, while three open questions were `resolved: false` and only raised `unresolved_question` warnings. The tool's own description says "An unresolved one blocks the document".
 
+**Also (2026-11-16, Architect, fresh-install drive):** still live in PyPI 2.2.0 and the first thing a new user meets. On both a Windows and a WSL fresh install, a Haiku planner wrote a complete document in one turn (`ready_to_approve: true`) and left it at step `intake`, so the very first approval in a new project answered 409 `approval_warnings` / `steps_skipped`.
+
 ## F1086 (B) -- the Hub's own knowledge-vault output dirties the project checkout and blocks its own landing
 
 **Status:** fixed 2026-11-12 (`4ac1ec8`, on `agentweave/DeveloperOpus`): integration does not count the Hub's own writes. `hub/hub/hub_writes.py` records the digest of every Hub write to `spec/index.json`, the journey, document files and `knowledge/`, and `hub_written_documents` exempts each file that still holds it (a hand edit stays dirty); a landing batch now asks the checkout question before its checks as well as after (`hub/tests/test_hub_writes_do_not_block_landing.py`). Opened 2026-10-29. Found by reading the ledger of `spdoc-a7d41f10be14` (Architect).
@@ -41880,3 +41882,54 @@ Open DeveloperOpus's conversation (on task-ef2c024ea80c, "Shell task finished; a
 **Tier:** 0
 
 Open a conversation, open the side panel's Specs tab, open a spec that has messages (here "Dashboards load with the brand's thread instead of a shimmer"), and click the message count in its header (`spec-notice-count`). The box (`.aw-notice-pop`, `hub/ui/src/styles/spec-notices.css:39`) is `position: absolute; right: 0; width: 520px; max-width: calc(100vw - 32px)`: it hangs leftwards from the badge and is capped only by the window. In the panel it spans x=635-1155 while the panel's scroll area (`min-h-0 flex-1 overflow-auto`) starts at x=730, so its left 95px, the start of each message and its expand control, are clipped. Same family as F1179: a spec page or conversation drawn in the narrower column the panel leaves. **Expected:** the box always lies inside the column that holds the spec: it shrinks to that column's width, or opens from the badge's left edge when there is no room to its left, so every message reads whole at any panel width. **Test:** with the spec in the side panel at its narrowest width, the box's left edge is at or right of its scroll container's left edge, and the same holds on the full-width Spec page.
+
+## F1181 (A) -- a two-task change's first task is silently made its "acceptance drive", and the drive gate then cannot be passed
+
+**Status:** open
+**Source:** found by driving -- Architect, 2026-11-16, fresh PyPI 2.2.0 install on Windows (sandboxed home, :8030), first change in a new project
+**Theme:** Evidence and review
+**Ready:** yes
+**Tier:** 1
+
+A Haiku planner wrote the obvious first change: task 1 "Add count_lines and the --lines flag", task 2 "Test count_lines" depending on it. `spec_completeness.acceptance_drive_key` takes any first task that every other task waits on as the acceptance drive, so task 1 became one. Only the reviewer is told (`drive_baseline.review_sentence`, used only by `review_turn.py`); the builder's prompt says nothing, so the first review sent it back for a missing `drive_baseline`. The builder then ran the checks on pre-build code honestly: FR-1 failed at its assertion, but FR-2 ("default output stays the word count") *passes* on pre-build code by construction, and FR-3 (a new function) fails at import, never reaching its assertion. FR-7 refuses both, so honest evidence can never pass. The builder raised `report_cannot_satisfy` and `ask_user`; the operator answered "waive the baseline", and the next review sent it back again, because its instructions require every check to fail. "Land it" was refused too (`drive_baseline_missing`, and FR-1's earlier rejected evidence). Recording operator evidence of kind `drive_baseline` at the task commit was refused as a duplicate of the operator's `test_result` at the same commit (the duplicate check ignores `kind`). It merged only after the operator accepted the builder's rejected baselines one by one through the evidence decision route. A first-time user would be stuck. **Expected:** a task is a drive only when the document says so; the builder of a drive is told it is one; a regression-guard or new-symbol check has a baseline form that can pass; and the operator's waiver or Land it ends the loop. **Test:** approve a two-task implement-then-test document, build task 1 without a baseline, and the task reaches approved with no operator evidence decisions.
+
+## F1182 (A) -- on Linux, a Codex agent's first turn cannot reach the Hub, so a review it runs records nothing and the task stays under review
+
+**Status:** open
+**Source:** found by driving -- Architect, 2026-11-16, fresh PyPI 2.2.0 install in WSL Ubuntu 24.04 (Python 3.12, codex-cli 0.169.0, :8040)
+**Theme:** Runners
+**Ready:** yes
+**Tier:** 1
+
+`launchability.told_access_path` tells a run to use MCP only once this agent's latest tested run found the harness `connected`; until then it is told `aw-tool`. Codex runs `workspace-write`, and on Linux that sandbox blocks network for shell commands, so every `aw-tool` call returns `unreachable` (the hint `shell_may_lack_network` only tells the agent to give up). In WSL, the Codex reviewer's first-ever turn was the automatic review of a Claude-built task: `harness_mcp_status=connected`, `plane_surface=shim`, and the agent said "the Hub call returned unreachable, I can't record a verdict". The run completed and the task stayed `under_review` with no verdict and no notice. Its second turn (told `mcp`) approved and merged. The Codex builder's first chat turn hit the same wall. On Windows the same first turns worked, because the shim reached the Hub there. **Expected:** a Codex run whose own MCP server is given is told MCP from its first turn (or the shim is reachable from its sandbox), and a review that records no verdict is surfaced, not left silently under review. **Test:** on Linux, a new Codex agent's first turn is a review, and it records a verdict.
+
+## F1183 (B) -- an expired Claude sign-in is reported as authorized, and the first turn fails
+
+**Status:** open
+**Source:** found by driving -- Architect, 2026-11-16, WSL fresh install
+**Theme:** Runners
+**Ready:** yes
+**Tier:** 0
+
+WSL's `~/.claude/.credentials.json` had an `expiresAt` long in the past. `GET /runners/launchability-by-provider` reported `claude: present, authorized, runnable`, and the Add-agent dialog offers it, but every turn failed with "Failed to authenticate: this login reached its time limit and cannot be renewed. Run `claude auth login`". A new user's first message is where they find out. **Expected:** launchability (and `agentweave doctor`) report the expired sign-in with the `claude auth login` remedy before any turn is started. **Test:** with an expired credential file, the provider is not runnable and the reason names `claude auth login`.
+
+## F1184 (B) -- agents run with AgentWeave's own virtualenv first on PATH, so `python` is the Hub's and agents install into it
+
+**Status:** open
+**Source:** found by driving -- Architect, 2026-11-16, fresh installs on Windows and WSL (agentweave-ai installed in a venv, as `pip install` users commonly do)
+**Theme:** Runners
+**Ready:** yes
+**Tier:** 1
+
+Runs inherit the Hub's environment, so in an agent's shell `python` / `python3` / `pip` are the venv AgentWeave is installed in. On Windows the builders reported "pytest is not installed in this environment" while `pytest` on PATH worked; in WSL the Claude builder ran `pip install pytest`, and it landed in `/tmp/awfresh/venv` (AgentWeave's own venv). An agent can therefore change or break the Hub's own install, and the project's interpreter is not the one its agents test with. **Expected:** a run's PATH does not lead with the Hub's own interpreter directory, unless the project is that venv. **Test:** with the Hub started from an activated venv, `python -c "import sys; print(sys.prefix)"` in a run does not print the Hub's venv.
+
+## F1185 (C) -- `.agentweave/hub-writes.json` is not excluded, so every project shows `?? .agentweave/` in git status
+
+**Status:** open
+**Source:** found by driving -- Architect, 2026-11-16, fresh installs on Windows and WSL
+**Theme:** Repository hygiene
+**Ready:** yes
+**Tier:** 0
+
+`repo_hygiene` writes `.git/info/exclude` entries for each `.agentweave/` subfolder plus `project.json`, but not `hub-writes.json` (`hub_writes.LEDGER`), so on a brand-new project `git status` shows `?? .agentweave/` from the first agent turn. A user tidying up will `git add .` it. **Expected:** nothing under `.agentweave/` is ever untracked-visible. **Test:** after one agent turn on a fresh repository, `git status --porcelain` lists nothing under `.agentweave/`.
+
