@@ -1,0 +1,102 @@
+/* Task threads on the spec page: the three layouts compared in the mock (task-threads). Tokens only. */
+.aw-st {
+  --st-done: var(--green);
+  --st-active: var(--blue);
+  --st-waiting: var(--text-3);
+  --st-rejected: var(--red);
+}
+
+/* Legend */
+.aw-st-legend { display: flex; flex-wrap: wrap; gap: 4px 16px; margin: 0 0 10px; padding: 0; list-style: none; font-size: 12px; color: var(--text-2); }
+.aw-st-legend li { display: inline-flex; align-items: center; gap: 6px; }
+.aw-st-swatch { display: inline-block; width: 18px; height: 0; border-top: 2px solid var(--st-waiting); }
+.aw-st-swatch[data-state="done"] { border-color: var(--st-done); }
+.aw-st-swatch[data-state="active"] { border-color: var(--st-active); border-top-style: dashed; }
+.aw-st-swatch[data-state="waiting"] { border-top-style: dotted; }
+.aw-st-swatch[data-state="rejected"] { border-color: var(--st-rejected); }
+
+/* A thread, whichever layout draws it: coloured by its prerequisite's state. */
+.aw-st-thread { fill: none; stroke: var(--st-waiting); stroke-width: 1.75; stroke-linecap: round; transition: opacity var(--dur-base) ease, stroke-width var(--dur-fast) ease; }
+.aw-st-thread[data-state="done"] { stroke: var(--st-done); }
+.aw-st-thread[data-state="active"] { stroke: var(--st-active); stroke-dasharray: 5 4; animation: aw-st-flow 900ms linear infinite; }
+.aw-st-thread[data-state="waiting"] { stroke-dasharray: 1.5 4; }
+.aw-st-thread[data-state="rejected"] { stroke: var(--st-rejected); }
+.aw-st-thread[data-lit="on"] { stroke-width: 2.5; }
+.aw-st-thread[data-lit="dim"] { opacity: 0.15; }
+@keyframes aw-st-flow { to { stroke-dashoffset: -18; } }
+
+.aw-st-card { transition: border-color var(--dur-fast) ease, opacity var(--dur-base) ease; }
+.aw-st-card:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--ring); }
+.aw-st-card[data-lit="dim"] { opacity: 0.4; }
+.aw-st-card[data-lit="on"] { border-color: var(--border-hi); }
+.aw-st-card .aw-sp-task-title { cursor: default; }
+.aw-st-card .aw-sp-task-title:hover { text-decoration: none; }
+.aw-st-reqchip { display: inline-flex; align-items: center; }
+
+/* A — the rail */
+.aw-st-rail { position: relative; margin: 0; padding: 0 0 0 var(--gutter); list-style: none; }
+.aw-st-rail-svg { position: absolute; top: 0; left: 0; overflow: visible; pointer-events: none; }
+.aw-st-rail .aw-st-card { margin: 0 0 8px 6px; }
+.aw-st-knot { fill: var(--sp-status-pending); stroke: var(--bg); stroke-width: 2.5; transition: opacity var(--dur-base) ease; }
+.aw-st-knot[data-status="in_progress"] { fill: var(--sp-status-in_progress); }
+.aw-st-knot[data-status="under_review"] { fill: var(--sp-status-under_review); }
+.aw-st-knot[data-status="approved"] { fill: var(--sp-status-approved); }
+.aw-st-knot[data-status="revision_needed"], .aw-st-knot[data-status="rejected"] { fill: var(--sp-status-rejected); }
+.aw-st-knot[data-status="completed"], .aw-st-knot[data-status="assigned"] { fill: var(--sp-status-assigned); }
+.aw-st-knot[data-lit="dim"] { opacity: 0.2; }
+
+/* B — stages */
+.aw-st-stages { position: relative; margin: 0; padding: 0; list-style: none; }
+.aw-st-stage { position: relative; padding: 0 0 14px 32px; }
+.aw-st-stage::before { content: ''; position: absolute; left: 10px; top: 24px; bottom: -2px; border-left: 2px solid var(--border); }
+.aw-st-stage[data-state="done"]::before { border-color: color-mix(in oklab, var(--green) 55%, var(--border)); }
+.aw-st-stage:last-child::before { display: none; }
+.aw-st-stage-head { display: flex; align-items: center; gap: 10px; min-height: 24px; margin: 0 0 8px -32px; font-size: 12px; }
+.aw-st-stage-mark {
+  display: inline-grid; place-items: center; width: 22px; height: 22px; flex: none; border-radius: 999px;
+  border: 1.5px solid var(--border-hi); background: var(--bg); font-size: 11px; font-weight: 600; color: var(--text-2);
+}
+.aw-st-stage-mark[data-state="done"] { border-color: var(--green); color: var(--green); }
+.aw-st-stage-mark[data-state="active"] { border-color: var(--blue); color: var(--blue); }
+.aw-st-stage-title { font-size: 12.5px; font-weight: 600; color: var(--text); }
+.aw-st-stage-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 8px; margin: 0; padding: 0; list-style: none; }
+.aw-st-stage-grid[data-single] { grid-template-columns: 1fr; }
+.aw-st-stage-grid .aw-st-card { margin: 0; }
+.aw-st-after { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 4px; color: var(--text-3); }
+.aw-st-afterchip {
+  display: inline-flex; align-items: center; gap: 5px; max-width: 220px; height: 20px; padding: 0 7px;
+  border: 1px solid var(--border); border-radius: 999px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
+  font-size: 11.5px; color: var(--text-2);
+}
+.aw-st-afterchip-dot { width: 6px; height: 6px; flex: none; border-radius: 999px; background: var(--st-waiting); }
+.aw-st-afterchip[data-state="done"] .aw-st-afterchip-dot { background: var(--st-done); }
+.aw-st-afterchip[data-state="active"] .aw-st-afterchip-dot { background: var(--st-active); }
+.aw-st-afterchip[data-state="rejected"] { border-color: color-mix(in oklab, var(--red) 45%, var(--border)); }
+.aw-st-afterchip[data-state="rejected"] .aw-st-afterchip-dot { background: var(--st-rejected); }
+.aw-st-stages { --st-done: var(--green); --st-active: var(--blue); --st-waiting: var(--text-3); --st-rejected: var(--red); }
+
+/* C — the flow map */
+.aw-st-map-scroll { overflow-x: auto; padding: 4px 2px 12px; }
+.aw-st-map { position: relative; }
+.aw-st-map-svg { position: absolute; inset: 0; overflow: visible; pointer-events: none; }
+.aw-st-node {
+  position: absolute; display: flex; flex-direction: column; justify-content: center; gap: 4px; padding: 0 12px;
+  border: 1px solid var(--border); border-left: 3px solid var(--st-waiting); border-radius: var(--radius-md);
+  background: var(--surface); text-align: left; cursor: pointer;
+  transition: border-color var(--dur-fast) ease, opacity var(--dur-base) ease, background var(--dur-fast) ease;
+}
+.aw-st-node:hover { background: var(--surface-2); }
+.aw-st-node:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--ring); }
+.aw-st-node[data-state="done"] { border-left-color: var(--st-done); }
+.aw-st-node[data-state="active"] { border-left-color: var(--st-active); }
+.aw-st-node[data-state="rejected"] { border-left-color: var(--st-rejected); }
+.aw-st-node[data-picked="true"] { border-color: var(--ring); }
+.aw-st-node[data-lit="dim"] { opacity: 0.4; }
+.aw-st-node-title { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 12.5px; font-weight: 500; color: var(--text); }
+.aw-st-node-meta { display: flex; align-items: center; gap: 8px; font-size: 11.5px; }
+.aw-st-picked { margin-top: 6px; }
+.aw-st-hint { margin: 6px 0 0; font-size: 12px; color: var(--text-3); }
+
+@media (prefers-reduced-motion: reduce) {
+  .aw-st-thread[data-state="active"] { animation: none; }
+}

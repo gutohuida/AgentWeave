@@ -12,6 +12,8 @@ export type MockRoute =
   | { kind: 'gallery' }
   /** The task card and story redesign (`task-card-and-story-redesign`). */
   | { kind: 'task-redesign' }
+  /** The spec page's task threads, three layouts to choose from (operator, 2026-11-16). */
+  | { kind: 'task-threads' }
   | { kind: 'thread' }
   /** The traces view: a fourth view inside Activity (operator, 2026-11-02). */
   | { kind: 'traces' }
