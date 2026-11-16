@@ -532,24 +532,24 @@ def browser_checks(ctx, only):
         page = browser.new_page(viewport={"width": 1500, "height": 1100})
         page.add_init_script(seed)
 
-        def open_document(path):
+        def open_document(path, title):
+            """Open the document by its row's title and return True only once the header shows it."""
             page.goto(f"{HUB}/?project={ctx.pid}&tab=spec", wait_until="domcontentloaded")
-            target = page.locator(f'[data-testid="spec-tree-document-{path}"]')
-            poll(lambda: page.locator("[data-testid^=spec-tree-directory-]").count() > 0, 20)
-            closed = page.locator("[data-testid^=spec-tree-directory-][aria-expanded=false]")
-            for _ in range(6):
-                if target.count() or not closed.count():
-                    break
-                closed.first.click()
-            poll(lambda: target.count() == 1, 10)
-            if target.count() == 1:
-                target.click()
-            return poll(lambda: page.locator("[data-testid=spec-phase]").count() == 1, 20)
+            row = page.locator(".aw-sp-list-row").filter(has=page.locator(".aw-sp-list-name", has_text=title))
+            if not poll(lambda: row.count() > 0, 8):
+                trigger = page.locator("[data-slot=switcher]")
+                if trigger.count():
+                    trigger.first.click()
+                poll(lambda: row.count() > 0, 8)
+            if row.count():
+                row.first.click()
+            return poll(lambda: page.locator(".aw-sp-title").count() > 0
+                        and page.locator(".aw-sp-title").first.inner_text().strip() == title, 15)
 
         if not only or "ac-ack-visible" in only:
-            open_document(GAPPY)
+            opened = open_document(GAPPY, "Gappy route")
             page.wait_for_timeout(1500)
-            shown = page.get_by_role("button", name="Check", exact=True).count() > 0
+            shown = opened and page.get_by_role("button", name="Check", exact=True).count() > 0
             page_ack = page.locator("[data-testid=spec-acknowledged]").inner_text() \
                 if page.locator("[data-testid=spec-acknowledged]").count() else ""
             page.screenshot(path=shot + "_page.png", full_page=True)
@@ -565,29 +565,40 @@ def browser_checks(ctx, only):
             rendered = json.dumps(rendered) if not isinstance(rendered, str) else rendered
             rows["visible"] = (shown, page_ack, check_ack_text, open_text, rendered)
         if not only or "ac-approve-acks" in only:
+            ack_codes = []
             for code_, where in (("criterion_without_check", "acceptance_criteria[0]"),
                                  ("steps_skipped", "step"), ("amendments_unreviewed", "amendments"),
                                  ("undeclared_task_files", "tasks")):
-                ctx.ack_operator(GAPPY, code_, where, "Drive: acknowledged so Approve has none open.")
+                ack_codes.append(ctx.ack_operator(GAPPY, code_, where, "Drive: acknowledged so Approve has none open.")[0])
             for finding in ctx.check(GAPPY)[1].get("warnings", []):
-                ctx.ack_operator(GAPPY, finding["code"], finding["where"], "Drive: acknowledged.")
-            open_document(GAPPY)
+                ack_codes.append(ctx.ack_operator(GAPPY, finding["code"], finding["where"], "Drive: acknowledged.")[0])
+            opened = open_document(GAPPY, "Gappy route")
             check_button = page.get_by_role("button", name="Check", exact=True)
-            if check_button.count():
+            checked_here = False
+            if opened and check_button.count():
                 check_button.click()
                 page.wait_for_timeout(2500)
+                checked_here = page.locator(".aw-sp-finding").count() > 0
             approve = page.get_by_role("button", name="Approve", exact=True)
             poll(lambda: approve.count() >= 1, 10)
-            shown = approve.count() >= 1
+            shown = opened and approve.count() >= 1
             dialog = ""
             stopped = False
-            if approve.count():
+            if shown:
                 approve.first.click()
                 page.wait_for_timeout(2000)
                 dialog = page.locator("[data-testid=approval-acknowledged]").inner_text() \
                     if page.locator("[data-testid=approval-acknowledged]").count() else ""
                 stopped = page.get_by_role("button", name="Approve anyway").count() > 0
+                # Reached only once the approval step opened or answered (dialog, stop, or a phase move).
+                shown = bool(dialog) or stopped or page.get_by_role("dialog").count() > 0                     or ctx.view(GAPPY).get("phase") != "exploring"
                 page.screenshot(path=shot + "_approve.png", full_page=True)
+            # The page offers Approve only on a document whose Check is clean. Before the build the
+            # acknowledgements that would make Gappy clean answer 404/405 (the feature's absence), so
+            # the page, opened on Gappy and checked, has findings and no Approve: that is reached, as
+            # an absent acknowledge route is for ac-ack. Once they exist, only the dialog counts.
+            absent = bool(ack_codes) and all(c in (404, 405) for c in ack_codes)
+            shown = shown or (opened and checked_here and absent)
             rows["approve"] = (shown, dialog, stopped, ctx.view(GAPPY).get("phase"))
         browser.close()
     if "visible" in rows:
