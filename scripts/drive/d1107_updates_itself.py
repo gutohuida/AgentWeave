@@ -468,13 +468,34 @@ def build(version: str, fail: bool = False) -> dict[str, pathlib.Path]:
     return found
 
 
+def remove_venv(limit: float = 30.0) -> None:
+    """Delete the cached venv, waiting out a process still exiting that holds its python.exe:
+    a silent partial delete left `py -m venv` failing with Permission denied."""
+
+    def gone() -> bool:
+        shutil.rmtree(VENV, onerror=_writable_then)
+        return not VENV.exists()
+
+    if not wait_for(gone, limit, 1.0):
+        raise SystemExit(f"cannot delete {VENV}: something still holds it; delete it by hand")
+
+
+def sweep_pip_leftovers() -> None:
+    """A run interrupted mid-pip leaves `~`-prefixed stashes (`~gentweave_hub`) in site-packages."""
+    site = VENV / "Lib" / "site-packages"
+    for left in site.glob("~*") if site.is_dir() else []:
+        note(f"removing pip's leftover {left.name}")
+        shutil.rmtree(left, onerror=_writable_then)
+
+
 def ensure_venv(fresh: bool) -> None:
     marker = VENV / ".d1107-ready"
     if fresh:
-        shutil.rmtree(VENV, ignore_errors=True)
+        remove_venv()
     if marker.exists() and VENV_PY.exists():
+        sweep_pip_leftovers()
         return
-    shutil.rmtree(VENV, ignore_errors=True)
+    remove_venv()
     done = sh(["py", "-3.11", "-m", "venv", VENV], timeout=300, env=clean_env())
     if done.returncode != 0:
         raise SystemExit(f"venv: {done.stderr}")
@@ -711,8 +732,9 @@ class App:
         target, arguments = json.loads(done.stdout.strip().splitlines()[-1])
         return [target, *arguments.split()]
 
-    def launch(self, index_url: str) -> subprocess.Popen:
-        cmd = self.shortcut(index_url)
+    def launch(self, index_url: str, cmd: list[str] | None = None) -> subprocess.Popen:
+        """`cmd` is a shortcut target resolved beforehand: resolving it spawns the venv's Python."""
+        cmd = cmd or self.shortcut(index_url)
         user32.AllowSetForegroundWindow(d.ASFW_ANY)
         proc = subprocess.Popen(
             [*cmd, "--profile", self.profile, "--port", str(self.port)],
@@ -876,8 +898,16 @@ class App:
     const item = document.querySelectorAll('[data-slot="settings-nav-item"]')[i];
     if (!item) continue;
     item.click(); await sleep(700);
-    const s = document.querySelector('[data-testid^="app-settings-"]');
-    text += '\\n' + (s ? s.innerText : '');
+    // A section's groups read the window bridge on mount (update_status, ~4 s on this machine),
+    // so read it once its text has held still for 6 s (at most ~25 s), not the moment it is clicked.
+    let last = null, cur = '', still = 0;
+    for (let k = 0; k < 25 && still < 6; k++) {
+      const s = document.querySelector('[data-testid^="app-settings-"]');
+      cur = s ? s.innerText : '';
+      still = cur === last ? still + 1 : 0;
+      last = cur; await sleep(1000);
+    }
+    text += '\\n' + cur;
   }
   return text;
 })()""",
@@ -1258,6 +1288,8 @@ def step_auto_off(ctx: Ctx) -> None:
         )
         c.check("nothing was upgraded (the install is 2.1.0)", installed() == OLD, installed())
         app.page_ready()
+        # The button reads update_status() through the bridge once the page is up: allow it that.
+        wait_for(lambda: app.update_button(), 15, 1.0)
         button = app.update_button()
         c.check("the Update button names 2.1.1", bool(button) and NEW in button, repr(button))
         app.cleanup()
@@ -1386,6 +1418,7 @@ def step_after_work(ctx: Ctx) -> None:
         )
         if not c.need("a real Haiku turn is in progress", running, why or str(run_id)):
             return
+        wait_for(lambda: app.update_button(), 15, 1.0)  # update_status() through the bridge
         button = app.update_button()
         c.check("the Update button is shown while the work runs", bool(button), repr(button))
         ended = wait_for(
@@ -1450,8 +1483,10 @@ def step_migration(ctx: Ctx) -> None:
             if app.version() != OLD:
                 return False
             status, _ = bridge_try(app, "update_status", timeout=10)
-            message = (status or {}).get("message", "") if isinstance(status, dict) else ""
-            text = message + "\n" + app.body_text()
+            message = (status or {}).get("message") if isinstance(status, dict) else None
+            if isinstance(message, dict):  # the bridge answers {"state", "detail", "at"}
+                message = f"{message.get('state', '')}: {message.get('detail', '')}"
+            text = (message or "") + "\n" + app.body_text()
             found = re.search(r"[^\n]{0,80}fail[^\n]{0,120}", text, re.I)
             stated["text"] = found.group(0) if found else ""
             return bool(found)
@@ -1547,11 +1582,15 @@ def step_concurrent(ctx: Ctx) -> None:
     try:
         if not c.need("nothing is running", d.port_free(app.port) and not app.hub_pids()):
             return
+        url = ctx.index.url("good")
+        # Resolved once, before the clock starts: each resolution imports agentweave.cli in the
+        # venv's Python, which alone takes longer than the 0.7 s the two launches may span.
+        cmd = app.shortcut(url)
         ctx.index.reset()
         started = time.monotonic()
-        app.launch(ctx.index.url("good"))
+        app.launch(url, cmd)
         time.sleep(0.3)
-        app.launch(ctx.index.url("good"))
+        app.launch(url, cmd)
         if not c.need("two launches started within one second", time.monotonic() - started < 1.0):
             return
         wait_for(lambda: app.version() == NEW, APPLY_LIMIT, 2.0)
