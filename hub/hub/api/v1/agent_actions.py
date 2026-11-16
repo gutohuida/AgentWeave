@@ -2626,8 +2626,9 @@ async def advance_spec_step(
                 "journey": spec_journey.journey(document.size, steps),
                 "missing": gaps,
                 "instructions": "",
-                "message": f"{left} is the last step of this journey; the document is ready for "
-                "the operator to approve.",
+                "message": f"{left} is the last step of this journey. Report the document ready "
+                "for the operator to approve only when the latest save's ready_to_approve is "
+                "true; otherwise fix or acknowledge each open gap and save again.",
             }
         await spec_journey.set_step(
             session,
