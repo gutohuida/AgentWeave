@@ -41,6 +41,7 @@ from ... import (
     requirement_coverage,
     requirement_evidence,
     requirement_links,
+    roadmap_edits,
     run_divergence,
     run_liveness,
     slice_drafting,
@@ -4627,6 +4628,100 @@ async def decline_next_slice_offer(
         ) from exc
     await session.commit()
     return {"state": "declined", **offer}
+
+
+class SliceMove(RequestModel):
+    path: str = Field(max_length=255)
+    slice: str = Field(min_length=1, max_length=128)
+    position: int = Field(ge=1, le=1000, description="Where it reads afterwards, counting from 1.")
+
+
+class SliceRemove(RequestModel):
+    path: str = Field(max_length=255)
+    slice: str = Field(min_length=1, max_length=128)
+
+
+class SliceConversation(RequestModel):
+    path: str = Field(max_length=255)
+    agent: Optional[_AgentName] = None
+
+
+def _slice_edit_refused(exc) -> HTTPException:
+    return HTTPException(status_code=exc.status, detail={"message": str(exc), "code": exc.code})
+
+
+@router.post("/documents/slices/move")
+async def move_roadmap_slice(
+    body: SliceMove,
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    """The operator moves a Not drafted or Drafting slice of an approved roadmap, at once and with
+    no re-approval; recorded in the roadmap's history (`slice_moved`). Approved, Building and
+    Built slices are refused 409 `slice_not_movable`."""
+    project_id, _ = project
+    workspace = await _workspace(session, project_id)
+    roadmap = await _require_document(session, project_id, body.path)
+    try:
+        result = await roadmap_edits.move_slice(
+            session, workspace, roadmap, body.slice, body.position, actor=_operator()
+        )
+    except roadmap_edits.SliceEditRefused as exc:
+        raise _slice_edit_refused(exc) from exc
+    path, phase = roadmap.path, roadmap.phase
+    await session.commit()
+    await sse_manager.broadcast(project_id, "spec_updated", {"path": path, "phase": phase})
+    return result
+
+
+@router.post("/documents/slices/remove")
+async def remove_roadmap_slice(
+    body: SliceRemove,
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    """The operator removes a Not drafted slice no change document names, recorded in the
+    roadmap's history (`slice_removed`); it is dropped from the builds-after of the slices that
+    followed it, and the answer says which. A slice a document names is refused 409
+    `slice_named_by_document`, naming the document."""
+    project_id, _ = project
+    workspace = await _workspace(session, project_id)
+    roadmap = await _require_document(session, project_id, body.path)
+    try:
+        result = await roadmap_edits.remove_slice(
+            session, workspace, roadmap, body.slice, actor=_operator()
+        )
+    except roadmap_edits.SliceEditRefused as exc:
+        raise _slice_edit_refused(exc) from exc
+    path, phase = roadmap.path, roadmap.phase
+    await session.commit()
+    await sse_manager.broadcast(project_id, "spec_updated", {"path": path, "phase": phase})
+    return result
+
+
+@router.post("/documents/slices/conversation")
+async def start_slice_conversation(
+    body: SliceConversation,
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    """'Add a slice': open a conversation with the chosen agent (default the roadmap's author),
+    seeded with the roadmap. The agent adds the slice through `amend_spec_document`; no route takes
+    a slice from a form."""
+    from ...turn_scheduler import schedule_accepted
+
+    project_id, _ = project
+    workspace = await _workspace(session, project_id)
+    roadmap = await _require_document(session, project_id, body.path)
+    try:
+        started = await roadmap_edits.start_conversation(
+            session, workspace, roadmap, agent=body.agent
+        )
+    except roadmap_edits.SliceEditRefused as exc:
+        raise _slice_edit_refused(exc) from exc
+    await session.commit()
+    await schedule_accepted(project_id, started["agent"])
+    return {"state": "queued", **started}
 
 
 @router.post("/documents/build")

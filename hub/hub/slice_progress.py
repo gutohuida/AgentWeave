@@ -186,6 +186,15 @@ def _state(document: Optional[SpecDocument], facts: Optional[Dict[str, Any]]) ->
     return APPROVED
 
 
+def _order_warning(key: str, after: List[str], order: List[str]) -> Optional[str]:
+    """A slice listed ahead of one it builds after (RTRR-3, FR-7): allowed, and said so."""
+    mine = order.index(key)
+    later = [k for k in after if k in order and order.index(k) > mine]
+    if not later:
+        return None
+    return "Builds after " + ", ".join(later) + ", which comes later in the roadmap"
+
+
 async def _retrospective(session: AsyncSession, document: SpecDocument) -> Optional[Dict[str, Any]]:
     """The newest written build retrospective of *document*, as a link, or None."""
     from . import build_retrospective
@@ -213,6 +222,7 @@ async def roadmap_view(session: AsyncSession, workspace, roadmap: SpecDocument) 
         str(item["key"]): _state(claimed.get(str(item["key"])), facts.get(str(item["key"])))
         for item in stored
     }
+    order = [str(item["key"]) for item in stored]
     slices: List[Dict[str, Any]] = []
     micros = unpriced = 0
     for item in stored:
@@ -242,7 +252,7 @@ async def roadmap_view(session: AsyncSession, workspace, roadmap: SpecDocument) 
                 if state == BUILT and document is not None
                 else None
             ),
-            "warning": item.get("warning"),
+            "warning": _order_warning(key, after, order),
             "added_after_approval": bool(item.get("added_after_approval")),
             "added_by": item.get("added_by"),
         }
