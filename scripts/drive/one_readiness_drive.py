@@ -45,11 +45,11 @@ task then follows them, not the behaviour):
     exactly when nothing blocks and no gap is open; notes are listed under `notes`;
   * Approve with only acknowledged gaps answers 200, with the acknowledged gaps under
     `acknowledged`;
-  * the page: `[data-testid=spec-acknowledged]` with one `[data-testid=acknowledged-gap-<code>]` per
-    acknowledged gap, its text holding the reason, author and time; Check's panel the same under
-    `[data-testid=check-acknowledged]`; the approve dialog `[data-testid=approval-acknowledged]`; a
-    Check finding offers `[data-testid=acknowledge-<code>]`, then `acknowledge-reason` and
-    `acknowledge-submit`; the rendered document (GET .../content) holds `acknowledged`.
+  * the page: `[data-testid=acknowledged-gaps-list]` (the header notice) with one
+    `[data-testid=acknowledged-gap-<code>]` per acknowledged gap, its text holding the reason, author
+    and time; Check on the page offers `[data-testid=acknowledge-open]` (inside `check-acknowledge`),
+    then `acknowledge-reason` and `acknowledge-submit`; the rendered document (GET
+    /project/spec?path=) holds `acknowledged`.
 
 Prints one line per check in the `drive_baseline` shape:
     check <key>: reached=<yes|no> failed_at_assertion=<yes|no> -- <detail>
@@ -520,6 +520,21 @@ def check_operator_ack(ctx):
            f"{open_gaps(after)} acknowledged={after.get('acknowledged')}")
 
 
+def ack_text(page):
+    """The acknowledged gaps the page shows: each gap's code (from its testid) and its text."""
+    parts = []
+    count = page.locator("[data-testid=spec-notice-count]")
+    if count.count() and not page.locator("[data-testid=spec-notices]").count():
+        count.first.click()  # the header's notices open from their count
+        page.wait_for_timeout(500)
+    for item in page.locator("[data-testid^=acknowledged-gap-]:not([data-testid=acknowledged-gaps-list]):not([data-testid=acknowledged-gaps]):not([data-testid=acknowledged-gap-meta])").all():
+        parts.append(item.get_attribute("data-testid").replace("acknowledged-gap-", "") + " " + item.inner_text())
+    if not parts and os.environ.get("AW_DRIVE_DEBUG"):
+        pop = page.locator("[data-testid=spec-notices]")
+        print("DEBUG notice-count", count.count(), "pop", pop.count(), (pop.inner_text()[:600] if pop.count() else ""))
+    return " | ".join(parts)
+
+
 def browser_checks(ctx, only):
     from playwright.sync_api import sync_playwright
 
@@ -552,18 +567,16 @@ def browser_checks(ctx, only):
             opened = open_document(GAPPY, "Gappy route")
             page.wait_for_timeout(1500)
             shown = opened and page.get_by_role("button", name="Check", exact=True).count() > 0
-            page_ack = page.locator("[data-testid=spec-acknowledged]").inner_text() \
-                if page.locator("[data-testid=spec-acknowledged]").count() else ""
+            page_ack = ack_text(page)
             page.screenshot(path=shot + "_page.png", full_page=True)
             check_button = page.get_by_role("button", name="Check", exact=True)
             if check_button.count():
                 check_button.click()
                 page.wait_for_timeout(3000)
-            check_ack_text = page.locator("[data-testid=check-acknowledged]").inner_text() \
-                if page.locator("[data-testid=check-acknowledged]").count() else ""
+            check_ack_text = ack_text(page)
             open_text = " | ".join(page.locator(".aw-sp-finding").all_inner_texts())
             page.screenshot(path=shot + "_check.png", full_page=True)
-            code, rendered = api("GET", f"{ctx.base}/project/documents/{GAPPY}/content")
+            code, rendered = api("GET", f"{ctx.base}/project/spec?path={GAPPY}")
             rendered = json.dumps(rendered) if not isinstance(rendered, str) else rendered
             rows["visible"] = (shown, page_ack, check_ack_text, open_text, rendered)
         if not only or "ac-approve-acks" in only:
@@ -589,8 +602,7 @@ def browser_checks(ctx, only):
             if shown:
                 approve.first.click()
                 page.wait_for_timeout(2000)
-                dialog = page.locator("[data-testid=approval-acknowledged]").inner_text() \
-                    if page.locator("[data-testid=approval-acknowledged]").count() else ""
+                dialog = ack_text(page)
                 stopped = page.get_by_role("button", name="Approve anyway").count() > 0
                 # Reached only once the approval step opened or answered (dialog, stop, or a phase move).
                 shown = bool(dialog) or stopped or page.get_by_role("dialog").count() > 0                     or ctx.view(GAPPY).get("phase") != "exploring"

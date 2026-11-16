@@ -24,6 +24,7 @@ import { Segmented } from '@/components/ui/segmented'
 import { formatAgoLong } from '@/lib/format'
 import { toast } from '@/lib/toast'
 import type { SpecPrimaryAction } from './SpecDocumentHeader'
+import { NOTE_GAP_CODES } from './gapWords'
 import { AcknowledgeGapControls, AcknowledgedGapLines, GapLines, ReviewerLine } from './SpecPhaseParts'
 import { NextSliceOfferNotice } from './NextSliceOfferNotice'
 import type { HeaderNotice } from './page/SpecNotices'
@@ -796,6 +797,16 @@ export function useSpecPhaseControls(
   ) : null
 
   const showGaps = gaps.length > 0 && (!inline || gapsOverridable)
+  // The Hub refuses to acknowledge a note, so only real gaps get a control (FR-11).
+  const ackGaps = gaps.filter((gap) => !NOTE_GAP_CODES.has(gap.code))
+  // On the page Check shows its findings inline, so the controls stand alone there (FR-11).
+  const inlineAck =
+    inline && !showGaps && document.phase === 'exploring' && ackGaps.length > 0 ? (
+      <div className="aw-spec-message" data-stack="true" data-testid="check-acknowledge">
+        <span className="aw-spec-message-text">Leave a gap open on purpose:</span>
+        <AcknowledgeGapControls gaps={ackGaps} onAcknowledge={onAcknowledge} />
+      </div>
+    ) : null
   const gapsSummary = gapsOverridable
     ? 'Not approved: the Hub found these gaps. Approve anyway records them on the document.'
     : 'Gaps approval will list:'
@@ -805,7 +816,7 @@ export function useSpecPhaseControls(
     <div className="aw-spec-message" data-tone="warn" data-stack="true" data-testid="approval-warnings">
       <span className="aw-spec-message-text">{gapsSummary}</span>
       <GapLines gaps={gaps} />
-      {document.phase === 'exploring' && <AcknowledgeGapControls gaps={gaps} onAcknowledge={onAcknowledge} />}
+      {document.phase === 'exploring' && <AcknowledgeGapControls gaps={ackGaps} onAcknowledge={onAcknowledge} />}
       {offersApproveAnyway && (
         <Button variant="primary" size="xs" data-testid="spec-approve-anyway" disabled={busy} onClick={onApproveAnyway}>
           {approveAnywayLabel}
@@ -883,6 +894,7 @@ export function useSpecPhaseControls(
       {journey}
       {journeyRefused}
       {gapList}
+      {inlineAck}
       {acknowledgedList}
       {notes}
       {overridden}
@@ -943,12 +955,15 @@ export function useSpecPhaseControls(
         <>
           <p>{gapsSummary}</p>
           <GapLines gaps={gaps} />
-          {document.phase === 'exploring' && <AcknowledgeGapControls gaps={gaps} onAcknowledge={onAcknowledge} />}
+          {document.phase === 'exploring' && <AcknowledgeGapControls gaps={ackGaps} onAcknowledge={onAcknowledge} />}
         </>
       ),
       defaultOpen: true,
       action: offersApproveAnyway ? { label: approveAnywayLabel, onClick: onApproveAnyway, disabled: busy } : undefined,
     })
+  }
+  if (inlineAck) {
+    notices.push({ id: 'check-acknowledge', tone: 'info', summary: `Check found ${plural(ackGaps.length, 'gap', 'gaps')} you may leave open`, body: inlineAck, defaultOpen: true })
   }
   if (acknowledgedList) {
     notices.push({

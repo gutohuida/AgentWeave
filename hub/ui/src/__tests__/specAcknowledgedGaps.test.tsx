@@ -3,6 +3,7 @@ import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { SpecPhaseBar } from '@/components/spec/SpecPhaseBar'
+import { useSpecPhaseControls } from '@/components/spec/useSpecPhaseControls'
 import { ApiError } from '@/api/client'
 
 /**
@@ -89,7 +90,35 @@ beforeEach(() => {
   loadedAcknowledged = []
 })
 
+/** The spec page's mode: Check's findings are drawn inline (`useSpecSurface`), not in the header. */
+function InlineHarness() {
+  const controls = useSpecPhaseControls(PATH, undefined, undefined, { inlineFindings: true })
+  if (!controls) return null
+  return (
+    <div>
+      <button onClick={controls.actions.check}>Check</button>
+      {controls.messages}
+    </div>
+  )
+}
+
 describe('acknowledged gaps', () => {
+  it('on the page (inline findings) Check offers Acknowledge for a gap, never for a note', async () => {
+    const note = { code: 'recommended_people', where: 'tasks', message: 'Task docs names no builder' }
+    check.mockResolvedValueOnce({ blocking: [], warnings: [open, note], acknowledged: [], ready: false })
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    render(
+      <QueryClientProvider client={client}>
+        <InlineHarness />
+      </QueryClientProvider>,
+    )
+    await userEvent.click(screen.getByRole('button', { name: 'Check' }))
+    const controls = await screen.findAllByTestId('acknowledge-open')
+    expect(controls).toHaveLength(1)
+    expect(controls[0]).not.toHaveTextContent(/builder/i)
+  })
+
+
   it('the page shows an acknowledged gap on load, with no Check', () => {
     loadedAcknowledged = [acked]
     renderBar()
