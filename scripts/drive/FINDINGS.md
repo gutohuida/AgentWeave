@@ -41900,3 +41900,9 @@ Open a conversation, open the side panel's Specs tab, open a spec that has messa
 **Tier:** 0
 
 `_AppWindowApi.update_status()` reports `applicable: false` for an editable install, and the launch path refuses it (`_launch_update`: `installation_kind() != "pip"`), but `_AppWindowApi.apply_update()` (`src/agentweave/cli.py:1817`) never looks at the install kind. With the release check's `latest` known (here 2.2.0, equal to the installed 2.2.0, read from PyPI because the drive had not set `AW_UPDATE_INDEX_URL`), `apply_update(false)` from the page of an editable scratch Hub stopped that Hub, copied its database, ran `pip install agentweave-ai==2.2.0 agentweave-hub==2.2.0` from PyPI over the editable install, and started it again. Twice in one run: once confirmed, once with `confirmed` false and nothing running. On the operator's `:8000`, which runs an editable install of this checkout, one call to the bridge would replace that install with the PyPI release and restart the live Hub. **Expected:** `apply_update` refuses (state `blocked`, nothing stopped) when the install is not a pip release, until `a-development-checkout-updates-the-same-way` gives a checkout its own path, and it never offers to install a version equal to the one installed. **Test:** with an editable install and `update-check.json` naming the installed version, `apply_update(true)` answers `blocked`, the Hub's pid is unchanged and pip is not called.
+
+## F1183 (A) -- an expired Claude sign-in that cannot be renewed is reported runnable
+
+Launchability showed claude `present/authorized/runnable` while every turn failed with "this login reached its time limit and cannot be renewed. Run `claude auth login`".
+
+**Status:** fixed -- `hub/hub/claude_signin.py`: a run ending with that text marks the sign-in unrenewable until the credentials file changes (`CLAUDE_CONFIG_DIR` respected); an expired token with no refresh token also counts. `expiresAt` alone does not.

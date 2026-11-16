@@ -42,6 +42,7 @@ from ... import (
     blocking,
     bound_address,
     build_retrospective,
+    claude_signin,
     flow_advance,
     instance_identity,
     mcp_announce,
@@ -3681,6 +3682,10 @@ async def _execute_run(
                 runner_version = parsed.runner_version
             if getattr(parsed, "auth_failure", False):
                 signed_out = True
+            if getattr(parsed, "claude_turn_ok", False):
+                claude_signin.forget()  # a turn completed: the mark was lifted another way
+            if getattr(parsed, "login_unrenewable", False):
+                claude_signin.mark_unrenewable()  # F1183: launchability says so until re-login
             # Resolve session_id from *this* line before writing its own events, so the row
             # that establishes the session carries it too, not just subsequent rows. Once this run
             # is bound to the session a line names, binding it again writes nothing and was a
