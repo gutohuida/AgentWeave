@@ -21,6 +21,7 @@ from .test_build_retrospective import (
     _configure,
     _document,
     _firings,
+    _land,
     _seed,
     _task,
     _usage,
@@ -52,6 +53,8 @@ async def _approved_by_a_running_reviewer():
         task = await session.get(Task, "t1")
         await apply_transition(session, task, "approved", run_actor(REVIEWER_RUN, "qa"))
         await session.commit()
+    # The firing waits for the landing, then for the approving run.
+    await _land("t1")
 
 
 async def _end_the_run():
@@ -101,6 +104,7 @@ async def test_an_approving_run_that_already_ended_fires_at_once(app, auth_heade
         run = await session.get(Run, REVIEWER_RUN)
         run.status = "completed"  # ended before the approval's commit was seen
         await session.commit()
+    await _land("t1")
 
     assert len(await _firings()) == 1 and len(fake.calls) == 1
 

@@ -476,7 +476,7 @@ async def test_ac_pr_a_task_of_a_build_landing_nowhere_is_done_at_approval(
     await _queued_without_moving(first.id)
     async with async_session_factory() as db:
         landing = await landing_queue.latest_landing(db, first.id)
-    assert landing.state == "queued", "not landed: there is nowhere for it to land"
+    assert landing is None, "there is nowhere for it to land, so no landing is recorded"
     assert await _done(first.id)
 
     await _queued_without_moving(second.id)
