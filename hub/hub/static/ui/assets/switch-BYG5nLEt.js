@@ -1,0 +1,5 @@
+<<<<<<<< HEAD:hub/hub/static/ui/assets/switch-DoDQlP9I.js
+import{r as n,j as a}from"./index-BiW7RXa0.js";const d=n.forwardRef(({checked:t,onCheckedChange:s,size:e="md",className:i,disabled:o,...r},c)=>a.jsx("button",{"data-slot":"switch",ref:c,type:"button",role:"switch","aria-checked":t,disabled:o,"data-state":t?"checked":"unchecked","data-size":e,className:["aw-switch",i].filter(Boolean).join(" "),onClick:()=>s(!t),...r,children:a.jsx("span",{className:"aw-switch-thumb","aria-hidden":"true"})}));d.displayName="Switch";export{d as S};
+========
+import{r as n,j as a}from"./index-CadfW2zs.js";const d=n.forwardRef(({checked:t,onCheckedChange:s,size:e="md",className:i,disabled:o,...r},c)=>a.jsx("button",{"data-slot":"switch",ref:c,type:"button",role:"switch","aria-checked":t,disabled:o,"data-state":t?"checked":"unchecked","data-size":e,className:["aw-switch",i].filter(Boolean).join(" "),onClick:()=>s(!t),...r,children:a.jsx("span",{className:"aw-switch-thumb","aria-hidden":"true"})}));d.displayName="Switch";export{d as S};
+>>>>>>>> agentweave/task/task-352d047b86a3:hub/hub/static/ui/assets/switch-BYG5nLEt.js

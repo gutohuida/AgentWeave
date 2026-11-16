@@ -46,6 +46,7 @@ from .subprocess_windows import no_console_kwargs
 from .task_transition_service import TransitionRefusedError
 from .trace_requests import RequestTraceMiddleware
 from .traces import install_log_handler
+from .version import install_kind
 
 logger = logging.getLogger(__name__)
 
@@ -877,7 +878,12 @@ def create_app() -> FastAPI:
 
     @app.get("/health", include_in_schema=False)
     async def health():
-        payload: Dict[str, Any] = {"status": "ok", "runtime": _runtime_kind()}
+        payload: Dict[str, Any] = {
+            "status": "ok",
+            "runtime": _runtime_kind(),
+            "version": __version__,
+            "install": install_kind(),
+        }
         warning = await _ui_staleness_warning_off_loop()
         if warning:
             payload["ui_stale"] = True
