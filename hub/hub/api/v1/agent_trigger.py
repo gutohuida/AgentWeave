@@ -1889,7 +1889,20 @@ async def _trigger_agent_directly(
         # F1161: a run told the call command keeps its arguments-file write, and is told so.
         access_path=described_path,
     )
-    if spec_notice:
+    if spec_notice and surfaces is not None:
+        # A run that tests itself is told its surface after the test (D9), so the sentence worded
+        # for that surface rides with the access notice it agrees with (F1191).
+        for surface, entry in surfaces.items():
+            told_spec = spec_turn_notice(
+                spec_phase,
+                path=spec_document,
+                is_unwritten=spec_is_unwritten,
+                kind=spec_kind,
+                access_path=surface,
+            )
+            if told_spec:
+                entry["notice"] = f"{entry['notice']}\n\n{told_spec}"
+    elif spec_notice:
         notices.append(spec_notice)
     prompt = "\n\n".join([*notices, message])
     # The pinned tool server and its `aw-tool` launchers, for **every** run
@@ -2205,6 +2218,8 @@ async def _trigger_agent_directly(
                 # F325: the canonical context, for a transport that reads no argv to find the
                 # context file on (Codex app-server). The same text the file above holds.
                 developer_instructions=rendered_context["context"],
+                # D9: both surfaces, for an RPC transport that tests itself (Codex, F1191).
+                surfaces=surfaces,
                 cli=probe["cli"],
                 prompt=prompt,
                 yolo=yolo,
@@ -3318,6 +3333,7 @@ async def _execute_run(
     restrict_spec_writes: bool = False,
     setup_events: Sequence[Any] = (),
     developer_instructions: Optional[str] = None,
+    surfaces: Optional[Dict[str, Dict[str, str]]] = None,
 ) -> None:
     """Background task: spawn, capture output, persist Run/AgentOutput, broadcast SSE.
 
@@ -3401,6 +3417,7 @@ async def _execute_run(
             restrict_spec_writes=restrict_spec_writes,
             pre_turn_events=setup_events,
             developer_instructions=developer_instructions,
+            surfaces=surfaces,
         )
         return
 
@@ -4496,6 +4513,7 @@ async def _execute_rpc_run(
     pre_turn_events: Sequence[Any] = (),
     told_access_path: Optional[str] = None,
     developer_instructions: Optional[str] = None,
+    surfaces: Optional[Dict[str, Dict[str, str]]] = None,
 ) -> None:
     """The executor every RPC transport shares (Codex `app-server`, Copilot ACP).
 
@@ -4544,6 +4562,8 @@ async def _execute_rpc_run(
             told_access_path=told_access_path,
             # F325: the canonical context; argv carries it on the stream transports.
             developer_instructions=developer_instructions,
+            # D9: what a transport that tests itself is told, by surface (F1191).
+            surfaces=surfaces,
         )
         # The harness's report about the Hub's server, recorded only for a run given it (D1).
         on_mcp_status = (
@@ -4561,6 +4581,18 @@ async def _execute_rpc_run(
                     should_interrupt=cb.should_interrupt,
                     on_refusal=cb.on_refusal,
                     on_mcp_status=on_mcp_status,
+                    # D9: a transport that tests itself records and is told after its test.
+                    render_surface=(
+                        make_render_surface(
+                            run_id=run_id,
+                            agent=agent,
+                            work_dir=work_dir,
+                            surfaces=surfaces,
+                            on_event=cb.on_event,
+                        )
+                        if surfaces is not None
+                        else None
+                    ),
                     request_approval=lambda method, subject: _await_operator_permission(
                         project_id=project_id,
                         agent=agent,

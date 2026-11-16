@@ -35,7 +35,7 @@ import os
 import re
 from collections import deque
 from dataclasses import dataclass
-from typing import Any, Awaitable, Callable, Deque, Dict, List, Optional, Tuple
+from typing import Any, Awaitable, Callable, Deque, Dict, List, Mapping, Optional, Tuple
 
 from .model_catalog import FULL_ACCESS_PERMISSION_MODE, WORKSPACE_PERMISSION_MODE
 from .process_job import ProcessJob, terminate_descendants
@@ -87,8 +87,24 @@ RESUMED_CONTEXT_HEAD = (
     "this conversation, including the developer instructions this thread started with."
 )
 
+#: The leading block of a **new** thread's first input, for a run that tests the Hub's tool server
+#: before its first prompt (F1191): its context waits for that test, so it cannot ride on
+#: `thread/start` as developer instructions.
+NEW_THREAD_CONTEXT_HEAD = "AgentWeave context for this turn."
 
-def turn_input(prompt: str, context: Optional[str]) -> List[Dict[str, Any]]:
+#: How long a run given the Hub's tool server waits, after `thread/start`/`thread/resume`, for the
+#: harness to report that server `ready` or `failed` before its first prompt (F1191). Measured
+#: against Codex 0.167.1 on 2026-11-16 with a stdlib server: `ready` arrived 0.1-0.25 s after
+#: `thread/start` responded and 0.02 s after `thread/resume` did; the pinned server also imports
+#: fastmcp (about 1.4 s). Copilot's announce wait is the same 15 s.
+MCP_STARTUP_WAIT_SECONDS = 15.0
+
+_MCP_STARTUP_METHOD = "mcpServer/startupStatus/updated"
+
+
+def turn_input(
+    prompt: str, context: Optional[str], *, head: Optional[str] = None
+) -> List[Dict[str, Any]]:
     """`turn/start`'s input: the prompt, led by *context* when a resumed thread needs it.
 
     A resumed thread is given its context here, not on `thread/resume`. Measured against Codex
@@ -97,10 +113,11 @@ def turn_input(prompt: str, context: Optional[str]) -> List[Dict[str, Any]]:
     first turn started with and a charter edit or a roster change never reaches it. The one
     instruction field it does honour on resume, `baseInstructions`, replaces Codex's own base
     instructions. A block of its own, like the prompt, so neither is read as part of the other.
+    *head* replaces the resumed-thread heading, for a new thread's first input (F1191).
     """
     blocks: List[Dict[str, Any]] = []
     if context:
-        blocks.append({"type": "text", "text": f"{RESUMED_CONTEXT_HEAD}\n\n{context}"})
+        blocks.append({"type": "text", "text": f"{head or RESUMED_CONTEXT_HEAD}\n\n{context}"})
     blocks.append({"type": "text", "text": prompt})
     return blocks
 
@@ -1126,6 +1143,45 @@ class TurnOutcome:
     stderr_tail: Optional[str] = None
 
 
+async def await_own_server_startup(
+    session: Any,
+    own_server_name: str,
+    backlog: List[Dict[str, Any]],
+    *,
+    timeout: float,
+    should_interrupt: "Optional[Callable[[], bool]]" = None,
+) -> Optional[str]:
+    """Wait, before the first prompt, for the harness's report about the Hub's own tool server.
+
+    Returns `"ready"` or `"failed"` as the harness reported it, `"interrupted"` when the run was
+    stopped during the wait, and `None` when no report came within *timeout* seconds, or the
+    process ended or its output was lost (the turn loop reports those itself). Every message read
+    is appended to *backlog* in order, the deciding one included, so the turn loop handles each
+    exactly as if it had read it: nothing is recorded or answered here.
+    """
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + timeout
+    while True:
+        if should_interrupt is not None and should_interrupt():
+            return "interrupted"
+        remaining = deadline - loop.time()
+        if remaining <= 0 or not session.is_running() or session.output_lost() is not None:
+            return None
+        try:
+            msg = await session.next_notification(timeout=min(remaining, 0.5))
+        except asyncio.TimeoutError:
+            continue
+        backlog.append(msg)
+        params = msg.get("params") or {}
+        if (
+            msg.get("method") == _MCP_STARTUP_METHOD
+            and "id" not in msg
+            and params.get("name") == own_server_name
+            and params.get("status") in ("ready", "failed")
+        ):
+            return str(params["status"])
+
+
 async def run_turn(
     *,
     cli: str,
@@ -1152,6 +1208,11 @@ async def run_turn(
     on_mcp_status: "Optional[Callable[[str], Awaitable[Any]]]" = None,
     restrict_spec_writes: bool = False,
     developer_instructions: Optional[str] = None,
+    surfaces: "Optional[Mapping[str, Mapping[str, str]]]" = None,
+    render_surface: (
+        "Optional[Callable[[str, Optional[bool], Optional[str]], Awaitable[List[str]]]]"
+    ) = None,
+    mcp_wait_seconds: Optional[float] = None,
 ) -> TurnOutcome:
     """Drive one Codex turn over `app-server`: spawn, initialize, start-or-resume a thread,
     start a turn, answer every server request, map every item/usage notification to the
@@ -1166,6 +1227,18 @@ async def run_turn(
     `thread/start`/`thread/resume` responds and strictly before `turn/start` — so a caller
     that binds session identity to durable state (e.g. `Conversation.provider_session_id`)
     can do so before any `on_event` call for this turn, never after.
+
+    `render_surface`, when given, makes the run test itself before its first prompt (F1191,
+    `a-run-reaches-the-hub-without-mcp` D9, as Copilot does): after `thread/start` or
+    `thread/resume` it waits up to `mcp_wait_seconds` (default `MCP_STARTUP_WAIT_SECONDS`) for
+    the harness's report about the Hub's server, and the run is told `mcp` only when that report
+    is `ready`. A `failed` report, no
+    report in time, or no server given at all tells it the call command, as it was told before
+    this test existed. `render_surface` records what it was told. The access notice and canonical
+    context it is sent are *surfaces*' entry for that surface: the notice leads the prompt, and
+    the context leads the input on a new thread as on a resumed one, because developer
+    instructions go on `thread/start`, which is sent before the test can be read. If the run is
+    stopped during the wait, the turn ends `interrupted`, with nothing told and no turn started.
 
     The protocol supplies no turn-level timeout (implications.md §2) — `turn_timeout` is the
     Hub's own, and a process that dies mid-turn (crash, `close()` from a stop request) fails
@@ -1195,7 +1268,9 @@ async def run_turn(
         # `--append-system-prompt-file` and `codex exec` through `model_instructions_file`. A new
         # thread takes it as `developerInstructions`: a developer message, Codex's own base
         # instructions left in place. A resumed one cannot -- see `turn_input`.
-        if developer_instructions and not resume_thread_id:
+        # A run that tests itself is told after `thread/start`, so its context waits for the test
+        # and leads the turn's input instead (F1191).
+        if developer_instructions and not resume_thread_id and render_surface is None:
             thread_params["developerInstructions"] = developer_instructions
         # `config` is the app-server's `config.toml`-override map, and it carries two unrelated
         # things: the MCP server this Hub injects, and whatever `-c KEY=VALUE` pairs the run's
@@ -1227,11 +1302,49 @@ async def run_turn(
             # line's own events are recorded.
             await on_thread_started(thread_id)
 
+        # Messages read while the run tests itself below; the turn loop handles them first.
+        backlog: List[Dict[str, Any]] = []
+        turn_context = developer_instructions if resume_thread_id else None
+        context_head: Optional[str] = None
+        if render_surface is not None:
+            # F1191: on Linux a Codex shell under `workspace-write` has no network, so a run told
+            # `aw-tool` cannot reach the Hub at all. Told `mcp` only on this run's own `ready`, it
+            # never asserts a surface the harness did not start.
+            tested: Optional[bool] = None
+            startup: Optional[str] = None
+            if mcp_command:
+                startup = await await_own_server_startup(
+                    session,
+                    own_server_name,
+                    backlog,
+                    timeout=(
+                        MCP_STARTUP_WAIT_SECONDS if mcp_wait_seconds is None else mcp_wait_seconds
+                    ),
+                    should_interrupt=should_interrupt,
+                )
+                if startup == "interrupted":
+                    interrupted = True
+                    return TurnOutcome(
+                        thread_id=thread_id, status="interrupted", exit_code=session.returncode
+                    )
+                # `ready` is a test that passed. `failed` is the harness's own report, which the
+                # turn loop records and words for the call command; only a report that never came
+                # is the wait's `absent` (D1's precedence).
+                tested = True if startup == "ready" else (False if startup is None else None)
+            told_access_path = "mcp" if startup == "ready" else "shim"
+            await render_surface(told_access_path, tested, None)
+            chosen = (surfaces or {}).get(told_access_path) or {}
+            if chosen.get("notice"):
+                prompt = f"{chosen['notice']}\n\n{prompt}"
+            turn_context = chosen.get("context") or developer_instructions
+            if not resume_thread_id:
+                context_head = NEW_THREAD_CONTEXT_HEAD
+
         turn_response = await session.request(
             "turn/start",
             {
                 "threadId": thread_id,
-                "input": turn_input(prompt, developer_instructions if resume_thread_id else None),
+                "input": turn_input(prompt, turn_context, head=context_head),
             },
         )
         turn_id = turn_response["result"]["turn"]["id"]
@@ -1286,10 +1399,13 @@ async def run_turn(
                 )
                 break
 
-            try:
-                msg = await session.next_notification(timeout=min(remaining, 1.0))
-            except asyncio.TimeoutError:
-                continue
+            if backlog:
+                msg = backlog.pop(0)
+            else:
+                try:
+                    msg = await session.next_notification(timeout=min(remaining, 1.0))
+                except asyncio.TimeoutError:
+                    continue
 
             msg_id = msg.get("id")
             method = msg.get("method")
@@ -1404,7 +1520,7 @@ async def run_turn(
                 if plan_event.content != last_plan_summary:
                     last_plan_summary = plan_event.content
                     await on_event(plan_event)
-            elif method == "mcpServer/startupStatus/updated":
+            elif method == _MCP_STARTUP_METHOD:
                 # The harness's own report about the Hub's server (`a-run-reaches-the-hub-without-
                 # mcp` D1): `ready` is `connected` and `failed` is `failed`; `starting` and
                 # `cancelled` are not reports. Never fails the turn: a record that cannot be written

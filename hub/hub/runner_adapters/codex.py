@@ -164,6 +164,12 @@ _CODEX_APPROVAL_LABELS = {
 class CodexAppServerTransport(RpcTransport):
     """Codex's RPC transport: a JSON-RPC peer the Hub drives (`codex_appserver.py`)."""
 
+    # F1191: Codex starts the servers it is given inside `thread/start`/`thread/resume` and reports
+    # each one's status before the Hub sends `turn/start` (measured, Codex 0.167.1), so the run
+    # tests itself, as Copilot's does (`a-run-reaches-the-hub-without-mcp` D9). Its shell may have
+    # no network (Linux `workspace-write`), so a run told `aw-tool` on no grounds could not reach
+    # the Hub at all.
+    tests_mcp_before_first_prompt = True
     instruction_channel = None  # F325 is open; design D11 covers it.
     context_window_source = "reported"
 
@@ -213,6 +219,8 @@ class CodexAppServerTransport(RpcTransport):
             on_mcp_status=cb.on_mcp_status,
             restrict_spec_writes=req.restrict_spec_writes,
             developer_instructions=req.developer_instructions,
+            surfaces=req.surfaces,
+            render_surface=cb.render_surface,
         )
 
 
