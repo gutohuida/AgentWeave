@@ -30,8 +30,8 @@
 .aw-st-card:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--ring); }
 .aw-st-card[data-lit="dim"] { opacity: 0.4; }
 .aw-st-card[data-lit="on"] { border-color: var(--border-hi); }
-.aw-st-card .aw-sp-task-title { cursor: default; }
-.aw-st-card .aw-sp-task-title:hover { text-decoration: none; }
+.aw-st-card span.aw-sp-task-title { cursor: default; }
+.aw-st-card span.aw-sp-task-title:hover { text-decoration: none; }
 .aw-st-reqchip { display: inline-flex; align-items: center; }
 
 /* A — the rail */

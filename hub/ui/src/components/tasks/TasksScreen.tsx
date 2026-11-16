@@ -25,7 +25,7 @@ import { useTaskFilterStore } from '@/store/taskFilterStore'
 import { BoardScopePicker, type ScopeSpec } from './BoardScopePicker'
 import { BOARD_COLUMNS, BoardView, type BoardMoves, type TasksView } from './BoardView'
 import type { ColumnDropState } from './BoardColumn'
-import { DependencyListView } from './DependencyListView'
+import { DependencyMapView } from './DependencyMapView'
 import { TaskDetailDrawer } from './TaskDetailDrawer'
 import { LoadingThread } from '@/components/common/LoadingThread'
 
@@ -452,7 +452,7 @@ export function TasksScreen({
           onStartWork={onStartWork}
           onReviewTask={onReviewTask}
         >
-          <DependencyListView
+          <DependencyMapView
             tasks={tasks}
             documents={(specDocuments?.documents ?? []).map((d) => ({ id: d.id, title: d.title, path: d.path }))}
             onOpenTask={setOpenTaskId}

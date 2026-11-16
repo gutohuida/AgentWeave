@@ -2,9 +2,6 @@ import * as React from 'react'
 import { Segmented } from '@/components/ui/segmented'
 import { TaskList } from '@/components/spec/page/SpecDocumentBody'
 import { orderTasks, type DocumentFilters, type SpecTaskView, type TaskStatus } from '@/components/spec/page/model'
-import { ThreadRail } from '@/components/spec/page/threads/ThreadRail'
-import { BuildStages } from '@/components/spec/page/threads/BuildStages'
-import { FlowMap } from '@/components/spec/page/threads/FlowMap'
 import { toast } from '@/lib/toast'
 import '@/styles/spec-page.css'
 
@@ -52,43 +49,19 @@ const SHAPES = {
 } satisfies Record<string, SpecTaskView[]>
 
 type Shape = keyof typeof SHAPES
-type Variant = 'today' | 'rail' | 'stages' | 'map'
-
-const VARIANTS: Array<{ value: Variant; label: string; note: string }> = [
-  { value: 'today', label: 'Today', note: 'What shipped: every thread hooks out to its own lane on the right and back.' },
-  {
-    value: 'rail',
-    label: 'A · Rail',
-    note: 'Like a git graph. A chain is one straight line; a fork curves out into a free lane, a join curves back in. Dots sit beside each title and take the task’s status colour; threads take their prerequisite’s.',
-  },
-  {
-    value: 'stages',
-    label: 'B · Stages',
-    note: 'No lines. Tasks grouped by when they can start, side by side when they run in parallel; each card names what it waits on, as chips coloured by that task’s state.',
-  },
-  {
-    value: 'map',
-    label: 'C · Flow map',
-    note: 'A small map, left to right: what can run together reads down a column, what waits on what reads across. Select a task to read it beneath.',
-  },
-]
-
 const FILTERS: DocumentFilters = { evidence: 'any', task: 'any', status: 'any', agent: 'any', order: 'build' }
 
 /** The spec page's task threads, three ways, for the operator to choose (2026-11-16). */
 export default function TaskThreads() {
   const params = new URLSearchParams(window.location.hash.split('?')[1] ?? '')
-  const [variant, setVariant] = React.useState<Variant>((params.get('variant') as Variant) || 'rail')
   const [shape, setShape] = React.useState<Shape>((params.get('shape') as Shape) || 'wide')
   // The document column beside the spec list and the contents is about 620px; without the list, wider.
   const [width, setWidth] = React.useState<'page' | 'wide'>((params.get('width') as 'page' | 'wide') || 'page')
   const tasks = React.useMemo(() => orderTasks(SHAPES[shape], FILTERS), [shape])
-  const note = VARIANTS.find((v) => v.value === variant)!.note
 
   return (
     <div className="mock-threads">
       <div className="mock-threads-bar">
-        <Segmented label="Layout" value={variant} onChange={setVariant} options={VARIANTS.map(({ value, label }) => ({ value, label }))} />
         <Segmented
           label="Tasks"
           value={shape}
@@ -109,27 +82,19 @@ export default function TaskThreads() {
           ]}
         />
       </div>
-      <p className="mock-threads-note">{note}</p>
+      <p className="mock-threads-note">The spec page's build order, as the app draws it: a chain is one straight thread, a fork curves into a free lane.</p>
       <section className="aw-sp-section mock-threads-section" data-width={width}>
         <h2 className="aw-sp-section-title">Tasks</h2>
-        {variant === 'today' ? (
-          <TaskList
-            key={shape}
-            tasks={tasks}
-            all={tasks}
-            order="build"
-            findingsFor={() => []}
-            flash={null}
-            onJump={() => toast({ title: 'Jumps to that requirement' })}
-            onCopyLink={() => toast({ title: 'Link copied' })}
-          />
-        ) : variant === 'rail' ? (
-          <ThreadRail key={shape} tasks={tasks} />
-        ) : variant === 'stages' ? (
-          <BuildStages key={shape} tasks={tasks} />
-        ) : (
-          <FlowMap key={shape} tasks={tasks} />
-        )}
+        <TaskList
+          key={shape}
+          tasks={tasks}
+          all={tasks}
+          order="build"
+          findingsFor={() => []}
+          flash={null}
+          onJump={() => toast({ title: 'Jumps to that requirement' })}
+          onCopyLink={() => toast({ title: 'Link copied' })}
+        />
       </section>
     </div>
   )
