@@ -468,13 +468,34 @@ def build(version: str, fail: bool = False) -> dict[str, pathlib.Path]:
     return found
 
 
+def remove_venv(limit: float = 30.0) -> None:
+    """Delete the cached venv, waiting out a process still exiting that holds its python.exe:
+    a silent partial delete left `py -m venv` failing with Permission denied."""
+
+    def gone() -> bool:
+        shutil.rmtree(VENV, onerror=_writable_then)
+        return not VENV.exists()
+
+    if not wait_for(gone, limit, 1.0):
+        raise SystemExit(f"cannot delete {VENV}: something still holds it; delete it by hand")
+
+
+def sweep_pip_leftovers() -> None:
+    """A run interrupted mid-pip leaves `~`-prefixed stashes (`~gentweave_hub`) in site-packages."""
+    site = VENV / "Lib" / "site-packages"
+    for left in site.glob("~*") if site.is_dir() else []:
+        note(f"removing pip's leftover {left.name}")
+        shutil.rmtree(left, onerror=_writable_then)
+
+
 def ensure_venv(fresh: bool) -> None:
     marker = VENV / ".d1107-ready"
     if fresh:
-        shutil.rmtree(VENV, ignore_errors=True)
+        remove_venv()
     if marker.exists() and VENV_PY.exists():
+        sweep_pip_leftovers()
         return
-    shutil.rmtree(VENV, ignore_errors=True)
+    remove_venv()
     done = sh(["py", "-3.11", "-m", "venv", VENV], timeout=300, env=clean_env())
     if done.returncode != 0:
         raise SystemExit(f"venv: {done.stderr}")
@@ -711,8 +732,9 @@ class App:
         target, arguments = json.loads(done.stdout.strip().splitlines()[-1])
         return [target, *arguments.split()]
 
-    def launch(self, index_url: str) -> subprocess.Popen:
-        cmd = self.shortcut(index_url)
+    def launch(self, index_url: str, cmd: list[str] | None = None) -> subprocess.Popen:
+        """`cmd` is a shortcut target resolved beforehand: resolving it spawns the venv's Python."""
+        cmd = cmd or self.shortcut(index_url)
         user32.AllowSetForegroundWindow(d.ASFW_ANY)
         proc = subprocess.Popen(
             [*cmd, "--profile", self.profile, "--port", str(self.port)],
@@ -1547,11 +1569,15 @@ def step_concurrent(ctx: Ctx) -> None:
     try:
         if not c.need("nothing is running", d.port_free(app.port) and not app.hub_pids()):
             return
+        url = ctx.index.url("good")
+        # Resolved once, before the clock starts: each resolution imports agentweave.cli in the
+        # venv's Python, which alone takes longer than the 0.7 s the two launches may span.
+        cmd = app.shortcut(url)
         ctx.index.reset()
         started = time.monotonic()
-        app.launch(ctx.index.url("good"))
+        app.launch(url, cmd)
         time.sleep(0.3)
-        app.launch(ctx.index.url("good"))
+        app.launch(url, cmd)
         if not c.need("two launches started within one second", time.monotonic() - started < 1.0):
             return
         wait_for(lambda: app.version() == NEW, APPLY_LIMIT, 2.0)
