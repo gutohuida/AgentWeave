@@ -30,6 +30,8 @@ def _read_checkout(root: Path) -> Dict[str, str]:
         return {}
 
     def git(*args: str) -> str:
+        from .subprocess_windows import no_console_kwargs
+
         try:
             out = subprocess.run(
                 ["git", "-C", str(root), *args],
@@ -37,6 +39,7 @@ def _read_checkout(root: Path) -> Dict[str, str]:
                 text=True,
                 timeout=10,
                 check=False,
+                **no_console_kwargs(),
             )
         except (OSError, subprocess.SubprocessError):
             return ""
