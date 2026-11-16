@@ -39,6 +39,7 @@ import re
 import shutil
 import stat
 import subprocess
+import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -70,6 +71,11 @@ SHARED_DEPENDENCY_DIRS = ("node_modules", ".venv", "venv")
 TASK_BRANCH_PREFIX = BRANCH_PREFIX + "task/"
 
 _GIT_TIMEOUT_SECONDS = 30
+#: F1197: an `index.lock` in a review checkout's own git dir at least this old is stale. No git the
+#: Hub starts there outlives `_GIT_TIMEOUT_SECONDS` (it is killed at it, which is how such a lock
+#: is left behind), and `ensure_review_checkout` runs serialized with every other worktree change
+#: while the reviewer has no turn running, so nothing of the Hub's can be holding it.
+STALE_INDEX_LOCK_SECONDS = _GIT_TIMEOUT_SECONDS
 _AGENT_NAME_RE = re.compile(r"^[a-zA-Z0-9_-]{1,32}$")
 #: Restated by the CLI as `RESERVED_AGENT_NAMES` (`src/agentweave/constants.py`); change together.
 #: `operator` is `schemas.messages.OPERATOR_SENDER` (F415): an agent of that name would be hidden
@@ -96,6 +102,17 @@ class GitCommandError(RuntimeError):
 
 class IsolationUnavailableError(RuntimeError):
     """A writing agent cannot be given the isolated checkout the spec requires."""
+
+
+class ReviewCheckoutLockedError(IsolationUnavailableError):
+    """A review checkout's `index.lock` blocks re-pointing it, and it is not stale enough to clear.
+
+    Carries the lock's path so the refusal, and the stall raised for it, name the file to remove.
+    """
+
+    def __init__(self, lock: Path, detail: str) -> None:
+        self.lock = lock
+        super().__init__(detail)
 
 
 class ReviewCommitUnavailableError(RuntimeError):
@@ -1467,6 +1484,74 @@ def existing_review_checkout(repo_root: Path, agent: str) -> Optional[Path]:
     return path
 
 
+def _index_lock(checkout: Path) -> Optional[Path]:
+    """The `index.lock` path in *checkout*'s own git dir (`.git/worktrees/<name>`), or `None`."""
+    try:
+        git_dir = _run_git(checkout, "rev-parse", "--absolute-git-dir").stdout.strip()
+    except (GitCommandError, OSError, subprocess.SubprocessError):
+        return None
+    return Path(git_dir) / "index.lock" if git_dir else None
+
+
+def _clear_if_stale(lock: Path) -> bool:
+    """Remove *lock* if it is stale; return whether it is gone (F1197).
+
+    The rule: at least `STALE_INDEX_LOCK_SECONDS` old, and deleting it succeeds -- on Windows a
+    lock a live git still holds open cannot be deleted, which refuses the one case the age cannot
+    see. Only a review checkout's lock is ever passed here: that checkout is disposable, nobody's
+    work lives in it, and it is never the operator's main checkout.
+    """
+    try:
+        age = time.time() - lock.stat().st_mtime
+    except FileNotFoundError:
+        return True
+    except OSError:
+        return False
+    if age < STALE_INDEX_LOCK_SECONDS:
+        return False
+    try:
+        lock.unlink()
+    except FileNotFoundError:
+        return True
+    except OSError:
+        return False
+    logger.warning("removed a stale %s (%.0fs old) from a review checkout", lock, age)
+    return True
+
+
+def _repoint_review_checkout(path: Path, commit: str) -> None:
+    """`checkout --force --detach` at *commit*, past a stale `index.lock` (F1197).
+
+    A stale lock is cleared before the checkout; a checkout that still fails on the lock clears it
+    again and is retried once. A lock that stays is refused as `ReviewCheckoutLockedError`, which
+    names the file.
+    """
+    lock = _index_lock(path)
+    if lock is not None:
+        _clear_if_stale(lock)
+    try:
+        _run_git(path, "checkout", "--force", "--detach", commit)
+        return
+    except GitCommandError as exc:
+        if lock is None or "index.lock" not in (exc.stderr or ""):
+            raise
+        failure = exc
+    if _clear_if_stale(lock):
+        try:
+            _run_git(path, "checkout", "--force", "--detach", commit)
+            return
+        except GitCommandError as exc:
+            if "index.lock" not in (exc.stderr or ""):
+                raise
+            failure = exc
+    raise ReviewCheckoutLockedError(
+        lock,
+        f"{lock} blocks re-pointing the review checkout at {path}. The Hub removes that lock "
+        f"itself once it is {STALE_INDEX_LOCK_SECONDS}s old and no process holds it open; if no "
+        f"git is running in that checkout, delete the file. ({failure.stderr.strip()})",
+    )
+
+
 def ensure_review_checkout(repo_root: Path, agent: str, sha: str) -> Path:
     """Provision *agent*'s review checkout, detached at *sha*. Idempotent (task 1.2).
 
@@ -1493,7 +1578,7 @@ def ensure_review_checkout(repo_root: Path, agent: str, sha: str) -> Path:
                 f"refusing existing path {path}: it is not a detached git worktree registered for "
                 f"{agent}'s reviews"
             )
-        _run_git(path, "checkout", "--force", "--detach", commit)
+        _repoint_review_checkout(path, commit)
     else:
         # Same reason as `ensure_worktree`: git's own `.git/worktrees/<name>` metadata can outlive
         # a directory removed by something other than `release_review_checkout`, and `worktree add`
