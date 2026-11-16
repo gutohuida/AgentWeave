@@ -72,6 +72,6 @@ def test_a_root_that_is_gone_is_skipped():
     assert proc_safe.tree([999], TABLE) == []
 
 
-def test_kill_pids_refuses_a_pid_that_is_not_in_the_snapshot(monkeypatch):
+def test_kill_pids_refuses_a_pid_that_is_not_in_the_snapshot():
     # Nothing is opened for a pid the snapshot never saw; on any platform the answer is empty.
     assert proc_safe.kill_pids([999999], {}) == []

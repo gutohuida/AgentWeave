@@ -83,7 +83,8 @@ def _created(kernel32, handle) -> int | None:
 def kill_pids(pids, table: Table) -> list[int]:
     """End each pid through a handle, only if that process was created when *table* says it was.
     Returns the pids ended. A pid that is gone, or has become a different process, is skipped."""
-    if sys.platform != "win32":
+    pids = [pid for pid in pids if pid in table]
+    if not pids or sys.platform != "win32":
         return []
     kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
     kernel32.OpenProcess.restype = wintypes.HANDLE
@@ -93,8 +94,6 @@ def kill_pids(pids, table: Table) -> list[int]:
     kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
     ended: list[int] = []
     for pid in pids:
-        if pid not in table:
-            continue
         handle = kernel32.OpenProcess(
             _PROCESS_TERMINATE | _PROCESS_QUERY_LIMITED_INFORMATION, False, pid
         )
