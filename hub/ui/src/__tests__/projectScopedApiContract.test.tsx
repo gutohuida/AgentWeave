@@ -30,7 +30,9 @@ const API_SOURCES = import.meta.glob('../api/*.ts', {
 // project directory *before* a project exists, so it cannot carry a project ID either.
 // nativeDialog.ts: the native folder dialog is the same "precedes a project" case as
 // fsBrowse.ts (composer/chrome refinement §7/§8) — it backs the same directory-choice
-// flow, just through the host's own dialog instead of the in-app browser.
+// flow, just through the host's own dialog instead of the in-app browser. hubVersion.ts: reads
+// `/health` of the Hub this window is connected to, which is about the instance, not a project;
+// its key is ['app', 'hub-version', hubUrl].
 const INSTANCE_LEVEL_FILES = new Set([
   'client.ts',
   'setup.ts',
@@ -38,6 +40,7 @@ const INSTANCE_LEVEL_FILES = new Set([
   'modelCatalog.ts',
   'fsBrowse.ts',
   'nativeDialog.ts',
+  'hubVersion.ts',
 ])
 
 function apiFiles(): Array<[name: string, source: string]> {

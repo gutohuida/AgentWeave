@@ -189,7 +189,7 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals())
 
 describe('messages-behind-a-count (FR-7)', () => {
-  it('shows one blocking finding and three warnings as 4 in the blocking tone, adding nothing above the body, and lists all four', async () => {
+  it('shows one blocking finding and three warnings as 5 (the four findings and the acknowledge-a-gap notice an exploring check adds) in the blocking tone, adding nothing above the body, and lists all five', async () => {
     hub.check = {
       blocking: [{ code: 'requirement_without_criterion', where: 'requirements[1]', message: "'r2' has no acceptance criterion" }],
       warnings: [
@@ -210,7 +210,7 @@ describe('messages-behind-a-count (FR-7)', () => {
 
     await user.click(within(header()).getByRole('button', { name: 'Check' }))
     const count = await within(header()).findByTestId('spec-notice-count')
-    expect(count).toHaveTextContent('4')
+    expect(count).toHaveTextContent('5')
     expect(count).toHaveAttribute('data-tone', 'error')
     // Still nothing between the header and the body, and the header has no more rows than before.
     expect(between()).toHaveLength(0)
@@ -219,10 +219,13 @@ describe('messages-behind-a-count (FR-7)', () => {
 
     await user.click(count)
     const list = screen.getByTestId('spec-notices')
-    expect(within(list).getAllByRole('listitem')).toHaveLength(4)
+    // five notices, plus the three gap lines the acknowledge notice itself lists
+    expect(within(list).getAllByRole('listitem')).toHaveLength(8)
+    expect(within(list).getByText(/Check found 3 gaps you may leave open/)).toBeInTheDocument()
     expect(within(list).getByText(/has no acceptance criterion/)).toBeInTheDocument()
-    expect(within(list).getByText(/No reviewer is named/)).toBeInTheDocument()
-    expect(within(list).getAllByText(/gives no rationale/)).toHaveLength(2)
+    // each warning also appears once in the acknowledge notice's own list
+    expect(within(list).getAllByText(/No reviewer is named/)).toHaveLength(2)
+    expect(within(list).getAllByText(/gives no rationale/)).toHaveLength(4)
     // The most urgent first, and each one's action shows it in the document.
     expect(within(list).getAllByRole('listitem')[0]).toHaveTextContent(/has no acceptance criterion/)
     expect(within(list).getAllByRole('button', { name: 'Show' })).toHaveLength(4)
