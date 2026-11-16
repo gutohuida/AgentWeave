@@ -210,7 +210,8 @@ export function useSpecPhaseControls(
   const [gaps, setGaps] = useState<SpecBlockingFinding[]>([])
   const [gapsOverridable, setGapsOverridable] = useState(false)
   // Gaps somebody chose to leave, shown apart from the open ones (FR-5).
-  const [acknowledged, setAcknowledged] = useState<SpecAcknowledgedGap[]>([])
+  // `null` until Check or an approval answers: the page then shows what the document read with.
+  const [acknowledgedAnswer, setAcknowledged] = useState<SpecAcknowledgedGap[] | null>(null)
   // What an approval told and did not gate on (F704: an unclaimed roadmap slice).
   const [approvalNotes, setApprovalNotes] = useState<SpecBlockingFinding[]>([])
   const [confirmingArchive, setConfirmingArchive] = useState(false)
@@ -252,6 +253,7 @@ export function useSpecPhaseControls(
   // eslint-disable-next-line react-hooks/exhaustive-deps -- the moment the dialog opened
   const buildOpenedAt = useMemo(() => new Date(), [building])
 
+  const acknowledged = acknowledgedAnswer ?? (specDocError ? [] : (specDoc?.acknowledged ?? []))
   const inline = options.inlineFindings === true
   const document = data?.documents.find((entry) => entry.path === path)
   const flow = useDocumentFlow(document?.id)
@@ -312,7 +314,7 @@ export function useSpecPhaseControls(
     setBlocking([])
     setGaps([])
     setGapsOverridable(false)
-    setAcknowledged([])
+    setAcknowledged(null)
     setApprovalNotes([])
     setCheckedClean(false)
     setCheckedOnce(false)

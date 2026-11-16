@@ -330,6 +330,10 @@ async def test_check_approve_and_the_rendered_document_show_the_acknowledged_gap
     checked = (await _check(app, auth_headers)).json()
     assert [a["reason"] for a in checked["acknowledged"]] == ["by hand"]
     page = (await app.get(f"{BASE}/spec", params={"path": PATH}, headers=auth_headers)).json()
+    # The page's own read carries the list, so it shows on load without a Check (FR-5).
+    assert [(a["code"], a["reason"]) for a in page["acknowledged"]] == [
+        ("criterion_without_check", "by hand")
+    ]
     assert "acknowledged-gap-criterion_without_check" in page["content"]
     assert "by hand" in page["content"] and "claude-1" in page["content"]
 

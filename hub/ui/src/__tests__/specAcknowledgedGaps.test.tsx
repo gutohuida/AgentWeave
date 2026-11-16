@@ -18,6 +18,8 @@ const setPhase = vi.fn()
 const approveAndBuild = vi.fn()
 const acknowledge = vi.fn()
 let documents: unknown[] = []
+// What `GET /spec` read the document with: the acknowledged gaps, before any Check.
+let loadedAcknowledged: unknown[] = []
 
 vi.mock('@/api/spec', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/api/spec')>()
@@ -25,7 +27,11 @@ vi.mock('@/api/spec', async (importOriginal) => {
     ...actual,
     useSpecDocuments: () => ({ data: { documents } }),
     useSetSpecJourney: () => ({ mutate: vi.fn(), isPending: false }),
-    useSpec: () => ({ data: { path: PATH, content: '', content_version: 'v1' }, isError: false, refetch: vi.fn() }),
+    useSpec: () => ({
+      data: { path: PATH, content: '', content_version: 'v1', acknowledged: loadedAcknowledged },
+      isError: false,
+      refetch: vi.fn(),
+    }),
     useCheckSpecDocument: () => ({ mutateAsync: check, isPending: false }),
     useAcknowledgeSpecGap: () => ({ mutateAsync: acknowledge, isPending: false }),
     useSetSpecPhase: () => ({ mutate: setPhase, isPending: false }),
@@ -80,9 +86,19 @@ beforeEach(() => {
   vi.clearAllMocks()
   setPhase.mockReset()
   documents = [doc()]
+  loadedAcknowledged = []
 })
 
 describe('acknowledged gaps', () => {
+  it('the page shows an acknowledged gap on load, with no Check', () => {
+    loadedAcknowledged = [acked]
+    renderBar()
+    const list = screen.getByTestId('acknowledged-gaps-list')
+    expect(list).toHaveTextContent('Acknowledged by operator')
+    expect(list).toHaveTextContent('the drive is a follow-up slice')
+    expect(check).not.toHaveBeenCalled()
+  })
+
   it('Check shows an acknowledged gap with reason and author apart from the open one', async () => {
     check.mockResolvedValueOnce({ blocking: [], warnings: [open], acknowledged: [acked], ready: false })
     renderBar()

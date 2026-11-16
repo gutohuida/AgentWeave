@@ -419,6 +419,8 @@ export interface SpecDocument {
   path: string
   content: string
   updated_at?: string
+  /** Gaps somebody chose to leave, read with the document so the page shows them on load. */
+  acknowledged?: SpecAcknowledgedGap[]
   delivery_status?: SpecDeliveryStatus
   fold_state?: SpecFoldState
   approval_outcome?: SpecApprovalOutcome
