@@ -179,6 +179,7 @@ async def test_an_incomplete_submission_is_stored_and_reports_what_blocks_approv
     """Saving an incomplete document is not an error. A document under
     discussion is incomplete, and refusing it would make exploring impossible."""
     await _create(app, auth_headers)
+    await _place_at_the_end()
 
     response = await _submit(app, run_headers, _document(tasks=[], acceptance_criteria=[]))
 
@@ -190,7 +191,8 @@ async def test_an_incomplete_submission_is_stored_and_reports_what_blocks_approv
     assert "requirement_without_task" in codes
     assert "requirement_without_criterion" in codes
     assert body["blocking"] == []
-    assert body["ready_to_approve"] is True
+    # Gaps approval would list make a save not ready: ready means Approve would not stop.
+    assert body["ready_to_approve"] is False
 
     checked = await app.post(f"{BASE}/documents/check", params={"path": PATH}, headers=auth_headers)
     assert checked.status_code == 200, checked.text
@@ -354,6 +356,7 @@ async def test_checking_a_document_whose_content_was_refused_says_whether_it_is_
     status code believed it had proposed. The 200 stays (`blocking` is the one shape for "not yet",
     F113); the body must carry the answer in a field a client checks."""
     await _create(app, auth_headers)
+    await _place_at_the_end()
     refused = await app.put(
         f"{BASE}/documents/{PATH}/content",
         json={
@@ -379,13 +382,15 @@ async def test_checking_a_document_whose_content_was_refused_says_whether_it_is_
     body = response.json()
     # An empty document is a gap (approve-lists-what-is-missing FR-3), not a refusal -- and the
     # field must say what `blocking` says, with the gap listed beside it.
-    assert body["ready"] is (body["blocking"] == [])
+    assert body["blocking"] == []
+    assert body["ready"] is False  # the gap is listed beside it, and Approve would stop on it
     assert "no_requirements" in {w["code"] for w in body["warnings"]}
 
 
 @pytest.mark.asyncio
 async def test_the_full_operator_path_reaches_approved(app, auth_headers, run_headers, tmp_path):
     await _create(app, auth_headers)
+    await _place_at_the_end()
     await _submit(app, run_headers, _document())
     await app.post(
         f"{BASE}/documents/close-exploration", params={"path": PATH}, headers=auth_headers
@@ -393,7 +398,7 @@ async def test_the_full_operator_path_reaches_approved(app, auth_headers, run_he
 
     checked = await app.post(f"{BASE}/documents/check", params={"path": PATH}, headers=auth_headers)
     assert checked.json()["blocking"] == []
-    assert checked.json()["ready"] is True
+    assert checked.json()["ready"] is False  # the criterion has no check: approved anyway below
 
     approved = await app.post(
         f"{BASE}/documents/phase",
@@ -646,3 +651,11 @@ async def test_document_events_are_append_only_with_no_route_to_change_or_delete
         assert (event.kind, event.actor, event.origin, event.detail) == snapshot[
             event.id
         ], "an earlier event must not change when a later one is recorded"
+
+
+async def _place_at_the_end():
+    """The document's step is the journey's last, so `steps_skipped` does not colour what this
+    test asks (a save moving the step by content is the steps slice)."""
+    from .test_spec_journey_briefing import _place
+
+    await _place(step="build", size="large")

@@ -2748,6 +2748,36 @@ class SpecDocumentEvent(Base):
     )
 
 
+class SpecGapAcknowledgement(Base):
+    """A gap on a specification document that its author or the operator chose to leave, with why.
+
+    `ready-means-the-same-thing-to-the-author-and-the-operator` FR-3, FR-4. Kept beside the
+    document, never inside its payload, so a save that replaces the whole payload cannot erase or
+    forge one. Keyed by (code, place) so a reworded gap keeps its acknowledgement; a row is dropped
+    when its gap is no longer reported.
+    """
+
+    __tablename__ = "spec_gap_acknowledgements"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    document_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("spec_documents.id"), nullable=False
+    )
+    project_id: Mapped[str] = mapped_column(String(64), ForeignKey("projects.id"), nullable=False)
+    code: Mapped[str] = mapped_column(String(64), nullable=False)
+    place: Mapped[str] = mapped_column(String(255), nullable=False, default="")
+    reason: Mapped[str] = mapped_column(Text, nullable=False)
+    actor_kind: Mapped[str] = mapped_column(String(16), nullable=False)
+    actor: Mapped[str] = mapped_column(String(128), nullable=False, default="")
+    run_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint("document_id", "code", "place", name="uq_spec_gap_ack_gap"),
+        Index("ix_spec_gap_acknowledgements_document", "document_id"),
+    )
+
+
 class SpecEditProposal(Base):
     """One pending, individually acceptable edit against a `contract`/`gate`-rigor document.
 

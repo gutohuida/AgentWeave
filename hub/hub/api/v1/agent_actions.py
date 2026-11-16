@@ -2952,6 +2952,59 @@ async def report_cannot_satisfy(
     return result
 
 
+class SpecGapAcknowledge(RequestModel):
+    """An authoring agent leaving one gap open on purpose."""
+
+    path: str = Field(max_length=255)
+    code: str = Field(max_length=64)
+    where: str = Field(max_length=255)
+    reason: str = Field(max_length=10000)
+
+
+@router.post("/spec/documents/acknowledge", status_code=status.HTTP_201_CREATED)
+async def acknowledge_spec_gap(
+    body: SpecGapAcknowledge,
+    actor: AgentActor = Depends(get_agent_actor),
+    session: AsyncSession = Depends(get_session),
+):
+    """Acknowledge one gap of a document you wrote, with a reason, instead of fixing it.
+
+    Refused, writing nothing: no reason (422 `reason_required`), a refusal or a note (422), a gap
+    the document does not report (404 `gap_not_reported`), `amendments_unreviewed` and
+    `vault_warning`, which are the operator's to clear (403 `operator_only`), and a document you
+    did not write (403 `not_the_author`).
+    """
+    from ... import spec_acknowledgements, spec_amendments, spec_lifecycle, spec_service
+
+    workspace, document = await _amendable_document(session, actor, body.path)
+    try:
+        payload = spec_service._stored_payload(workspace, document)
+        report = await spec_service.readiness(session, workspace, document, payload)
+        recorded = await spec_acknowledgements.acknowledge(
+            session,
+            document,
+            report,
+            code=body.code,
+            where=body.where,
+            reason=body.reason,
+            actor=spec_lifecycle.Actor(kind="agent", name=actor.agent, run_id=actor.run_id),
+            authors=await spec_amendments.authors(session, document),
+        )
+    except spec_service.SaveRefusedError as exc:
+        raise HTTPException(
+            status_code=422, detail={"message": str(exc), "code": exc.code}
+        ) from exc
+    except spec_acknowledgements.AcknowledgementRefusedError as exc:
+        raise HTTPException(
+            status_code=exc.status, detail={"message": str(exc), "code": exc.code}
+        ) from exc
+    await session.commit()
+    await sse_manager.broadcast(
+        actor.project_id, "spec_updated", {"path": document.path, "phase": document.phase}
+    )
+    return recorded
+
+
 @router.post("/spec/documents")
 async def submit_spec_document(
     body: SpecDocumentSubmission,
@@ -2964,7 +3017,7 @@ async def submit_spec_document(
     and refusing it would make exploring impossible. `blocking` says what approval would refuse,
     exactly as the operator's Check reports it.
     """
-    from ... import project_workspace, spec_completeness, spec_lifecycle, spec_service
+    from ... import project_workspace, spec_lifecycle, spec_service
     from ...spec_manifest import SpecPathError, validate_spec_path
 
     try:
@@ -3013,8 +3066,10 @@ async def submit_spec_document(
         "blocking": result.blocking,
         # F502: an agent read the call's success beside eight blocking findings as "ready".
         # F1124: and no gap Approve would list, which the warnings carry.
-        "ready_to_approve": not result.blocking
-        and not any(w.get("code") in spec_completeness.APPROVAL_GAP_CODES for w in result.warnings),
+        # Ready means Approve would not stop: no refusal and no unacknowledged gap (FR-2).
+        "ready_to_approve": result.ready_to_approve,
         "divergence": result.divergence,
         "warnings": result.warnings,
+        "notes": result.notes,
+        "acknowledged": result.acknowledged,
     }

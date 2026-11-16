@@ -89,9 +89,9 @@ async def _written_with_a_gap(app, auth_headers, run_headers):  # noqa: F811
     """A document whose criterion has no check, so approval has one gap to list. Returns what the
     agent's save answered."""
     await _create(app, auth_headers)
+    await _place(step="build", size="large")
     saved = await _submit(app, run_headers, _document())
     assert saved.status_code == 200, saved.text
-    await _place(step="build", size="large")
     return saved.json()
 
 
