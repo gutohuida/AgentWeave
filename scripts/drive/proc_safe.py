@@ -107,12 +107,39 @@ def kill_pids(pids, table: Table) -> list[int]:
     return ended
 
 
+def genuine(pids, table: Table, before: Table | None = None) -> list[int]:
+    """Of *pids*, those that are the processes they appear to be in *table*.
+
+    A pid whose creation time differs from *before*'s (when given) was reused since. A pid created
+    before its recorded parent is an orphan of a dead process whose pid something else now holds,
+    so the parent it names is not its parent. A parent that is gone altogether is a real orphan and
+    stays: that is what a tree-walk from the parent could never reach."""
+    keep = []
+    for pid in pids:
+        if pid not in table:
+            continue
+        if before is not None and (pid not in before or before[pid][1] != table[pid][1]):
+            continue
+        parent, created = table[pid]
+        if parent in table and table[parent][1] > created:
+            continue
+        keep.append(pid)
+    return keep
+
+
+def kill_candidates(pids, before: Table | None = None) -> list[int]:
+    """End each of *pids* (named by a slow CIM read or an old walk) only if `genuine`, and only it:
+    no tree. *before* is a `snapshot()` taken before that read."""
+    table = snapshot()
+    return kill_pids(genuine(pids, table, before), table)
+
+
 def kill_tree(roots, since: int | None = None, before: Table | None = None) -> list[int]:
     """End *roots* and everything under them, deepest first, touching only our own processes.
 
     `since` (e.g. `DRIVE_START`) drops remembered roots older than it. `before` is an earlier
-    `snapshot()`: a root counts only if it was created when that snapshot saw it, which is how a
-    drive that read the table seconds ago, or minutes ago, stays honest."""
+    `snapshot()`, taken before the roots were read: a root counts only if it still has the creation
+    time that snapshot saw. Either way a root created before its recorded parent is dropped."""
     table = snapshot()
-    roots = [r for r in roots if before is None or (r in before and r in table and before[r][1] == table[r][1])]
+    roots = genuine(roots, table, before)
     return kill_pids(tree(roots, table, since), table)

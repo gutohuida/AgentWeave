@@ -74,9 +74,9 @@ for _ in range(80):
     time.sleep(3)
 print("sleeper:", sleeper)
 pid = q("select pid from runs where id=?", run_id)[0]["pid"]
+before = proc_safe.snapshot()  # before the slow read, so a later kill spares a reused pid
 table = procs()
 tree = [pid] + descendants(table, pid) if pid in table else []
-before = proc_safe.snapshot()  # creation times of `tree`, so a later kill spares a reused pid
 
 status, roster = req("GET", f"{B}/agents")
 for a in roster if isinstance(roster, list) else []:

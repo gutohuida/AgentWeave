@@ -26,7 +26,7 @@ def main():
     else:
         hub_pid = int(json.loads(pathlib.Path(os.environ["AW_E2E_STATE"]).read_text())["pid"])
         before = proc_safe.snapshot()  # a pid the CIM walk names must still be this process
-        proc_safe.kill_pids([k["ProcessId"] for k in d._claude_children(hub_pid)], before)
+        proc_safe.kill_candidates([k["ProcessId"] for k in d._claude_children(hub_pid)], before)
     d.say("final", d.wait_run(run, 180))
     d.say("run row", d.ro("select status, exit_code from runs where id=?", (run,)))
 

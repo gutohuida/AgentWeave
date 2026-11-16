@@ -929,8 +929,12 @@ def step_closed(app, stream, shell, hwnd, project, watch):
     mine: set[int] = set()
     seen: dict = {}
     if run and wait_for(lambda: d.run_status(app, run) == "running", 90, 1.0):
-        mine = wait_for(lambda: claude_children() - existing, 60, 1.0) or set()
-        seen = proc_safe.snapshot()  # when each of `mine` was created
+
+        def poll() -> set[int]:
+            seen["table"] = proc_safe.snapshot()  # taken before the slow CIM read it vets
+            return claude_children() - existing
+
+        mine = wait_for(poll, 60, 1.0) or set()
         time.sleep(8.0)  # let the turn get into its tool call
     if not precondition("c-closed: failbot's turn is running under the Hub", bool(mine)):
         return
@@ -941,8 +945,9 @@ def step_closed(app, stream, shell, hwnd, project, watch):
     closed_at = time.monotonic()
     d.close_window(hwnd)
     # `mine` was read seconds ago: a pid kept only if it is still the process that was seen then.
-    proc_safe.kill_tree(mine, before=seen)
-    proc_safe.kill_tree(claude_children() - existing - mine)
+    proc_safe.kill_tree(mine, before=seen.get("table"))
+    late = proc_safe.snapshot()
+    proc_safe.kill_tree(claude_children() - existing - mine, before=late)
     time.sleep(max(0.0, 1.0 - (time.monotonic() - closed_at)))
     asked_after = time.monotonic() - closed_at
     ask(app, project, "closedask")  # a question inside the first 2 s, too

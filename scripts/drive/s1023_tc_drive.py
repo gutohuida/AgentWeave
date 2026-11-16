@@ -148,7 +148,7 @@ def phase_fail():
     before = proc_safe.snapshot()  # a pid the CIM walk below names must still be this process
     kids = _claude_children(hub_pid)
     say("claude processes", [(k["ProcessId"], k["Name"]) for k in kids])
-    proc_safe.kill_pids([k["ProcessId"] for k in kids], before)
+    proc_safe.kill_candidates([k["ProcessId"] for k in kids], before)
     say("final", wait_run(run, 180))
     say("run row", q("select status, exit_code, error from runs where id=?", run))
 

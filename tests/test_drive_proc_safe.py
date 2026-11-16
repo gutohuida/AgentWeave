@@ -75,3 +75,22 @@ def test_a_root_that_is_gone_is_skipped():
 def test_kill_pids_refuses_a_pid_that_is_not_in_the_snapshot():
     # Nothing is opened for a pid the snapshot never saw; on any platform the answer is empty.
     assert proc_safe.kill_pids([999999], {}) == []
+
+
+def test_genuine_drops_an_orphan_created_before_the_parent_it_names():
+    # 102 names 100 as its parent but predates it: a naive CIM walk reports it, the filter does not.
+    assert proc_safe.genuine([101, 102, 200], TABLE) == [101, 200]
+
+
+def test_genuine_keeps_a_real_orphan_whose_parent_is_gone():
+    table = {500: (77, 900)}  # parent 77 is not running
+    assert proc_safe.genuine([500], table) == [500]
+
+
+def test_genuine_drops_a_pid_whose_creation_time_changed_since_it_was_seen():
+    before = {101: (100, 1999), 200: (101, 3000)}  # 101 was a different process then
+    assert proc_safe.genuine([101, 200], TABLE, before) == [200]
+
+
+def test_genuine_drops_a_pid_the_earlier_snapshot_never_saw():
+    assert proc_safe.genuine([200], TABLE, {}) == []

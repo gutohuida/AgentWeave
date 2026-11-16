@@ -53,6 +53,7 @@ tools = q(
     run_id,
 )
 print("outputs before stop:", tools)
+before = proc_safe.snapshot()  # before the slow read, so a later kill spares a reused pid
 table = procs()
 chain, cur = [], sleeper
 while cur in table:
@@ -63,7 +64,6 @@ for c in chain:
     print("   ", c)
 root = run["pid"]
 tree = [root] + descendants(table, root) if root in table else []
-before = proc_safe.snapshot()  # creation times of `tree`, so a later kill spares a reused pid
 print(f"run pid {root} in table: {root in table}; tree size {len(tree)}")
 for p in tree:
     print("    tree", p, table[p]["name"], table[p]["cmd"][:100])
