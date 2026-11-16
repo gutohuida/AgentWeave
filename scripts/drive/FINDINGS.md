@@ -41953,3 +41953,13 @@ WSL appends the Windows PATH by default, so a user with Codex installed on Windo
 **Tier:** 0
 
 `review_on_completion` (`a-hand-started-task-reaches-review-and-merge`) gives a hand-started task the step a build's flow gives it on completion: its review starts by itself. The opposite edge has no equivalent. When the review turn moves the task to `revision_needed`, a flow would restart the author (`flow_advance`: `revision_needed -> in_progress` with the author), but a hand-started task simply waits. The operator has to notice and start the builder again. On a fresh install this is the second stop after "who reviews it?" that a new user meets. **Expected:** when a review turn sends a hand-started task back, the author's turn on it is queued with the reviewer's notes, as the review was queued on completion. A task sent back repeatedly is surfaced rather than looped forever (see the cap in AW task). **Test:** a hand-started task completed by A and sent back by reviewer B's review turn ends with a queued or running turn for A on that task, and no operator action.
+
+## F1197 (B) -- a stale `index.lock` in an agent's review checkout blocks every review turn for that agent, and nothing clears it
+
+**Status:** open
+**Source:** found by the operator, 2026-11-16 ("something stuck in QA2"); diagnosed by Architect on `:8000` (read-only DB)
+**Theme:** Review and merge
+**Ready:** yes
+**Tier:** 0
+
+At 15:07:13 UTC `review_on_completion` staffed QA2 on AW-146. Preparing QA2's review checkout left a zero-byte `.git/worktrees/QA2/index.lock` (created 15:07:17), with no git process alive afterwards. Every later attempt (`git checkout --force --detach <sha>`) failed 128 with "Unable to create ... index.lock: File exists". The job entry was withdrawn after 3 attempts ("the Hub stopped retrying"), and the operator's two "Review with QA2" clicks were withdrawn at once with the same error. The task sat `completed` for 37 minutes, and no stall was raised for it. Removing the lock by hand fixed it. **Expected:** the Hub owns that checkout, so before a checkout it clears an `index.lock` that no live git process could hold (for example, older than a short threshold with no git child of the Hub running in that checkout) and retries. Where it cannot, the withdrawal raises a stall naming the lock file. **Test:** create a stale `index.lock` in a review checkout's git dir; the next review turn for that agent starts and the lock is gone.
