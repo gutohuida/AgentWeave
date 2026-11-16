@@ -34,7 +34,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Dict, List, Optional, Set
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .db.models import Run, Task
@@ -166,3 +166,32 @@ async def live_turn_for_task(
     for run in rows:
         return LiveTurn(run_id=run.id, agent=run.agent or "an agent", started_at=run.started_at)
     return None
+
+
+async def has_running_turn(
+    session: AsyncSession,
+    project_id: str,
+    *,
+    agent: Optional[str] = None,
+    task_id: Optional[str] = None,
+    excluding_run_id: Optional[str] = None,
+) -> bool:
+    """Is a run of *agent*, or a run bound to *task_id*, recorded `running` (F1197, AW-152)?
+
+    Asked before the Hub clears a stale `index.lock` in that agent's or task's checkout, where
+    agents run their own git. The `Run` row rather than the registry, unlike `live_turn_for_task`:
+    a row is written before its process is registered, and a crashed run's row stays `running`
+    until the next start reconciles it -- both keep the lock, which is the safe direction here (the
+    lock is then named in a stall, not removed under a git that may still be using it).
+    """
+    if agent is None and task_id is None:
+        return False
+    whose = []
+    if agent is not None:
+        whose.append(Run.agent == agent)
+    if task_id is not None:
+        whose.append(Run.task_id == task_id)
+    query = select(Run.id).where(Run.project_id == project_id, Run.status == "running", or_(*whose))
+    if excluding_run_id is not None:
+        query = query.where(Run.id != excluding_run_id)
+    return (await session.execute(query.limit(1))).first() is not None
