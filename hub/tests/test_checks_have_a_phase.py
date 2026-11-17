@@ -38,9 +38,10 @@ def _a_long_gather_window(monkeypatch):
     landing_queue.cancel_timers()
 
 
-def marker_check(tmp_path_factory, name, *, phase=None, fails=False):
+def marker_check(tmp_path_factory, name, *, phase=None, fails=False, fails_where=None):
     """A check named *name* that appends the tree it ran on to its marker file, and passes (or
-    fails, printing a pytest failure line, where *fails*)."""
+    fails, printing a pytest failure line, where *fails*: only on a tree holding the file
+    *fails_where*, where that is given)."""
     outside = tmp_path_factory.mktemp(f"check-{name}")
     marker = outside / "ran.txt"
     script = outside / "check.py"
@@ -50,10 +51,12 @@ def marker_check(tmp_path_factory, name, *, phase=None, fails=False):
         " text=True).stdout.strip()\n"
         f"with open(r'{marker}', 'a', encoding='utf-8') as out:\n"
         "    out.write(tree + '\\n')\n"
+        + (f"import os\nif os.path.exists(r'{fails_where}'):\n" if fails_where else "if True:\n")
         + (
-            "print('FAILED tests/test_suite.py::test_balance - assert 2 == 3')\nsys.exit(1)\n"
+            "    print('FAILED tests/test_suite.py::test_balance - assert 2 == 3')\n"
+            "    sys.exit(1)\n"
             if fails
-            else ""
+            else "    pass\n"
         ),
         encoding="utf-8",
     )
@@ -226,9 +229,13 @@ async def test_a_landing_only_check_waits_for_landing_and_holds_nothing_before(
 async def test_a_landing_only_check_that_fails_holds_the_landing(
     app, auth_headers, tmp_path, tmp_path_factory
 ):
-    """ac-landing-runs-it, its failure half: B fails on the merged tree, so nothing lands."""
+    """ac-landing-runs-it, its failure half: B fails on the merged tree, so nothing lands. B fails
+    only where the task's work is: a failure main shares is no task's
+    (`a-landing-failure-is-blamed-on-a-task-only-when-it-reproduces-there`, FR-1)."""
     a, _ = marker_check(tmp_path_factory, "A", phase="review")
-    b, b_ran = marker_check(tmp_path_factory, "B", phase="landing", fails=True)
+    b, b_ran = marker_check(
+        tmp_path_factory, "B", phase="landing", fails=True, fails_where="feature_1.py"
+    )
     [task_id], _ = await tasks_under_review(tmp_path, 1, status="completed")
     await store_checks([a, b])
     main_before = _tip(tmp_path)

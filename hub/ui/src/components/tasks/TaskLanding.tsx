@@ -156,7 +156,13 @@ export function TaskLanding({ taskId }: { taskId: string }) {
       {landing.state === 'landed' && landing.went_past?.length ? <WentPast taskId={taskId} entries={landing.went_past} /> : null}
       {landing.state === 'landed' && (landing.override_reason || landing.batch?.override_reason) && (
         <p style={{ color: 'var(--text-2)' }}>
-          Landed over failures main shares: {landing.override_reason || landing.batch?.override_reason}
+          {/* The Hub lands a batch past a failure only where it reproduced on no task's prefix
+              (`a-landing-failure-is-blamed-on-a-task-only-when-it-reproduces-there`, FR-6); the
+              operator's override is over failures main shares. */}
+          {landing.batch?.override_by === 'hub'
+            ? 'Landed past failures held against no task: '
+            : 'Landed over failures main shares: '}
+          {landing.override_reason || landing.batch?.override_reason}
         </p>
       )}
     </div>
