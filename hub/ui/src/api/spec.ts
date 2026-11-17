@@ -933,7 +933,17 @@ export interface SpecDocumentRecord {
   /** A capability: the open changes that name it, in the Hub's order. */
   waiting_changes?: WaitingChange[]
   waiting_count?: number
+  /** A capability: every change folded into it, newest fold first, including changes since
+   *  superseded or archived. */
+  folded_changes?: FoldedChange[]
   updated_at: string
+}
+
+/** One change folded into a capability, as the capability's row in the document list reports it. */
+export interface FoldedChange {
+  path: string
+  title: string
+  folded_at: string | null
 }
 
 export interface CapabilityLink {
