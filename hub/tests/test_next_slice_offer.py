@@ -13,7 +13,7 @@ from sqlalchemy import select
 
 from hub import slice_drafting, spec_lifecycle
 from hub.db.engine import async_session_factory
-from hub.db.models import Agent, Conversation, SpecDocument, Task
+from hub.db.models import Agent, Conversation, SpecDocument, Task, TaskLanding
 
 from .test_spec_roadmaps import (  # noqa: F401 -- fixtures
     BASE,
@@ -42,6 +42,22 @@ async def _agents(*names):
     async with async_session_factory() as session:
         for name in names:
             session.add(Agent(id=f"ag-{name}", project_id="proj-test", name=name))
+        await session.commit()
+
+
+async def land(task_id):
+    """What the landing queue does once the work is on main: the task's landings landed, and the
+    operator told what that offers (the hook `landing_queue` runs after a batch lands)."""
+    async with async_session_factory() as session:
+        for row in (
+            (await session.execute(select(TaskLanding).where(TaskLanding.task_id == task_id)))
+            .scalars()
+            .all()
+        ):
+            row.state = "landed"
+        await session.commit()
+        task = await session.get(Task, task_id)
+        await slice_drafting.notify_for_document(session, task.spec_document_id)
         await session.commit()
 
 
@@ -76,6 +92,7 @@ async def test_no_offer_when_the_next_slice_is_claimed(
     assert saved.status_code == 200, saved.text
 
     await _move(app, auth_headers, task_id, *DONE)
+    await land(task_id)
     await _settle()
 
     assert await _offers(app, auth_headers) == []
@@ -90,7 +107,8 @@ async def test_take_queues_once_in_a_new_conversation_with_the_outcomes(
     the next slice; it says how each task ended; a second take queues nothing."""
     await _agents("planner", "architect")
     _, slice_path, task_id = await _built_slice(app, auth_headers, planner)
-    await _move(app, auth_headers, task_id, "rejected")
+    await _move(app, auth_headers, task_id, *DONE)
+    await land(task_id)
     await _settle()
     async with async_session_factory() as session:
         (
@@ -115,8 +133,8 @@ async def test_take_queues_once_in_a_new_conversation_with_the_outcomes(
     async with async_session_factory() as session:
         readable_id = (await session.get(Task, task_id)).readable_id
     assert readable_id and task_id not in entry.content
-    assert f"`{readable_id}`" in entry.content and ": rejected" in entry.content
-    assert "no merge into the main branch is recorded" in entry.content
+    assert f"`{readable_id}`" in entry.content and ": approved" in entry.content
+    assert "not merged (skipped)" in entry.content
     assert "s2" in entry.content and "Slice two" in entry.content
     async with async_session_factory() as session:
         fresh = (
@@ -137,6 +155,7 @@ async def test_take_goes_to_the_author_in_its_open_conversation(
     await _agents("planner")
     _, slice_path, task_id = await _built_slice(app, auth_headers, planner)
     await _move(app, auth_headers, task_id, *DONE)
+    await land(task_id)
     await _settle()
 
     taken = await app.post(TAKE, params={"path": slice_path}, headers=auth_headers)
@@ -150,6 +169,7 @@ async def test_take_goes_to_the_author_in_its_open_conversation(
 async def test_declining_hides_the_offer(app, auth_headers, planner, scheduled):  # noqa: F811
     _, slice_path, task_id = await _built_slice(app, auth_headers, planner)
     await _move(app, auth_headers, task_id, *DONE)
+    await land(task_id)
     await _settle()
 
     declined = await app.post(DECLINE, params={"path": slice_path}, headers=auth_headers)
@@ -163,8 +183,11 @@ async def test_declining_hides_the_offer(app, auth_headers, planner, scheduled):
 async def test_the_last_slice_offers_nothing(app, auth_headers, planner, scheduled):  # noqa: F811
     _, _, task_id = await _built_slice(app, auth_headers, planner, key="s2")
     await _move(app, auth_headers, task_id, *DONE)
+    await land(task_id)
     await _settle()
-    assert await _offers(app, auth_headers) == []
+    # The one rule offers every Not drafted slice whose builds-after are built: s1 builds after
+    # nothing, and nothing follows s2.
+    assert [o["next_slice"]["key"] for o in await _offers(app, auth_headers)] == ["s1"]
 
 
 @pytest.mark.asyncio
@@ -182,7 +205,7 @@ async def test_a_failing_offer_never_fails_the_task_transition(
     async def broken(*args, **kwargs):
         raise RuntimeError("the offer could not be read")
 
-    monkeypatch.setattr(slice_drafting, "offer_for", broken)
+    monkeypatch.setattr(slice_drafting, "offers_of", broken)
     await _move(app, auth_headers, task_id, *DONE)
     async with async_session_factory() as session:
         assert (await session.get(Task, task_id)).status == "approved"
@@ -231,11 +254,12 @@ async def test_approval_refuses_the_request_and_an_old_request_is_an_offer(
             },
         )
         task = await session.get(Task, task_id)
-        task.status = "rejected"
+        task.status = "approved"
         await session.commit()
 
+    # One rule: the request adds nothing; the slice is offered once its work is on main.
     (offer,) = await _offers(app, auth_headers)
-    assert offer["document"] == slice_path and offer["requested"] is True
+    assert offer["document"] == slice_path and offer["requested"] is False
     assert await _queued() == []
 
 
@@ -258,7 +282,8 @@ async def test_an_operator_created_slice_offers_its_writer(
     assert (await _propose(app, auth_headers, slice_path))["blocking"] == []
     approved = await _approve(app, auth_headers, slice_path)
     (task_id,) = approved.json()["tasks_created"]
-    await _move(app, auth_headers, task_id, "rejected")
+    await _move(app, auth_headers, task_id, *DONE)
+    await land(task_id)
     await _settle()
 
     (offer,) = await _offers(app, auth_headers)

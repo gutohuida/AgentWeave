@@ -1950,6 +1950,7 @@ async def _record_landed(
         check_run_id = batch.check_run_id
         await session.commit()
         await _announce(session, [landing.id for landing in landings])
+        await _offer_slices_landed(session, landings)
         run = await session.get(TaskCheckRun, check_run_id) if check_run_id else None
         ran_on_landed = run is not None and bool(prefixes) and run.merged_sha == prefixes[-1]
     await _refresh_reachability(project_id, root)
@@ -1960,6 +1961,28 @@ async def _record_landed(
         from . import known_failing
 
         await known_failing.record_run(check_run_id, on_main=prefixes[-1])
+
+
+async def _offer_slices_landed(session: AsyncSession, landings: Sequence[TaskLanding]) -> None:
+    """A landing can make a slice Built and so offer the slices that wait on it: tell the operator
+    (`slice_drafting`). Never raises; a landing is not undone for it."""
+    from .slice_drafting import notify_for_document
+
+    try:
+        document_ids = {
+            document_id
+            for landing in landings
+            if (
+                document_id := await session.scalar(
+                    select(Task.spec_document_id).where(Task.id == landing.task_id)
+                )
+            )
+        }
+        for document_id in document_ids:
+            await notify_for_document(session, document_id)
+        await session.commit()
+    except Exception:  # noqa: BLE001 -- the landing already happened
+        logger.warning("could not offer slices after a landing", exc_info=True)
 
 
 async def _not_landed(

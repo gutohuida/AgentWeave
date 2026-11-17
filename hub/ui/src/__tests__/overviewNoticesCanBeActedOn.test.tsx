@@ -226,11 +226,47 @@ describe('main moving outside the Hub, and a next slice offered', () => {
     fireEvent.change(picker, { target: { value: 'builder' } })
     fireEvent.click(within(row).getByRole('button', { name: 'Draft' }))
     expect(takeOfferMutate).toHaveBeenCalledWith(
-      { path: 'spec/changes/slice-one/spec.json', agent: 'builder' },
+      { roadmap: 'spec/changes/the-plan/spec.json', slice: 's2', agent: 'builder' },
       expect.anything(),
     )
     fireEvent.click(within(row).getByRole('button', { name: 'Not now' }))
-    expect(declineOfferMutate).toHaveBeenCalledWith({ path: 'spec/changes/slice-one/spec.json' }, expect.anything())
+    expect(declineOfferMutate).toHaveBeenCalledWith(
+      { roadmap: 'spec/changes/the-plan/spec.json', slice: 's2' },
+      expect.anything(),
+    )
+  })
+
+  it('answers an offer that builds after no slice, by roadmap and slice', () => {
+    nextSliceOffers = [
+      { ...offer(), document: null, document_id: null, title: null, approved_slice: null, next_slice: { key: 's1', title: 'Slice one' } },
+    ]
+    render(<OverviewScreen onNavigate={vi.fn()} />)
+
+    const row = rowOf('Draft Slice one?')
+    fireEvent.click(within(row).getByRole('button', { name: 'Draft' }))
+    expect(takeOfferMutate).toHaveBeenCalledWith(
+      { roadmap: 'spec/changes/the-plan/spec.json', slice: 's1', agent: 'architect' },
+      expect.anything(),
+    )
+    fireEvent.click(within(row).getByRole('button', { name: 'Not now' }))
+    expect(declineOfferMutate).toHaveBeenCalledWith(
+      { roadmap: 'spec/changes/the-plan/spec.json', slice: 's1' },
+      expect.anything(),
+    )
+  })
+
+  it('keeps two offers of one roadmap apart, a non-adjacent one included', () => {
+    nextSliceOffers = [
+      offer(),
+      { ...offer(), approved_slice: { key: 's1', title: 'Slice one' }, next_slice: { key: 's3', title: 'Slice three' } },
+    ]
+    render(<OverviewScreen onNavigate={vi.fn()} />)
+    const row = rowOf('Slice s1 is built: draft Slice three?')
+    fireEvent.click(within(row).getByRole('button', { name: 'Draft' }))
+    expect(takeOfferMutate).toHaveBeenCalledWith(
+      { roadmap: 'spec/changes/the-plan/spec.json', slice: 's3', agent: 'architect' },
+      expect.anything(),
+    )
   })
 })
 

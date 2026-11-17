@@ -10,7 +10,7 @@ import { useEndStall, useOpenStalls, type Stall } from '@/api/stalls'
 import { useClearStableFixTasks, useDisturbedRuns, useKnownFailing } from '@/api/knownFailing'
 import { describeMainNotice, useMarkMainNoticeSeen, useOpenMainNotices } from '@/api/mainNotices'
 import { useReopeningWarnings } from '@/api/reopeningWarnings'
-import { offerTitle, useDeclineNextSliceOffer, useNextSliceOffers, useTakeNextSliceOffer } from '@/api/nextSlice'
+import { offerKey, offerTarget, offerTitle, useDeclineNextSliceOffer, useNextSliceOffers, useTakeNextSliceOffer } from '@/api/nextSlice'
 import { isWaitedOn } from '@/lib/pendingQuestions'
 import { useRetryIntegration, useTasks, useUpdateTask, type Task } from '@/api/tasks'
 import { accountingDisplayLabel, formatAiCredits } from '@/components/accounting/accountingDisplay'
@@ -236,25 +236,31 @@ export function OverviewScreen({
     ...offers.map<NeedItem>((offer) => {
       const names = agents.map((a) => a.name)
       const options = offer.agent && !names.includes(offer.agent) ? [offer.agent, ...names] : names
-      const agent = offerAgent[offer.document] ?? offer.agent ?? options[0] ?? ''
+      const key = offerKey(offer)
+      const target = offerTarget(offer)
+      const agent = offerAgent[key] ?? offer.agent ?? options[0] ?? ''
       return {
-        id: `offer-${offer.document_id}`,
+        id: `offer-${key}`,
         kind: 'offer',
         agent: null,
         title: offerTitle(offer),
-        detail: sentence(`${offer.title} (${offer.document}) has no open task, and no document claims ${offer.next_slice.key} yet`),
+        detail: sentence(
+          offer.approved_slice
+            ? `${offer.roadmap_title}: what ${offer.next_slice.key} builds after is built, and no document claims it yet`
+            : `${offer.roadmap_title}: ${offer.next_slice.key} builds after nothing, and no document claims it yet`,
+        ),
         at: new Date().toISOString(),
         picker: {
           label: 'Agent that drafts the next slice',
           options,
           value: agent,
-          onChange: (value: string) => setOfferAgent((current) => ({ ...current, [offer.document]: value })),
+          onChange: (value: string) => setOfferAgent((current) => ({ ...current, [key]: value })),
         },
         primary: {
           label: 'Draft',
           onClick: () =>
             takeOffer.mutate(
-              { path: offer.document, agent },
+              { ...target, agent },
               {
                 onSuccess: () => toast({ title: `Asked ${agent} to draft ${offer.next_slice.title || offer.next_slice.key}`, tone: 'success' }),
                 onError: refusal('The drafting turn was not queued'),
@@ -263,7 +269,7 @@ export function OverviewScreen({
         },
         secondary: {
           label: 'Not now',
-          onClick: () => declineOffer.mutate({ path: offer.document }, { onError: refusal('The offer was not dismissed') }),
+          onClick: () => declineOffer.mutate(target,{ onError: refusal('The offer was not dismissed') }),
         },
       }
     }),
