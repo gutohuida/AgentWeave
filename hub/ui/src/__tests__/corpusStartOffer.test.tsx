@@ -169,6 +169,18 @@ describe('an empty corpus is offered a start on the Spec tab', () => {
     expect(screen.queryByTestId('corpus-start-offer')).toBeNull()
   })
 
+  it('a corpus read that fails says so, rather than passing for a corpus with nothing to offer', async () => {
+    const stubbed = vi.mocked(fetch).getMockImplementation()!
+    vi.mocked(fetch).mockImplementation(async (url, init) =>
+      new URL(String(url), 'http://hub.test').pathname.endsWith('/project/corpus')
+        ? new Response(JSON.stringify({ detail: 'corpus unreadable' }), { status: 500, headers: { 'Content-Type': 'application/json' } })
+        : stubbed(url, init),
+    )
+    openSpecTab()
+    await waitFor(() => expect(screen.getByTestId('spec-page').textContent).toContain('could not say how this project could start'))
+    expect(screen.queryByTestId('corpus-start-offer')).toBeNull()
+  })
+
   it('a project with documents shows its list and no offer, even if the corpus read is stale', async () => {
     documents = ['spec/changes/one/spec.json']
     openSpecTab()

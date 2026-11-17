@@ -6,6 +6,7 @@ import { useConfigStore } from '@/store/configStore'
 import { useProjectEvidence, useSpecDocumentRename, useSpecEvents } from '@/api/spec'
 import type { LoopSummary } from '@/api/loops'
 import { useCorpusState } from '@/api/corpusStart'
+import { readableApiError } from '@/api/client'
 import { SpecHomeView } from './home/SpecHomeView'
 import { CorpusStartOffer } from './page/CorpusStartOffer'
 import { SpecDocList } from './page/SpecDocList'
@@ -161,6 +162,16 @@ export function SpecPage({ document: openDocument, anchor, onOpenDocument, onOpe
     main = (
       <div className="aw-sp-empty-page" data-corpus="empty">
         <CorpusStartOffer key={projectId} projectId={projectId} state={corpus.data} onAddAgent={onAddAgent} />
+      </div>
+    )
+  } else if (!list.loading && inventory.nodes.length === 0 && corpus.isError) {
+    main = (
+      <div className="aw-sp-empty-page" data-corpus="unknown">
+        <EmptyState
+          icon="article"
+          title="No specification yet"
+          description={`The Hub could not say how this project could start its specifications: ${readableApiError(corpus.error, 'the corpus state did not load.')} Open a conversation and ask an agent to write one instead.`}
+        />
       </div>
     )
   } else if (!list.loading && inventory.nodes.length === 0) {
