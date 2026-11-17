@@ -41,9 +41,11 @@ from ... import (
     requirement_coverage,
     requirement_evidence,
     requirement_links,
+    roadmap_edits,
     run_divergence,
     run_liveness,
     slice_drafting,
+    slice_progress,
     spec_acknowledgements,
     spec_adoption,
     spec_capability_links,
@@ -463,6 +465,9 @@ async def get_spec(
             payload["slice_documents"] = await _slice_documents(
                 session, workspace, project_id, document
             )
+            # Each slice's state, tasks on main, cost, dates, retrospective and offer, and the
+            # roadmap's progress (RTRR-2): derived on every read.
+            payload.update(await slice_progress.roadmap_view(session, workspace, document))
         if document.phase == "approved":
             outcome = await _approval_outcome(session, document)
             if outcome is not None:
@@ -4541,31 +4546,58 @@ async def next_slice_offers(
 
 
 class NextSliceTake(RequestModel):
-    """The agent that drafts the next slice; left out, the slice document's author."""
+    """The agent that drafts the slice (left out, the roadmap's author), and which slice: a
+    roadmap path with its `slice`, or the change document whose following slice it is."""
 
     agent: Optional[_AgentName] = None
+    path: Optional[str] = Field(default=None, max_length=255)
+    slice: Optional[str] = Field(default=None, max_length=128)
+
+
+class NextSliceDecline(RequestModel):
+    path: Optional[str] = Field(default=None, max_length=255)
+    slice: Optional[str] = Field(default=None, max_length=128)
+
+
+async def _offer_target(session, workspace, project_id, request, body, query_path):
+    """The roadmap and slice a take or decline answers. The path is the body's, or (older callers)
+    the query's: a change document stands for the slice that follows its own."""
+    _misplaced_query(request, {"path"})
+    path = body.path or query_path
+    if not path:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={"message": "name the roadmap (path) and its slice", "code": "no_offer"},
+        )
+    document = await _require_document(session, project_id, path)
+    try:
+        return await slice_drafting.resolve(session, workspace, document, body.slice)
+    except slice_drafting.OfferRefused as exc:
+        raise HTTPException(
+            status_code=exc.status_code, detail={"message": str(exc), "code": "no_offer"}
+        ) from exc
 
 
 @router.post("/documents/next-slice/take")
 async def take_next_slice_offer(
     request: Request,
     body: Optional[NextSliceTake] = None,
-    path: str = Query(...),
+    path: Optional[str] = Query(default=None),
     project: Tuple[str, str] = Depends(get_project),
     session: AsyncSession = Depends(get_session),
 ):
-    """Take a document's next-slice offer: one drafting turn queued to the chosen agent, carrying
-    the slice's outcomes, in the conversation the slice was written in while it is open, else a new
-    one (F1047). 409 when there is no offer (a second take queues nothing)."""
+    """Take a slice's drafting offer: one drafting turn queued to the chosen agent, carrying the
+    outcomes and retrospectives of the slices it builds after, in the conversation the roadmap was
+    written in while it is open, else a new one (F1047). 409 when there is no offer (a second take
+    queues nothing)."""
     from ...turn_scheduler import schedule_accepted
 
     body = body or NextSliceTake()
-    _misplaced_query(request, {"path"})
     project_id, _ = project
     workspace = await _workspace(session, project_id)
-    document = await _require_document(session, project_id, path)
+    roadmap, key = await _offer_target(session, workspace, project_id, request, body, path)
     try:
-        taken = await slice_drafting.take_offer(session, workspace, document, agent=body.agent)
+        taken = await slice_drafting.take_offer(session, workspace, roadmap, key, agent=body.agent)
     except slice_drafting.OfferRefused as exc:
         raise HTTPException(
             status_code=exc.status_code, detail={"message": str(exc), "code": "no_offer"}
@@ -4578,23 +4610,118 @@ async def take_next_slice_offer(
 @router.post("/documents/next-slice/decline")
 async def decline_next_slice_offer(
     request: Request,
-    path: str = Query(...),
+    body: Optional[NextSliceDecline] = None,
+    path: Optional[str] = Query(default=None),
     project: Tuple[str, str] = Depends(get_project),
     session: AsyncSession = Depends(get_session),
 ):
-    """Not now: hide a document's next-slice offer for that slice. Nothing is queued."""
-    _misplaced_query(request, {"path"})
+    """Not now: hide a slice's drafting offer, in every view. Nothing is queued."""
+    body = body or NextSliceDecline()
     project_id, _ = project
     workspace = await _workspace(session, project_id)
-    document = await _require_document(session, project_id, path)
+    roadmap, key = await _offer_target(session, workspace, project_id, request, body, path)
     try:
-        offer = await slice_drafting.decline_offer(session, workspace, document)
+        offer = await slice_drafting.decline_offer(session, workspace, roadmap, key)
     except slice_drafting.OfferRefused as exc:
         raise HTTPException(
             status_code=exc.status_code, detail={"message": str(exc), "code": "no_offer"}
         ) from exc
     await session.commit()
     return {"state": "declined", **offer}
+
+
+class SliceMove(RequestModel):
+    path: str = Field(max_length=255)
+    slice: str = Field(min_length=1, max_length=128)
+    position: int = Field(ge=1, le=1000, description="Where it reads afterwards, counting from 1.")
+
+
+class SliceRemove(RequestModel):
+    path: str = Field(max_length=255)
+    slice: str = Field(min_length=1, max_length=128)
+
+
+class SliceConversation(RequestModel):
+    path: str = Field(max_length=255)
+    agent: Optional[_AgentName] = None
+
+
+def _slice_edit_refused(exc) -> HTTPException:
+    return HTTPException(status_code=exc.status, detail={"message": str(exc), "code": exc.code})
+
+
+@router.post("/documents/slices/move")
+async def move_roadmap_slice(
+    body: SliceMove,
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    """The operator moves a Not drafted or Drafting slice of an approved roadmap, at once and with
+    no re-approval; recorded in the roadmap's history (`slice_moved`). Approved, Building and
+    Built slices are refused 409 `slice_not_movable`."""
+    project_id, _ = project
+    workspace = await _workspace(session, project_id)
+    roadmap = await _require_document(session, project_id, body.path)
+    try:
+        result = await roadmap_edits.move_slice(
+            session, workspace, roadmap, body.slice, body.position, actor=_operator()
+        )
+    except roadmap_edits.SliceEditRefused as exc:
+        raise _slice_edit_refused(exc) from exc
+    path, phase = roadmap.path, roadmap.phase
+    await session.commit()
+    await sse_manager.broadcast(project_id, "spec_updated", {"path": path, "phase": phase})
+    return result
+
+
+@router.post("/documents/slices/remove")
+async def remove_roadmap_slice(
+    body: SliceRemove,
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    """The operator removes a Not drafted slice no change document names, recorded in the
+    roadmap's history (`slice_removed`); it is dropped from the builds-after of the slices that
+    followed it, and the answer says which. A slice a document names is refused 409
+    `slice_named_by_document`, naming the document."""
+    project_id, _ = project
+    workspace = await _workspace(session, project_id)
+    roadmap = await _require_document(session, project_id, body.path)
+    try:
+        result = await roadmap_edits.remove_slice(
+            session, workspace, roadmap, body.slice, actor=_operator()
+        )
+    except roadmap_edits.SliceEditRefused as exc:
+        raise _slice_edit_refused(exc) from exc
+    path, phase = roadmap.path, roadmap.phase
+    await session.commit()
+    await sse_manager.broadcast(project_id, "spec_updated", {"path": path, "phase": phase})
+    return result
+
+
+@router.post("/documents/slices/conversation")
+async def start_slice_conversation(
+    body: SliceConversation,
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    """'Add a slice': open a conversation with the chosen agent (default the roadmap's author),
+    seeded with the roadmap. The agent adds the slice through `amend_spec_document`; no route takes
+    a slice from a form."""
+    from ...turn_scheduler import schedule_accepted
+
+    project_id, _ = project
+    workspace = await _workspace(session, project_id)
+    roadmap = await _require_document(session, project_id, body.path)
+    try:
+        started = await roadmap_edits.start_conversation(
+            session, workspace, roadmap, agent=body.agent
+        )
+    except roadmap_edits.SliceEditRefused as exc:
+        raise _slice_edit_refused(exc) from exc
+    await session.commit()
+    await schedule_accepted(project_id, started["agent"])
+    return {"state": "queued", **started}
 
 
 @router.post("/documents/build")
