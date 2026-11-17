@@ -114,6 +114,7 @@ vi.mock('@/api/knownFailing', () => ({
   useDisturbedRuns: () => ({ data: disturbedRuns }),
   useClearStableFixTasks: () => ({ mutate: clearMutate, isPending: false, data: clearResult, error: null }),
 }))
+vi.mock('@/api/checkNotices', () => ({ useCheckNotices: () => ({ data: [], error: null, refetch: () => {} }) }))
 vi.mock('@/api/accounting', () => ({ useAccounting: () => ({ data: accountingData }) }))
 vi.mock('@/components/overview/AgentPostureChips', () => ({ AgentPostureChips: () => null }))
 
