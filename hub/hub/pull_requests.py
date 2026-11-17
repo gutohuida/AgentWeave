@@ -1228,6 +1228,21 @@ async def land(landing_id: str, checks: List[Dict[str, Any]]) -> bool:
         unjudged_again = outcome.unjudged and await lq._previous_batch_unjudged(
             batch_id, project_id, [task_id]
         )
+        cannot = project_checks.could_not_run_results(outcome.results)
+        if cannot:
+            # A check whose command could not start judged nothing: nothing is pushed, nobody is
+            # sent back, and the task waits, approved, for the next try
+            # (`a-check-that-cannot-run-says-so-and-is-never-silently-excused`, FR-6, FR-11).
+            await lq._requeue([landing_id])
+            await lq._end_batch(
+                batch_id,
+                "failed",
+                error=(
+                    f"{lq.COULD_NOT_RUN_PREFIX} {project_checks.could_not_run_summary(cannot)}; "
+                    "nothing was pushed, and the task waits for the next try"
+                ),
+            )
+            return False
         if outcome.state == "error" and not unjudged_again:
             # The Hub produced no verdict (or a first unjudged timeout): tried again later.
             await lq._requeue([landing_id])
