@@ -663,7 +663,8 @@ async def _attach_failed_checks(
     (`task-card-and-story-redesign` FR-5); left null for a task whose checks never ran.
 
     "Latest" is the run `GET /tasks/{id}/checks` lists first, which is the run the Work view names,
-    so the card's count and the rows it points at are the same checks. A failure on the known-failing
+    so the card's count and the rows it points at are the same checks. A check that could not run
+    is not counted: it is its own state, neither the work's failure nor a pass. A failure on the known-failing
     list is not counted: the Work view says it as "fails on main too", not as one of the work's.
     One query for the page, the newest run per task picked by a window rather than read per card.
     """
@@ -696,6 +697,7 @@ async def _attach_failed_checks(
             for result in results or []
             if isinstance(result, dict)
             and project_checks.failed(result)
+            and not project_checks.could_not_run(result)
             and not project_checks.preexisting(result)
         )
         for task_id, results in rows

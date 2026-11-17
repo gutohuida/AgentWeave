@@ -11,6 +11,7 @@ const nextSliceOffers: unknown[] = []
 const markSeenMutate = vi.fn()
 const takeOfferMutate = vi.fn()
 const declineOfferMutate = vi.fn()
+vi.mock('@/api/checkNotices', () => ({ useCheckNotices: () => ({ data: [], error: null, refetch: () => {} }) }))
 vi.mock('@/api/reopeningWarnings', () => ({
   useReopeningWarnings: () => ({ data: [], error: null }),
   useStopReopenedBuild: () => ({ mutate: vi.fn(), isPending: false }),

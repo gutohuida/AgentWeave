@@ -373,15 +373,21 @@ function renderEvent(event: StoryEvent, index: number, fresh: boolean, runs: Run
     case 'evidence':
       return <EvidenceItem key={event.id} event={event} index={index} fresh={fresh} />
     case 'check': {
-      const tone: Tone =
-        event.state === 'passed'
+      const cannot = event.results.filter((r) => r.outcome === 'could_not_run')
+      const failing = event.results.filter(
+        (r) => r.outcome !== 'could_not_run' && !r.skipped && (r.passed === false || (r.exit_code ?? 0) !== 0),
+      )
+      // A check that could not run is its own state: not the work's failure, never a pass.
+      const onlyCouldNotRun = cannot.length > 0 && failing.length === 0
+      const tone: Tone = onlyCouldNotRun
+        ? 'amber'
+        : event.state === 'passed'
           ? 'green'
           : event.state === 'failed'
             ? 'red'
             : event.state === 'running'
               ? 'blue'
               : 'amber'
-      const failing = event.results.filter((r) => !r.skipped && (r.passed === false || (r.exit_code ?? 0) !== 0))
       const skipped = event.results.filter((r) => r.skipped)
       return (
         <TimelineItem
@@ -390,9 +396,14 @@ function renderEvent(event: StoryEvent, index: number, fresh: boolean, runs: Run
           tone={tone}
           icon="task_alt"
           live={event.state === 'running'}
-          head={<span>Checks {event.state}</span>}
+          head={<span>{onlyCouldNotRun ? 'Checks could not run' : `Checks ${event.state}`}</span>}
           meta={<Time value={event.at} />}
         >
+          {cannot.length ? (
+            <div className="aw-callout tone-amber">
+              {cannot.map((r) => `${r.name ?? r.command} could not run${r.missing_program ? `: ${r.missing_program} was not found` : ''}`).join('; ')}
+            </div>
+          ) : null}
           {failing.length ? (
             <div className="aw-callout tone-red">
               {failing.map((r) => r.name ?? r.command).filter(Boolean).join(', ')}

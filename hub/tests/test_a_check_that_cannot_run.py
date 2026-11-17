@@ -367,8 +367,14 @@ async def test_ac_no_send_back_and_ac_batch_retries(
             states = [
                 (await landing_queue.latest_landing(session, task_id)).state for task_id in ids
             ]
+            shown = [await landing_queue.view(session, task_id) for task_id in ids]
         assert run.state != "passed"
         assert states == ["queued", "queued"]
+        for one in shown:
+            # Queued again with no batch; the record still says why it is waiting.
+            assert one["state"] == "queued" and one["batch"] is None
+            assert [c["name"] for c in one["could_not_run"]] == ["hub-ui"]
+            assert one["could_not_run"][0]["missing_program"] == "eslint"
         assert [await _status(task_id) for task_id in ids] == ["approved", "approved"]
         assert [await _moved_to(task_id, "revision_needed") for task_id in ids] == [[], []]
         assert all(tip not in commits_on(tmp_path, "main") for tip in tips)
@@ -384,6 +390,25 @@ async def test_ac_no_send_back_and_ac_batch_retries(
             assert [row.commit_sha for row in await _merged(task_id)] == [tip]
             assert len(await _moved_to(task_id, "approved")) == 1, "approved once, not again"
         assert all(tip in commits_on(tmp_path, "main") for tip in tips)
+
+        # A landing queued afterwards for the same task is a new landing: the earlier batch's
+        # "could not run" belongs to the earlier one and is not lent to it.
+        async with async_session_factory() as session:
+            task = await session.get(Task, ids[0])
+            fresh = landing_queue.stage(
+                session,
+                task,
+                actor_kind="operator",
+                actor="operator",
+                kind="approval",
+                targets=[],
+            )
+            fresh_id = fresh.id
+            await session.commit()
+        async with async_session_factory() as session:
+            shown = await landing_queue.view(session, ids[0])
+        assert shown["id"] == fresh_id and shown["batch"] is None
+        assert shown["could_not_run"] == []
     finally:
         landing_queue.cancel_timers()
 
@@ -488,6 +513,36 @@ async def test_ac_prereview_waits_and_ac_runs_again(app, auth_headers, tmp_path)
         task = await session.get(Task, task_id)
         assert await project_checks.review_wait(session, task) is None, "it goes on to review"
     assert await _moved_to(task_id, "revision_needed") == []
+
+
+async def test_ac_project_notice_names_the_check_and_clears_on_its_next_run(
+    app, auth_headers, tmp_path
+):
+    """FR-9: the notice is there while the latest run of `hub-ui` could not run, and gone after the
+    next run of that check, with nobody dismissing it."""
+    task_id, _ = await _task_with_work(tmp_path)
+    installed = _scripts(tmp_path) / "node_modules-installed"
+    await _configure([_lint(tmp_path, installed), _passing(tmp_path)])
+    notices = "/api/v1/projects/proj-test/check-notices"
+
+    assert (await app.get(notices, headers=auth_headers)).json()["notices"] == []
+
+    await project_checks.request_run("proj-test", task_id)
+    await project_checks.drain()
+    await project_checks.drain()
+    read = await app.get(notices, headers=auth_headers)
+    assert read.status_code == 200, read.text
+    [notice] = read.json()["notices"]
+    assert notice["check"] == "hub-ui" and notice["program"] == "eslint"
+    assert "Landing is waiting on it" in notice["message"]
+
+    installed.write_text("yes", encoding="utf-8")
+    rerun = await app.post(
+        f"/api/v1/projects/proj-test/tasks/{task_id}/checks/run", headers=auth_headers
+    )
+    assert rerun.status_code == 202, rerun.text
+    await project_checks.drain()
+    assert (await app.get(notices, headers=auth_headers)).json()["notices"] == []
 
 
 async def test_a_fast_check_that_could_not_run_does_not_refuse_the_completion(tmp_path):

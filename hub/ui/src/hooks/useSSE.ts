@@ -618,6 +618,8 @@ function applyInvalidation(queryClient: QueryClient, event: SSEEvent): void {
           // The drawer's Land wait clears on this, without a reload, and the board's cards follow;
           // a landing's state beside Land follows its batch the same way.
           const data = event.data as { task_id?: string } | null
+          // A run that ends opens or clears the project's could-not-run notices.
+          inv({ queryKey: ['project', pid, 'checkNotices'] })
           inv({
             queryKey: data?.task_id
               ? ['project', pid, 'task', data.task_id, 'checks']

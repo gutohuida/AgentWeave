@@ -5,6 +5,7 @@ import { useState } from 'react'
 import { Icon } from '@/components/common/Icon'
 import { Expander } from '@/components/common/Expander'
 import { hubDate } from '@/lib/hubTime'
+import { couldNotRunSentence, isCouldNotRun } from './couldNotRun'
 
 const LABEL: Record<TaskCheckRun['state'], string> = {
   running: 'Checks running',
@@ -30,7 +31,7 @@ const AT_LANDING = 'runs at landing'
 
 /** A skipped check passes; anything else that timed out or exited non-zero failed. */
 const failedResult = (result: TaskCheckResult) =>
-  !result.skipped && (result.timed_out || result.exit_code !== 0)
+  !result.skipped && !isCouldNotRun(result) && (result.timed_out || result.exit_code !== 0)
 
 /** Whether a result ran the command for a change, and on how many files (FR-4). */
 const sizedNote = (result: TaskCheckResult) =>
@@ -62,10 +63,10 @@ function EarlierRun({ run }: { run: TaskCheckRun }) {
           <span
             key={result.name}
             data-testid={`task-check-result-${run.id}-${result.name}`}
-            style={{ color: failedResult(result) ? 'var(--red)' : undefined }}
+            style={{ color: failedResult(result) ? 'var(--red)' : isCouldNotRun(result) ? 'var(--amber, var(--text-2))' : undefined }}
             title={result.skipped ? result.reason : undefined}
           >
-            {result.name} · {result.skipped ? SKIPPED : result.timed_out ? 'timed out' : `exit ${result.exit_code}`}
+            {result.name} · {result.skipped ? SKIPPED : isCouldNotRun(result) ? 'could not run' : result.timed_out ? 'timed out' : `exit ${result.exit_code}`}
             {!result.skipped && result.duration_seconds != null ? ` · ${result.duration_seconds}s` : ''}
             {result.preexisting ? ` · ${ON_MAIN_TOO}` : ''}
             {sizedNote(result)}
@@ -92,6 +93,10 @@ export function TaskChecksRow({ taskId }: { taskId: string }) {
   const latest = data.runs[0]
   const state: TaskCheckRun['state'] | null = data.running ? 'running' : (latest?.state ?? null)
   const failing = (latest?.results ?? []).filter(failedResult)
+  // A check that could not start judged nothing: a run holding one is never "passed", and where
+  // nothing else failed it is said as "could not run", not as a failure of the work.
+  const cannot = (latest?.results ?? []).filter(isCouldNotRun)
+  const onlyCannot = !data.running && cannot.length > 0 && failing.length === 0
   const skipped = (latest?.results ?? []).filter((result) => result.skipped)
   const sized = (latest?.results ?? []).filter((result) => result.sized_to_change)
   const disturbed = (latest?.results ?? []).filter((result) => result.disturbed)
@@ -102,9 +107,13 @@ export function TaskChecksRow({ taskId }: { taskId: string }) {
   return (
     <div data-testid={`task-checks-${taskId}`} className="space-y-1">
       <div className="flex items-center justify-between gap-2">
-        <p className="text-[12px] flex items-center gap-1.5" style={{ color: state ? COLOR[state] : 'var(--text-3)' }}>
-          <Icon name={state === 'passed' ? 'check_circle' : state === 'failed' || state === 'error' ? 'error' : 'schedule'} size={14} />
-          {state ? LABEL[state] : idleLabel}
+        <p
+          data-testid={`task-checks-state-${taskId}`}
+          className="text-[12px] flex items-center gap-1.5"
+          style={{ color: onlyCannot ? 'var(--amber, var(--text-2))' : state ? COLOR[state] : 'var(--text-3)' }}
+        >
+          <Icon name={onlyCannot ? 'error' : state === 'passed' ? 'check_circle' : state === 'failed' || state === 'error' ? 'error' : 'schedule'} size={14} />
+          {onlyCannot ? 'Checks could not run' : state ? LABEL[state] : idleLabel}
           {state === 'failed' && failing.length > 0 && (
             <span>: {failing.map((result) => result.name).join(', ')}</span>
           )}
@@ -119,6 +128,15 @@ export function TaskChecksRow({ taskId }: { taskId: string }) {
           Re-run
         </Button>
       </div>
+      {/* A check whose command could not start is its own state, named with the program it lacked
+          and any dependency link that failed: not "failed", and never "passed" (FR-8). */}
+      {cannot.length > 0 && (
+        <ul data-testid={`task-checks-could-not-run-${taskId}`} className="text-[11px]" style={{ color: 'var(--amber, var(--text-2))' }}>
+          {cannot.map((result) => (
+            <li key={result.name}>{couldNotRunSentence(result)}</li>
+          ))}
+        </ul>
+      )}
       {/* A skipped check is said, never left out: one that silently disappears reads as one that
           never ran (operator, 2026-10-24). */}
       {skipped.length > 0 && (
