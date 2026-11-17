@@ -1705,8 +1705,11 @@ async def _decide(
         override = None
         if unreproduced:
             # The run again passed a failure no prefix reproduced: flaky, and said so (FR-3, FR-6).
-            await _list_as_flaky(unreproduced)
-            override = (_unreproduced_reason(batch_id, unreproduced, passed=True), OVERRIDE_BY_HUB)
+            listed = await _list_as_flaky(unreproduced)
+            override = (
+                _unreproduced_reason(batch_id, unreproduced, listed, passed=True),
+                OVERRIDE_BY_HUB,
+            )
         await _land_batch(
             root, main_branch, batch_id, base, landings, prefixes, len(prefixes), chain, override
         )
@@ -2246,7 +2249,7 @@ async def _unreproduced(
     carried; the second time -- it failed again, and again on no prefix -- the batch lands, and
     both are recorded flaky. Never held: a batch held stops every task behind it."""
     if len(found) > 1:
-        await _list_as_flaky(found)
+        listed = await _list_as_flaky(found)
         await _land_batch(
             root,
             main_branch,
@@ -2256,7 +2259,7 @@ async def _unreproduced(
             prefixes,
             len(prefixes),
             chain,
-            (_unreproduced_reason(batch_id, found, passed=False), OVERRIDE_BY_HUB),
+            (_unreproduced_reason(batch_id, found, listed, passed=False), OVERRIDE_BY_HUB),
         )
         return True
     logger.info(
@@ -2281,8 +2284,11 @@ async def _unreproduced(
     )
 
 
-def _unreproduced_reason(batch_id: str, found: Sequence[Dict[str, Any]], *, passed: bool) -> str:
-    """What a batch's landing says when it landed past failures no prefix reproduced (FR-6)."""
+def _unreproduced_reason(
+    batch_id: str, found: Sequence[Dict[str, Any]], listed: Sequence[str], *, passed: bool
+) -> str:
+    """What a batch's landing says when it landed past failures no prefix reproduced (FR-6).
+    *listed*: which of their tests are on the known-failing list now; only those are said to be."""
     parts = []
     for item in found:
         what = ", ".join(item.get("tests") or []) or (
@@ -2294,19 +2300,31 @@ def _unreproduced_reason(batch_id: str, found: Sequence[Dict[str, Any]], *, pass
         if passed
         else "failed again when its checks ran once more, and again on no task's prefix"
     )
+    named = [str(t) for item in found for t in item.get("tests") or [] if t]
+    unlisted = [t for t in dict.fromkeys(named) if t not in set(listed)]
+    on_list = (
+        f" On the known-failing list as flaky: {', '.join(dict.fromkeys(listed))}."
+        if listed
+        else ""
+    )
+    if unlisted:
+        on_list += f" Not on the known-failing list: {', '.join(unlisted)}."
     return (
         f"Landed past a failure {REPRODUCED_ON_NO_TASK}: in landing batch {batch_id}, "
         + "; ".join(parts)
         + f", and no task's work reproduced it when probed on its own prefix. The batch {then}, "
-        "so it was held against no task; its tests are on the known-failing list as flaky."
+        "so it was held against no task." + on_list
     )
 
 
-async def _list_as_flaky(found: Sequence[Dict[str, Any]]) -> None:
+async def _list_as_flaky(found: Sequence[Dict[str, Any]]) -> List[str]:
     """Each test in *found* recorded flaky on the run that failed it and read into the known-failing
     list, which lists a first flake and files its fix task at the second (FR-3). A whole check
-    names no test, so nothing is listed for it."""
+    names no test, so nothing is listed for it. Returns the tests of *found* the list now holds,
+    read back from it, so a landing never claims a listing that did not happen (FR-6)."""
     from . import known_failing
+
+    listed: List[str] = []
 
     for item in found:
         tests = [str(t) for t in item.get("tests") or [] if t]
@@ -2328,8 +2346,16 @@ async def _list_as_flaky(found: Sequence[Dict[str, Any]]) -> None:
                     }
                 results.append(result)
             run.results = results
+            project_id = run.project_id
             await session.commit()
         await known_failing.record_run(run_id)
+        async with async_session_factory() as session:
+            held = {
+                (entry.check_name, entry.test)
+                for entry in await known_failing.entries(session, project_id)
+            }
+        listed += [t for t in tests if (str(item.get("check")), t) in held]
+    return listed
 
 
 async def _passed_on(

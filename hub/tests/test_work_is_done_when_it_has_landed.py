@@ -213,7 +213,9 @@ async def test_ac_drive_a_send_back_by_landing_leaves_the_build_running(
     assert (row["tasks_done"], row["tasks_total"]) == (1, 2)
     (shown,) = row["landings"]
     assert (shown["task_id"], shown["landing_state"]) == (second.id, "sent_back")
-    assert shown["reason"] and shown["reason"] == second_landing.reason
+    # The Running tab's read carries the reason's first 500 characters (`builds.py`); a landing
+    # send-back's proof makes its reason longer than that.
+    assert shown["reason"] and shown["reason"] == second_landing.reason[:500]
 
 
 # --- ac-done, ac-no-step -------------------------------------------------------------------------

@@ -17,10 +17,11 @@ from sqlalchemy import select
 
 from hub import landing_queue
 from hub.db.engine import async_session_factory
-from hub.db.models import KnownFailingTest, Task
+from hub.db.models import KnownFailingTest, Project, Task
 
 from .test_a_failing_batch_is_narrowed import (  # noqa: F401 -- the autouse gather window
     NO_MARKER,
+    PYTEST,
     TASKS,
     _a_long_gather_window,
     _approve,
@@ -50,6 +51,43 @@ def _failing_times(name: str, counter: Path, times: int) -> Dict[str, str]:
             f"        assert False, '{name} failed this time'\n"
         )
     }
+
+
+def _failing_on_full_runs(name: str, state: Path) -> Dict[str, str]:
+    """A test file whose one test fails every run of the whole suite and the re-run straight after
+    one (its confirmation), and passes any other run of named tests (a probe): in *state*, whether
+    the last run was of the whole suite."""
+    state.write_text("", encoding="utf-8")
+    return {
+        f"test_{name}.py": (
+            "import sys\n\n\n"
+            f"def test_{name}():\n"
+            f"    path = r'{state}'\n"
+            "    whole = not any('::' in arg for arg in sys.argv)\n"
+            "    last = open(path).read()\n"
+            "    open(path, 'w').write('whole' if whole else 'named')\n"
+            f"    assert not (whole or last == 'whole'), '{name} failed this time'\n"
+        )
+    }
+
+
+async def _xunit2() -> None:
+    """The project's pytest check writing pytest's default report, which names no test's file: as
+    in a real project, every failing test then counts as touched by the work."""
+    async with async_session_factory() as session:
+        project = await session.get(Project, "proj-test")
+        command = PYTEST["command"].replace("junit_family=xunit1", "junit_family=xunit2")
+        project.checks = [{**PYTEST, "command": command}]
+        await session.commit()
+
+
+async def _listed(test: str) -> list:
+    async with async_session_factory() as session:
+        return (
+            (await session.execute(select(KnownFailingTest).where(KnownFailingTest.test == test)))
+            .scalars()
+            .all()
+        )
 
 
 async def test_a_regression_is_sent_back_with_its_proof(
@@ -172,3 +210,58 @@ async def test_every_failing_test_is_probed(app, auth_headers, tmp_path, tmp_pat
     assert probed[1]["failed"] is True
     assert probed[0]["failed"] is False, "the batch's base is the commit before the first task"
     assert (await _landing(ids[0])).state == "sent_back"
+
+
+async def test_an_unreproduced_failure_is_listed_when_its_report_names_no_file(
+    app, auth_headers, tmp_path, tmp_path_factory
+):
+    """ac-unreproduced-lands-as-flaky with pytest's default (xunit2) report, which gives no test's
+    file, so the run counts every failing test as touched by the work: a failure narrowing showed
+    reproduces on no prefix is still listed flaky, and the landing says so."""
+    ledger = tmp_path_factory.mktemp("ledger") / "runs.txt"
+    counter = tmp_path_factory.mktemp("counter") / "left.txt"
+    _repo(tmp_path, ledger, _failing_times("wobbly", counter, 2))
+    await _project()
+    await _xunit2()
+    ids, _tips = await _tasks(tmp_path, [({"one.py": "x = 1\n"}, None), ({"two.py": "x\n"}, None)])
+    for task_id in ids:
+        await _approve(app, auth_headers, task_id)
+
+    await landing_queue.drain()
+
+    assert [await _status(task_id) for task_id in ids] == ["approved", "approved"]
+    [batch] = await _batches()
+    assert batch.state == "landed", (batch.state, batch.error)
+    wobbly = "test_wobbly::test_wobbly"
+    assert [entry.kind for entry in await _listed(wobbly)] == ["flaky"]
+    assert f"On the known-failing list as flaky: {wobbly}." in (batch.override_reason or "")
+    assert "Not on the known-failing list" not in batch.override_reason
+
+
+async def test_a_failure_again_on_no_prefix_lands_the_batch(
+    app, auth_headers, tmp_path, tmp_path_factory
+):
+    """FR-3, round two: the batch fails on a test no prefix reproduces, its checks run once more and
+    fail again, and again on no prefix. Nobody is sent back and nothing is held: the batch lands,
+    the test is listed flaky, and the landing says it failed again on no task's prefix."""
+    ledger = tmp_path_factory.mktemp("ledger") / "runs.txt"
+    state = tmp_path_factory.mktemp("state") / "last.txt"
+    _repo(tmp_path, ledger, _failing_on_full_runs("stubborn", state))
+    await _project()
+    ids, tips = await _tasks(tmp_path, [({"one.py": "x = 1\n"}, None), ({"two.py": "x\n"}, None)])
+    for task_id in ids:
+        await _approve(app, auth_headers, task_id)
+
+    await landing_queue.drain()
+
+    assert [await _status(task_id) for task_id in ids] == ["approved", "approved"]
+    for task_id, tip in zip(ids, tips, strict=True):
+        assert [row.commit_sha for row in await _merged(task_id)] == [tip]
+    [batch] = await _batches()
+    assert batch.state == "landed", (batch.state, batch.error)
+    assert batch.narrowing and not any(step["failed"] for step in batch.narrowing)
+    stubborn = "test_stubborn::test_stubborn"
+    assert [entry.kind for entry in await _listed(stubborn)] == ["flaky"]
+    why = batch.override_reason or ""
+    assert "reproduced on no task's work" in why and "failed again" in why, why
+    assert why.count(stubborn) >= 2, "both rounds' failures are named"
