@@ -138,13 +138,77 @@ async def builds_of(session: AsyncSession, document_id: str) -> List[Build]:
     )
 
 
-async def project_rows(session: AsyncSession, project_id: str) -> List[Dict[str, Any]]:
+async def _links_of(
+    session: AsyncSession, workspace: Optional[Any], document_ids: Set[str]
+) -> Dict[str, Dict[str, Any]]:
+    """`{document id: {"roadmap": ..., "capabilities": [...]}}` for the Spec home's build rows
+    (`spec-home-shows-what-is-being-built...`, FR-3): the roadmap slice and the capabilities each
+    document's stored payload names, resolved to titles. A document whose file cannot be read, or
+    that names nothing, has no entry."""
+    from . import spec_capability_links, spec_reading
+
+    payloads = await spec_reading.payloads_for_documents(session, workspace, document_ids)
+    named: Dict[str, Tuple[Optional[Dict[str, Any]], List[str]]] = {}
+    wanted: Set[str] = set()
+    for document_id, stored in payloads.items():
+        roadmap = (stored or {}).get("roadmap")
+        if not (isinstance(roadmap, dict) and roadmap.get("document") and roadmap.get("slice")):
+            roadmap = None
+        link = spec_capability_links.named(stored)
+        paths = list(link["changes"]) if link else []
+        named[document_id] = (roadmap, paths)
+        wanted.update(paths)
+        if roadmap:
+            wanted.add(str(roadmap["document"]))
+    if not wanted:
+        return {}
+    by_path = {
+        path: (doc_id, title)
+        for path, doc_id, title in (
+            await session.execute(
+                select(SpecDocument.path, SpecDocument.id, SpecDocument.title).where(
+                    SpecDocument.path.in_(wanted)
+                )
+            )
+        ).all()
+    }
+    slices: Dict[str, Dict[str, str]] = {}
+    found: Dict[str, Dict[str, Any]] = {}
+    for document_id, (roadmap, paths) in named.items():
+        entry: Dict[str, Any] = {"roadmap": None, "capabilities": []}
+        if roadmap:
+            road_path, key = str(roadmap["document"]), str(roadmap["slice"])
+            if road_path in by_path:
+                if road_path not in slices:
+                    stored = await spec_reading.payloads_for_documents(
+                        session, workspace, [by_path[road_path][0]]
+                    )
+                    slices[road_path] = {
+                        str(s.get("key")): str(s.get("title") or "")
+                        for s in ((stored.get(by_path[road_path][0]) or {}).get("slices") or [])
+                        if isinstance(s, dict)
+                    }
+                entry["roadmap"] = {
+                    "path": road_path,
+                    "title": by_path[road_path][1],
+                    "slice": {"key": key, "title": slices[road_path].get(key, "")},
+                }
+        entry["capabilities"] = [{"path": p, "title": by_path[p][1]} for p in paths if p in by_path]
+        found[document_id] = entry
+    return found
+
+
+async def project_rows(
+    session: AsyncSession, project_id: str, workspace: Optional[Any] = None
+) -> List[Dict[str, Any]]:
     """Every build of every document in the project, running and ended, whatever drives it, one
     row each (`the-side-panel-s-running-tab`, FR-2): the document's title, the build's loop where it
     has one, its tasks' progress and the blocking questions its work is waiting on.
 
     Newest first, the order `builds_of` gives one document's. Titles, loops, task counts and
-    questions are each one grouped read, not one per document; only the spend is read per build."""
+    questions are each one grouped read, not one per document; only the spend is read per build.
+    With a `workspace`, each row also names the roadmap slice and capabilities its document's file
+    holds (`roadmap`, `capabilities`); without one they are null and empty."""
     from .db.models import AIJob, Question
 
     builds = list(
@@ -161,15 +225,19 @@ async def project_rows(session: AsyncSession, project_id: str) -> List[Dict[str,
     if not builds:
         return []
     build_ids = [b.id for b in builds]
-    titles = dict(
-        (
+    document_ids = {b.document_id for b in builds}
+    docs = {
+        doc_id: (title, path)
+        for doc_id, title, path in (
             await session.execute(
-                select(SpecDocument.id, SpecDocument.title).where(
-                    SpecDocument.id.in_({b.document_id for b in builds})
+                select(SpecDocument.id, SpecDocument.title, SpecDocument.path).where(
+                    SpecDocument.id.in_(document_ids)
                 )
             )
         ).all()
-    )
+    }
+    titles = {doc_id: pair[0] for doc_id, pair in docs.items()}
+    links = await _links_of(session, workspace, document_ids) if workspace is not None else {}
     loops: Dict[str, Tuple[Loop, Optional[AIJob]]] = {}
     loop_ids = {b.loop_id for b in builds if b.loop_id}
     if loop_ids:
@@ -283,6 +351,10 @@ async def project_rows(session: AsyncSession, project_id: str) -> List[Dict[str,
                 "id": build.id,
                 "document_id": build.document_id,
                 "document_title": titles.get(build.document_id) or "",
+                "document_path": (docs.get(build.document_id) or ("", ""))[1],
+                "finished_at": _iso(build.stopped_at) if build.state == FINISHED else None,
+                "roadmap": links.get(build.document_id, {}).get("roadmap"),
+                "capabilities": links.get(build.document_id, {}).get("capabilities", []),
                 "state": build.state,
                 "driver": build.driver,
                 "level": build.level,
