@@ -434,8 +434,42 @@ export interface SpecDocument {
   roadmap_slice?: SpecRoadmapSlice
   /** On a roadmap: the change document that specifies each slice, by slice key. */
   slice_documents?: Record<string, string>
+  /** On a roadmap: each slice's state, facts and offer, derived on every read (`slice_progress.py`). */
+  slices?: RoadmapSliceRow[]
+  /** On a roadmap: built of total, and what its builds cost, unpriced turns counted apart. */
+  progress?: RoadmapProgressFigures
   /** Set only on a retired (archived) capability: why, and the capability that absorbed it (F536). */
   retired?: SpecRetirement
+}
+
+export interface RoadmapSliceRow {
+  key: string
+  title: string | null
+  intent: string | null
+  done: string | null
+  builds_after: string[]
+  state: 'Not drafted' | 'Drafting' | 'Approved' | 'Building' | 'Built'
+  document: string | null
+  document_title: string | null
+  tasks_on_main: number
+  tasks_total: number
+  cost_usd: number | null
+  unpriced_turns: number
+  built_at: string | null
+  started_at: string | null
+  waits_for: string[]
+  offers_drafting: boolean
+  retrospective: { document: string; at: string | null; vault_source: string | null } | null
+  warning: string | null
+  added_after_approval: boolean
+  added_by: string | null
+}
+
+export interface RoadmapProgressFigures {
+  built: number
+  total: number
+  cost_usd: number
+  unpriced_turns: number
 }
 
 export interface SpecRetirement {
