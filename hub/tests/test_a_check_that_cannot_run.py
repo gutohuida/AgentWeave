@@ -48,8 +48,6 @@ from .test_a_failing_batch_is_narrowed import (
 from .test_project_checks_run import _task_with_work, listed_whole_check
 from .test_task_integration import commits_on, make_repo, set_main_branch
 
-pytestmark = pytest.mark.asyncio
-
 PY = f'"{sys.executable}"'
 #: What cmd prints when `npm run lint` starts an eslint that is not installed (2026-11-15).
 CMD_NOT_RECOGNIZED = (
