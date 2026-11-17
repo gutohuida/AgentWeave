@@ -5934,6 +5934,10 @@ def amend_spec_document(
               `criterion` its new key, `change` is `{given, when, then, how_to_check?, checked_by?}`.
             `change_criterion` — `criterion` and the fields to change in `change`.
             `remove_criterion` — `criterion`.
+            `add_slice` — on an approved roadmap, only in a conversation the operator opened
+              with you (Add a slice): one slice, `change` is `{title, intent?, done?,
+              builds_after?: [slice keys], position?: 1-based, key?}`. It shows on the roadmap
+              at once, marked added after approval with your name, and is listed unreviewed.
           A change or removal of a criterion holds its requirement unverifiable until reviewed.
         reason: What you found and how — what you ran and what it showed.
         how_to_check: How somebody else checks the amendment holds (a command, a click path).

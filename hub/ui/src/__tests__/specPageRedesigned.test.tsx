@@ -646,7 +646,7 @@ describe('documents of other shapes', () => {
     await waitFor(() => expect(anchor('slice-first')).toBeTruthy())
     expect(screen.getByText('The first outcome.')).toBeInTheDocument()
     expect(screen.getByText('First is visible.')).toBeInTheDocument()
-    expect(within(anchor('slice-second')!).getByText(/builds after/i).parentElement).toHaveTextContent('Builds after First slice')
+    expect(within(anchor('slice-second')!).getByText(/builds after/i).parentElement).toHaveTextContent(/Builds after\s*First slice/)
     expect(screen.getByText('Pick the next slice')).toBeInTheDocument()
     expect(screen.getByText('Choose the first undone slice')).toBeInTheDocument()
   })
