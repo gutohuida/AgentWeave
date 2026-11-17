@@ -131,12 +131,26 @@ def _first_cycle(local_edges: Dict[str, List[str]]) -> Optional[List[str]]:
     return None
 
 
+def is_capability_draft(payload: SpecPayload, proposed: AbstractSet[str]) -> bool:
+    """A change that only drafts capabilities a system map proposes: no tasks, nothing in
+    `capabilities.changes`, and every title in `capabilities.creates` among `proposed` (casefolded
+    titles). Narrowed so an ordinary change that forgot its tasks still draws
+    `requirement_without_task` (`a-project-with-no-specs-is-offered-a-start` FR-11)."""
+    link = payload.capabilities
+    if payload.kind != "change-spec" or payload.tasks or link is None:
+        return False
+    if link.changes or not link.creates:
+        return False
+    return all(created.title.strip().casefold() in proposed for created in link.creates)
+
+
 def check(
     payload: SpecPayload,
     *,
     board_served: Optional[AbstractSet[str]] = None,
     approved_document_paths: Optional[AbstractSet[str]] = None,
     roadmaps: Optional[Mapping[str, RoadmapState]] = None,
+    proposed_capabilities: Optional[AbstractSet[str]] = None,
 ) -> List[Finding]:
     """Everything wrong with this document, not just the first thing.
 
@@ -158,11 +172,17 @@ def check(
 
     `roadmaps` maps a roadmap path to its state, for the roadmap a slice document names. A path
     absent from it is a roadmap that does not exist.
+
+    `proposed_capabilities` is every capability title a system map of the project proposes,
+    casefolded (`spec_capability_links.proposed_titles`), for `is_capability_draft`.
     """
     findings: List[Finding] = []
     # A capability states what the system does; the changes folded into it carry the tasks and the
     # non-goals, so neither is asked of it (F534).
     capability = payload.kind == "capability"
+    # A capability draft describes behaviour that already exists, so "nothing implements it" is
+    # wrong for each of its requirements (`a-project-with-no-specs-is-offered-a-start` FR-11).
+    draft = is_capability_draft(payload, proposed_capabilities or frozenset())
     served = board_served or frozenset()
     approved = approved_document_paths or frozenset()
 
@@ -245,7 +265,12 @@ def check(
                     f"{requirement.key!r} has no acceptance criterion, so nothing demonstrates it",
                 )
             )
-        if not capability and requirement.key not in tasked and requirement.key not in served:
+        if (
+            not capability
+            and not draft
+            and requirement.key not in tasked
+            and requirement.key not in served
+        ):
             findings.append(
                 Finding(
                     "requirement_without_task",

@@ -379,11 +379,19 @@ async def transition(
         # module is the one every phase write passes through, and `Task` reaches back into it.
         from .db.models import SpecRequirement, Task
 
-        produced = await session.scalar(
-            select(SpecRequirement.id).where(SpecRequirement.document_id == document.id).limit(1)
-        ) or await session.scalar(
+        tasked = await session.scalar(
             select(Task.id).where(Task.spec_document_id == document.id).limit(1)
         )
+        produced = tasked or await session.scalar(
+            select(SpecRequirement.id).where(SpecRequirement.document_id == document.id).limit(1)
+        )
+        # A capability draft's requirements describe code that exists, not work it produced:
+        # archiving it declines the draft (`a-project-with-no-specs-is-offered-a-start` FR-7).
+        if produced is not None and tasked is None:
+            from . import spec_capability_links
+
+            if await spec_capability_links.is_draft(session, workspace, document):
+                produced = None
         if produced is not None:
             raise PhaseError(
                 "this document has produced requirements or tasks, so archiving it from "

@@ -435,6 +435,13 @@ async def get_spec(
             payload["fold_state"] = fold_state
         payload["superseded"] = spec_lifecycle.superseded_view(document)
         payload["held"] = spec_lifecycle.held_view(document)
+        if document.kind == "system-map":
+            # Each capability the map proposes with its draft and the draft's state (FR-8).
+            link = spec_capability_links.named(stored_payload)
+            payload["capabilities"] = link
+            payload["proposed_capabilities"] = await spec_capability_links.map_drafts(
+                session, workspace, project_id, link
+            )
         if document.kind in ("change-spec", "capability"):
             _capability_fields(
                 payload,
@@ -733,10 +740,13 @@ def _capability_fields(
     waiting: Dict[str, List[Dict[str, Any]]],
     folded_to: Dict[str, str],
 ) -> None:
-    """A change's named capabilities and where it was folded; a capability's waiting list."""
+    """A change's named capabilities and where it was folded; a capability's waiting list; the
+    capabilities a system map proposes (`a-project-with-no-specs-is-offered-a-start` FR-12)."""
     if document.kind == "change-spec":
         view["capabilities"] = spec_capability_links.named(stored)
         view["folded_into"] = folded_to.get(document.id)
+    elif document.kind == "system-map":
+        view["capabilities"] = spec_capability_links.named(stored)
     elif document.kind == "capability":
         view["waiting_changes"] = waiting.get(document.path, [])
         view["waiting_count"] = len(view["waiting_changes"])

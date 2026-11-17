@@ -440,6 +440,22 @@ export interface SpecDocument {
   progress?: RoadmapProgressFigures
   /** Set only on a retired (archived) capability: why, and the capability that absorbed it (F536). */
   retired?: SpecRetirement
+  /** On a system map: the capabilities it proposes (`capabilities.creates` only). */
+  capabilities?: CapabilityLink | null
+  /** On a system map: each proposed title with its draft and the draft's state, in the map's order
+   *  (`a-project-with-no-specs-is-offered-a-start` FR-8). Absent from an older Hub. */
+  proposed_capabilities?: ProposedCapability[]
+}
+
+/** A proposed capability's draft state, as the system map's page names it. */
+export type ProposedCapabilityState = 'no-draft' | 'exploring' | 'approved' | 'current' | 'declined'
+
+/** One capability a system map proposes, and its draft: the change creating the same title,
+ *  compared case-insensitively. */
+export interface ProposedCapability {
+  title: string
+  state: ProposedCapabilityState
+  draft: { path: string; title: string; phase: string } | null
 }
 
 export interface RoadmapSliceRow {
@@ -531,6 +547,24 @@ export function useSpec(path: string | null) {
       getJson<SpecDocument>(
         `/api/v1/projects/${projectId}/project/spec?path=${encodeURIComponent(path ?? '')}`,
       ),
+    enabled: isConfigured && !!projectId && !!path,
+  })
+}
+
+/** A system map's proposed capabilities and their drafts (`a-project-with-no-specs-is-offered-a-start`
+ *  FR-8). Read from the document route, but keyed under `specDocuments`: a draft's save, approval,
+ *  archive or fold is broadcast with the draft's path, never the map's, and the list's key is the
+ *  one every `spec_updated` refreshes. */
+export function useMapDrafts(path: string | null) {
+  const { isConfigured, selectedProjectId: projectId } = useConfigStore()
+  return useQuery<ProposedCapability[]>({
+    queryKey: ['project', projectId, 'specDocuments', 'mapDrafts', path],
+    queryFn: async () =>
+      (
+        await getJson<SpecDocument>(
+          `/api/v1/projects/${projectId}/project/spec?path=${encodeURIComponent(path ?? '')}`,
+        )
+      ).proposed_capabilities ?? [],
     enabled: isConfigured && !!projectId && !!path,
   })
 }

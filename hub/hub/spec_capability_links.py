@@ -15,13 +15,16 @@ What this module answers:
 - `waiting_lists(...)` -- every capability's open changes, in the stated total order (FR-5).
 - `folded_into(...)` -- the capability a change was folded into, from its merge rows (FR-8).
 - `default_fold_target(...)` -- the capability a fold starts from (FR-7).
+- `proposed_titles(...)` / `map_drafts(...)` -- the capabilities a system map proposes in its own
+  `creates`, and each one's draft: the change creating that title, matched case-insensitively
+  (`a-project-with-no-specs-is-offered-a-start` FR-8, FR-11, FR-12).
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import timezone
-from typing import Any, Dict, Iterable, List, Optional, Sequence
+from typing import Any, Dict, Iterable, List, Optional, Sequence, Set
 
 from sqlalchemy import literal_column, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -424,3 +427,120 @@ def target_is_named(link: Optional[Dict[str, Any]], capability: SpecDocument) ->
     if link is None:
         return False
     return capability.path in link["changes"] or names_title(link, capability.title)
+
+
+#: A proposed capability's draft states, as the system map's page names them (FR-8).
+DRAFT_NONE = "no-draft"
+DRAFT_EXPLORING = "exploring"
+DRAFT_APPROVED = "approved"
+DRAFT_CURRENT = "current"
+DRAFT_DECLINED = "declined"
+
+#: Where several changes create one title, the one furthest on is the title's draft: a declined
+#: draft followed by a fresh one shows the fresh one.
+_DRAFT_RANK = {DRAFT_DECLINED: 1, DRAFT_EXPLORING: 2, DRAFT_APPROVED: 3, DRAFT_CURRENT: 4}
+
+
+async def _payloads_of_kind(
+    session: AsyncSession,
+    workspace: Optional[ProjectWorkspace],
+    project_id: str,
+    kind: str,
+    *,
+    archived: bool,
+) -> List[tuple]:
+    """`[(document, stored payload)]` for every document of `kind`, archived ones only if asked."""
+    query = select(SpecDocument).where(
+        SpecDocument.project_id == project_id, SpecDocument.kind == kind
+    )
+    if not archived:
+        query = query.where(SpecDocument.phase != spec_lifecycle.ARCHIVED)
+    rows = list((await session.execute(query)).scalars().all())
+    if not rows or workspace is None:
+        return []
+    from . import spec_reading
+
+    read = await spec_reading.payloads_for_documents(session, workspace, [r.id for r in rows])
+    return [(row, read.get(row.id)) for row in rows]
+
+
+async def proposed_titles(
+    session: AsyncSession, workspace: Optional[ProjectWorkspace], project_id: str
+) -> Set[str]:
+    """Every capability title a system map of the project proposes, casefolded (FR-11). An
+    archived map proposes nothing."""
+    titles: Set[str] = set()
+    for _, stored in await _payloads_of_kind(
+        session, workspace, project_id, "system-map", archived=False
+    ):
+        for created in (named(stored) or {}).get("creates") or []:
+            titles.add(created["title"].casefold())
+    return titles
+
+
+async def map_drafts(
+    session: AsyncSession,
+    workspace: Optional[ProjectWorkspace],
+    project_id: str,
+    link: Optional[Dict[str, Any]],
+) -> List[Dict[str, Any]]:
+    """`[{title, state, draft}]`, one per title the map proposes, in the map's order (FR-8).
+
+    A title's draft is the change whose `creates` holds the same title, compared case-insensitively;
+    `draft` is `{path, title, phase}` or None. Its state is `current` once folded, `declined` when
+    archived unfolded, else its phase; `no-draft` when no change creates the title.
+    """
+    titles = [c["title"] for c in (link or {}).get("creates") or []]
+    if not titles:
+        return []
+    changes = await _payloads_of_kind(session, workspace, project_id, "change-spec", archived=True)
+    folded = await folded_into_by_id(session, [d.id for d, _ in changes])
+    best: Dict[str, tuple] = {}
+    for document, stored in changes:
+        if document.id in folded:
+            state = DRAFT_CURRENT
+        elif document.phase == spec_lifecycle.ARCHIVED:
+            state = DRAFT_DECLINED
+        elif document.phase == spec_lifecycle.APPROVED:
+            state = DRAFT_APPROVED
+        else:
+            state = DRAFT_EXPLORING
+        for created in (named(stored) or {}).get("creates") or []:
+            key = created["title"].casefold()
+            held = best.get(key)
+            if held is None or _DRAFT_RANK[state] > _DRAFT_RANK[held[0]]:
+                best[key] = (state, document)
+    rows: List[Dict[str, Any]] = []
+    for title in titles:
+        found = best.get(title.casefold())
+        if found is None:
+            rows.append({"title": title, "state": DRAFT_NONE, "draft": None})
+            continue
+        state, document = found
+        rows.append(
+            {
+                "title": title,
+                "state": state,
+                "draft": {"path": document.path, "title": document.title, "phase": document.phase},
+            }
+        )
+    return rows
+
+
+async def is_draft(
+    session: AsyncSession, workspace: Optional[ProjectWorkspace], document: SpecDocument
+) -> bool:
+    """Whether the stored change is a capability draft (`spec_completeness.is_capability_draft`):
+    no tasks, nothing it changes, and only titles a system map of its project proposes."""
+    if document.kind != "change-spec" or workspace is None:
+        return False
+    from . import spec_completeness, spec_service
+
+    try:
+        payload = spec_service._stored_payload(workspace, document)
+    except spec_service.SaveRefusedError:
+        return False
+    if payload.tasks or payload.capabilities is None:
+        return False
+    proposed = await proposed_titles(session, workspace, document.project_id)
+    return spec_completeness.is_capability_draft(payload, proposed)
