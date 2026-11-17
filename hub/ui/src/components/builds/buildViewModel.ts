@@ -194,7 +194,9 @@ export function sentBackBy(by: SendBackRead['by']): string {
 /** The reviewer's words, without the Hub's "Sent back as <class>:" prefix the class chip already says. */
 export function sendBackText(sendBack: SendBackRead): string {
   const reason = sendBack.reason.replace(/^Sent back( as [\w-]+)?:\s*/i, '').trim()
-  const text = reason || sendBack.note.trim()
+  // The landing checks name their check run by id ("…failed on check run chk-63a5…"); the id
+  // means nothing on screen, and differs between otherwise identical send-backs (P17).
+  const text = (reason || sendBack.note.trim()).replace(/\s+on check run chk-[0-9a-f]+/gi, '')
   return text.charAt(0).toUpperCase() + text.slice(1)
 }
 
@@ -234,6 +236,9 @@ export function moveOf(run: BuildRunRead): MoveWords {
       return { text: 'Started, not handed in', tone: 'quiet' }
     case 'under_review':
       return { text: 'Took it for review', tone: 'quiet' }
+    case 'assigned':
+    case 'pending':
+      return { text: 'Let it go unfinished', tone: 'quiet' }
     default:
       return { text: `Moved it to ${taskStateOf(last.to).label.toLowerCase()}`, tone: 'quiet' }
   }
@@ -335,12 +340,21 @@ export interface TimelineSendBack {
   text: string
 }
 
-/** Consecutive mender runs, shown as one counted row that expands (P12). */
+/** A stretch of the timeline that repeats, shown as one counted row that expands (P12): mender
+ *  turns back to back, one agent building again and again, or a build and the same send-back in
+ *  turn (a build bounced by failing checks forty times reads as one row, not eighty). */
 export interface TimelineGroup {
   kind: 'group'
   key: string
+  /** "Mender ×3", "Build ×44". */
   label: string
+  /** What repeated, in words: "Build 3 to Build 45, each sent back by the landing checks". */
+  detail: string
+  /** The send-backs' reason, when every one in the group gave the same. */
+  reason: string | null
+  items: Array<TimelineRun | TimelineSendBack>
   runs: TimelineRun[]
+  sendBacks: number
   move: MoveWords
   cost: CostTotal
   seconds: number
@@ -391,29 +405,79 @@ export function timelineOf(runs: BuildRunRead[], sendBacks: SendBackRead[], now:
 
   const out: TimelineItem[] = []
   for (let i = 0; i < flat.length; ) {
-    const item = flat[i]!
-    if (item.kind === 'run' && item.run.role === 'mender') {
-      let j = i
-      while (j < flat.length && flat[j]!.kind === 'run' && (flat[j] as TimelineRun).run.role === 'mender') j++
-      if (j - i >= 2) {
-        const group = flat.slice(i, j) as TimelineRun[]
-        out.push({
-          kind: 'group',
-          key: `group-${group[0]!.key}`,
-          label: `Mender ×${group.length}`,
-          runs: group,
-          move: worstMove(group.map((g) => g.move)),
-          cost: costTotal(group.map((g) => g.run)),
-          seconds: group.reduce((n, g) => n + g.seconds, 0),
-        })
-        i = j
-        continue
-      }
+    const found = repeatAt(flat, i)
+    if (found) {
+      out.push(groupOf(flat.slice(i, i + found.period * found.times), found.times))
+      i += found.period * found.times
+      continue
     }
-    out.push(item)
+    out.push(flat[i]!)
     i++
   }
   return out
+}
+
+/** What makes two timeline lines "the same" for grouping: a run's role and agent; a send-back's
+ *  sender, class and reason. */
+function signatureOf(item: TimelineRun | TimelineSendBack): string {
+  if (item.kind === 'run') return `run:${item.run.role}:${item.run.agent}`
+  const by = item.sendBack.by
+  return `send-back:${by.kind}:${by.kind === 'agent' ? by.agent : ''}:${item.sendBack.reason_class ?? ''}:${item.text}`
+}
+
+/** The repeat starting at `i`, if any: a pattern of one line (a run) or two (a run and a
+ *  send-back, either way round) seen at least three times in a row; mender turns group from two. */
+function repeatAt(flat: Array<TimelineRun | TimelineSendBack>, i: number): { period: number; times: number } | null {
+  const sig = flat.map(signatureOf)
+  const timesOf = (period: number): number => {
+    let times = 1
+    while (i + (times + 1) * period <= flat.length && sig.slice(i + times * period, i + (times + 1) * period).every((s, k) => s === sig[i + k])) times++
+    return times
+  }
+  let best: { period: number; times: number } | null = null
+  for (const period of [1, 2]) {
+    const pattern = flat.slice(i, i + period)
+    if (pattern.length < period || !pattern.some((p) => p.kind === 'run')) continue
+    if (period === 2 && sig[i] === sig[i + 1]) continue
+    const times = timesOf(period)
+    const mender = period === 1 && pattern[0]!.kind === 'run' && pattern[0]!.run.role === 'mender'
+    if (times < (mender ? 2 : 3)) continue
+    if (!best || period * times > best.period * best.times) best = { period, times }
+  }
+  return best
+}
+
+function groupOf(items: Array<TimelineRun | TimelineSendBack>, times: number): TimelineGroup {
+  const runs = items.filter((i): i is TimelineRun => i.kind === 'run')
+  const sendBacks = items.filter((i): i is TimelineSendBack => i.kind === 'send-back')
+  const role = ROLE[runs[0]!.run.role].label
+  const range = runs.length > 1 ? `${runs[0]!.label} to ${runs[runs.length - 1]!.label}` : runs[0]!.label
+  const reasons = new Set(sendBacks.map((s) => s.text))
+  const first = sendBacks[0]
+  // The label stays short ("Build ×44") to fit the label column; `detail` says what repeated.
+  const label = `${role} ×${times}`
+  let detail: string
+  let move: MoveWords
+  if (!first) {
+    detail = runs[0]!.run.role === 'mender' ? 'repeated mender turns, shown as one' : `${range}, each by ${runs[0]!.run.agent}`
+    move = worstMove(runs.map((r) => r.move))
+  } else {
+    detail = `${range}, each sent back by ${first.by}`
+    move = { text: `Sent back ${sendBacks.length} times`, tone: 'bad' }
+  }
+  return {
+    kind: 'group',
+    key: `group-${items[0]!.key}`,
+    label,
+    detail,
+    reason: first && reasons.size === 1 ? first.text : null,
+    items,
+    runs,
+    sendBacks: sendBacks.length,
+    move,
+    cost: costTotal(runs.map((r) => r.run)),
+    seconds: runs.reduce((n, r) => n + r.seconds, 0),
+  }
 }
 
 /** Just the latest attempt of each role (P11): changes what is shown, never the totals. */

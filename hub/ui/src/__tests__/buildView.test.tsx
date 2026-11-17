@@ -122,6 +122,38 @@ describe('build view model', () => {
     expect(group).toMatchObject({ kind: 'group', label: 'Mender ×3', move: { tone: 'bad' } })
   })
 
+  it('collapses a build bounced by the same failing checks again and again into one row, keeping every run', () => {
+    const runs = Array.from({ length: 5 }, (_, i) => run(`b${i}`, { role: 'build', agent: 'Dev', started_at: `2026-11-17T09:${String(i * 10).padStart(2, '0')}:00Z` }))
+    const sendBacks = Array.from({ length: 4 }, (_, i) => ({
+      sequence: i + 1,
+      at: `2026-11-17T09:${String(i * 10 + 5).padStart(2, '0')}:00Z`,
+      to: 'revision_needed' as const,
+      by: { kind: 'checks' as const },
+      run_id: null,
+      reason_class: 'broken-check',
+      reason: `The project's checks failed on check run chk-${i}a${i}b.`,
+      note: '',
+    }))
+    const items = timelineOf(runs, sendBacks, NOW)
+    expect(items.map((i) => i.label)).toEqual(['Build ×4', 'Build 5'])
+    const [group] = items
+    expect(group).toMatchObject({
+      kind: 'group',
+      detail: 'Build 1 to Build 4, each sent back by the landing checks',
+      sendBacks: 4,
+      reason: "The project's checks failed.",
+      move: { text: 'Sent back 4 times', tone: 'bad' },
+    })
+    // Every run is still there to open, in order.
+    expect(group!.kind === 'group' && group.runs.map((r) => r.label)).toEqual(['Build 1', 'Build 2', 'Build 3', 'Build 4'])
+  })
+
+  it('collapses one agent building again and again, but not two builds in a row', () => {
+    const many = Array.from({ length: 4 }, (_, i) => run(`b${i}`, { role: 'build', agent: 'Dev', started_at: `2026-11-17T09:0${i}:00Z` }))
+    expect(timelineOf(many, [], NOW).map((i) => i.label)).toEqual(['Build ×4'])
+    expect(timelineOf(many.slice(0, 2), [], NOW).map((i) => i.label)).toEqual(['Build 1', 'Build 2'])
+  })
+
   it('never totals unpriced as zero, and says what a total leaves out', () => {
     const mixed = costTotal(READ.tasks[1]!.runs)
     expect(totalCell(mixed)).toEqual({ kind: 'cost', usd: 1 })

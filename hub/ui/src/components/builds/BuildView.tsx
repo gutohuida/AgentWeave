@@ -91,19 +91,37 @@ export function BuildView(props: BuildViewProps) {
   return <BuildViewLoaded {...props} read={read} />
 }
 
-/** Shaped like the view, shown only after a short delay (`.aw-delayed`), announced once. */
+/** Shaped like the view, shown only after a short delay (`.aw-delayed`), announced once: the
+ *  header's lines, the five figures, and task rows on the table's own grid, so nothing moves when
+ *  the build arrives (P19). */
 function BuildSkeleton() {
+  // Widths of each cell's bar, per column of `.aw-bv-row` (chevron, task, status, people,
+  // evidence, runs, sent back, cost, changed).
+  const cells = ['12px', '78%', '70%', '80%', '70%', '18px', '18px', '48px', '26px']
   return (
     <div className="aw-bv-skeleton aw-delayed" role="status" aria-busy="true" aria-label="Loading the build">
-      <div className="aw-bv-skel-line" style={{ width: '40%', height: 22 }} />
-      <div className="aw-bv-skel-figures">
-        {[0, 1, 2, 3, 4].map((i) => (
-          <div key={i} className="aw-bv-skel-line" style={{ height: 40 }} />
+      <div className="aw-bv-header" aria-hidden="true">
+        <div className="aw-bv-skel-line" style={{ width: 44, height: 12 }} />
+        <div className="aw-bv-skel-line" style={{ width: '36%', height: 22 }} />
+        <div className="aw-bv-skel-line" style={{ width: '28%', height: 14 }} />
+        <div className="aw-bv-figures">
+          {[0, 1, 2, 3, 4].map((i) => (
+            <div key={i} className="aw-bv-figure">
+              <div className="aw-bv-skel-line" style={{ width: '40%', height: 11 }} />
+              <div className="aw-bv-skel-line" style={{ width: '55%', height: 18 }} />
+            </div>
+          ))}
+        </div>
+      </div>
+      <div className="aw-bv-table" aria-hidden="true">
+        {[0, 1, 2, 3, 4].map((row) => (
+          <div key={row} className="aw-bv-row aw-bv-skel-row">
+            {cells.map((width, i) => (
+              <div key={i} className="aw-bv-skel-line" style={{ width, height: 12, justifySelf: i >= 5 ? 'end' : undefined }} />
+            ))}
+          </div>
         ))}
       </div>
-      {[0, 1, 2, 3, 4].map((i) => (
-        <div key={i} className="aw-bv-skel-row" />
-      ))}
     </div>
   )
 }
@@ -778,16 +796,25 @@ function GroupLine({
   return (
     <li className="aw-bv-event aw-bv-group" data-kind="group" data-tone={item.move.tone}>
       <span className="aw-bv-rail" aria-hidden="true">
-        <Icon name="build" size={12} />
+        <Icon name={ROLE[item.runs[0]!.run.role].icon} size={12} />
       </span>
       <div className="aw-bv-group-body">
-        <button type="button" data-slot="build-run-group" className="aw-bv-run" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
+        <button
+          type="button"
+          data-slot="build-run-group"
+          className="aw-bv-run"
+          aria-expanded={open}
+          aria-label={`${open ? 'Hide' : 'Show'} ${item.label}: ${item.detail}`}
+          onClick={() => setOpen((o) => !o)}
+        >
           <span className="aw-bv-run-label">
             <Icon name={open ? 'expand_more' : 'chevron_right'} size={12} />
             {item.label}
           </span>
           <span className="aw-bv-run-who">
-            <span className="aw-bv-model">repeated mender turns, shown as one</span>
+            <span className="aw-bv-model" title={item.detail}>
+              {item.detail}
+            </span>
           </span>
           <span className="aw-bv-run-when" />
           <span className="aw-bv-run-took tabular">{formatDuration(item.seconds)}</span>
@@ -799,11 +826,20 @@ function GroupLine({
             <CostFigure cell={totalCell(item.cost)} total={item.cost} />
           </span>
         </button>
+        {item.reason && !open ? (
+          <p className="aw-bv-group-reason" title={item.reason}>
+            {item.reason}
+          </p>
+        ) : null}
         {open ? (
           <ol className="aw-bv-timeline aw-bv-group-runs">
-            {item.runs.map((r) => (
-              <RunLine key={r.key} item={r} now={now} opened={openedRunId === r.run.id} onOpen={() => onOpenRun(r.run)} runButtons={runButtons} colorIndexOf={colorIndexOf} />
-            ))}
+            {item.items.map((r) =>
+              r.kind === 'run' ? (
+                <RunLine key={r.key} item={r} now={now} opened={openedRunId === r.run.id} onOpen={() => onOpenRun(r.run)} runButtons={runButtons} colorIndexOf={colorIndexOf} />
+              ) : (
+                <SendBackLine key={r.key} item={r} now={now} />
+              ),
+            )}
           </ol>
         ) : null}
       </div>

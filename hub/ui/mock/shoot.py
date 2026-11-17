@@ -37,6 +37,9 @@ with sync_playwright() as p:
                 page.evaluate(f"document.documentElement.classList.add('no-transitions'); document.documentElement.dataset.mode = '{mode}'")
                 page.wait_for_timeout(150)
                 page.evaluate("document.documentElement.classList.remove('no-transitions')")
+                # Removing `no-transitions` restarts animations, `.aw-delayed`'s 300ms entry among
+                # them: wait it out, or a loading state shoots as an empty page.
+                page.wait_for_timeout(600)
                 if action:
                     for step in action.split("::"):
                         page.locator(step).first.click()

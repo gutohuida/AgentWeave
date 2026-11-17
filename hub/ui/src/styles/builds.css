@@ -227,9 +227,10 @@
 .aw-bv-move[data-tone="live"] svg { color: var(--green); }
 .aw-bv-move[data-tone="quiet"] { color: var(--text-2); }
 
+/* A send-back is a turn in the story, not an alarm: a quiet rule and its words, no fill (P1). */
 .aw-bv-sendback-body {
-  margin: 3px 0 5px; padding: 6px 10px 7px; border-radius: var(--radius-sm);
-  background: color-mix(in oklab, var(--red) 4%, var(--bg)); box-shadow: inset 2px 0 0 color-mix(in oklab, var(--red) 70%, var(--bg));
+  margin: 2px 0 4px; padding: 3px 8px 4px 10px;
+  box-shadow: inset 2px 0 0 color-mix(in oklab, var(--red) 55%, var(--bg));
 }
 .aw-bv-sendback .aw-bv-rail { color: var(--red); }
 .aw-bv-sendback-head { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; font-size: 12px; color: var(--text-2); }
@@ -238,11 +239,18 @@
   padding: 0 6px; border: 1px solid var(--border-hi); border-radius: 999px; font-size: 11px; font-weight: 500; color: var(--text);
 }
 .aw-bv-sendback-when { margin-left: auto; white-space: nowrap; }
-.aw-bv-sendback-text { margin: 3px 0 0; font-size: 12px; line-height: 1.5; color: var(--text); white-space: pre-line; overflow-wrap: anywhere; }
+.aw-bv-sendback-text { margin: 2px 0 0; font-size: 12px; line-height: 1.5; color: var(--text-2); white-space: pre-line; overflow-wrap: anywhere; }
 .aw-bv-sendback-text[data-full="false"] { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .aw-bv-sendback-body .aw-bv-link { margin-top: 2px; font-size: 11.5px; }
 
 .aw-bv-group-body { min-width: 0; }
+/* A group has no single start time: its detail takes the start's column too. */
+.aw-bv-group-body > .aw-bv-run > :nth-child(3) { display: none; }
+.aw-bv-group-body > .aw-bv-run > :nth-child(2) { grid-column: 2 / 4; }
+.aw-bv-group-reason {
+  margin: -2px 0 4px 8px; padding-left: 8px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
+  font-size: 12px; color: var(--text-2); box-shadow: inset 2px 0 0 color-mix(in oklab, var(--red) 55%, var(--bg));
+}
 .aw-bv-group-runs { margin-left: 4px; }
 
 .aw-bv-panel-total { margin: 8px 0 0 30px; font-size: 12px; color: var(--text-2); }
@@ -258,10 +266,9 @@
 .aw-bv-drawer-sub { font-weight: 400; color: var(--text-2); }
 
 /* Loading: the view's own shape. */
-.aw-bv-skeleton { display: flex; flex-direction: column; gap: 10px; }
-.aw-bv-skel-figures { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; margin-bottom: 8px; }
-.aw-bv-skel-line, .aw-bv-skel-row { border-radius: var(--radius-sm); background: var(--surface-2); }
-.aw-bv-skel-row { height: 38px; }
+.aw-bv-skeleton .aw-bv-header { margin-bottom: 52px; }
+.aw-bv-skel-line { border-radius: var(--radius-sm); background: var(--surface-3); }
+.aw-bv-skel-row { border-bottom: 1px solid var(--border); }
 
 /* Narrower than the full table: builder and evidence move to a second line under the task. */
 @container (max-width: 920px) {
@@ -298,6 +305,7 @@
   .aw-bv-run > :nth-child(4) { grid-area: took; }
   .aw-bv-run > :nth-child(5) { grid-area: move; }
   .aw-bv-run > :nth-child(6) { grid-area: cost; }
+  .aw-bv-group-body > .aw-bv-run > :nth-child(2) { grid-column: auto; grid-area: who; }
 }
 
 /* ── The compact summary ─────────────────────────────────────────────── */
