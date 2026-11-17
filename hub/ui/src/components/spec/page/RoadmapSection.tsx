@@ -4,7 +4,7 @@ import { readableApiError } from '@/api/client'
 import { useAgents } from '@/api/agents'
 import { useDeclineNextSliceOffer, useNextSliceOffers, useTakeNextSliceOffer } from '@/api/nextSlice'
 import { useMoveSlice, useRemoveSlice, useStartSliceConversation } from '@/api/roadmapEdits'
-import { useArchiveBatch } from '@/api/specTidy'
+import { useArchiveBatch, type ArchiveBatchResult } from '@/api/specTidy'
 import { Icon } from '@/components/common/Icon'
 import { Button } from '@/components/ui/button'
 import { agentDestination, serializeDestination } from '@/lib/navigation'
@@ -105,6 +105,7 @@ export function RoadmapSection({ doc, now, onOpenDocument }: { doc: SpecDocument
   const [picking, setPicking] = React.useState<string | null>(null)
   const [confirming, setConfirming] = React.useState(false)
   const [notice, setNotice] = React.useState<string | null>(null)
+  const [plan, setPlan] = React.useState<ArchiveBatchResult['plan'] | null>(null)
 
   const slices = viewOf(doc)
   const agents = agentRows.map((a) => a.name)
@@ -169,7 +170,19 @@ export function RoadmapSection({ doc, now, onOpenDocument }: { doc: SpecDocument
             <strong>This roadmap is done.</strong> Every slice is built.
           </span>
           {toArchive.length ? (
-            <Button variant="outline" size="xs" onClick={() => setConfirming(true)}>
+            <Button
+              variant="outline"
+              size="xs"
+              onClick={() => {
+                setConfirming(true)
+                setPlan(null)
+                // Asks the Hub what archiving would do to each document; archives nothing.
+                archive.mutate(
+                  { paths: toArchive.map((d) => d.path), check_only: true, no_capability_change: true },
+                  { onSuccess: (result) => setPlan((result as ArchiveBatchResult).plan ?? []) },
+                )
+              }}
+            >
               <Icon name="archive" size={12} />
               Archive the roadmap and its slices
             </Button>
@@ -219,10 +232,30 @@ export function RoadmapSection({ doc, now, onOpenDocument }: { doc: SpecDocument
           </h3>
           <p className="aw-rm-muted">This cannot be undone. Nothing is archived until you confirm.</p>
           <ul>
-            {toArchive.map((d) => (
-              <li key={d.path}>{d.title}</li>
-            ))}
+            {toArchive.map((d) => {
+              const will = plan?.find((p) => p.path === d.path)
+              return (
+                <li key={d.path} data-will={will?.will}>
+                  {d.title}
+                  {will ? (
+                    <span className="aw-rm-muted">
+                      {' — '}
+                      {will.will === 'archive'
+                        ? 'will be archived'
+                        : will.will === 'archive_no_capability_change'
+                          ? 'built and not folded into a capability: will be archived stating it changes none'
+                          : `cannot be archived: ${will.reason ?? will.code ?? 'refused'}`}
+                    </span>
+                  ) : null}
+                </li>
+              )
+            })}
           </ul>
+          {plan?.some((p) => p.will === 'refuse') ? (
+            <p className="aw-rm-warn" role="alert">
+              Nothing will be archived while any of these is refused.
+            </p>
+          ) : null}
           <div className="aw-rm-confirm-actions">
             <Button variant="ghost" size="xs" disabled={archive.isPending} onClick={() => setConfirming(false)}>
               Cancel
@@ -230,10 +263,10 @@ export function RoadmapSection({ doc, now, onOpenDocument }: { doc: SpecDocument
             <Button
               variant="primary"
               size="xs"
-              disabled={archive.isPending}
+              disabled={archive.isPending || !plan || plan.some((p) => p.will === 'refuse')}
               onClick={() =>
                 archive.mutate(
-                  { paths: toArchive.map((d) => d.path) },
+                  { paths: toArchive.map((d) => d.path), all_or_none: true, no_capability_change: true },
                   {
                     onSuccess: (result) => {
                       setConfirming(false)
