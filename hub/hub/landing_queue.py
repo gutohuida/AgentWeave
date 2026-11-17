@@ -1203,6 +1203,7 @@ async def _run_one_batch(
                 prefixes=[],
                 results=[],
                 narrowing=[],
+                check_runs=0,
             )
         )
         await session.commit()
@@ -1212,6 +1213,8 @@ async def _run_one_batch(
     async with async_session_factory() as session:
         batch = await session.get(LandingBatch, batch_id)
         batch.task_ids = [landing.task_id for landing in chosen]
+        # When the earliest of its tasks became ready to land (FR-7): its wait starts there.
+        batch.ready_at = min((landing.created_at for landing in chosen), default=None)
         await session.commit()
         await _announce(session, [landing.id for landing in chosen])
     if not chosen:
@@ -1510,10 +1513,12 @@ async def run_batch_checks(
     path: Optional[Path] = None
     state, error = "passed", ""
     unjudged = False
+    ran = 0  # the check runs this makes, confirmations included (FR-7)
     try:
         slots = project_checks._every_slot() if quiet else project_checks.check_slot(landing=True)
         async with slots:
             await project_checks._took_slot(run_id)  # FR-1: the batch's wait survives a restart
+            await _batch_took_slot(batch_id)
             for check, already in zip(checks, planned, strict=True):
                 result = already or project_checks.skipped(check, changed)
                 if result is None:
@@ -1524,6 +1529,7 @@ async def run_batch_checks(
                     result = await asyncio.to_thread(
                         project_checks.run_one, check_history.recording(check), path, owner
                     )
+                    ran += 1
                     outcomes = check_history.take(result)
                     if project_checks.unjudged_timeout(result):
                         # Out of time naming no failing test: it says nothing about the work, so
@@ -1547,6 +1553,7 @@ async def run_batch_checks(
                         await asyncio.to_thread(
                             project_checks.confirm_failure, check, path, result, owner, changed
                         )
+                        ran += 1
                         if result.get("flaky"):
                             await _record_run(run_id, results + [result])
                             from . import flaky_tests
@@ -1575,6 +1582,7 @@ async def run_batch_checks(
     finally:
         if path is not None:
             await asyncio.to_thread(project_checks._remove_checkout, root, path)
+        await _batch_checks_ran(batch_id, ran)
     if unjudged:
         state = "error"
     elif state != "error":
@@ -1595,6 +1603,27 @@ async def run_batch_checks(
         # batch's run is read again as a run on main's tree, counting nothing twice.
         await known_failing.record_run(run_id)
     return BatchChecks(state=state, results=results, run_id=run_id, error=error, unjudged=unjudged)
+
+
+async def _batch_took_slot(batch_id: str) -> None:
+    """Record when *batch_id*'s checks first held a check slot (FR-7); a later run keeps it."""
+    async with async_session_factory() as session:
+        batch = await session.get(LandingBatch, batch_id)
+        if batch is not None and batch.slot_at is None:
+            batch.slot_at = _now()
+            await session.commit()
+
+
+async def _batch_checks_ran(batch_id: str, runs: int) -> None:
+    """Count *runs* more check runs on *batch_id* and move its checks' end to now (FR-7): first
+    runs, confirmation re-runs, probes and the re-runs of a disturbed or unreproduced failure."""
+    async with async_session_factory() as session:
+        batch = await session.get(LandingBatch, batch_id)
+        if batch is None:
+            return
+        batch.check_runs = (batch.check_runs or 0) + runs
+        batch.checks_ended_at = _now()
+        await session.commit()
 
 
 async def _record_history(
@@ -2305,6 +2334,7 @@ async def _narrow(
                 result = await asyncio.to_thread(project_checks.run_one, probe, path, owner)
         finally:
             await asyncio.to_thread(project_checks._remove_checkout, root, path)
+            await _batch_checks_ran(batch_id, 1)
         if project_checks.could_not_run(result):
             # A probe that never started proves nothing about any prefix: no task is blamed on it
             # (`a-check-that-cannot-run-says-so-and-is-never-silently-excused`, FR-6).

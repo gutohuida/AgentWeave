@@ -3647,6 +3647,16 @@ class LandingBatch(Base):
     error: Mapped[str] = mapped_column(Text, nullable=False, default="")
     created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, nullable=False)
     ended_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), nullable=True)
+    # The batch's landing record (`landing-time-and-test-flakiness-are-measured`, FR-7, migration
+    # 0181). Null on a batch from before it: not recorded, never zero.
+    #: When the earliest of its tasks became ready to land (that landing's `created_at`).
+    ready_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), nullable=True)
+    #: When its checks first held a check slot; its wait is `slot_at - ready_at`.
+    slot_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), nullable=True)
+    #: When its last check run ended; its check time is `checks_ended_at - slot_at`.
+    checks_ended_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), nullable=True)
+    #: How many check runs it made: first runs, confirmation re-runs, probes and re-runs together.
+    check_runs: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
 
     __table_args__ = (Index("ix_landing_batches_project", "project_id", "created_at"),)
 
