@@ -680,7 +680,7 @@ export function useSpecPhaseControls(
   // ── Messages ───────────────────────────────────────────────────────────────────────────────
   // Each message is built once, then laid out twice: stacked as `messages` (the phase bar) and as
   // `notices` (the redesigned header), whose body is the same block, so neither can drop a control.
-  const offer = (offers ?? []).find((entry) => entry.document === path)
+  const offer = (offers ?? []).find((entry) => entry.roadmap === path || entry.document === path)
   const nextSlice = <NextSliceOfferNotice path={path} />
 
   // A stale recommendation (design D5/D5b): the recommended agent is archived or unknown, so

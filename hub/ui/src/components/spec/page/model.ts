@@ -66,7 +66,31 @@ export interface SpecSlice {
   done: string
   buildsAfter: string[]
   /** The change document that specifies the slice, and where it stands. */
-  document?: { path: string; title: string; state: DocState } | null
+  document?: { path: string; title: string; state: DocState; archived?: boolean } | null
+  /** Where the slice stands, with its facts and offer, as the Hub derives them (a roadmap only). */
+  progress?: SliceProgress
+}
+
+/** One slice as the roadmap's page shows it: state, tasks on main, cost, dates and what is offered. */
+export interface SliceProgress {
+  state: 'not_drafted' | 'drafting' | 'approved' | 'building' | 'built'
+  tasks: { landed: number; total: number } | null
+  costUsd: number | null
+  unpriced: number
+  at: string | null
+  waitsFor: string[]
+  offersDrafting: boolean
+  retrospective: { at: string | null } | null
+  warning: string | null
+  addedBy: string | null
+  addedAfterApproval: boolean
+}
+
+export interface RoadmapFigures {
+  built: number
+  total: number
+  costUsd: number
+  unpriced: number
 }
 
 export interface SpecDocumentView {
@@ -89,6 +113,10 @@ export interface SpecDocumentView {
   foldReady?: boolean
   /** A roadmap's slices and the procedures a document describes. */
   slices?: SpecSlice[]
+  /** A roadmap's built-of-total and cost, summed over its builds. */
+  progress?: RoadmapFigures
+  /** What the document rests on: what was checked and where it stops. */
+  evidence?: { checked: string[]; limits: string[] }
   algorithms?: Array<{ name: string; steps: string[] }>
   /** The roadmap this document is a slice of, and its neighbours in build order. */
   roadmap?: {

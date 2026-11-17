@@ -2092,6 +2092,7 @@ async def _record_landed(
         check_run_id = batch.check_run_id
         await session.commit()
         await _announce(session, [landing.id for landing in landings])
+        await _offer_slices_landed(session, landings)
         run = await session.get(TaskCheckRun, check_run_id) if check_run_id else None
         ran_on_landed = run is not None and bool(prefixes) and run.merged_sha == prefixes[-1]
     await _refresh_reachability(project_id, root)
@@ -2102,6 +2103,28 @@ async def _record_landed(
         from . import known_failing
 
         await known_failing.record_run(check_run_id, on_main=prefixes[-1])
+
+
+async def _offer_slices_landed(session: AsyncSession, landings: Sequence[TaskLanding]) -> None:
+    """A landing can make a slice Built and so offer the slices that wait on it: tell the operator
+    (`slice_drafting`). Never raises; a landing is not undone for it."""
+    from .slice_drafting import notify_for_document
+
+    try:
+        document_ids = {
+            document_id
+            for landing in landings
+            if (
+                document_id := await session.scalar(
+                    select(Task.spec_document_id).where(Task.id == landing.task_id)
+                )
+            )
+        }
+        for document_id in document_ids:
+            await notify_for_document(session, document_id)
+        await session.commit()
+    except Exception:  # noqa: BLE001 -- the landing already happened
+        logger.warning("could not offer slices after a landing", exc_info=True)
 
 
 async def _not_landed(
@@ -2323,6 +2346,7 @@ async def _narrow(
         report,
         project_checks.send_back_class([failing]),
         reason,
+        restart_author=True,
     )
     after = landings[culprit:]
     # A task after the culprit built on its work waits for it.
@@ -2595,11 +2619,19 @@ async def _own_accepted_on_main(session, task_id: str) -> frozenset:
 
 
 async def _send_back(
-    landing_id: str, batch_id: str, report: str, reason_class: str, reason: str
+    landing_id: str,
+    batch_id: str,
+    report: str,
+    reason_class: str,
+    reason: str,
+    *,
+    restart_author: bool = False,
 ) -> bool:
     """The task goes back to its author (approved -> revision_needed, the operator's edge, origin
     `checks`, as slice L returns failed work), its landing recorded sent back with *report*, its
-    history row with *reason_class* and the sentence *reason* (FR-8/FR-9)."""
+    history row with *reason_class* and the sentence *reason* (FR-8/FR-9). With *restart_author*
+    (a failure proven on its work), the author's turn is asked for once this commits
+    (`send_back_restart`, capped and left to a live build or flow there)."""
     from .run_task_binding import withdraw_review_entries_for
     from .sse import sse_manager
     from .task_transition_service import ORIGIN_CHECKS, TransitionRefusedError, apply_transition
@@ -2660,6 +2692,10 @@ async def _send_back(
                 task.notes = report
                 await withdraw_review_entries_for(session, task)
                 moved = True
+                if restart_author:
+                    from . import send_back_restart
+
+                    send_back_restart.ask_after_commit(session, task.id)
             except TransitionRefusedError:
                 logger.warning("could not send %s back", landing.task_id, exc_info=True)
         await session.commit()
