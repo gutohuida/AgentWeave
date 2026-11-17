@@ -33,6 +33,12 @@ export interface CorpusStartResult {
   entry_id: string
 }
 
+/** The order the starts are offered in: the recommended one first. */
+export function orderStarts(starts: CorpusStartKind[], recommended: CorpusStartKind | null): CorpusStartKind[] {
+  if (!recommended || !starts.includes(recommended)) return starts
+  return [recommended, ...starts.filter((s) => s !== recommended)]
+}
+
 export function useCorpusState() {
   const { isConfigured, selectedProjectId: projectId } = useConfigStore()
   return useQuery<CorpusState>({

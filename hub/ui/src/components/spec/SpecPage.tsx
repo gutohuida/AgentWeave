@@ -5,7 +5,9 @@ import { toast } from '@/lib/toast'
 import { useConfigStore } from '@/store/configStore'
 import { useProjectEvidence, useSpecDocumentRename, useSpecEvents } from '@/api/spec'
 import type { LoopSummary } from '@/api/loops'
+import { useCorpusState } from '@/api/corpusStart'
 import { SpecHomeView } from './home/SpecHomeView'
+import { CorpusStartOffer } from './page/CorpusStartOffer'
 import { SpecDocList } from './page/SpecDocList'
 import { SpecPlainDocument } from './page/SpecPlainDocument'
 import { SpecWorkspace } from './page/SpecWorkspace'
@@ -32,6 +34,8 @@ interface SpecPageProps {
   evidenceOpen?: boolean
   /** Shown in place of the document beside the list: the evidence view, or one requirement's story. */
   children?: ReactNode
+  /** Opens adding an agent: the start offer's way forward for a project with none. */
+  onAddAgent?: () => void
 }
 
 const NEW_CHANGE_HINT = { title: 'Start a change from a conversation', description: "Open one and press the composer's Spec pill." }
@@ -41,7 +45,7 @@ const NEW_CHANGE_HINT = { title: 'Start a change from a conversation', descripti
  * column, and the open document drawn natively with its header, outline, filters and builds. The
  * conversation is not here; working on a specification with an agent is the conversation view's job.
  */
-export function SpecPage({ document: openDocument, anchor, onOpenDocument, onOpenTasks, onOpenLoop, onOpenEvidence, evidenceOpen = false, children }: SpecPageProps) {
+export function SpecPage({ document: openDocument, anchor, onOpenDocument, onOpenTasks, onOpenLoop, onOpenEvidence, evidenceOpen = false, children, onAddAgent }: SpecPageProps) {
   const list = useSpecListData()
   const { data: evidence, isError: evidenceError } = useProjectEvidence(!!onOpenEvidence)
   useSpecEvents()
@@ -50,6 +54,9 @@ export function SpecPage({ document: openDocument, anchor, onOpenDocument, onOpe
   const inventory = useMemo(() => buildInventory(list.specList), [list.specList])
 
   const projectId = useConfigStore((s) => s.selectedProjectId) ?? ''
+  /* An empty corpus is offered a start in place of the empty page (FR-2). The list, not this read,
+   * decides when the offer goes: a document in the list is a corpus that is not empty. */
+  const corpus = useCorpusState()
   /* The operator asked for the list (or the remembered document is gone): a bare Spec tab stays on it. */
   const [listMode, setListMode] = useState(false)
   useEffect(() => {
@@ -146,6 +153,14 @@ export function SpecPage({ document: openDocument, anchor, onOpenDocument, onOpe
       <div className="aw-sp" data-layout="column">
         {column(null)}
         <div className="aw-sp-main aw-sp-override">{children}</div>
+      </div>
+    )
+  } else if (!list.loading && inventory.nodes.length === 0 && corpus.isLoading) {
+    main = <LoadingThread label="Loading specification" minHeight={240} />
+  } else if (!list.loading && inventory.nodes.length === 0 && corpus.data?.empty) {
+    main = (
+      <div className="aw-sp-empty-page" data-corpus="empty">
+        <CorpusStartOffer key={projectId} projectId={projectId} state={corpus.data} onAddAgent={onAddAgent} />
       </div>
     )
   } else if (!list.loading && inventory.nodes.length === 0) {

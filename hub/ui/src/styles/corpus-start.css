@@ -1,0 +1,48 @@
+/* The start offered to a project with no specs (`a-project-with-no-specs-is-offered-a-start`):
+ * one card in place of the empty Spec page, its two starts as rows. Tokens only. */
+
+.aw-corpus-start {
+  --tone: var(--blue);
+  width: min(100%, 720px);
+  margin: 48px auto;
+  border: 1px solid color-mix(in oklab, var(--tone) 28%, var(--border));
+  border-radius: var(--radius-lg);
+  background: linear-gradient(to right, color-mix(in oklab, var(--tone) 6%, var(--surface)), var(--surface) 55%);
+  box-shadow: 0 1px 2px rgb(0 0 0 / .08), inset 0 1px var(--lift-hi);
+  padding: 18px 20px 8px;
+  container-type: inline-size;
+}
+.aw-corpus-start-title { font-size: 15px; font-weight: 600; color: var(--text); }
+.aw-corpus-start-lede { margin-top: 4px; max-width: 72ch; font-size: 13px; line-height: 1.5; color: var(--text-2); }
+.aw-corpus-start-noagent { margin-top: 12px; font-size: 13px; color: var(--text-2); }
+.aw-corpus-start-options { list-style: none; margin: 10px 0 0; padding: 0; }
+.aw-corpus-start-option {
+  display: grid; grid-template-columns: 30px minmax(0, 1fr) auto; column-gap: 12px; align-items: start;
+  padding: 12px 0;
+}
+.aw-corpus-start-option + .aw-corpus-start-option { border-top: 1px solid var(--border); }
+.aw-corpus-start-icon {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 28px; height: 28px; border-radius: var(--radius-md);
+  background: color-mix(in oklab, var(--tone) 14%, transparent); color: var(--tone);
+}
+.aw-corpus-start-body { min-width: 0; }
+.aw-corpus-start-option-title { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; font-size: 13.5px; font-weight: 500; color: var(--text); }
+.aw-corpus-start-badge {
+  display: inline-flex; align-items: center; height: 18px; padding: 0 7px; border-radius: 999px;
+  background: color-mix(in oklab, var(--green, var(--tone)) 16%, transparent); color: var(--green, var(--tone));
+  font-size: 11px; font-weight: 600;
+}
+.aw-corpus-start-option-detail { margin-top: 3px; max-width: 72ch; font-size: 12.5px; line-height: 1.5; color: var(--text-2); }
+.aw-corpus-start-actions { display: flex; align-items: center; }
+.aw-corpus-start-pick { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.aw-corpus-start-pick-label { font-size: 12.5px; color: var(--text-2); }
+.aw-corpus-start-select {
+  height: 30px; min-width: 160px; padding: 0 8px; border-radius: var(--radius-md);
+  border: 1px solid var(--border); background: var(--surface); color: var(--text); font-size: 13px;
+}
+.aw-corpus-start-select:focus-visible { outline: 2px solid var(--ring); outline-offset: 1px; }
+@container (max-width: 560px) {
+  .aw-corpus-start-option { grid-template-columns: 30px minmax(0, 1fr); row-gap: 8px; }
+  .aw-corpus-start-actions { grid-column: 2; }
+}
