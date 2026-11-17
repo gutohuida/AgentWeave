@@ -3,6 +3,7 @@ import { useQueryClient, type Query, type QueryClient } from '@tanstack/react-qu
 import { useConfigStore } from '@/store/configStore'
 import type { AgentSummary, ContextUsage } from '@/api/agents'
 import type { AgentConversation, ProjectConversations } from '@/api/agentChat'
+import type { ProjectSummary } from '@/api/projects'
 
 export interface SSEEvent {
   type: string
@@ -495,6 +496,16 @@ function applyContextReading(queryClient: QueryClient, pid: string | undefined, 
   return true
 }
 
+/** Whether the cached project list still shows *pid*'s specification set-up item, or lists it as
+ *  dismissed. Only then can a `spec_updated` change the list, so evidence and run events do not
+ *  refetch every project. */
+function listsSpecificationSetup(queryClient: QueryClient, pid: string | undefined): boolean {
+  const projects = queryClient.getQueryData<ProjectSummary[]>(['projects'])
+  const setup = Array.isArray(projects) ? projects.find((p) => p.id === pid)?.setup : undefined
+  if (!setup) return false
+  return [...setup.items, ...setup.dismissed].some((item) => item.key === 'specification')
+}
+
 function invalidateSpecShownPhase(inv: (f?: InvalidateFilters) => void, pid: string | undefined): void {
   inv({ queryKey: ['project', pid, 'spec'] })
   inv({ queryKey: ['project', pid, 'specs'] })
@@ -517,6 +528,11 @@ function applyInvalidation(queryClient: QueryClient, event: SSEEvent): void {
           // Evidence recorded or decided, and a recording run's end, arrive here: each is part of a
           // task's story. The spec page's own listener (`useSpecEvents`) covers the spec queries.
           invalidateTaskStories(queryClient, pid)
+          if (event.type === 'spec_updated' && listsSpecificationSetup(queryClient, pid)) {
+            // A document created anywhere (an agent, the composer, the documents route) ends the
+            // specification set-up item, and only the project list carries it.
+            inv({ queryKey: ['projects'] })
+          }
           break
         case 'task_updated': {
           // A delete broadcasts `{id, deleted: true}` as it commits, which can reach the page before

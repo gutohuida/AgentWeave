@@ -280,6 +280,42 @@ data: {"project_id":"proj-1","id":"x","agent":"claude","run_id":"run-1"}
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['project', 'proj-1', 'settings'] })
   })
 
+  it.each([
+    ['shows', true, true],
+    ['lists as dismissed', false, true],
+    ['no longer carries', false, false],
+  ])('spec_updated refetches the project list only while it %s the specification set-up item (PNSOS-5)', async (label, shown, expected) => {
+    const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query')
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    const item = { id: 'specification', key: 'specification', dismissable: true, agent: null, provider: null, reason: null, detail: null }
+    const listed = label !== 'no longer carries'
+    client.setQueryData(['projects'], [
+      { id: 'proj-1', setup: { items: listed && shown ? [item] : [], dismissed: listed && !shown ? [item] : [] } },
+    ])
+    const invalidateSpy = vi.spyOn(client, 'invalidateQueries')
+    // What `create_spec_document` and the documents route broadcast; the stream stamps the project id.
+    fetchSpy.mockResolvedValue(makeSSEResponse([
+      'event: spec_updated\ndata: {"project_id":"proj-1","path":"spec/changes/x/spec.json","phase":"exploring"}\n\n',
+    ]))
+
+    function Probe() {
+      useSSE()
+      return null
+    }
+    render(
+      <QueryClientProvider client={client}>
+        <Probe />
+      </QueryClientProvider>
+    )
+
+    await waitFor(() => expect(getBufferedEvents().some((e) => e.type === 'spec_updated')).toBe(true))
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    const projectsCalls = invalidateSpy.mock.calls.filter(
+      (c) => JSON.stringify((c[0] as { queryKey?: unknown[] })?.queryKey) === JSON.stringify(['projects']),
+    )
+    expect(projectsCalls.length > 0).toBe(expected)
+  })
+
   it('refetches the project steps and every phase bar when the journey is saved', async () => {
     const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query')
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
