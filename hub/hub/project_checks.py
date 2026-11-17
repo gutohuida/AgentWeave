@@ -13,8 +13,9 @@ project's main tip moves (`refresh`: the Hub's own merge, or `watch_main_forever
 outside it) for a task with no pass of its work. A run main moves past runs to its end and its
 result counts (`a-check-run-finishes-when-master-moves`): a pass counts on any tip, and a failure
 that is not the task's own is asked again on the tip main moved to. Only a run whose task's work a
-new completion replaced is ended, recorded `superseded`, and replaced. At most two run at once per
-Hub, and one per task (D4). The approval gate
+new completion replaced is ended, recorded `superseded`, and replaced. At most `check_concurrency()`
+run at once per Hub (a Hub setting, 2 unless set), a landing batch's served before the rest, and
+one per task (D4). The approval gate
 only *reads* what is recorded (`view`) and starts nothing: a task's run is the gate before review,
 and a pass of its work counts on any main tip; landing is gated by the batch's one run on main with
 the queued work merged (`landing_queue`, `approved-work-merges-in-batches`).
@@ -64,7 +65,7 @@ from typing import Any, Dict, List, Optional, Sequence, Set, Tuple
 from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from . import flaky_tests, known_failing, readable_ids, traces
+from . import check_history, flaky_tests, known_failing, readable_ids, traces
 from .db.engine import async_session_factory
 from .db.models import Project, Run, Task, TaskCheckRun, TaskTransition
 from .subprocess_windows import no_console_kwargs
@@ -73,7 +74,11 @@ from .utils import short_id
 logger = logging.getLogger(__name__)
 
 CHECKS_DIR = Path(".agentweave") / "checks"
-MAX_CONCURRENT_RUNS = 2
+#: How many check runs a Hub runs at once where its operator set nothing
+#: (`landing-time-and-test-flakiness-are-measured`, FR-10): the value before it was a setting.
+DEFAULT_CHECK_CONCURRENCY = 2
+#: The most the setting may be: each run may be a whole suite on this machine.
+MAX_CHECK_CONCURRENCY = 16
 OUTPUT_TAIL_CHARS = 4000
 #: How much of one test's own failure message a result keeps (a fix task quotes it).
 TEST_MESSAGE_CHARS = 1500
@@ -451,7 +456,7 @@ def check_environment() -> Tuple[Dict[str, str], List[str]]:
             removed.append(value)
         else:
             env[name] = value
-    # `-n auto` sizes pytest-xdist to every CPU, and up to MAX_CONCURRENT_RUNS checks run at once
+    # `-n auto` sizes pytest-xdist to every CPU, and up to `check_concurrency()` checks run at once
     # beside the agents: on the operator's 20-CPU machine that was 40+ workers on 20 CPUs, the
     # suite ran 5-12 min, and the timing-sensitive tests flaked (2026-10-25). Each run gets a share
     # with room left for the agents. Only `-n auto` reads it; an explicit `-n 8` is the operator's,
@@ -467,7 +472,7 @@ XDIST_AUTO_WORKERS_VARIABLE = "PYTEST_XDIST_AUTO_NUM_WORKERS"
 def auto_workers(cpus: Optional[int] = None) -> int:
     """The xdist workers one check run gets for `-n auto`: the CPUs shared by the runs that may run
     at once and one share kept for everything else (the agents, the Hub)."""
-    return max(1, (cpus or os.cpu_count() or 2) // (MAX_CONCURRENT_RUNS + 1))
+    return max(1, (cpus or os.cpu_count() or 2) // (check_concurrency() + 1))
 
 
 def scrub(text: str, removed: Sequence[str]) -> str:
@@ -1000,6 +1005,15 @@ def _judge_by_report(
     which of them its report shows passing, so that a pass proves they ran."""
     report, how = read_report(check, cwd)
     result["report"] = how
+    if check.get(check_history.RECORD_KEY) and report is not None:
+        # Every test the report names, for the run's history (`check_history`); taken off the
+        # result before it is stored. A skipped test did not run, so it has no outcome.
+        result[check_history.OUTCOMES_KEY] = {
+            test: check_history.FAILED if failed_ else check_history.PASSED
+            for test, failed_ in report.outcomes.items()
+            if failed_ is not None
+        }
+        result[check_history.FILES_KEY] = dict(report.files)
     asked = list(check.get("rerun_tests") or [])
     if asked and report is not None:
         result["passed_tests"] = [test for test in asked if report.outcomes.get(test) is False]
@@ -1372,6 +1386,18 @@ def _still_failing(again: Dict[str, Any], node_ids: Sequence[str]) -> List[str]:
     return [node for node in node_ids if node in named]
 
 
+def _flipped(again: Dict[str, Any], node_ids: Sequence[str]) -> List[str]:
+    """Which of *node_ids*, failing in the first run, the re-run *again* passed
+    (`landing-time-and-test-flakiness-are-measured`, FR-5, FR-6): those its report shows passing,
+    or, where it read no report, all of them if it passed and none if it failed. A test the re-run
+    failed too, or did not run, did not flip."""
+    taken = check_history.take(again)
+    if taken is None:
+        return [] if failed(again) else list(node_ids)
+    outcomes, _files = taken
+    return [node for node in node_ids if outcomes.get(node) == check_history.PASSED]
+
+
 def confirm_failure(
     check: Dict[str, Any],
     cwd: Path,
@@ -1395,13 +1421,17 @@ def confirm_failure(
     narrowed = rerun_check(check, node_ids)
     how, again = "check", None
     if narrowed is not None:
-        again = run_one(narrowed, cwd, owner)
+        again = run_one(check_history.recording(narrowed), cwd, owner)
         if proves_the_tests_pass(again, node_ids) or reproduces_a_test_failure(again):
             how = "tests"
         else:
             again = None  # the re-run proved nothing either way: run the check
     if again is None:
-        again = run_one(check, cwd, owner)
+        again = run_one(check_history.recording(check), cwd, owner)
+    flipped = _flipped(again, node_ids)
+    if flipped:
+        # A failure the re-run of the same tree passed is a flip in the test's history (FR-5).
+        result[check_history.FLIPPED_KEY] = flipped
     attempt = {
         "how": how,
         "tests": node_ids if how == "tests" else [],
@@ -1771,46 +1801,169 @@ _processes: Dict[str, subprocess.Popen] = {}
 _seen_tips: Dict[str, str] = {}
 _starting: Set[str] = set()
 _pending: Set["asyncio.Task[Any]"] = set()
-_semaphores: Dict[int, asyncio.Semaphore] = {}
-#: One taker of every slot at a time (`_every_slot`), so two never each hold part and wait forever.
-_every_slot_locks: Dict[int, asyncio.Lock] = {}
+#: The check slots of each event loop (`CheckSlots`), by `id(loop)`.
+_semaphores: Dict[int, "CheckSlots"] = {}
 #: Set, by run id, once the run's fast checks have all decided (or the run ended): what an agent's
 #: completion waits on (D2). Gone once set; a waiter that finds none reads the recorded run.
 _fast_waiters: Dict[str, asyncio.Event] = {}
-#: By run id, when a run began waiting for a check slot (the semaphore), while it waits (F1076).
+#: By run id, when a run began waiting for a check slot, while it waits (F1076).
 _waiting_for_slot: Dict[str, datetime] = {}
 #: Recorded in `_superseded` in place of a main tip: the task's work changed under the run (a new
 #: completion), not main.
 _NEW_WORK = "new-work"
+#: The operator's check concurrency (`hub_settings.check_concurrency`), `None` for the default:
+#: read at the Hub's start (`load_check_concurrency`) and set by the settings route.
+_concurrency: Optional[int] = None
 
 
-def _semaphore() -> asyncio.Semaphore:
+def check_concurrency() -> int:
+    """How many check runs the Hub runs at once now (`landing-time-and-test-flakiness-are-
+    measured`, FR-10): the operator's setting, else `DEFAULT_CHECK_CONCURRENCY`. Read each time a
+    slot is given, so a change applies to the next run that takes one, without a restart."""
+    return _concurrency or DEFAULT_CHECK_CONCURRENCY
+
+
+def set_check_concurrency(value: Optional[int]) -> None:
+    """Use *value* (`None`: the default) from now on, and give any slot it frees to the waiting."""
+    global _concurrency
+    _concurrency = value
+    try:
+        slots = _semaphores.get(id(asyncio.get_running_loop()))
+    except RuntimeError:
+        slots = None
+    if slots is not None:
+        slots.grant()
+
+
+async def load_check_concurrency() -> int:
+    """Read the operator's setting from `hub_settings` (at the Hub's start); the limit in force."""
+    from .db.models import HubSettings
+
+    async with async_session_factory() as session:
+        row = await session.get(HubSettings, 1)
+    set_check_concurrency(row.check_concurrency if row is not None else None)
+    return check_concurrency()
+
+
+@dataclass
+class _SlotWaiter:
+    rank: int
+    order: int
+    whole: bool
+    future: "asyncio.Future[None]"
+
+
+class CheckSlots:
+    """The Hub's check slots (`landing-time-and-test-flakiness-are-measured`, FR-3, FR-10).
+
+    At most `check_concurrency()` runs hold one at a time, read each time one is given, so a lower
+    setting holds new runs back until enough have ended. Waiters are served by rank, then in the
+    order they came: a landing batch's runs first, because every approved task waits on them,
+    while a pre-review run delays only its author. The first waiter is served before any after it,
+    so a run waiting for every slot (`_every_slot`) is never passed by runs taking one."""
+
+    #: Ranks: a landing batch's runs (its checks, re-runs and probes), then everything else.
+    LANDING = 0
+    OTHER = 1
+
+    def __init__(self) -> None:
+        self.held = 0
+        self.whole = False
+        self._waiters: List[_SlotWaiter] = []
+        self._order = 0
+
+    def _free_for(self, waiter: _SlotWaiter) -> bool:
+        if self.whole:
+            return False
+        return self.held == 0 if waiter.whole else self.held < check_concurrency()
+
+    def grant(self) -> None:
+        """Give slots to the waiters in turn, as far as the first that cannot have one."""
+        self._waiters.sort(key=lambda w: (w.rank, w.order))
+        while self._waiters:
+            waiter = self._waiters[0]
+            if waiter.future.done():  # cancelled while it waited
+                self._waiters.pop(0)
+                continue
+            if not self._free_for(waiter):
+                return
+            self._waiters.pop(0)
+            if waiter.whole:
+                self.whole = True
+            else:
+                self.held += 1
+            waiter.future.set_result(None)
+
+    async def acquire(self, landing: bool = False, whole: bool = False) -> None:
+        """Wait for a slot (*whole*: every slot, entered once no run holds one)."""
+        self._order += 1
+        waiter = _SlotWaiter(
+            rank=self.LANDING if landing else self.OTHER,
+            order=self._order,
+            whole=whole,
+            future=asyncio.get_running_loop().create_future(),
+        )
+        self._waiters.append(waiter)
+        self.grant()
+        try:
+            await waiter.future
+        except asyncio.CancelledError:
+            if waiter.future.done() and not waiter.future.cancelled():
+                self._give_back(whole)  # given, then cancelled before it could be used
+            elif waiter in self._waiters:
+                self._waiters.remove(waiter)
+            self.grant()
+            raise
+
+    def _give_back(self, whole: bool) -> None:
+        if whole:
+            self.whole = False
+        else:
+            self.held -= 1
+
+    def release(self, whole: bool = False) -> None:
+        self._give_back(whole)
+        self.grant()
+
+    def locked(self) -> bool:
+        """Whether a run asking now would wait: every slot is held."""
+        return self.whole or self.held >= check_concurrency()
+
+    @contextlib.asynccontextmanager
+    async def slot(self, landing: bool = False) -> Any:
+        await self.acquire(landing=landing)
+        try:
+            yield
+        finally:
+            self.release()
+
+
+def _semaphore() -> CheckSlots:
+    """This event loop's check slots."""
     loop_id = id(asyncio.get_running_loop())
     if loop_id not in _semaphores:
-        _semaphores[loop_id] = asyncio.Semaphore(MAX_CONCURRENT_RUNS)
+        _semaphores[loop_id] = CheckSlots()
     return _semaphores[loop_id]
+
+
+def check_slot(landing: bool = False) -> Any:
+    """One check slot as `async with`: for a landing batch's run (*landing*), served first, or
+    for any other run."""
+    return _semaphore().slot(landing=landing)
 
 
 @contextlib.asynccontextmanager
 async def _every_slot() -> Any:
     """Every check slot at once: entered once no other check run holds one, and while it is held
     none starts. A disturbed landing run is run again so, on a quiet Hub
-    (`a-landing-failure-is-blamed-on-a-task-only-when-it-reproduces-there`, FR-4). The semaphore
-    queues its waiters in order, so the slots are taken as the runs ahead give them back."""
-    loop_id = id(asyncio.get_running_loop())
-    if loop_id not in _every_slot_locks:
-        _every_slot_locks[loop_id] = asyncio.Lock()
-    semaphore = _semaphore()
-    taken = 0
-    async with _every_slot_locks[loop_id]:
-        try:
-            for _ in range(MAX_CONCURRENT_RUNS):
-                await semaphore.acquire()
-                taken += 1
-            yield
-        finally:
-            for _ in range(taken):
-                semaphore.release()
+    (`a-landing-failure-is-blamed-on-a-task-only-when-it-reproduces-there`, FR-4). It waits as a
+    landing run, and no run waiting after it takes a slot first."""
+    slots = _semaphore()
+    await slots.acquire(landing=True, whole=True)
+    try:
+        yield
+    finally:
+        slots.release(whole=True)
 
 
 async def _took_slot(run_id: str) -> None:
@@ -1820,7 +1973,7 @@ async def _took_slot(run_id: str) -> None:
     a 70-minute run, which the mender called hung (F1076). Held in memory, the wait was lost at a
     restart; on the row it survives one, and the build's tally splits waiting from running by it
     (`the-build-card-shows-where-check-time-went` FR-1). Called at every place a run takes
-    `_semaphore()` -- a task's run here, a landing batch's in `landing_queue` -- and only once it
+    `check_slot()` -- a task's run here, a landing batch's in `landing_queue` -- and only once it
     holds the slot, so a run ended or superseded while waiting records none."""
     async with async_session_factory() as session:
         run = await session.get(TaskCheckRun, run_id)
@@ -2034,11 +2187,16 @@ async def _execute(
                 if ran is None and check.get("changed_files") is not None:
                     # Not sized after all: it runs, and is reused, as the full command.
                     check = {k: v for k, v in check.items() if k != "changed_files"}
-                result = await asyncio.to_thread(run_one, ran or check, path, task_id)
+                result = await asyncio.to_thread(
+                    run_one, check_history.recording(ran or check), path, task_id
+                )
+                outcomes = check_history.take(result)
                 result.update(sizing(check, ran))
+
                 if unjudged_timeout(result) and task_id not in _superseded:
                     # Not confirmed: running out of time again would say no more about the work.
                     # The run is retried instead (FR-9).
+                    await _record_history(project_id, run_id, merged, check, outcomes, result)
                     result.update(tree=tree, check_digest=check_digest(check))
                     results.append(result)
                     timed_out = check
@@ -2053,6 +2211,7 @@ async def _execute(
                     if result.get("flaky"):
                         # Raised to the operator, not only to the reviewer (`flaky_tests`).
                         await flaky_tests.record_flake(run_id, result)
+                await _record_history(project_id, run_id, merged, check, outcomes, result)
                 if judged and failed(result) and task_id not in _superseded:
                     # Whose it is, the known-failing list decides: nothing runs on main for it but
                     # the twice rule's one test (`failures-already-known-are-on-a-list-not-re-
@@ -2127,7 +2286,7 @@ async def _execute(
                 _fast_decided(run_id)
             if outcome is None and pairs[split:]:
                 _waiting_for_slot[run_id] = datetime.now(timezone.utc)
-                async with _semaphore():
+                async with check_slot():
                     _waiting_for_slot.pop(run_id, None)
                     if await superseded():
                         # Its work changed while it waited: it ends here without running, so it
@@ -2170,6 +2329,27 @@ async def _execute(
     finally:
         _fast_decided(run_id)
         _waiting_for_slot.pop(run_id, None)
+
+
+async def _record_history(
+    project_id: str,
+    run_id: str,
+    merged: str,
+    check: Dict[str, Any],
+    outcomes: Optional[check_history.Outcomes],
+    result: Dict[str, Any],
+) -> None:
+    """Every test a task's pre-review run of *check* names, flips included (`check_history`,
+    FR-5)."""
+    await check_history.record(
+        project_id=project_id,
+        check_run_id=run_id,
+        phase=check_history.PHASE_REVIEW,
+        commit_sha=merged,
+        check_name=check["name"],
+        taken=outcomes,
+        result=result,
+    )
 
 
 #: The name of the result a check run records its generated-files rebuild under (FR-8).
@@ -2941,7 +3121,7 @@ async def review_wait(session: AsyncSession, task: Task) -> Optional[ReviewWait]
             "running",
             run_id,
             f"its fast checks passed and the rest have waited {_duration(queued)} for a check slot "
-            f"behind other runs, at most {MAX_CONCURRENT_RUNS} running at once{took} (check run "
+            f"behind other runs, at most {check_concurrency()} running at once{took} (check run "
             f"{run_id}); queued is not hung, and its review is offered once they pass",
         )
     if seen.state == "running" and run is not None and run.started_at is not None:
