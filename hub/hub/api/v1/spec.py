@@ -937,6 +937,9 @@ class ArchiveBatchRequest(RequestModel):
     )
     # Said on every archive in the batch; left empty, a superseded document's own mark says why.
     reason: str = Field(default="", max_length=2000)
+    all_or_none: bool = False
+    check_only: bool = False
+    no_capability_change: bool = False
 
 
 class TidyReviewedRequest(RequestModel):
@@ -994,22 +997,37 @@ async def archive_batch(
 
     Each path is archived as `POST /documents/phase?to=archived` would, in its own savepoint: one
     refused leaves the others archived and is reported in `refused` with its code and reason.
+
+    `all_or_none` checks every document first and archives none when any would be refused (a
+    finished roadmap and its slices go together or not at all); `check_only` stops after the check
+    and answers `plan`, what archiving would do to each. `no_capability_change` states, for an
+    approved change not folded into a capability, that it changes none, with `reason`.
     """
     project_id, _ = project
     workspace = await _workspace(session, project_id)
-    archived: List[str] = []
-    refused: List[Dict[str, Any]] = []
-    for path in dict.fromkeys(body.paths):
+    paths = list(dict.fromkeys(body.paths))
+    given = body.reason.strip()
+
+    async def attempt(path: str, *, dry_run: bool):
+        """Archive one document in a savepoint; on `dry_run` roll it back. (document, moved, refusal)."""
         try:
             document = await _require_document(session, project_id, path)
         except HTTPException as exc:
-            refused.append(_batch_refusal(path, exc))
-            continue
-        reason, no_capability_change, absorbed_by = await _archive_reason(
-            session, project_id, document, body.reason.strip()
-        )
+            return None, None, _batch_refusal(path, exc)
+        reason, no_change, absorbed_by = await _archive_reason(session, project_id, document, given)
+        unfolded = False
+        if (
+            body.no_capability_change
+            and not no_change
+            and document.kind == "change-spec"
+            and document.phase == spec_lifecycle.APPROVED
+            and not await spec_lifecycle.merged_into(session, document)
+        ):
+            no_change, unfolded = True, True
+            reason = given or "built; changes no capability of its own"
+        moved = None
         try:
-            async with session.begin_nested():
+            async with session.begin_nested() as savepoint:
                 moved = await _move_phase(
                     session,
                     workspace,
@@ -1017,28 +1035,62 @@ async def archive_batch(
                     document,
                     to=spec_lifecycle.ARCHIVED,
                     reason=reason,
-                    no_capability_change=no_capability_change,
+                    no_capability_change=no_change,
                     absorbed_by=absorbed_by,
                 )
-                await spec_service.rerender_phase(session, workspace, document)
-                if document.kind == "capability":
-                    await spec_index.reindex_from_file(
-                        session,
-                        workspace,
-                        document,
-                        actor=_operator(),
-                        source=spec_index.SOURCE_HUB,
-                    )
-                    await _refresh_index_entry(session, workspace, project_id, document.path)
+                if dry_run:
+                    await savepoint.rollback()
+                else:
+                    await spec_service.rerender_phase(session, workspace, document)
+                    if document.kind == "capability":
+                        await spec_index.reindex_from_file(
+                            session,
+                            workspace,
+                            document,
+                            actor=_operator(),
+                            source=spec_index.SOURCE_HUB,
+                        )
+                        await _refresh_index_entry(session, workspace, project_id, document.path)
         except HTTPException as exc:
             # The savepoint rolled the row back; reload it so a later read sees the stored phase.
             await session.refresh(document)
-            refused.append(_batch_refusal(path, exc))
+            return document, None, _batch_refusal(path, exc)
+        if dry_run:
+            await session.refresh(document)
+        return document, (moved, unfolded), None
+
+    plan: List[Dict[str, Any]] = []
+    if body.all_or_none or body.check_only:
+        for path in paths:
+            document, outcome, refusal = await attempt(path, dry_run=True)
+            if refusal is not None:
+                plan.append({**refusal, "will": "refuse"})
+            else:
+                plan.append(
+                    {
+                        "path": document.path,
+                        "will": "archive_no_capability_change" if outcome[1] else "archive",
+                    }
+                )
+        if body.check_only or any(entry["will"] == "refuse" for entry in plan):
+            refused = [e for e in plan if e["will"] == "refuse"]
+            return {
+                "archived": [],
+                "refused": [{k: v for k, v in e.items() if k != "will"} for e in refused],
+                "plan": plan,
+            }
+
+    archived: List[str] = []
+    refused: List[Dict[str, Any]] = []
+    for path in paths:
+        document, outcome, refusal = await attempt(path, dry_run=False)
+        if refusal is not None:
+            refused.append(refusal)
             continue
-        _defer_phase_broadcasts(session, project_id, document, moved)
+        _defer_phase_broadcasts(session, project_id, document, outcome[0])
         archived.append(document.path)
     await session.commit()
-    return {"archived": archived, "refused": refused}
+    return {"archived": archived, "refused": refused, "plan": plan}
 
 
 @router.post("/documents/{path:path}/hold")
