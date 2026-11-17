@@ -90,12 +90,14 @@ const NOTES: Record<RelationsView, string> = {
     'A — Links on each row. Every build names its roadmap › slice and the capabilities it changes, each one click away. Cheapest to build and to read row by row; the relations between rows are not shown, so seeing that three builds touched the same capability means scanning.',
   tree:
     'B — An outline. The same builds regrouped under their roadmaps, slice by slice, with the capabilities each changes beneath it. Shows which builds belong together; a capability touched from two roadmaps appears twice. Hover anything to light what it connects to.',
+  'links-map':
+    'A + C — Links on every row, so each build’s roadmap, slice and capabilities are one click from where you read it; and the drawn map below the builds for how they relate to the rest. Hover a row and the map lights that build’s roadmap and capabilities; hover a box in the map and the rows it connects to stay lit while the rest dim. Capabilities follows, listing every capability, including those no recent build touched.',
   map:
     'C — A drawn map. Roadmaps, the shown builds and their capabilities in three columns joined by threads; hover a roadmap, build or capability to light everything it connects to. Shows shared capabilities at a glance; the most to build, and it grows tall as more builds are shown.',
 }
 
 export default function SpecHome() {
-  const [relations, setRelations] = React.useState<RelationsView>('links')
+  const [relations, setRelations] = React.useState<RelationsView>('links-map')
   return (
     <div className="mock-threads">
       <div className="mock-threads-bar">
@@ -107,6 +109,7 @@ export default function SpecHome() {
             { value: 'links', label: 'A · Links on rows' },
             { value: 'tree', label: 'B · Outline' },
             { value: 'map', label: 'C · Drawn map' },
+            { value: 'links-map', label: 'A + C' },
           ]}
         />
       </div>

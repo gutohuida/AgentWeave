@@ -33,7 +33,8 @@ export interface HomeCapability extends HomeDocRef {
   waiting: number
 }
 
-export type RelationsView = 'links' | 'tree' | 'map'
+/** `links-map`: links on every row, and the drawn map below the builds (the operator's A + C). */
+export type RelationsView = 'links' | 'tree' | 'map' | 'links-map'
 
 export function SpecHome({
   builds,
@@ -85,7 +86,7 @@ export function SpecHome({
       </section>
 
       {relations === 'tree' ? <RelationTree builds={shown} focus={focus} onFocus={setFocus} onOpen={onOpen} /> : null}
-      {relations === 'map' ? <RelationMap builds={shown} focus={focus} onFocus={setFocus} onOpen={onOpen} /> : null}
+      {relations === 'map' || relations === 'links-map' ? <RelationMap builds={shown} focus={focus} onFocus={setFocus} onOpen={onOpen} /> : null}
 
       {relations !== 'map' ? (
         <section className="aw-home-section" data-testid="spec-home-capabilities">
@@ -101,7 +102,7 @@ export function SpecHome({
                   className="aw-home-cap"
                   data-testid="spec-home-capability-row"
                   data-path={c.path}
-                  data-lit={focus ? litBy(shown, focus).has(c.path) || undefined : undefined}
+                  data-lit={focus ? String(litBy(shown, focus).has(c.path)) : undefined}
                   onClick={() => onOpen(c.path)}
                 >
                   <span className="aw-home-cap-title">{c.title}</span>
@@ -171,7 +172,7 @@ function BuildRow({
         <button data-slot="home-open" type="button" className="aw-home-title" onClick={() => onOpen(build.document.path)}>
           {build.document.title}
         </button>
-        {relations === 'links' ? <RelationLinks build={build} onOpen={onOpen} /> : null}
+        {relations === 'links' || relations === 'links-map' ? <RelationLinks build={build} onOpen={onOpen} /> : null}
       </div>
       <div className="aw-home-facts">
         {running ? (
