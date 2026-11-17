@@ -1533,7 +1533,13 @@ async def run_batch_checks(
                             f"{check.get('timeout_seconds')}s time limit and named no failing test"
                         )
                         break
-                    if project_checks.failed(result):
+                    # A check whose command never started is neither confirmed nor judged: no
+                    # entry excuses it and no task is blamed for it (`a-check-that-cannot-run-
+                    # says-so-and-is-never-silently-excused`, FR-5, FR-6); the rest still run.
+                    judged = project_checks.failed(result) and not project_checks.could_not_run(
+                        result
+                    )
+                    if judged:
                         await asyncio.to_thread(
                             project_checks.confirm_failure, check, path, result, owner, changed
                         )
@@ -1542,7 +1548,7 @@ async def run_batch_checks(
                             from . import flaky_tests
 
                             await flaky_tests.record_flake(run_id, result)
-                    if project_checks.failed(result):
+                    if judged and project_checks.failed(result):
                         # Whose it is, the list decides (FR-7): nothing runs on main for it.
                         await known_failing.judge(
                             project_id=project_id,
@@ -1556,7 +1562,7 @@ async def run_batch_checks(
                     result.update(tree=tree, check_digest=project_checks.check_digest(check))
                 results.append(result)
                 await _record_run(run_id, results)
-                if project_checks.failed(result) and not project_checks.preexisting(result):
+                if project_checks.counts_against(result):
                     break  # the batch's own failure decides it
     except Exception as exc:  # noqa: BLE001 -- a run ends recorded, never `running` forever
         logger.warning("the checks of batch %s failed to complete", batch_id, exc_info=True)
@@ -1608,6 +1614,16 @@ async def _record_run(
 
 #: A batch's `error` begins with this where its checks ran out of time and judged nothing.
 UNJUDGED_TIMEOUT = "unjudged timeout:"
+#: A batch's `error` begins with this where a check's command could not start, naming each.
+COULD_NOT_RUN_PREFIX = "could not run:"
+
+
+class _ProbeCouldNotRunError(Exception):
+    """A narrowing probe whose command could not start: the narrowing stops, blaming nobody."""
+
+    def __init__(self, result: Dict[str, Any]) -> None:
+        super().__init__(str(result.get("name")))
+        self.result = result
 
 
 def _close_check_run(run: Optional[TaskCheckRun], batch: LandingBatch) -> None:
@@ -1678,7 +1694,22 @@ async def _decide(
     A failure of the batch's own naming at least its check's disturbed threshold of tests in files
     no task of the batch changed is the machine's, not a change's: the batch's checks run once more,
     on a quiet Hub, and are decided again with *disturbed* carried (FR-4). Only once: what that run
-    fails is narrowed, so nobody is sent back unless a prefix reproduces it (FR-1)."""
+    fails is narrowed, so nobody is sent back unless a prefix reproduces it (FR-1).
+
+    A batch in which any check could not run does not land, is not narrowed and sends nobody back:
+    its landings are queued again in their places, still approved, for the next batch
+    (`a-check-that-cannot-run-says-so-and-is-never-silently-excused`, FR-6, FR-11, D6)."""
+    if project_checks.could_not_run_results(outcome.results):
+        await _requeue([landing.id for landing in landings])
+        await _end_batch(
+            batch_id,
+            "failed",
+            error=(
+                f"{COULD_NOT_RUN_PREFIX} {project_checks.could_not_run_summary(outcome.results)}; "
+                "the batch's work was not checked, so it did not land and waits for the next batch"
+            ),
+        )
+        return False
     if outcome.unjudged:
         # Nobody's failure yet: queued again once, as a run that judged nothing (AW-39); a second
         # in a row is narrowed like a failure (FR-9), as is the run again of a failure no prefix
@@ -1709,9 +1740,7 @@ async def _decide(
         await _requeue([landing.id for landing in landings])
         await _end_batch(batch_id, "failed", error=outcome.error)
         return False  # the Hub could not produce a result: tried again at the next kick
-    own = [
-        r for r in outcome.results if project_checks.failed(r) and not project_checks.preexisting(r)
-    ]
+    own = [r for r in outcome.results if project_checks.counts_against(r)]
     if not own:
         # Passed, or failed only where the list says the failure is not the work's: it lands, and
         # the entries it went past stay on the batch's results for its landings to name (FR-10).
@@ -2251,6 +2280,10 @@ async def _narrow(
                 result = await asyncio.to_thread(project_checks.run_one, probe, path, owner)
         finally:
             await asyncio.to_thread(project_checks._remove_checkout, root, path)
+        if project_checks.could_not_run(result):
+            # A probe that never started proves nothing about any prefix: no task is blamed on it
+            # (`a-check-that-cannot-run-says-so-and-is-never-silently-excused`, FR-6).
+            raise _ProbeCouldNotRunError(result)
         if (
             rerun
             and result.get("report") == project_checks.REPORT_READ
@@ -2285,15 +2318,32 @@ async def _narrow(
         return failing_here
 
     lo, hi = 1, len(prefixes)
-    while lo < hi:
-        mid = (lo + hi) // 2
-        if await fails_at(mid):
-            hi = mid
-        else:
-            lo = mid + 1
-    culprit = lo
-    # Elimination is not evidence: the culprit's own prefix fails, and the commit before it passes.
-    proven = await fails_at(culprit) and not await fails_at(culprit - 1)
+    try:
+        while lo < hi:
+            mid = (lo + hi) // 2
+            if await fails_at(mid):
+                hi = mid
+            else:
+                lo = mid + 1
+        culprit = lo
+        # Elimination is not evidence: the culprit's own prefix fails, and the commit before it
+        # passes.
+        proven = await fails_at(culprit) and not await fails_at(culprit - 1)
+    except _ProbeCouldNotRunError as stopped:
+        async with async_session_factory() as session:
+            batch = await session.get(LandingBatch, batch_id)
+            batch.narrowing = [*(batch.narrowing or []), *log]
+            await session.commit()
+        await _requeue([landing.id for landing in landings])
+        await _end_batch(
+            batch_id,
+            "failed",
+            error=(
+                f"{COULD_NOT_RUN_PREFIX} {project_checks.could_not_run_summary([stopped.result])} "
+                "while narrowing; nobody was blamed, and the batch's work waits for the next batch"
+            ),
+        )
+        return False
     async with async_session_factory() as session:
         batch = await session.get(LandingBatch, batch_id)
         # Kept: an earlier round's probes (FR-3) and a disturbed run's run again (FR-4).
