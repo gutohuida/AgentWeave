@@ -499,3 +499,39 @@ async def test_a_fast_check_that_could_not_run_does_not_refuse_the_completion(tm
     ]
     assert not project_checks.own_failure(results)
     assert "lint" not in project_checks.failure_report(results, run_id="chk-x", merged_sha="")
+
+
+# ---------------------------------------------------------------------------------------------
+# FR-7: a checkout that lacks a dependency directory says so beside the 'could not run'
+# ---------------------------------------------------------------------------------------------
+
+
+async def test_ac_link_failure_recorded_beside_could_not_run(
+    app, auth_headers, tmp_path, monkeypatch
+):
+    from hub import worktrees
+
+    task_id, _ = await _task_with_work(tmp_path)
+    (tmp_path / "hub" / "ui").mkdir(parents=True)
+    (tmp_path / "hub" / "ui" / "package.json").write_text("{}", encoding="utf-8")
+    (tmp_path / "hub" / "ui" / "node_modules").mkdir()
+    for args in (["add", "hub/ui/package.json"], ["commit", "-q", "-m", "ui"]):
+        subprocess.run(["git", "-C", str(tmp_path), *args], check=True, capture_output=True)
+
+    def refuse(*_args, **_kwargs):
+        raise OSError("A required privilege is not held by the client")
+
+    monkeypatch.setattr(Path, "symlink_to", refuse)
+    monkeypatch.setattr(worktrees, "_make_junction", refuse)
+    await _configure([_lint(tmp_path, tmp_path / "never")])
+
+    await project_checks.request_run("proj-test", task_id)
+    await project_checks.drain()
+
+    read = await app.get(f"/api/v1/projects/proj-test/tasks/{task_id}/checks", headers=auth_headers)
+    assert read.status_code == 200, read.text
+    [result] = read.json()["runs"][0]["results"]
+    assert result["outcome"] == "could_not_run"
+    assert result["dependency_link_failures"] == [
+        {"name": "hub/ui/node_modules", "reason": "A required privilege is not held by the client"}
+    ]

@@ -484,6 +484,17 @@ def run_one(check: Dict[str, Any], cwd: Path, owner: Optional[str] = None) -> Di
     """
     with traces.command(check["command"], name=f"check {check['name']}") as span:
         result = _run_one(check, cwd, owner)
+        # A checkout the Hub made without a dependency directory it wanted (F567): every check run
+        # in it says so, beside its own outcome, so a 'could not run' is not read as the work's
+        # (`a-check-that-cannot-run-says-so...`, FR-7). Pre-review, landing, main and generated-
+        # files checkouts all run their checks here.
+        from .worktrees import link_failures_of
+
+        links = link_failures_of(cwd)
+        if links:
+            result["dependency_link_failures"] = [
+                {"name": f.name, "reason": f.reason} for f in links
+            ]
         traces.exited(
             span,
             result["exit_code"],
