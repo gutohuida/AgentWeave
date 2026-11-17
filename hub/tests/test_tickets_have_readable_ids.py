@@ -930,9 +930,7 @@ async def test_ac_shown_a_review_names_a_siblings_requirements_by_the_readable_i
 
 def test_ac_shown_the_drafting_turn_lists_tasks_by_the_readable_id():
     task = Task(id="task-abc", title="Build it", status="approved", readable_id="BPS-3")
-    message = slice_drafting.next_slice_message(
-        {"roadmap": "spec/roadmap/spec.json"}, tasks=[task]
-    )
+    message = slice_drafting.next_slice_message({"roadmap": "spec/roadmap/spec.json"}, tasks=[task])
     assert "- `BPS-3` Build it: approved" in message and "task-abc" not in message
 
 
