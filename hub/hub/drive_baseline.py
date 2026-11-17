@@ -18,13 +18,18 @@ the checks named so the reviewer sends the drive back naming them. Whether a che
 
 The operator is held only to FR-6: what they may do with evidence is unchanged (a non-goal), so a
 baseline they accepted is theirs to have judged.
+
+A check named for a *guard* criterion (`guard: true` in the document) is exempt from FR-7: a guard
+states behaviour the code already had, so on the pre-build code it passes, or fails only on names
+the build adds, and cannot honestly fail at its own assertion (operator, 2026-11-17, after CTCRS-1).
+Marking a criterion a guard is the operator's (`spec_amendments`); every other check is still held.
 """
 
 from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Iterable, List, Optional, Set
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -94,8 +99,11 @@ def checks_of(evidence: RequirementEvidence) -> List[Check]:
     return list(found.values())
 
 
-def bad_checks(evidence: RequirementEvidence) -> List[Check]:
-    return [check for check in checks_of(evidence) if check.bad]
+def bad_checks(evidence: RequirementEvidence, guards: Iterable[str] = ()) -> List[Check]:
+    """The checks *evidence* lists that were not reached or did not fail, less those named for a
+    guard criterion in *guards*."""
+    exempt = set(guards)
+    return [check for check in checks_of(evidence) if check.bad and check.key not in exempt]
 
 
 def _document_tasks(workspace, path: str) -> Optional[list]:
@@ -104,6 +112,41 @@ def _document_tasks(workspace, path: str) -> Optional[list]:
     payload = read_payload(workspace, path)
     tasks = (payload or {}).get("tasks")
     return tasks if isinstance(tasks, list) else None
+
+
+def guard_criteria(payload: Optional[Dict[str, Any]]) -> Set[str]:
+    """The keys of *payload*'s criteria marked `guard: true` (a bare `true`, not a truthy text)."""
+    return {
+        criterion["key"]
+        for criterion in (payload or {}).get("acceptance_criteria") or []
+        if isinstance(criterion, dict)
+        and criterion.get("guard") is True
+        and isinstance(criterion.get("key"), str)
+    }
+
+
+def _document_guards(workspace, path: str) -> Set[str]:
+    from .spec_documents import read_payload
+
+    return guard_criteria(read_payload(workspace, path))
+
+
+async def guard_keys(session: AsyncSession, task: Optional[Task]) -> Set[str]:
+    """The guard criteria of *task*'s change document. Empty where the document cannot be read:
+    an exemption is not invented from a missing file."""
+    from .project_workspace import ProjectWorkspaceError, resolve_project_workspace
+    from .spec_manifest import SpecPathError
+
+    if task is None or not task.spec_document_id:
+        return set()
+    document = await session.get(SpecDocument, task.spec_document_id)
+    if document is None:
+        return set()
+    try:
+        workspace = await resolve_project_workspace(session, task.project_id)
+        return await blocking.run(_document_guards, workspace, document.path)
+    except (ProjectWorkspaceError, SpecPathError, OSError, ValueError):
+        return set()
 
 
 async def is_acceptance_drive(session: AsyncSession, task: Task) -> bool:
@@ -221,7 +264,8 @@ async def approval_refusal(
         )
     if is_operator:
         return None
-    bad = [check for row in listed for check in bad_checks(row)]
+    guards = await guard_keys(session, task)
+    bad = [check for row in listed for check in bad_checks(row, guards)]
     if bad:
         return DriveBaselineRefusal(NOT_FAILING, not_failing_sentence(task.id, bad), bad)
     return None
@@ -236,7 +280,8 @@ async def review_sentence(session: AsyncSession, task: Task) -> Optional[str]:
         "evidence of kind `drive_baseline` listing each check the drive covers, one line per "
         f"check: `{LINE_FORMAT}`. Judge each check: it must have been reached on the pre-build "
         "code (not stopped at setup, a 404 or 409, or a crash) and have failed at its own "
-        "assertion. Where any check was not reached, or passed on the pre-build code, do not "
+        "assertion; a check for a criterion the document marks `guard` (behaviour the code "
+        "already had) is exempt, and may pass before the build. Where any check was not reached, or passed on the pre-build code, do not "
         "approve: send the task back (`revision_needed`, reason_class `broken-check`) with notes "
         "naming every such check and the baseline piece in failing_pieces. Where the baseline is "
         "missing, send it back naming the missing baseline. Running the drive yourself on the "

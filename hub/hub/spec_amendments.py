@@ -72,7 +72,10 @@ RESPONSES = {"amend": "amended", "accept": "accepted", "reject": "rejected"}
 # pass, so every change or removal waits for the operator; an addition never does.
 RELAXING = frozenset({CHANGE_CRITERION, REMOVE_CRITERION, CANNOT_SATISFY})
 
-CRITERION_FIELDS = ("given", "when", "then", "how_to_check", "checked_by")
+CRITERION_FIELDS = ("given", "when", "then", "how_to_check", "checked_by", "guard")
+# A guard criterion's drive check is exempt from failing before the build (`drive_baseline`), so
+# marking one is the operator's: an agent may propose it, never apply it itself.
+GUARD_FIELD = "guard"
 TASK_FIELDS = ("key", "title", "description", "requirements", "depends_on", "files", "reviewer")
 TEXT_MAX = 2000
 
@@ -441,6 +444,15 @@ def apply(
             )
         after = dict(before)
         for field, value in change.items():
+            if field == GUARD_FIELD:
+                if not isinstance(value, bool):
+                    raise AmendmentRefused(
+                        "change.guard must be true or false",
+                        code="amendment_invalid",
+                        field="change.guard",
+                    )
+                after[field] = value
+                continue
             after[field] = _text(value, f"change.{field}")
         new["acceptance_criteria"] = [
             after if isinstance(c, dict) and c.get("key") == key else c for c in criteria
@@ -512,15 +524,21 @@ async def amend(
         )
 
     tested = await tested_task(session, getattr(actor, "run_id", None), document)
+    # Marking a guard exempts a drive check from failing before the build: a tester proposes it
+    # like an author does, and only the operator's acceptance applies it.
+    marks_guard = op == CHANGE_CRITERION and isinstance(change, dict) and GUARD_FIELD in change
     if (
         actor.kind != "agent"
         or tested is None
         or not testing_on(stored_before)
         or op not in TESTER_OPS
+        or marks_guard
     ):
         writers = await authors(session, document) if actor.kind == "agent" else []
         lead = await running_lead(session, document) if actor.kind == "agent" else None
-        if actor.kind == "agent" and (actor.name in writers or (lead and actor.name == lead)):
+        if actor.kind == "agent" and (
+            actor.name in writers or (lead and actor.name == lead) or (marks_guard and tested)
+        ):
             return await propose(
                 session,
                 document,

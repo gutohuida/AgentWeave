@@ -3,6 +3,8 @@ import { cleanup, render, screen } from '@testing-library/react'
 import { TaskWorkView } from '@/components/tasks/TaskViews'
 import type { Task } from '@/api/tasks'
 
+type TaskChecksArg = React.ComponentProps<typeof TaskWorkView>['checks']
+
 /**
  * The Work view's checks when their read fails. Before this, a failed `GET /tasks/{id}/checks`
  * read as "the project's checks have not run on this work yet": a claim about the work made from
@@ -33,5 +35,19 @@ describe('TaskWorkView checks', () => {
   it('still says the checks have not run when the read succeeded with none', () => {
     render(<TaskWorkView task={TASK} checks={null} checksError={null} />)
     expect(screen.getByText(/have not run on this work yet/)).toBeTruthy()
+  })
+
+  it('shows a could-not-run check as its own state, never passed,', () => {
+    const checks = {
+      configured: true,
+      running: false,
+      runs: [],
+      results: [
+        { name: 'hub-ui', outcome: 'could_not_run', missing_program: 'eslint', exit_code: null, output_tail: '' },
+      ],
+    } as unknown as TaskChecksArg
+    render(<TaskWorkView task={TASK} checks={checks} checksError={null} />)
+    expect(screen.getAllByText(/hub-ui could not run: eslint was not found/).length).toBeGreaterThan(0)
+    expect(screen.queryByText(/^passed$/)).toBeNull()
   })
 })

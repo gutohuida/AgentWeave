@@ -185,6 +185,29 @@ describe('SpecAmendmentsPanel', () => {
     )
   })
 
+  it('amends the reported criterion into a guard with nothing else changed', async () => {
+    amendments = [
+      amendment({
+        id: 'amd-3',
+        op: 'cannot_satisfy',
+        target: 'c1',
+        relaxing: true,
+        before: { key: 'c1', given: 'g', when: 'w', then: 'a plain not-found is a failure' },
+      }),
+    ]
+    renderPanel()
+    const row = screen.getByTestId('spec-amendment-amd-3')
+    await userEvent.click(within(row).getByRole('button', { name: 'Amend criterion…' }))
+    const amend = within(row).getByRole('button', { name: 'Amend and unblock' })
+    expect(amend).toBeDisabled()
+    await userEvent.click(within(row).getByLabelText('Criterion is a guard'))
+    await userEvent.click(amend)
+    expect(respond).toHaveBeenLastCalledWith(
+      { path: PATH, id: 'amd-3', response: 'amend', reason: '', change: { guard: true } },
+      expect.anything(),
+    )
+  })
+
   it('names how an answered report was answered', () => {
     amendments = [
       amendment({

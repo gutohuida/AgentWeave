@@ -54,4 +54,29 @@ describe('the landing record names a check that could not run (FR-8)', () => {
     expect(said).toHaveTextContent('node_modules: symlink refused')
     expect(screen.queryByText(/passed/i)).toBeNull()
   })
+
+  it('names the check on a landing queued again with no batch, the shape the route returns', () => {
+    checks = {
+      configured: true,
+      running: false,
+      runs: [],
+      landing: {
+        id: 'land-1',
+        state: 'queued',
+        kind: 'approval',
+        reason: '',
+        waits_on: null,
+        landed_sha: null,
+        override_reason: null,
+        batch: null,
+        could_not_run: [{ name: 'hub-ui', missing_program: 'eslint', dependency_link_failures: [] }],
+        position: 1,
+        queued_at: null,
+      },
+    }
+    render(<TaskLanding taskId="task-1" />)
+    expect(screen.getByTestId('task-landing-could-not-run-task-1')).toHaveTextContent(
+      'hub-ui could not run: eslint was not found',
+    )
+  })
 })

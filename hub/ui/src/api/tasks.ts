@@ -326,6 +326,9 @@ export interface TaskLanding {
    *  Absent from a Hub older than the list. */
   went_past?: TaskLandingEntry[]
   batch: TaskLandingBatch | null
+  /** The checks of the batch that last held this work that could not run; kept when the landing
+   *  was queued again with no batch. Absent from a Hub older than that outcome. */
+  could_not_run?: CouldNotRunCheck[]
   /** Its place in the project's queue (1 is next), while queued. */
   position: number | null
   queued_at: string | null
@@ -499,7 +502,7 @@ export type StoryEvent =
       at: string | null
       state: string
       ended_at: string | null
-      results: { name?: string; command?: string; exit_code?: number | null; passed?: boolean; skipped?: boolean }[]
+      results: { name?: string; command?: string; exit_code?: number | null; passed?: boolean; skipped?: boolean; outcome?: string; missing_program?: string }[]
       error: string | null
       merged_sha: string | null
     }

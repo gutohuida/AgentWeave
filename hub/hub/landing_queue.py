@@ -2784,6 +2784,9 @@ async def view(session: AsyncSession, task_id: str) -> Optional[Dict[str, Any]]:
         # what flaked, that did not hold this work.
         "went_past": [],
         "batch": None,
+        # Checks of the batch that last held this work that could not run. A landing whose batch
+        # could not run is queued again with no batch, so this is where the record still says why.
+        "could_not_run": [],
         "position": None,
         "queued_at": landing.created_at.isoformat() if landing.created_at else None,
     }
@@ -2798,6 +2801,26 @@ async def view(session: AsyncSession, task_id: str) -> Optional[Dict[str, Any]]:
             )
         ).all()
         out["position"] = len(ahead) + 1
+        if not landing.batch_id:
+            latest = (
+                (
+                    await session.execute(
+                        select(LandingBatch)
+                        .where(
+                            LandingBatch.project_id == landing.project_id,
+                            LandingBatch.ended_at.is_not(None),
+                        )
+                        .order_by(LandingBatch.created_at.desc())
+                        .limit(50)
+                    )
+                )
+                .scalars()
+                .all()
+            )
+            for earlier in latest:
+                if landing.task_id in (earlier.task_ids or []):
+                    out["could_not_run"] = project_checks.could_not_run_view(earlier.results)
+                    break
     if landing.batch_id:
         batch = await session.get(LandingBatch, landing.batch_id, populate_existing=True)
         if batch is not None:
@@ -2842,6 +2865,7 @@ async def view(session: AsyncSession, task_id: str) -> Optional[Dict[str, Any]]:
                 # A check of the batch whose command could not start: neither passed nor failed.
                 "could_not_run": project_checks.could_not_run_view(batch.results),
             }
+            out["could_not_run"] = out["batch"]["could_not_run"]
             if landing.state == LANDED:
                 from . import known_failing
 

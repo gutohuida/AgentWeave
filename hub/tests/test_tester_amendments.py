@@ -371,6 +371,32 @@ async def test_a_changed_criterion_holds_its_requirement_until_reviewed(
 
 
 @pytest.mark.asyncio
+async def test_a_tester_only_proposes_marking_a_guard(app, auth_headers, author_headers, tmp_path):
+    """A guard criterion's drive check need not fail before the build (`drive_baseline`), so the
+    tester who may change a criterion at once may only propose marking one; the operator applies
+    it. A value that is not a bare true or false is refused."""
+    task_id = await _approved(app, auth_headers, author_headers)
+    tester = await _run("run-tester", "tess", reviews=task_id)
+    before = await _stored(tmp_path)
+    body = {
+        "path": PATH,
+        "op": "change_criterion",
+        "criterion": "c1",
+        "change": {"guard": True},
+        "reason": "the code already behaved this way before the build",
+        "how_to_check": "run the drive on the pre-build code",
+    }
+    proposed = await app.post(AMEND, json=body, headers=tester)
+    assert proposed.status_code in (200, 201), proposed.text
+    assert proposed.json()["state"] == "proposed", proposed.json()
+    assert await _stored(tmp_path) == before
+
+    texty = await app.post(AMEND, json={**body, "change": {"guard": "yes"}}, headers=tester)
+    assert texty.status_code == 422, texty.text
+    assert texty.json()["detail"]["field"] == "change.guard"
+
+
+@pytest.mark.asyncio
 async def test_an_added_criterion_alone_never_holds_its_requirement(
     app, auth_headers, author_headers
 ):

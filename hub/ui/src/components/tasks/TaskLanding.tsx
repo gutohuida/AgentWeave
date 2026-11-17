@@ -145,9 +145,9 @@ export function TaskLanding({ taskId }: { taskId: string }) {
       )}
       {landing.state === 'held' && !landing.waits_on && <HeldOnMain taskId={taskId} />}
       {/* A check of the batch that could not start is said as that, never as passed or failed. */}
-      {landing.batch?.could_not_run?.length ? (
+      {(landing.could_not_run ?? landing.batch?.could_not_run)?.length ? (
         <ul data-testid={`task-landing-could-not-run-${taskId}`} style={{ color: 'var(--amber, var(--text-2))' }}>
-          {landing.batch.could_not_run.map((check) => (
+          {(landing.could_not_run ?? landing.batch?.could_not_run ?? []).map((check) => (
             <li key={check.name}>{couldNotRunSentence(check)}</li>
           ))}
         </ul>

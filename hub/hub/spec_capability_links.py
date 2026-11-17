@@ -20,6 +20,7 @@ What this module answers:
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import timezone
 from typing import Any, Dict, Iterable, List, Optional, Sequence
 
 from sqlalchemy import literal_column, select
@@ -141,6 +142,47 @@ async def folded_into_by_id(session: AsyncSession, document_ids: Sequence[str]) 
     found: Dict[str, str] = {}
     for change_id, path in rows:
         found.setdefault(change_id, path)
+    return found
+
+
+async def folded_changes_by_capability(
+    session: AsyncSession, capability_ids: Sequence[str]
+) -> Dict[str, List[Dict[str, Any]]]:
+    """`{capability id: [{path, title, folded_at}]}`, newest fold first, from the merge rows.
+
+    Every change a merge names is listed, whatever has become of it since (superseded, archived),
+    so a capability's page lists what touched it for good (`spec-home-shows-what-is-being-built...`,
+    FR-7). A change folded twice into one capability is listed once, at its latest fold."""
+    if not capability_ids:
+        return {}
+    rows = await session.execute(
+        select(
+            SpecDocumentMerge.capability_document_id,
+            SpecDocument.path,
+            SpecDocument.title,
+            SpecDocumentMerge.created_at,
+        )
+        .join(SpecDocument, SpecDocument.id == SpecDocumentMerge.change_document_id)
+        .where(SpecDocumentMerge.capability_document_id.in_(list(capability_ids)))
+        .order_by(
+            SpecDocumentMerge.created_at.desc(), literal_column("spec_document_merges.rowid").desc()
+        )
+    )
+    found: Dict[str, List[Dict[str, Any]]] = {}
+    seen = set()
+    for capability_id, path, title, created_at in rows:
+        if (capability_id, path) in seen:
+            continue
+        seen.add((capability_id, path))
+        if created_at is not None and created_at.tzinfo is None:
+            created_at = created_at.replace(tzinfo=timezone.utc)
+        found.setdefault(capability_id, []).append(
+            {
+                "path": path,
+                "title": title,
+                "folded_at": created_at.isoformat() if created_at is not None else None,
+            }
+        )
     return found
 
 

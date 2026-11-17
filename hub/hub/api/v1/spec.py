@@ -891,9 +891,14 @@ async def list_documents(
     folded_to = await spec_capability_links.folded_into_by_id(
         session, [d.id for d in documents if d.kind == "change-spec"]
     )
+    folded_changes = await spec_capability_links.folded_changes_by_capability(
+        session, [d.id for d in documents if d.kind == "capability"]
+    )
     for document in documents:
         view = _document_view(document, steps, shown[document.id])
         _capability_fields(view, document, parsed.get(document.path), waiting, folded_to)
+        if document.kind == "capability":
+            view["folded_changes"] = folded_changes.get(document.id, [])
         if document.id in overridden:
             view["approval_warnings_overridden"] = overridden[document.id]
         if document.id in amended:
@@ -5064,7 +5069,13 @@ async def list_builds(
     its loop, its tasks' progress and the blocking question its work is waiting on: what the side
     panel's Running tab lists, without opening each document (`the-side-panel-s-running-tab`)."""
     project_id, _ = project
-    return {"builds": await builds.project_rows(session, project_id)}
+    try:
+        workspace = await _workspace(session, project_id)
+    except HTTPException:
+        # An unavailable workspace is reported elsewhere; the rows lose their roadmap and
+        # capabilities rather than the list turning into an error.
+        workspace = None
+    return {"builds": await builds.project_rows(session, project_id, workspace)}
 
 
 @router.get("/reopening-warnings")

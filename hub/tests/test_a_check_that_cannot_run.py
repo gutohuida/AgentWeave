@@ -367,8 +367,14 @@ async def test_ac_no_send_back_and_ac_batch_retries(
             states = [
                 (await landing_queue.latest_landing(session, task_id)).state for task_id in ids
             ]
+            shown = [await landing_queue.view(session, task_id) for task_id in ids]
         assert run.state != "passed"
         assert states == ["queued", "queued"]
+        for one in shown:
+            # Queued again with no batch; the record still says why it is waiting.
+            assert one["state"] == "queued" and one["batch"] is None
+            assert [c["name"] for c in one["could_not_run"]] == ["hub-ui"]
+            assert one["could_not_run"][0]["missing_program"] == "eslint"
         assert [await _status(task_id) for task_id in ids] == ["approved", "approved"]
         assert [await _moved_to(task_id, "revision_needed") for task_id in ids] == [[], []]
         assert all(tip not in commits_on(tmp_path, "main") for tip in tips)
