@@ -44,6 +44,7 @@ the task left where it is. A run the Hub's stop interrupted is requested again a
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import hashlib
 import json
 import logging
@@ -1594,6 +1595,8 @@ _seen_tips: Dict[str, str] = {}
 _starting: Set[str] = set()
 _pending: Set["asyncio.Task[Any]"] = set()
 _semaphores: Dict[int, asyncio.Semaphore] = {}
+#: One taker of every slot at a time (`_every_slot`), so two never each hold part and wait forever.
+_every_slot_locks: Dict[int, asyncio.Lock] = {}
 #: Set, by run id, once the run's fast checks have all decided (or the run ended): what an agent's
 #: completion waits on (D2). Gone once set; a waiter that finds none reads the recorded run.
 _fast_waiters: Dict[str, asyncio.Event] = {}
@@ -1609,6 +1612,28 @@ def _semaphore() -> asyncio.Semaphore:
     if loop_id not in _semaphores:
         _semaphores[loop_id] = asyncio.Semaphore(MAX_CONCURRENT_RUNS)
     return _semaphores[loop_id]
+
+
+@contextlib.asynccontextmanager
+async def _every_slot() -> Any:
+    """Every check slot at once: entered once no other check run holds one, and while it is held
+    none starts. A disturbed landing run is run again so, on a quiet Hub
+    (`a-landing-failure-is-blamed-on-a-task-only-when-it-reproduces-there`, FR-4). The semaphore
+    queues its waiters in order, so the slots are taken as the runs ahead give them back."""
+    loop_id = id(asyncio.get_running_loop())
+    if loop_id not in _every_slot_locks:
+        _every_slot_locks[loop_id] = asyncio.Lock()
+    semaphore = _semaphore()
+    taken = 0
+    async with _every_slot_locks[loop_id]:
+        try:
+            for _ in range(MAX_CONCURRENT_RUNS):
+                await semaphore.acquire()
+                taken += 1
+            yield
+        finally:
+            for _ in range(taken):
+                semaphore.release()
 
 
 async def _took_slot(run_id: str) -> None:
