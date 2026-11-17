@@ -267,18 +267,7 @@ FULL_SUITE_FILES = {"pyproject.toml", "hub/pyproject.toml", "constraints-dev.txt
 NO_TESTS_MESSAGE = "no Hub test relates to the change; running no tests"
 
 
-def extract_changed_files(argv: list[str]) -> tuple[Optional[str], list[str]]:
-    """(the `--changed-files` path or `None`, argv without the option)."""
-    args = list(argv)
-    for i, arg in enumerate(args):
-        if arg == "--changed-files":
-            if i + 1 >= len(args):
-                raise junit_rerun.UsageError("--changed-files needs a path")
-            path = args[i + 1]
-            return path, args[:i] + args[i + 2 :]
-        if arg.startswith("--changed-files="):
-            return arg.split("=", 1)[1], args[:i] + args[i + 1 :]
-    return None, args
+extract_changed_files = junit_rerun.extract_changed_files
 
 
 def related_tests(changed: list[str], root: Path) -> Optional[list[str]]:
@@ -317,16 +306,6 @@ def related_tests(changed: list[str], root: Path) -> Optional[list[str]]:
     return sorted(selected)
 
 
-def _write_empty_report(report: str) -> None:
-    path = Path(report)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(
-        '<?xml version="1.0" encoding="utf-8"?><testsuites><testsuite name="pytest" '
-        'errors="0" failures="0" skipped="0" tests="0" time="0"/></testsuites>',
-        encoding="utf-8",
-    )
-
-
 def main(
     argv: list[str],
     *,
@@ -352,7 +331,7 @@ def main(
             elif not related:
                 say(NO_TESTS_MESSAGE)
                 if report:
-                    _write_empty_report(report)
+                    junit_rerun.write_empty_report(report)
                 return 0
             else:
                 say(f"running {len(related)} Hub test file(s) related to the change")
