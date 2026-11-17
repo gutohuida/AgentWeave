@@ -1656,16 +1656,22 @@ async def _decide(
     checks: List[Dict[str, Any]],
     outcome: BatchChecks,
     chain: Chain,
+    unreproduced: Sequence[Dict[str, Any]] = (),
 ) -> bool:
     """What a batch's checks decide. Never held for the operator
     (`failures-already-known-are-on-a-list-not-re-argued`, FR-9): a batch whose only failures are on
     the known-failing list lands past them; one with a failure of its own, or whose check ran out of
     time naming no failing test twice in a row, is narrowed to the task whose part first fails or
-    times out, which goes back to its author."""
+    times out, which goes back to its author where its prefix is shown to fail and the one before
+    it to pass (`a-landing-failure-is-blamed-on-a-task-only-when-it-reproduces-there`, FR-1).
+
+    *unreproduced*: this is the run again of a batch whose failure reproduced on no prefix (FR-3),
+    the failures it found then; a batch that now lands records them as why it landed past them."""
     if outcome.unjudged:
         # Nobody's failure yet: queued again once, as a run that judged nothing (AW-39); a second
-        # in a row is narrowed like a failure (FR-9).
-        if not await _previous_batch_unjudged(batch_id, project_id, tasks):
+        # in a row is narrowed like a failure (FR-9), as is the run again of a failure no prefix
+        # reproduced (`a-landing-failure-is-blamed-on-a-task-only-when-it-reproduces-there`, FR-3).
+        if not unreproduced and not await _previous_batch_unjudged(batch_id, project_id, tasks):
             await _requeue([landing.id for landing in landings])
             await _end_batch(batch_id, "failed", error=outcome.error)
             return False
@@ -1684,6 +1690,7 @@ async def _decide(
             timed,
             chain,
             timed_out=True,
+            unreproduced=unreproduced,
         )
     if outcome.state == "error":
         await _requeue([landing.id for landing in landings])
@@ -1695,8 +1702,16 @@ async def _decide(
     if not own:
         # Passed, or failed only where the list says the failure is not the work's: it lands, and
         # the entries it went past stay on the batch's results for its landings to name (FR-10).
+        override = None
+        if unreproduced:
+            # The run again passed a failure no prefix reproduced: flaky, and said so (FR-3, FR-6).
+            listed = await _list_as_flaky(unreproduced)
+            override = (
+                _unreproduced_reason(batch_id, unreproduced, listed, passed=True),
+                OVERRIDE_BY_HUB,
+            )
         await _land_batch(
-            root, main_branch, batch_id, base, landings, prefixes, len(prefixes), chain, None
+            root, main_branch, batch_id, base, landings, prefixes, len(prefixes), chain, override
         )
         return True  # whether it landed or was queued again, the loop looks at the queue next
     return await _narrow(
@@ -1712,6 +1727,7 @@ async def _decide(
         outcome,
         own[0],
         chain,
+        unreproduced=unreproduced,
     )
 
 
@@ -2013,6 +2029,27 @@ def _failing_ids(result: Dict[str, Any]) -> List[str]:
     return list(result.get("compared_tests") or result.get("failed_tests") or [])
 
 
+async def _probe_ids(project_id: str, result: Dict[str, Any]) -> List[str]:
+    """Every test the confirmed failure *result* named -- each the first run failed, and each its
+    confirmation compared -- less those on the known-failing list for its check
+    (`a-landing-failure-is-blamed-on-a-task-only-when-it-reproduces-there`, FR-2). Not only the ones
+    that failed again: a probe of one test of seventeen proves nothing about the other sixteen."""
+    from . import known_failing
+
+    named = [
+        str(t)
+        for t in [*(result.get("failed_tests") or []), *(result.get("compared_tests") or [])]
+        if t
+    ]
+    listed = {
+        str(entry.get("test"))
+        for entry in await known_failing.listed_for(project_id, str(result.get("name") or ""))
+        if entry.get("test")
+    }
+    listed |= {str(t) for t in result.get("shared_tests") or []}
+    return [t for t in dict.fromkeys(named) if t not in listed] or _failing_ids(result)
+
+
 async def _narrow(
     root: Path,
     main_branch: str,
@@ -2028,26 +2065,37 @@ async def _narrow(
     chain: Chain,
     *,
     timed_out: bool = False,
+    unreproduced: Sequence[Dict[str, Any]] = (),
 ) -> bool:
     """Find the first task whose work, on the ones before it, makes the failing tests fail: binary
-    search over the prefixes, running the check's re-run command with only the failed test ids (or
+    search over the prefixes, running the check's re-run command with every failed test id (or
     the failing check where it has no re-run command or the ids are too long for one,
-    `checks-report-which-tests-failed-in-any-language` FR-6). That task goes back to its author;
-    the ones before it land if they already passed on exactly their prefix, else they and the ones
-    after it are queued again at the head.
+    `checks-report-which-tests-failed-in-any-language` FR-6). The task it finds goes back to its
+    author only where its own prefix is probed and fails and the commit before it -- the previous
+    prefix, or the batch's base for the first -- is probed and passes
+    (`a-landing-failure-is-blamed-on-a-task-only-when-it-reproduces-there`, FR-1); the probes are
+    its send-back's proof (FR-5). The ones before it land if they already passed on exactly their
+    prefix, else they and the ones after it are queued again at the head. A failure no prefix
+    reproduces is nobody's: the batch's checks run once more (`_unreproduced`, FR-3).
 
     *timed_out*: *failing* ran out of time naming no failing test, twice in a row. The check is run
-    whole on each prefix, and the first whose run fails or times out is the task sent back, with the
-    reason 'timed out' (`failures-already-known-are-on-a-list-not-re-argued`, FR-9)."""
+    whole on each prefix, and a run that fails or times out counts as failing; the task found is
+    sent back with the reason 'timed out' (`failures-already-known-are-on-a-list-not-re-argued`,
+    FR-9)."""
     check = next(c for c in checks if c["name"] == failing.get("name"))
-    ids = _failing_ids(failing)
+    ids = await _probe_ids(project_id, failing)
     rerun = project_checks.rerun_check(check, ids)
     probe = rerun or check
     owner = f"batch-{batch_id}.narrow"
     log: List[Dict[str, Any]] = []
+    probed: Dict[int, bool] = {}
 
     async def fails_at(k: int) -> bool:
-        path = await asyncio.to_thread(project_checks._checkout, root, owner, prefixes[k - 1])
+        """Whether prefix *k* fails the probe; 0 is the batch's base. Each prefix is run once."""
+        if k in probed:
+            return probed[k]
+        commit = prefixes[k - 1] if k else base
+        path = await asyncio.to_thread(project_checks._checkout, root, owner, commit)
         try:
             async with project_checks._semaphore():
                 result = await asyncio.to_thread(project_checks.run_one, probe, path, owner)
@@ -2062,6 +2110,7 @@ async def _narrow(
             # (a test the culprit adds), so it does not fail them, whatever the exit code.
             failing_here = False
         elif rerun:
+            # Any one of them failing is the prefix failing (FR-2).
             failing_here = project_checks.reproduces_a_test_failure(result) or (
                 project_checks.failed(result)
                 and not project_checks.proves_the_tests_pass(result, ids)
@@ -2071,14 +2120,18 @@ async def _narrow(
         log.append(
             {
                 "prefix": k,
-                "task": tasks[k - 1],
-                "commit": prefixes[k - 1],
+                "task": tasks[k - 1] if k else None,
+                "commit": commit,
                 "command": probe["command"],
                 "tests": ids if rerun else [],
                 "exit_code": result.get("exit_code"),
+                "timed_out": bool(result.get("timed_out")),
+                "failed_tests": [str(t) for t in result.get("failed_tests") or [] if t],
                 "failed": failing_here,
+                "round": len(unreproduced) + 1,
             }
         )
+        probed[k] = failing_here
         return failing_here
 
     lo, hi = 1, len(prefixes)
@@ -2089,10 +2142,35 @@ async def _narrow(
         else:
             lo = mid + 1
     culprit = lo
+    # Elimination is not evidence: the culprit's own prefix fails, and the commit before it passes.
+    proven = await fails_at(culprit) and not await fails_at(culprit - 1)
     async with async_session_factory() as session:
         batch = await session.get(LandingBatch, batch_id)
-        batch.narrowing = log
+        batch.narrowing = [*(batch.narrowing or []), *log] if unreproduced else log
         await session.commit()
+    if not proven:
+        return await _unreproduced(
+            root,
+            main_branch,
+            project_id,
+            batch_id,
+            base,
+            tasks,
+            prefixes,
+            landings,
+            checks,
+            chain,
+            [
+                *unreproduced,
+                {
+                    "check": failing.get("name"),
+                    "tests": ids,
+                    "run_id": outcome.run_id,
+                    "timed_out": timed_out,
+                },
+            ],
+        )
+    proof = [next(step for step in log if step["prefix"] == k) for k in (culprit, culprit - 1)]
     before = tasks[: culprit - 1]
     if timed_out:
         report = _timeout_report(
@@ -2101,13 +2179,14 @@ async def _narrow(
             {**failing, "timeout_seconds": check.get("timeout_seconds")},
             tasks[culprit - 1],
             before,
+            proof,
         )
         reason = (
             f"timed out: the check `{failing.get('name')}` ran past its time limit on its work in "
             f"landing batch {batch_id}, twice in a row."
         )
     else:
-        report = _failure_report(batch_id, outcome, failing, tasks[culprit - 1], before)
+        report = _failure_report(batch_id, outcome, failing, tasks[culprit - 1], before, proof)
         reason = f"The project's checks failed on its work in landing batch {batch_id}."
     await _send_back(
         landings[culprit - 1].id,
@@ -2147,6 +2226,138 @@ async def _narrow(
     return True
 
 
+#: Why a batch landed past a failure no prefix reproduced (FR-6), as its landing says it.
+REPRODUCED_ON_NO_TASK = "reproduced on no task's work"
+
+
+async def _unreproduced(
+    root: Path,
+    main_branch: str,
+    project_id: str,
+    batch_id: str,
+    base: str,
+    tasks: List[str],
+    prefixes: List[str],
+    landings: List[TaskLanding],
+    checks: List[Dict[str, Any]],
+    chain: Chain,
+    found: List[Dict[str, Any]],
+) -> bool:
+    """A failure that reproduced on no prefix belongs to no task: nobody is sent back
+    (`a-landing-failure-is-blamed-on-a-task-only-when-it-reproduces-there`, FR-3). The first time,
+    the batch's checks run once more on the whole batch and are decided again with *found*
+    carried; the second time -- it failed again, and again on no prefix -- the batch lands, and
+    both are recorded flaky. Never held: a batch held stops every task behind it."""
+    if len(found) > 1:
+        listed = await _list_as_flaky(found)
+        await _land_batch(
+            root,
+            main_branch,
+            batch_id,
+            base,
+            landings,
+            prefixes,
+            len(prefixes),
+            chain,
+            (_unreproduced_reason(batch_id, found, listed, passed=False), OVERRIDE_BY_HUB),
+        )
+        return True
+    logger.info(
+        "batch %s: the failure of %s reproduced on no prefix; its checks run once more",
+        batch_id,
+        found[-1].get("check"),
+    )
+    again = await run_batch_checks(root, project_id, batch_id, base, prefixes[-1], checks, landings)
+    return await _decide(
+        root,
+        main_branch,
+        project_id,
+        batch_id,
+        base,
+        tasks,
+        prefixes,
+        landings,
+        checks,
+        again,
+        chain,
+        unreproduced=found,
+    )
+
+
+def _unreproduced_reason(
+    batch_id: str, found: Sequence[Dict[str, Any]], listed: Sequence[str], *, passed: bool
+) -> str:
+    """What a batch's landing says when it landed past failures no prefix reproduced (FR-6).
+    *listed*: which of their tests are on the known-failing list now; only those are said to be."""
+    parts = []
+    for item in found:
+        what = ", ".join(item.get("tests") or []) or (
+            "the whole check (it ran out of time)" if item.get("timed_out") else "the whole check"
+        )
+        parts.append(f"`{item.get('check')}` failed {what} (check run {item.get('run_id')})")
+    then = (
+        "passed when its checks ran once more"
+        if passed
+        else "failed again when its checks ran once more, and again on no task's prefix"
+    )
+    named = [str(t) for item in found for t in item.get("tests") or [] if t]
+    unlisted = [t for t in dict.fromkeys(named) if t not in set(listed)]
+    on_list = (
+        f" On the known-failing list as flaky: {', '.join(dict.fromkeys(listed))}."
+        if listed
+        else ""
+    )
+    if unlisted:
+        on_list += f" Not on the known-failing list: {', '.join(unlisted)}."
+    return (
+        f"Landed past a failure {REPRODUCED_ON_NO_TASK}: in landing batch {batch_id}, "
+        + "; ".join(parts)
+        + f", and no task's work reproduced it when probed on its own prefix. The batch {then}, "
+        "so it was held against no task." + on_list
+    )
+
+
+async def _list_as_flaky(found: Sequence[Dict[str, Any]]) -> List[str]:
+    """Each test in *found* recorded flaky on the run that failed it and read into the known-failing
+    list, which lists a first flake and files its fix task at the second (FR-3). A whole check
+    names no test, so nothing is listed for it. Returns the tests of *found* the list now holds,
+    read back from it, so a landing never claims a listing that did not happen (FR-6)."""
+    from . import known_failing
+
+    listed: List[str] = []
+
+    for item in found:
+        tests = [str(t) for t in item.get("tests") or [] if t]
+        run_id = item.get("run_id")
+        if not tests or not run_id:
+            continue
+        async with async_session_factory() as session:
+            run = await session.get(TaskCheckRun, run_id)
+            if run is None:
+                continue
+            results = []
+            for result in run.results or []:
+                if isinstance(result, dict) and result.get("name") == item.get("check"):
+                    flaked = [*(result.get("flaky_tests") or []), *tests]
+                    result = {
+                        **result,
+                        "flaky_tests": list(dict.fromkeys(str(t) for t in flaked)),
+                        "unreproduced": {"tests": tests, "reason": REPRODUCED_ON_NO_TASK},
+                    }
+                results.append(result)
+            run.results = results
+            project_id = run.project_id
+            await session.commit()
+        await known_failing.record_run(run_id)
+        async with async_session_factory() as session:
+            held = {
+                (entry.check_name, entry.test)
+                for entry in await known_failing.entries(session, project_id)
+            }
+        listed += [t for t in tests if (str(item.get("check")), t) in held]
+    return listed
+
+
 async def _passed_on(
     project_id: str, root: Path, commit: str, checks: List[Dict[str, Any]]
 ) -> bool:
@@ -2159,12 +2370,29 @@ async def _passed_on(
     return all(project_checks.check_digest(check) in passes for check in checks)
 
 
+def _proof(proof: Sequence[Dict[str, Any]]) -> str:
+    """The probes a send-back rests on, as its note states them (FR-5): on the culprit's prefix,
+    then on the commit before it, each command with its exit code and the tests that failed."""
+    lines = ["Proof:"]
+    for step in proof:
+        where = f"task {step['task']}'s prefix" if step.get("task") else "the batch's base (main)"
+        failed = ", ".join(step.get("failed_tests") or []) or "none named"
+        lines.append(
+            f"- on {where} ({str(step.get('commit') or '')[:12]}): `{step.get('command')}` "
+            f"{'failed' if step.get('failed') else 'passed'}, exit code {step.get('exit_code')}"
+            + (", timed out" if step.get("timed_out") else "")
+            + f"; failing tests: {failed}"
+        )
+    return "\n".join(lines)
+
+
 def _failure_report(
     batch_id: str,
     outcome: BatchChecks,
     failing: Dict[str, Any],
     culprit: str,
     before: Sequence[str],
+    proof: Sequence[Dict[str, Any]] = (),
 ) -> str:
     ids = _failing_ids(failing)
     on = (
@@ -2178,7 +2406,9 @@ def _failure_report(
         f"check `{failing.get('name')}` fail"
         + (f" ({', '.join(ids)})" if ids else "")
         + f" (check run {outcome.run_id}). It goes back to its author; the rest of the batch lands "
-        "without it.\n\n" + output[-project_checks.OUTPUT_TAIL_CHARS :]
+        "without it.\n\n"
+        + (_proof(proof) + "\n\n" if proof else "")
+        + output[-project_checks.OUTPUT_TAIL_CHARS :]
     )
 
 
@@ -2188,6 +2418,7 @@ def _timeout_report(
     failing: Dict[str, Any],
     culprit: str,
     before: Sequence[str],
+    proof: Sequence[Dict[str, Any]] = (),
 ) -> str:
     on = (
         "landed on " + ", ".join(before) + " in the same batch"
@@ -2201,6 +2432,7 @@ def _timeout_report(
         f"(check run {outcome.run_id}), and task {culprit}'s work, {on}, is the first it runs out "
         "of time on. It goes back to its author; the rest of the batch lands without it. A check "
         "that ran out of time on a loaded machine may pass when run again.\n\n"
+        + (_proof(proof) + "\n\n" if proof else "")
         + output[-project_checks.OUTPUT_TAIL_CHARS :]
     )
 
