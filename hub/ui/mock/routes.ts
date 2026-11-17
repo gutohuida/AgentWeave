@@ -23,6 +23,11 @@ export type MockRoute =
   | { kind: 'traces' }
   /** A whole conversation's trace (spec a-trace-of-a-whole-conversation). */
   | { kind: 'conversation-trace'; conversationId: string | null }
+  /** One build's view (spec a-build-view-showing-every-task-and-run-of-a-build). Its task, run,
+   *  filter and mock state ride in the hash's query (`?task=…&run=…&filter=…&state=…`). */
+  | { kind: 'build'; buildId: string | null }
+  /** The build view's two compact summaries in their real containers, side by side. */
+  | { kind: 'build-summaries' }
 
 /** Project settings, one place under one name. Replaces Environment / Configuration / Settings. */
 export type SettingsSection =

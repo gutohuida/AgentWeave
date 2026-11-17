@@ -1,4 +1,5 @@
 import type { TraceFilters, TraceGroup, TraceGrouping, TraceOperation, TraceSummary, TraceTotals } from '@/api/traces'
+import type { CostCell } from '@/lib/format'
 import { hubDate } from '@/lib/hubTime'
 
 /** What the view narrows by. `kind` is the Hub-internals choice; null is agents' runs. */
@@ -111,8 +112,8 @@ export function durationMs(trace: TraceSummary): number | null {
 }
 
 /** A run's cost as its row says it: a figure, "unpriced" (finished, not measured), or nothing
- *  yet (still running). Never $0.00 for a cost that was not measured. */
-export type CostCell = { kind: 'cost'; usd: number } | { kind: 'unpriced' } | { kind: 'none' }
+ *  yet (still running). The cell's type and wording are `lib/format`'s, shared with the build view. */
+export type { CostCell }
 
 export function costOf(trace: TraceSummary): CostCell {
   if (trace.cost_state === 'measured' && trace.cost_usd != null) return { kind: 'cost', usd: trace.cost_usd }

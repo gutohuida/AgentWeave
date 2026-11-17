@@ -4,6 +4,7 @@ import { TopBar } from '@/components/layout/TopBar'
 import { Toaster } from '@/components/ui/toast'
 import { APP_SETTINGS_SECTIONS, PROJECT_TABS, type AppSettingsSection, type ProjectTab } from '@/lib/navigation'
 import { MOCK_NOW, project, projects, tasks } from './fixtures'
+import { BUILD_MOCK_STATES, DEFAULT_BUILD, RECORDED_BUILDS, useBuildHash, type BuildMockState } from './buildsMock'
 import { beforeKey, type MockRoute } from './routes'
 import { SCREENS, screenFor } from './screens'
 import { useSetupTitles } from './setupMock'
@@ -33,6 +34,8 @@ function parseHash(): MockRoute {
   if (kind === 'thread') return { kind: 'thread' }
   if (kind === 'traces') return { kind: 'traces' }
   if (kind === 'conversation-trace') return { kind: 'conversation-trace', conversationId: a || null }
+  if (kind === 'build') return { kind: 'build', buildId: a || null }
+  if (kind === 'build-summaries') return { kind: 'build-summaries' }
   return { kind: 'tab', tab: 'overview' }
 }
 
@@ -64,6 +67,10 @@ function toHash(route: MockRoute): string {
       return 'traces'
     case 'conversation-trace':
       return `conversation-trace/${route.conversationId ?? ''}`
+    case 'build':
+      return `build/${route.buildId ?? ''}`
+    case 'build-summaries':
+      return 'build-summaries'
   }
 }
 
@@ -197,10 +204,43 @@ function MockBar({
         <SpecMockBar showLayout={route.kind === 'tab'} />
       ) : null}
       {route.kind === 'tab' && route.tab === 'tasks' ? <TasksMockBar /> : null}
+      {route.kind === 'build' || route.kind === 'build-summaries' ? <BuildMockBar showBuild={route.kind === 'build'} /> : null}
       <button type="button" className="mock-bar-button" disabled={!hasBefore} data-on={before ? 'true' : 'false'} onClick={onBefore}>
         {before ? 'Showing today' : 'Compare with today'}
       </button>
     </div>
+  )
+}
+
+/** The build view's controls: which recorded build, and the states the recording lacks. */
+function BuildMockBar({ showBuild }: { showBuild: boolean }) {
+  const { buildId, state, setState } = useBuildHash()
+  return (
+    <>
+      {showBuild ? (
+        <select
+          className="mock-bar-select"
+          aria-label="Build"
+          value={buildId ?? DEFAULT_BUILD}
+          onChange={(e) => {
+            window.location.hash = `build/${e.target.value}${state === 'recorded' ? '' : `?state=${state}`}`
+          }}
+        >
+          {RECORDED_BUILDS.map((b) => (
+            <option key={b.build.id} value={b.build.id}>
+              {b.build.document_title}
+            </option>
+          ))}
+        </select>
+      ) : null}
+      <select className="mock-bar-select" aria-label="Build state" value={state} onChange={(e) => setState(e.target.value as BuildMockState)}>
+        {BUILD_MOCK_STATES.map((s) => (
+          <option key={s.value} value={s.value}>
+            {s.label}
+          </option>
+        ))}
+      </select>
+    </>
   )
 }
 

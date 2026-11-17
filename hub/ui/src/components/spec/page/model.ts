@@ -7,6 +7,7 @@
 
 import type { BuildChecks, BuildLanding } from '@/api/buildFigures'
 import type { BuildCaught } from '@/api/spec'
+import type { BuildSummaryModel } from '@/components/builds/buildViewModel'
 
 export type SpecKind = 'change-spec' | 'roadmap' | 'capability' | 'baseline' | 'system-map'
 export type SpecPhase = 'exploring' | 'proposed' | 'approved' | 'archived' | 'current'
@@ -226,6 +227,17 @@ export interface BuildView {
   /** The build's check runs, on a line of their own. */
   checks: BuildChecks
   landing?: BuildLanding
+  /** The build view's compact summary for this build, and where it opens (the build view slice). */
+  summary?: BuildSummaryLink
+}
+
+/** A compact summary of a build and the build view it opens. */
+export interface BuildSummaryLink {
+  model: BuildSummaryModel
+  /** The build view's address, at a task when one is named. */
+  hrefFor: (task?: string) => string
+  /** In-app navigation for a plain click. */
+  onOpen?: (task?: string) => void
 }
 
 export interface StartBuildChoice {

@@ -35,14 +35,9 @@ import {
 import { Button } from '@/components/ui/button'
 import type { TracesRequest } from '@/store/tracesRequestStore'
 import { Segmented } from '@/components/ui/segmented'
-import { formatCount, formatTokens, formatTokensExact } from '@/lib/format'
+import { formatCost, formatCostExact, formatCount, formatTokens, formatTokensExact, UNPRICED_TITLE } from '@/lib/format'
 import { hubDate } from '@/lib/hubTime'
 import '@/styles/traces.css'
-
-/** A cost small enough to round to $0.00 still shows its digits: it was measured, it is not zero. */
-function money(usd: number): string {
-  return usd < 0.01 ? `$${usd.toFixed(4)}` : `$${usd.toFixed(2)}`
-}
 
 function plural(n: number, one: string, many = `${one}s`): string {
   return `${formatCount(n)} ${n === 1 ? one : many}`
@@ -53,13 +48,19 @@ function Cost({ trace }: { trace: TraceSummary }) {
 }
 
 function CostText({ cost, testId = 'trace-cost' }: { cost: CostCell; testId?: string }) {
-  if (cost.kind === 'cost') return <span data-testid={testId} data-value={cost.usd}>{money(cost.usd)}</span>
+  if (cost.kind === 'cost') {
+    return (
+      <span data-testid={testId} data-value={cost.usd} title={formatCostExact(cost.usd)}>
+        {formatCost(cost.usd)}
+      </span>
+    )
+  }
   if (cost.kind === 'unpriced') {
     return (
       <span
         data-testid={testId}
         className="aw-traces-unpriced"
-        title="This run finished and the Hub could not measure its cost"
+        title={UNPRICED_TITLE}
       >
         unpriced
       </span>

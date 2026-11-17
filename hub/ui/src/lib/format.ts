@@ -31,6 +31,26 @@ export function formatMoney(value: number): string {
   return `$${value.toFixed(2)}`
 }
 
+/** The one cost-cell rule, shared by Traces and the build view. A run's (or a total's) cost is a
+ *  measured figure, `unpriced` (it finished and the Hub could not measure it), or nothing yet
+ *  (still running, or no usage reported). Never $0.00 for a cost that was not measured. */
+export type CostCell = { kind: 'cost'; usd: number } | { kind: 'unpriced' } | { kind: 'none' }
+
+/** Why a cell reads "unpriced", for its title. */
+export const UNPRICED_TITLE = 'This run finished and the Hub could not measure its cost'
+
+/** A measured cost. Under a cent reads "<$0.01", never "$0.00": it was measured, it is not zero.
+ *  A true zero reads "$0.00". Otherwise `formatMoney`. */
+export function formatCost(usd: number): string {
+  if (usd > 0 && usd < 0.01) return '<$0.01'
+  return formatMoney(usd)
+}
+
+/** The exact figure behind `formatCost`, for its title: "$0.0042", "$12.3456". */
+export function formatCostExact(usd: number): string {
+  return `$${usd.toFixed(4)}`
+}
+
 /** A firing's cost in words: its tokens, then its money when the runner reported it. */
 export interface TokenUsage {
   input_tokens?: number
