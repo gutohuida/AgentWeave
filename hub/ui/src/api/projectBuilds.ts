@@ -10,6 +10,18 @@ export interface ProjectBuildRow {
   id: string
   document_id: string
   document_title: string
+  /** The document's path, so a row can open it (the Spec home's Recently built). */
+  document_path?: string
+  /** When a finished build finished; null while running or for a stopped build. */
+  finished_at?: string | null
+  /** The roadmap slice the document builds, or null. */
+  roadmap?: {
+    path: string
+    title: string
+    slice: { key: string; title: string }
+  } | null
+  /** The capabilities the document names it changes, resolved to titles. */
+  capabilities?: { path: string; title: string }[]
   state: 'running' | 'stopped' | 'finished'
   driver: BuildDriver
   level: BuildLevel
