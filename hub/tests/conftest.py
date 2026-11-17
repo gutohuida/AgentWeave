@@ -760,6 +760,7 @@ def _forget_module_level_background_state() -> None:
         _project_checks._starting,
         _project_checks._pending,
         _project_checks._semaphores,
+        _project_checks._every_slot_locks,
         _project_checks._fast_waiters,
         _project_checks._waiting_for_slot,
         _landing_queue._jobs,

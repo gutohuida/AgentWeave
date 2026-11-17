@@ -421,8 +421,12 @@ async def test_a_test_the_culprit_adds_does_not_fail_the_prefix_before_it(
     await landing_queue.drain()
 
     batch = (await _batches())[0]
-    assert [step["prefix"] for step in batch.narrowing] == [1]
-    assert batch.narrowing[0]["failed"] is False, batch.narrowing
+    # Prefix 1 does not fail it; prefix 2, the one blamed, is probed and does (it is not blamed by
+    # elimination: `a-landing-failure-is-blamed-on-a-task-only-when-it-reproduces-there`, FR-1).
+    assert [(step["prefix"], step["failed"]) for step in batch.narrowing] == [
+        (1, False),
+        (2, True),
+    ], batch.narrowing
     assert await _status(ids[1]) == "revision_needed"
     assert await _status(ids[0]) == "approved"
     assert (await _landing(ids[1])).state == "sent_back"
