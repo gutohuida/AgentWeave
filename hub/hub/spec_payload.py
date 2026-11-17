@@ -487,7 +487,8 @@ class SpecPayload(_Part):
     capabilities: Optional[CapabilityLink] = Field(
         default=None,
         description="The existing capabilities this change document changes, and any new one it "
-        "creates. Only on a change-spec document.",
+        "creates. Only on a change-spec document, and on a system-map document `creates` alone: "
+        "the capability titles the map proposes.",
     )
 
 
@@ -569,11 +570,22 @@ READ_VIEW_FIELDS = ("identifier", "state", "anchor")
 
 
 def check_capability_link(link: CapabilityLink, *, kind: str = "change-spec") -> None:
-    """The link's shape: on a change only, no empty or repeated entry. Whether each path names a
-    current capability of the project is the save's question (`spec_capability_links`)."""
-    if kind != "change-spec":
+    """The link's shape: on a change, or `creates` alone on a system map (the titles it proposes,
+    `a-project-with-no-specs-is-offered-a-start` FR-12); no empty or repeated entry. Whether each
+    path names a current capability of the project is the save's question
+    (`spec_capability_links`)."""
+    if kind == "system-map":
+        if link.changes:
+            raise PayloadError(
+                "a system map proposes capabilities in `capabilities.creates`; only a change "
+                "document names the capabilities it changes",
+                field="capabilities",
+            )
+    elif kind != "change-spec":
         raise PayloadError(
-            "only a change document names the capabilities it changes", field="capabilities"
+            "only a change document names the capabilities it changes, and a system map the "
+            "ones it proposes",
+            field="capabilities",
         )
     for index, path in enumerate(link.changes):
         if not path.strip():
