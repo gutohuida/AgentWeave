@@ -6,6 +6,15 @@ paths:
 
 # Hub UI rules (loaded when a UI file is read)
 
+## Build and review UI against the best-practices note
+
+Every UI change is mocked first (`hub/ui/mock/README.md`: real components fed fixtures) and built and
+reviewed against the vault's UI/UX best-practices note, **`src-0b85ea5a1d1d`** (`vault_read`;
+operator, 2026-11-17). Its "Checklist for a UI change" is the bar a builder ticks before completing
+and a reviewer checks before approving: light, dark and narrow screenshots, unknown never shown as
+zero, status never by colour alone, stable accessible names for drives, live updates that keep
+scroll and focus. When practice changes, update the note (`vault_replace_passage`), not this file.
+
 ## The committed bundle reaches the operator's live app
 
 `hub/hub/static/ui` is a committed build artefact, and the operator's `:8000` Hub serves it straight
