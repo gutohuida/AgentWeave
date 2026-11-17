@@ -1467,11 +1467,16 @@ async def run_batch_checks(
     merged: str,
     checks: List[Dict[str, Any]],
     landings: Sequence[TaskLanding],
+    *,
+    quiet: bool = False,
 ) -> BatchChecks:
     """The project's checks, once, on *merged* (main's tip *base* with the batch's work), through
     `project_checks`' runner, semaphore and confirmation; a failure is judged against the
     known-failing list (`known_failing.judge`), never on a checkout of main. Recorded as a
-    `TaskCheckRun` on the batch's first task, so a pass of this tree is reused like any other."""
+    `TaskCheckRun` on the batch's first task, so a pass of this tree is reused like any other.
+
+    *quiet*: run holding every check slot, once no other check run holds one -- a disturbed run's
+    run again (`a-landing-failure-is-blamed-on-a-task-only-when-it-reproduces-there`, FR-4)."""
     owner = f"batch-{batch_id}"
     run_id = f"chk-{short_id()}"
     tree = await blocking.run(project_checks.tree_of, root, merged)
@@ -1506,7 +1511,8 @@ async def run_batch_checks(
     state, error = "passed", ""
     unjudged = False
     try:
-        async with project_checks._semaphore():
+        slots = project_checks._every_slot() if quiet else project_checks._semaphore()
+        async with slots:
             await project_checks._took_slot(run_id)  # FR-1: the batch's wait survives a restart
             for check, already in zip(checks, planned, strict=True):
                 result = already or project_checks.skipped(check, changed)
@@ -1657,6 +1663,7 @@ async def _decide(
     outcome: BatchChecks,
     chain: Chain,
     unreproduced: Sequence[Dict[str, Any]] = (),
+    disturbed: Sequence[Dict[str, Any]] = (),
 ) -> bool:
     """What a batch's checks decide. Never held for the operator
     (`failures-already-known-are-on-a-list-not-re-argued`, FR-9): a batch whose only failures are on
@@ -1666,7 +1673,12 @@ async def _decide(
     it to pass (`a-landing-failure-is-blamed-on-a-task-only-when-it-reproduces-there`, FR-1).
 
     *unreproduced*: this is the run again of a batch whose failure reproduced on no prefix (FR-3),
-    the failures it found then; a batch that now lands records them as why it landed past them."""
+    the failures it found then; a batch that now lands records them as why it landed past them.
+
+    A failure of the batch's own naming at least its check's disturbed threshold of tests in files
+    no task of the batch changed is the machine's, not a change's: the batch's checks run once more,
+    on a quiet Hub, and are decided again with *disturbed* carried (FR-4). Only once: what that run
+    fails is narrowed, so nobody is sent back unless a prefix reproduces it (FR-1)."""
     if outcome.unjudged:
         # Nobody's failure yet: queued again once, as a run that judged nothing (AW-39); a second
         # in a row is narrowed like a failure (FR-9), as is the run again of a failure no prefix
@@ -1691,6 +1703,7 @@ async def _decide(
             chain,
             timed_out=True,
             unreproduced=unreproduced,
+            disturbed=disturbed,
         )
     if outcome.state == "error":
         await _requeue([landing.id for landing in landings])
@@ -1702,18 +1715,34 @@ async def _decide(
     if not own:
         # Passed, or failed only where the list says the failure is not the work's: it lands, and
         # the entries it went past stay on the batch's results for its landings to name (FR-10).
-        override = None
+        # A disturbed run, run again, and a failure no prefix reproduced: each says why it was held
+        # against no task (FR-3, FR-4, FR-6); an unreproduced one is listed flaky.
+        reasons = [_disturbed_reason(batch_id, item) for item in disturbed]
         if unreproduced:
-            # The run again passed a failure no prefix reproduced: flaky, and said so (FR-3, FR-6).
             listed = await _list_as_flaky(unreproduced)
-            override = (
-                _unreproduced_reason(batch_id, unreproduced, listed, passed=True),
-                OVERRIDE_BY_HUB,
-            )
+            reasons.append(_unreproduced_reason(batch_id, unreproduced, listed, passed=True))
+        override = (" ".join(reasons), OVERRIDE_BY_HUB) if reasons else None
         await _land_batch(
             root, main_branch, batch_id, base, landings, prefixes, len(prefixes), chain, override
         )
         return True  # whether it landed or was queued again, the loop looks at the queue next
+    if not disturbed:
+        found = await _disturbance(root, base, prefixes[-1], checks, own, outcome.run_id)
+        if found is not None:
+            return await _run_disturbed_again(
+                root,
+                main_branch,
+                project_id,
+                batch_id,
+                base,
+                tasks,
+                prefixes,
+                landings,
+                checks,
+                chain,
+                found,
+                unreproduced,
+            )
     return await _narrow(
         root,
         main_branch,
@@ -1728,6 +1757,103 @@ async def _decide(
         own[0],
         chain,
         unreproduced=unreproduced,
+        disturbed=disturbed,
+    )
+
+
+async def _disturbance(
+    root: Path,
+    base: str,
+    merged: str,
+    checks: List[Dict[str, Any]],
+    own: Sequence[Dict[str, Any]],
+    run_id: str,
+) -> Optional[Dict[str, Any]]:
+    """Whether the batch's own failures *own* make its run disturbed
+    (`a-landing-failure-is-blamed-on-a-task-only-when-it-reproduces-there`, FR-4): a check whose
+    confirmed failing tests include at least its disturbed threshold in files none of the batch's
+    tasks changed. A test whose report gives no file counts as changed (`touched_tests`), so a run
+    is never judged disturbed on a guess. `None` where no check is."""
+    changed = await blocking.run(project_checks.changed_paths, root, base, merged)
+    by_name = {check["name"]: check for check in checks}
+    for result in own:
+        check = by_name.get(str(result.get("name") or ""))
+        if check is None:
+            continue
+        ids = [str(t) for t in dict.fromkeys(_failing_ids(result)) if t]
+        touched = set(project_checks.touched_tests(ids, changed, result.get("test_files")))
+        untouched = [t for t in ids if t not in touched]
+        threshold = project_checks.disturbed_threshold(check)
+        if len(untouched) >= threshold:
+            return {
+                "disturbed": True,
+                "check": check["name"],
+                "tests": untouched,
+                "failed": len(ids),
+                "threshold": threshold,
+                "run_id": run_id,
+            }
+    return None
+
+
+async def _run_disturbed_again(
+    root: Path,
+    main_branch: str,
+    project_id: str,
+    batch_id: str,
+    base: str,
+    tasks: List[str],
+    prefixes: List[str],
+    landings: List[TaskLanding],
+    checks: List[Dict[str, Any]],
+    chain: Chain,
+    found: Dict[str, Any],
+    unreproduced: Sequence[Dict[str, Any]],
+) -> bool:
+    """A disturbed run is blamed on nobody yet (FR-4): the batch's checks run once more, holding
+    every check slot once no other check run holds one, and that run is decided with *found*
+    carried. The run again is recorded on the batch's narrowing log, beside the probes."""
+    logger.info(
+        "batch %s: %s failed %d tests in files no task of it changed (threshold %d); its checks "
+        "run once more on a quiet Hub",
+        batch_id,
+        found["check"],
+        len(found["tests"]),
+        found["threshold"],
+    )
+    again = await run_batch_checks(
+        root, project_id, batch_id, base, prefixes[-1], checks, landings, quiet=True
+    )
+    found = {**found, "rerun_run_id": again.run_id, "rerun_state": again.state}
+    async with async_session_factory() as session:
+        batch = await session.get(LandingBatch, batch_id)
+        batch.narrowing = [*(batch.narrowing or []), found]
+        await session.commit()
+    return await _decide(
+        root,
+        main_branch,
+        project_id,
+        batch_id,
+        base,
+        tasks,
+        prefixes,
+        landings,
+        checks,
+        again,
+        chain,
+        unreproduced=unreproduced,
+        disturbed=[found],
+    )
+
+
+def _disturbed_reason(batch_id: str, found: Dict[str, Any]) -> str:
+    """What a batch's landing says when it landed past a disturbed run (FR-4, FR-6)."""
+    return (
+        f"Landed past a disturbed run: in landing batch {batch_id}, `{found.get('check')}` failed "
+        f"{len(found.get('tests') or [])} tests in files no task of the batch changed "
+        f"({', '.join(found.get('tests') or [])}; check run {found.get('run_id')}), at least its "
+        f"threshold of {found.get('threshold')}, so its checks ran once more on a quiet Hub (check "
+        f"run {found.get('rerun_run_id')}) and it was held against no task."
     )
 
 
@@ -2066,6 +2192,7 @@ async def _narrow(
     *,
     timed_out: bool = False,
     unreproduced: Sequence[Dict[str, Any]] = (),
+    disturbed: Sequence[Dict[str, Any]] = (),
 ) -> bool:
     """Find the first task whose work, on the ones before it, makes the failing tests fail: binary
     search over the prefixes, running the check's re-run command with every failed test id (or
@@ -2146,7 +2273,8 @@ async def _narrow(
     proven = await fails_at(culprit) and not await fails_at(culprit - 1)
     async with async_session_factory() as session:
         batch = await session.get(LandingBatch, batch_id)
-        batch.narrowing = [*(batch.narrowing or []), *log] if unreproduced else log
+        # Kept: an earlier round's probes (FR-3) and a disturbed run's run again (FR-4).
+        batch.narrowing = [*(batch.narrowing or []), *log]
         await session.commit()
     if not proven:
         return await _unreproduced(
@@ -2169,6 +2297,7 @@ async def _narrow(
                     "timed_out": timed_out,
                 },
             ],
+            disturbed,
         )
     proof = [next(step for step in log if step["prefix"] == k) for k in (culprit, culprit - 1)]
     before = tasks[: culprit - 1]
@@ -2242,6 +2371,7 @@ async def _unreproduced(
     checks: List[Dict[str, Any]],
     chain: Chain,
     found: List[Dict[str, Any]],
+    disturbed: Sequence[Dict[str, Any]] = (),
 ) -> bool:
     """A failure that reproduced on no prefix belongs to no task: nobody is sent back
     (`a-landing-failure-is-blamed-on-a-task-only-when-it-reproduces-there`, FR-3). The first time,
@@ -2259,7 +2389,15 @@ async def _unreproduced(
             prefixes,
             len(prefixes),
             chain,
-            (_unreproduced_reason(batch_id, found, listed, passed=False), OVERRIDE_BY_HUB),
+            (
+                " ".join(
+                    [
+                        *(_disturbed_reason(batch_id, item) for item in disturbed),
+                        _unreproduced_reason(batch_id, found, listed, passed=False),
+                    ]
+                ),
+                OVERRIDE_BY_HUB,
+            ),
         )
         return True
     logger.info(
@@ -2281,6 +2419,7 @@ async def _unreproduced(
         again,
         chain,
         unreproduced=found,
+        disturbed=disturbed,
     )
 
 
