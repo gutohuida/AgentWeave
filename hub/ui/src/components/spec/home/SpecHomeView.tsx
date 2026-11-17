@@ -10,9 +10,19 @@ const REFRESH_MS = 5000
 
 /** The Spec home fed from `GET /project/builds` and `GET /project/documents`. */
 export function SpecHomeView({ onOpen }: { onOpen: (path: string, anchor?: string) => void }) {
-  const { data: rows } = useProjectBuilds(REFRESH_MS)
-  const { data: documents } = useSpecDocuments()
+  const { data: rows, error: buildsError } = useProjectBuilds(REFRESH_MS)
+  const { data: documents, error: documentsError } = useSpecDocuments()
   const builds = useMemo(() => homeBuilds(rows ?? []), [rows])
   const capabilities = useMemo(() => homeCapabilities(documents?.documents ?? []), [documents])
-  return <SpecHome builds={builds} capabilities={capabilities} now={new Date()} onOpen={onOpen} />
+  const failed = buildsError ?? documentsError
+  return (
+    <>
+      {failed && (
+        <div role="alert" data-testid="spec-home-error" className="text-sm text-red-600 px-4 py-2">
+          The Spec home could not load: {failed instanceof Error ? failed.message : String(failed)}
+        </div>
+      )}
+      <SpecHome builds={builds} capabilities={capabilities} now={new Date()} onOpen={onOpen} />
+    </>
+  )
 }
