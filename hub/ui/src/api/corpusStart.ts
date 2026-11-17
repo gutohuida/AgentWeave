@@ -53,7 +53,8 @@ export function useStartCorpus() {
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ['project', projectId, 'corpus'] })
       queryClient.invalidateQueries({ queryKey: ['project', projectId, 'specDocuments'] })
-      queryClient.invalidateQueries({ queryKey: ['projects'] })
+      // The project list carries the set-up items, the specification one among them.
+      queryClient.invalidateQueries({ predicate: (query) => query.queryKey[0] === 'projects' })
     },
   })
 }
