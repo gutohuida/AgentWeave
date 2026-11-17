@@ -182,6 +182,8 @@ export function useSpecSurface(path: string, host: SpecSurfaceHost): SpecSurface
     checkedClean: clean,
     foldReady: !!controls?.actions.fold,
     sliceDocuments: specDoc.slice_documents,
+    sliceRows: specDoc.slices,
+    progress: specDoc.progress,
   })
 
   const check: CheckState = checking

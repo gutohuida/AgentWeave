@@ -1,0 +1,13 @@
+
+.aw-rm-section { display: flex; flex-direction: column; gap: 10px; }
+.aw-rm-done { display: flex; align-items: center; flex-wrap: wrap; gap: 10px 14px; padding: 10px 14px; border-radius: var(--radius); background: color-mix(in oklab, var(--green) 12%, transparent); color: var(--text); font-size: 13px; }
+.aw-rm-done .aw-rm-done-action, .aw-rm-done button { margin-left: auto; }
+.aw-rm-added { font-size: 11px; color: var(--amber); white-space: nowrap; }
+.aw-rm-remove:hover { color: var(--red); }
+.aw-rm-picker { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.aw-rm-picker select { height: 26px; border-radius: var(--radius-sm, 6px); border: 1px solid var(--border); background: var(--surface); color: var(--text); font-size: 12px; padding: 0 6px; }
+.aw-rm-confirm { padding: 14px 16px; border: 1px solid var(--border-hi); border-radius: var(--radius); background: var(--surface); display: flex; flex-direction: column; gap: 8px; }
+.aw-rm-confirm h3 { margin: 0; font-size: 13.5px; font-weight: 600; }
+.aw-rm-confirm ul { margin: 0; padding-left: 18px; font-size: 12.5px; color: var(--text-2); }
+.aw-rm-confirm-actions { display: flex; justify-content: flex-end; gap: 6px; }
+.aw-sp-problem-list { margin: 6px 0 0; padding-left: 22px; display: flex; flex-direction: column; gap: 6px; font-size: 13px; line-height: 1.55; color: var(--text-2); }

@@ -4,7 +4,11 @@ import { Icon } from '@/components/common/Icon'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { MenuSelect } from '@/components/ui/menu'
+import { readableApiError } from '@/api/client'
+import { useSpec } from '@/api/spec'
 import { formatAgo } from '@/lib/format'
+import { progressOf } from './adapt'
+import { RoadmapProgress, SliceStateChip, type SliceState } from './RoadmapSlices'
 import { arrangeList, SHOWN_LABEL, type ListOrder, type ListPreferences, type SpecListEntry } from './model'
 import { NewCapabilityAction } from './NewCapability'
 import '@/styles/spec-page.css'
@@ -117,12 +121,11 @@ export function SpecDocList({
         {groups.map((g, gi) => (
           <div key={g.roadmap?.path ?? g.label ?? `run-${gi}`} className="aw-sp-list-group" data-roadmap={g.roadmap ? 'true' : 'false'}>
             {g.label ? <div className="aw-sp-list-label">{g.label}</div> : null}
-            {g.roadmap ? <Row entry={g.roadmap} active={active} onOpen={onOpen} now={now} roadmap slices={g.entries.length} action={rowAction} /> : null}
-            {g.entries.length ? (
-              <ol className="aw-sp-list-rows" data-slices={g.roadmap ? 'true' : 'false'}>
-                {g.entries.map((e, i) => (
+            {g.roadmap ? <RoadmapGroup roadmap={g.roadmap} entries={g.entries} active={active} onOpen={onOpen} now={now} action={rowAction} showWaiting={prefs.order === 'attention'} /> : g.entries.length ? (
+              <ol className="aw-sp-list-rows" data-slices="false">
+                {g.entries.map((e) => (
                   <li key={e.path}>
-                    <Row entry={e} active={active} onOpen={onOpen} now={now} position={g.roadmap ? i + 1 : undefined} action={rowAction} showWaiting={prefs.order === 'attention'} />
+                    <Row entry={e} active={active} onOpen={onOpen} now={now} action={rowAction} showWaiting={prefs.order === 'attention'} />
                   </li>
                 ))}
               </ol>
@@ -145,6 +148,49 @@ export function SpecDocList({
   )
 }
 
+/** A roadmap's row and its slices in build order. Its progress is one mark per slice and built-of-
+ *  total; each slice row shows its state. Read from the roadmap's own page data, so the list and the
+ *  page cannot disagree. */
+function RoadmapGroup({
+  roadmap,
+  entries,
+  active,
+  onOpen,
+  now,
+  action,
+  showWaiting,
+}: {
+  roadmap: SpecListEntry
+  entries: SpecListEntry[]
+  active: string | null
+  onOpen: (path: string) => void
+  now: Date
+  action?: (entry: SpecListEntry) => React.ReactNode
+  showWaiting: boolean
+}) {
+  const { data, error } = useSpec(roadmap.path)
+  const rows = data?.slices ?? []
+  const marks = rows.map((r) => ({ key: r.key, title: r.title ?? r.key, state: progressOf(r).state }))
+  const stateOf = (path: string) => {
+    const row = rows.find((r) => r.document === path)
+    return row ? progressOf(row).state : undefined
+  }
+  return (
+    <>
+      <Row entry={roadmap} active={active} onOpen={onOpen} now={now} roadmap slices={entries.length} marks={marks.length ? marks : undefined} progressUnread={error ? readableApiError(error, 'the Hub did not answer') : undefined} action={action} />
+      {entries.length ? (
+        <ol className="aw-sp-list-rows" data-slices="true">
+          {entries.map((e, i) => (
+            <li key={e.path}>
+              <Row entry={e} active={active} onOpen={onOpen} now={now} position={i + 1} sliceState={stateOf(e.path)} action={action} showWaiting={showWaiting} />
+            </li>
+          ))}
+        </ol>
+      ) : null}
+    </>
+  )
+}
+
 function Row({
   entry: e,
   active,
@@ -153,10 +199,17 @@ function Row({
   roadmap,
   slices,
   position,
+  marks,
+  progressUnread,
+  sliceState,
   action,
   showWaiting = false,
 }: {
   showWaiting?: boolean
+  marks?: Array<{ key: string; title: string; state: SliceState }>
+  /** Why the roadmap's progress could not be drawn, shown instead of a bare slice count. */
+  progressUnread?: string
+  sliceState?: SliceState
   entry: SpecListEntry
   active: string | null
   onOpen: (path: string) => void
@@ -193,8 +246,14 @@ function Row({
       ) : null}
       {showWaiting && e.waiting ? (
         <span className="aw-sp-list-waiting">{e.waiting}</span>
+      ) : roadmap && marks ? (
+        <RoadmapProgress slices={marks} compact />
       ) : roadmap && slices !== undefined ? (
-        <span className="aw-sp-list-meta">{slices}</span>
+        <span className="aw-sp-list-meta" title={progressUnread ? `Progress unread: ${progressUnread}` : undefined}>
+          {slices}
+        </span>
+      ) : sliceState ? (
+        <SliceStateChip state={sliceState} />
       ) : (
         <span className="aw-sp-list-meta">{formatAgo(e.updatedAt, now)}</span>
       )}
