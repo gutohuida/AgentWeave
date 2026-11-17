@@ -60,6 +60,8 @@ ADD_CRITERION = "add_criterion"
 CHANGE_CRITERION = "change_criterion"
 REMOVE_CRITERION = "remove_criterion"
 CANNOT_SATISFY = "cannot_satisfy"
+#: A roadmap's one added slice (RTRR-3): applied at once, never by a tester, never a proposal.
+ADD_SLICE = "add_slice"
 OPS = (ADD_TASK, ADD_REQUIREMENT, ADD_CRITERION, CHANGE_CRITERION, REMOVE_CRITERION)
 #: What a tester applies at once: a new requirement is only ever proposed (non-goals: the tester's
 #: amendments are unchanged).
@@ -496,6 +498,19 @@ async def amend(
             "this document has no readable payload", code="payload_unreadable", status=409
         )
 
+    if op == ADD_SLICE:
+        return await _add_slice(
+            session,
+            workspace,
+            document,
+            stored_before,
+            existing_content,
+            reason=reason,
+            how_to_check=how_to_check,
+            actor=actor,
+            change=change,
+        )
+
     tested = await tested_task(session, getattr(actor, "run_id", None), document)
     if (
         actor.kind != "agent"
@@ -592,6 +607,89 @@ async def amend(
             (row.id for row in created if row.spec_task_key == target), None
         )
     return view
+
+
+async def _add_slice(
+    session: AsyncSession,
+    workspace: Any,
+    document: SpecDocument,
+    stored_before: Dict[str, Any],
+    existing_content: Optional[str],
+    *,
+    reason: Any,
+    how_to_check: Any,
+    actor: Any,
+    change: Optional[Dict[str, Any]],
+) -> Dict[str, Any]:
+    """An agent adds one slice to an approved roadmap (RTRR-3, FR-8): applied at once, recorded
+    with the agent and the run, and listed not reviewed. Only an agent the operator opened a slice
+    conversation with, or the roadmap's author, may; the operator never adds one by hand."""
+    from . import roadmap_edits, spec_lifecycle, spec_service
+
+    if document.kind != "roadmap":
+        raise AmendmentRefused(
+            "add_slice amends a roadmap", code="amendment_invalid", status=422, field="path"
+        )
+    asked = await roadmap_edits.asked_agents(session, document)
+    writers = await authors(session, document)
+    if actor.kind != "agent" or actor.name not in {*asked, *writers}:
+        raise AmendmentRefused(
+            "a slice is added by an agent the operator opened a conversation with (Add a slice "
+            "on the roadmap's page), or by the roadmap's author; there is no form for adding one "
+            "by hand",
+            code="add_slice_not_asked",
+            status=403,
+        )
+    reason_text = _text(reason, "reason")
+    check_text = _text(how_to_check, "how_to_check", required=False)
+    current = _without_identity(stored_before)
+    new_payload, key, detail = roadmap_edits.add_slice_to_payload(
+        current, change, added_by=actor.name
+    )
+    payload = _validated(new_payload)
+    amendment_id = f"amd-{short_id()}"
+    await spec_service._apply_and_write(
+        session,
+        workspace,
+        document,
+        payload,
+        stored_before,
+        existing_content,
+        actor=actor,
+        extra_detail={"amendment": amendment_id},
+    )
+    event = await spec_lifecycle.record_event(
+        session,
+        document,
+        kind=EVENT,
+        actor=actor,
+        detail={
+            "id": amendment_id,
+            "op": ADD_SLICE,
+            "target": key,
+            "requirement": None,
+            "identifier": None,
+            "reason": reason_text,
+            "how_to_check": check_text,
+            **detail,
+        },
+    )
+    await spec_lifecycle.record_event(
+        session,
+        document,
+        kind=roadmap_edits.ADDED_EVENT,
+        actor=actor,
+        detail={"slice": key, "amendment": amendment_id, "position": detail["change"]["position"]},
+    )
+    return {
+        "id": amendment_id,
+        "op": ADD_SLICE,
+        "target": key,
+        "requirement": None,
+        "identifier": None,
+        "reviewed": False,
+        "event_id": event.id,
+    }
 
 
 def _arguments(
