@@ -229,6 +229,18 @@ def poll(fn, secs, every=0.5):
     return bool(fn())
 
 
+def poll_page(page, fn, secs, every=0.5):
+    """`poll` for a condition on the page's own state (its URL): waits with `page.wait_for_timeout`,
+    because `time.sleep` blocks Playwright's sync dispatcher and `page.url` would never see a
+    `pushState` navigation made while it sleeps."""
+    end = time.time() + secs
+    while time.time() < end:
+        if fn():
+            return True
+        page.wait_for_timeout(int(every * 1000))
+    return bool(fn())
+
+
 def port_answers():
     with socket.socket() as sock:
         sock.settimeout(2)
@@ -681,7 +693,7 @@ def check_start_existing(fx, page):
     need(present(page, OFFER, 4000), "no offer to take the existing-code start from")
     take_start(page, "existing-code", agent="Alpha")
     page.click(CONFIRM)
-    poll(lambda: conversation_of(page.url)[1] is not None, 15, 0.5)
+    poll_page(page, lambda: conversation_of(page.url)[1] is not None, 15, 0.5)
     shot(page, "start-existing-conversation")
     agent, conversation = conversation_of(page.url)
     need(agent == "Alpha" and conversation, f"the start did not open Alpha's conversation: {decoded(page.url)}")
@@ -766,7 +778,7 @@ def check_greenfield(fx, page):
     need(present(page, OFFER, 4000), "an empty folder is offered no start")
     take_start(page, "greenfield", agent="Greeter")
     page.click(CONFIRM)
-    poll(lambda: conversation_of(page.url)[1] is not None, 15, 0.5)
+    poll_page(page, lambda: conversation_of(page.url)[1] is not None, 15, 0.5)
     agent, conversation = conversation_of(page.url)
     need(agent == "Greeter" and conversation, f"the greenfield start did not open Greeter's conversation: {decoded(page.url)}")
     roadmaps = [d for d in p.documents() if d.get("kind") == "roadmap"]

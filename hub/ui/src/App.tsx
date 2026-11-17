@@ -580,6 +580,7 @@ export default function App() {
           }}
           onOpenEvidence={() => navigateTo(evidenceDestination(destination.projectId), { replace: true })}
           evidenceOpen={destination.view === 'evidence'}
+          onAddAgent={() => setAgentCreateProjectId(destination.projectId)}
         >
           {specView}
         </SpecPage>
