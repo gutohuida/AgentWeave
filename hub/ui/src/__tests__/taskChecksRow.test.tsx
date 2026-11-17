@@ -266,3 +266,43 @@ describe('a disturbed run is shown on the check run (`a-disturbed-check-run-is-n
     expect(note).toHaveTextContent('FAILED test_a: git timed out')
   })
 })
+
+describe('a check that could not run is its own state (a-check-that-cannot-run-says-so, FR-8)', () => {
+  // As the route returns it: newest run first, the could-not-run result carrying its program.
+  const cannot = {
+    name: 'hub-ui',
+    exit_code: 127,
+    timed_out: false,
+    duration_seconds: 0.4,
+    output_tail: 'sh: 1: eslint: not found',
+    outcome: 'could_not_run',
+    missing_program: 'eslint',
+    dependency_link_failures: [{ name: 'node_modules', reason: 'symlink and junction refused' }],
+  }
+
+  it('is labelled apart from failed, names the check, eslint and the link failure, never passed', () => {
+    checks = {
+      configured: true,
+      running: false,
+      runs: [
+        run('failed', { results: [cannot, { name: 'hub-tests', exit_code: 0, timed_out: false, duration_seconds: 2, output_tail: 'ok' }] }),
+        run('passed'),
+      ],
+    }
+    render(<TaskChecksRow taskId="task-1" />)
+    expect(screen.getByTestId('task-checks-state-task-1')).toHaveTextContent('Checks could not run')
+    expect(screen.getByTestId('task-checks-state-task-1')).not.toHaveTextContent(/failed|passed/)
+    const named = screen.getByTestId('task-checks-could-not-run-task-1')
+    expect(named).toHaveTextContent('hub-ui could not run: eslint was not found')
+    expect(named).toHaveTextContent('node_modules: symlink and junction refused')
+    expect(screen.queryByLabelText('Output of hub-ui')).toBeNull()
+  })
+
+  it('still says failed when a check failed beside the one that could not run', () => {
+    const failing = { name: 'tests', exit_code: 1, timed_out: false, duration_seconds: 1, output_tail: 'FAILED' }
+    checks = { configured: true, running: false, runs: [run('failed', { results: [cannot, failing] })] }
+    render(<TaskChecksRow taskId="task-1" />)
+    expect(screen.getByTestId('task-checks-state-task-1')).toHaveTextContent('Checks failed: tests')
+    expect(screen.getByTestId('task-checks-could-not-run-task-1')).toHaveTextContent('hub-ui could not run')
+  })
+})

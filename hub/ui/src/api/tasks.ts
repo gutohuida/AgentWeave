@@ -243,6 +243,23 @@ export interface TaskCheckResult {
   disturbed?: { failed: number; passed_on_rerun: number; threshold: number }
   /** The first run of a check that failed and then passed when re-run. */
   flaky?: { first?: { output_tail?: string } }
+  /** `could_not_run`: the check's command could not start. Neither passed nor failed, and never
+   *  the work's (`a-check-that-cannot-run-says-so...`). */
+  outcome?: string
+  /** The program the shell could not find (`eslint`). */
+  missing_program?: string | null
+  /** Why the command could not be started at all, where no program was named. */
+  spawn_error?: string | null
+  /** Dependency links that failed in the check's checkout. */
+  dependency_link_failures?: { name: string; reason: string }[]
+}
+
+/** A check of a landing batch that could not run, as the landing record names it. */
+export interface CouldNotRunCheck {
+  name: string
+  missing_program?: string | null
+  spawn_error?: string | null
+  dependency_link_failures?: { name: string; reason: string }[]
 }
 
 /** One run of the project's checks on the work this task's approval would merge. */
@@ -274,6 +291,8 @@ export interface TaskLandingBatch {
   override_reason: string | null
   override_by: 'hub' | 'operator' | null
   error: string
+  /** Its checks whose command could not start; absent from a Hub older than that outcome. */
+  could_not_run?: CouldNotRunCheck[]
 }
 
 /** A known-failing entry as a landing recorded going past it (`known_failing.snapshot`). */

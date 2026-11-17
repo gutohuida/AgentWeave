@@ -8,6 +8,7 @@ import {
   type TaskLandingEntry as LandingEntry,
 } from '@/api/tasks'
 import { CiState } from '@/components/spec/PullRequestLine'
+import { couldNotRunSentence } from './couldNotRun'
 import { Button } from '@/components/ui/button'
 
 /**
@@ -143,6 +144,14 @@ export function TaskLanding({ taskId }: { taskId: string }) {
         <p style={{ color: 'var(--text-2)' }}>{landing.reason}</p>
       )}
       {landing.state === 'held' && !landing.waits_on && <HeldOnMain taskId={taskId} />}
+      {/* A check of the batch that could not start is said as that, never as passed or failed. */}
+      {landing.batch?.could_not_run?.length ? (
+        <ul data-testid={`task-landing-could-not-run-${taskId}`} style={{ color: 'var(--amber, var(--text-2))' }}>
+          {landing.batch.could_not_run.map((check) => (
+            <li key={check.name}>{couldNotRunSentence(check)}</li>
+          ))}
+        </ul>
+      ) : null}
       <CiState ci={landing.ci} testId={`task-ci-${taskId}`} />
       {(landing.state === 'sent_back' || landing.state === 'not_landed') && landing.reason && (
         <pre

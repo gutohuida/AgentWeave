@@ -2839,6 +2839,8 @@ async def view(session: AsyncSession, task_id: str) -> Optional[Dict[str, Any]]:
                 "override_reason": batch.override_reason,
                 "override_by": batch.override_by,
                 "error": batch.error,
+                # A check of the batch whose command could not start: neither passed nor failed.
+                "could_not_run": project_checks.could_not_run_view(batch.results),
             }
             if landing.state == LANDED:
                 from . import known_failing

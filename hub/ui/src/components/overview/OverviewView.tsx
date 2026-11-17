@@ -23,6 +23,7 @@ export type NeedKind =
   | 'blocked'
   | 'main'
   | 'offer'
+  | 'check'
 
 export interface NeedItem {
   id: string
@@ -93,6 +94,7 @@ const NEED_ICON: Record<NeedKind, { icon: string; tone: 'amber' | 'red' | 'blue'
   blocked: { icon: 'hourglass_top', tone: 'amber' },
   main: { icon: 'call_split', tone: 'amber' },
   offer: { icon: 'edit_note', tone: 'blue' },
+  check: { icon: 'build', tone: 'amber' },
 }
 
 export function OverviewView({

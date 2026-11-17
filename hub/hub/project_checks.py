@@ -783,6 +783,79 @@ def could_not_run_summary(results: Optional[Sequence[Any]]) -> str:
     )
 
 
+def could_not_run_view(results: Optional[Sequence[Any]]) -> List[Dict[str, Any]]:
+    """Each check that could not run, as the operator's screens name it (FR-8): the check, the
+    program it lacked, and any dependency link that failed in its checkout."""
+    return [
+        {
+            "name": r.get("name"),
+            "missing_program": r.get("missing_program"),
+            "spawn_error": r.get("spawn_error"),
+            "dependency_link_failures": list(r.get("dependency_link_failures") or []),
+        }
+        for r in could_not_run_results(results)
+    ]
+
+
+async def could_not_run_notices(session: AsyncSession, project_id: str) -> List[Dict[str, Any]]:
+    """The project's notices for checks whose latest run ended 'could not run' (FR-9): one per
+    check, from the newest finished run of that check on any task, landing batch or main-branch
+    run. Computed from the runs themselves, so the next run of the check, passing or failing,
+    clears it with nobody dismissing anything."""
+    from .db.models import LandingBatch, MainCheckRun
+
+    def stamp(moment: Optional[datetime]) -> datetime:
+        if moment is None:
+            return datetime.min.replace(tzinfo=timezone.utc)
+        return moment if moment.tzinfo is not None else moment.replace(tzinfo=timezone.utc)
+
+    runs: List[Tuple[datetime, str, Sequence[Any]]] = []
+    for model, source in ((TaskCheckRun, "task"), (MainCheckRun, "main")):
+        rows = (
+            (
+                await session.execute(
+                    select(model).where(model.project_id == project_id, model.state != "running")
+                )
+            )
+            .scalars()
+            .all()
+        )
+        runs += [(stamp(r.ended_at or r.started_at), source, r.results or []) for r in rows]
+    batches = (
+        (
+            await session.execute(
+                select(LandingBatch).where(
+                    LandingBatch.project_id == project_id, LandingBatch.ended_at.is_not(None)
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    runs += [(stamp(b.ended_at), "landing", b.results or []) for b in batches]
+    runs.sort(key=lambda run: run[0])
+    latest: Dict[str, Tuple[datetime, str, Dict[str, Any]]] = {}
+    for at, source, results in runs:
+        for result in results:
+            if isinstance(result, dict) and result.get("name") and not result.get("skipped"):
+                latest[str(result["name"])] = (at, source, result)
+    return [
+        {
+            "check": name,
+            "program": result.get("missing_program") or result.get("spawn_error"),
+            "dependency_link_failures": list(result.get("dependency_link_failures") or []),
+            "source": source,
+            "at": at.isoformat(),
+            "message": (
+                f"The check {name} could not run: {result.get('missing_program') or result.get('spawn_error') or 'its program'}"
+                f" was not found. Landing is waiting on it until it runs again."
+            ),
+        }
+        for name, (at, source, result) in sorted(latest.items())
+        if could_not_run(result)
+    ]
+
+
 # --- the check's report (`checks-report-which-tests-failed-in-any-language`) --------------------
 
 #: Where a re-run command takes the ids of the tests to re-run (FR-1, FR-6).

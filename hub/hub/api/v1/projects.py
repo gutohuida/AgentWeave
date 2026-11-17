@@ -1199,6 +1199,20 @@ async def list_main_notices(
     return {"notices": [main_watch.view(row) for row in rows]}
 
 
+@router.get("/{project_id}/check-notices")
+async def list_check_notices(
+    project_identity: Tuple[str, str] = Depends(get_operator_project),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """Checks whose latest run ended 'could not run' (`project_checks.could_not_run_notices`):
+    landing is waiting on each. There is nothing to dismiss; the check's next run clears it."""
+    from ... import project_checks
+
+    project_id = project_identity[0]
+    await _operator_project_row(project_id, session)
+    return {"notices": await project_checks.could_not_run_notices(session, project_id)}
+
+
 @router.post("/{project_id}/main-notices/{notice_id}/seen")
 async def mark_main_notice_seen(
     notice_id: str,

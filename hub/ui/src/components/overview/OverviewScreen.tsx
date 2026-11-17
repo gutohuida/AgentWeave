@@ -8,6 +8,7 @@ import { readableApiError } from '@/api/client'
 import { useAnswerQuestion, useDeclineQuestion, useQuestions } from '@/api/questions'
 import { useEndStall, useOpenStalls, type Stall } from '@/api/stalls'
 import { useClearStableFixTasks, useDisturbedRuns, useKnownFailing } from '@/api/knownFailing'
+import { useCheckNotices } from '@/api/checkNotices'
 import { describeMainNotice, useMarkMainNoticeSeen, useOpenMainNotices } from '@/api/mainNotices'
 import { useReopeningWarnings } from '@/api/reopeningWarnings'
 import { offerKey, offerTarget, offerTitle, useDeclineNextSliceOffer, useNextSliceOffers, useTakeNextSliceOffer } from '@/api/nextSlice'
@@ -78,6 +79,7 @@ export function OverviewScreen({
   const clearStable = useClearStableFixTasks()
   const { data: mainNotices = [], error: mainNoticesError, refetch: refetchMainNotices } = useOpenMainNotices()
   const markSeen = useMarkMainNoticeSeen()
+  const { data: checkNotices = [], error: checkNoticesError, refetch: refetchCheckNotices } = useCheckNotices()
   const { data: offers = [], error: offersError, refetch: refetchOffers } = useNextSliceOffers()
   const takeOffer = useTakeNextSliceOffer()
   const declineOffer = useDeclineNextSliceOffer()
@@ -97,6 +99,7 @@ export function OverviewScreen({
     ['the ledger', ledgerError, refetchLedger],
     ['the budget', accountingError, refetchAccounting],
     ['the main branch notices', mainNoticesError, refetchMainNotices],
+    ['the checks that could not run', checkNoticesError, refetchCheckNotices],
     ['the next-slice offers', offersError, refetchOffers],
     ['the reopened builds', reopeningsError, refetchReopenings],
   ]
@@ -275,6 +278,18 @@ export function OverviewScreen({
     }),
     // Main moved outside the Hub's own integration (`hub/hub/main_watch.py`): one row per open
     // notice, naming the commits so the operator recognises their own merges at a glance.
+    // A check whose latest run could not run (`project_checks.could_not_run_notices`): landing
+    // waits on it, and it clears when the check runs again. The row only takes the operator to
+    // the tasks, where the run is.
+    ...checkNotices.map<NeedItem>((notice) => ({
+      id: `check-${notice.check}`,
+      kind: 'check',
+      agent: null,
+      title: `${notice.check} could not run`,
+      detail: notice.message,
+      at: notice.at,
+      primary: { label: 'Open tasks', onClick: () => onNavigate('tasks') },
+    })),
     ...mainNotices.map<NeedItem>((notice) => ({
       id: `main-${notice.id}`,
       kind: 'main',

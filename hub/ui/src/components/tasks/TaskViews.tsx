@@ -3,6 +3,7 @@ import { Icon } from '@/components/common/Icon'
 import { DIVERGENCE_POLICY_LABELS, type RequirementLink, type Task, type TaskCheckResult, type TaskCheckRun, type TaskDependencyRef } from '@/api/tasks'
 import { formatAgo, formatDateTime } from '@/lib/format'
 import { stageVisual } from '@/lib/taskStageVisual'
+import { couldNotRunSentence, isCouldNotRun } from './couldNotRun'
 import '@/styles/task-redesign.css'
 import '@/styles/task-views.css'
 
@@ -28,7 +29,7 @@ function requirementState(link: RequirementLink, coverage: string | undefined) {
 }
 
 function isFailure(result: TaskCheckResult): boolean {
-  return !result.skipped && (result.timed_out || result.exit_code !== 0)
+  return !result.skipped && !isCouldNotRun(result) && (result.timed_out || result.exit_code !== 0)
 }
 
 /** What the task is checked against and how that stands: each requirement with its evidence, the
@@ -175,12 +176,13 @@ function EarlierRuns({ runs, now }: { runs: TaskCheckRun[]; now?: Date }) {
 function CheckRow({ result }: { result: TaskCheckResult }) {
   const [open, setOpen] = React.useState(false)
   const failed = isFailure(result)
-  const tone = result.skipped ? 'idle' : failed ? (result.preexisting ? 'needs-you' : 'failed') : 'done'
-  const word = result.skipped ? 'skipped' : result.timed_out ? 'timed out' : failed ? (result.preexisting ? 'fails on main too' : 'failed') : 'passed'
+  const cannot = isCouldNotRun(result)
+  const tone = result.skipped ? 'idle' : cannot ? 'needs-you' : failed ? (result.preexisting ? 'needs-you' : 'failed') : 'done'
+  const word = result.skipped ? 'skipped' : cannot ? couldNotRunSentence(result) : result.timed_out ? 'timed out' : failed ? (result.preexisting ? 'fails on main too' : 'failed') : 'passed'
   return (
     <li className="aw-tview-check" data-tone={tone}>
       <button type="button" data-slot="check-row" className="aw-tview-check-head" aria-expanded={failed ? open : undefined} disabled={!failed} onClick={() => setOpen((o) => !o)}>
-        <Icon name={result.skipped ? 'circle_dashed' : failed ? 'x' : 'check'} size={13} />
+        <Icon name={result.skipped ? 'circle_dashed' : cannot ? 'circle_dashed' : failed ? 'x' : 'check'} size={13} />
         <span className="aw-tview-check-name">{result.name}</span>
         <span className="aw-tview-check-word">{word}</span>
         <span className="aw-tview-check-time">{Math.round(result.duration_seconds)}s</span>
