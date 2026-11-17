@@ -25,7 +25,8 @@ branch, moves it to completed, starts its pre-review run with the operator's
 Concurrency. FR-10's setting does not exist on the pre-build code; the Hub runs
 `--slots` (default 2, today's `MAX_CONCURRENT_RUNS`) check runs at once. The drive fills every slot
 with a holder, so freeing one holder is the spec's "concurrency 1 with the slot held": one slot
-frees and two runs wait for it.
+frees and two runs wait for it. On the built code (LTTFA-4) a `--start-hub` drive first sets the
+scratch Hub's `PUT /hub-settings {check_concurrency: --slots}`, so `--slots 1` is concurrency 1.
 
 Steps:
   order    L (adds hold-l.txt) has its pre-review run pass while nothing is held, then the holders
@@ -101,8 +102,9 @@ HISTORY_COLUMNS = (
     "commit_sha",
     "recorded_at",
 )
-#: The batch's landing record (FR-7), on `landing_batches`.
-BATCH_FIELDS = ("ready_at", "slot_at", "checks_ended_at", "check_runs", "outcome")
+#: The batch's landing record (FR-7), on `landing_batches`. Run-the-drive (LTTFA-4): the build
+#: keeps the batch's outcome in its existing `state` column rather than a new `outcome` one.
+BATCH_FIELDS = ("ready_at", "slot_at", "checks_ended_at", "check_runs", "state as outcome")
 
 GATE = r"""import json, pathlib, shutil, subprocess, sys, time
 log, gates, args = pathlib.Path(sys.argv[1]), pathlib.Path(sys.argv[2]), sys.argv[3:]
@@ -744,6 +746,9 @@ def main() -> int:
         except OSError as exc:
             raise SystemExit(f"no Hub at {args.hub}: {exc}") from exc
         print(f"Hub {args.hub}", flush=True)
+    if proc is not None:  # the scratch Hub's own setting; a shared Hub's is left alone
+        code, res = hub.request("PUT", "/hub-settings", {"check_concurrency": args.slots})
+        print(f"PUT /hub-settings check_concurrency={args.slots} -> {code}: {res}", flush=True)
     projects: list[Project] = []
     try:
         try:
