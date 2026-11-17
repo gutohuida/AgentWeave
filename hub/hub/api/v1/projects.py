@@ -1371,8 +1371,9 @@ async def _setup_dismissal(project_id: str, item: str, session: AsyncSession, un
             detail={
                 "code": "setup_item_not_dismissable",
                 "message": (
-                    f"'{item}' cannot be dismissed: only the repository item can be. Without a "
-                    "folder, an agent, or an agent that runs, nothing in this project works."
+                    f"'{item}' cannot be dismissed: only the repository and specification "
+                    "items can be. Without a folder, an agent, or an agent that runs, nothing in "
+                    "this project works."
                 ),
             },
         ) from exc
