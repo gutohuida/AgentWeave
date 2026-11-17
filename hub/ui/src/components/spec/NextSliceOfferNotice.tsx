@@ -3,6 +3,7 @@ import { Button } from '@/components/ui/button'
 import { readableApiError } from '@/api/client'
 import { useAgents } from '@/api/agents'
 import {
+  offerTarget,
   offerTitle,
   useDeclineNextSliceOffer,
   useNextSliceOffers,
@@ -20,7 +21,9 @@ export function NextSliceOfferNotice({ path }: { path: string }) {
   const { data: agents = [], error: agentsError } = useAgents()
   const take = useTakeNextSliceOffer()
   const decline = useDeclineNextSliceOffer()
-  const offer = offers.find((entry) => entry.document === path)
+  // The notice sits on a roadmap (its first offered slice) or on the document of the slice an
+  // offer builds after; the offer is addressed by roadmap and slice either way.
+  const offer = offers.find((entry) => entry.roadmap === path || entry.document === path)
   const [chosen, setChosen] = useState<string | null>(null)
   if (offersError) {
     // Said, not shown as "no offer": the offer may be there and unread.
@@ -59,11 +62,11 @@ export function NextSliceOfferNotice({ path }: { path: string }) {
         variant="primary"
         size="xs"
         disabled={busy || !agent}
-        onClick={() => take.mutate({ path, agent })}
+        onClick={() => take.mutate({ ...offerTarget(offer), agent })}
       >
         Draft
       </Button>
-      <Button variant="ghost" size="xs" disabled={busy} onClick={() => decline.mutate({ path })}>
+      <Button variant="ghost" size="xs" disabled={busy} onClick={() => decline.mutate(offerTarget(offer))}>
         Not now
       </Button>
       {agentsError && (

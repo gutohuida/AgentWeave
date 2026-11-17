@@ -346,11 +346,17 @@ def observe(result: Dict[str, Any]) -> Observed:
     """*result* read for the list. A skipped result ran nothing, so says nothing; a reused pass says
     what the run it was reused from found on the same tree (`record_run` counts it once, by that
     run). A test in a file the task's work changes is the task's (`touched_tests`), never listed
-    as flaky."""
+    as flaky -- unless narrowing showed it reproduces on no task's prefix (`unreproduced`)."""
     seen = Observed()
     if not isinstance(result, dict) or result.get("skipped"):
         return seen
     touched = set(result.get("touched_tests") or [])
+    # A failure shown to reproduce on no task's prefix is no task's, touched or not
+    # (`a-landing-failure-is-blamed-on-a-task-only-when-it-reproduces-there`, FR-3).
+    unreproduced = (
+        result.get("unreproduced") if isinstance(result.get("unreproduced"), dict) else {}
+    )
+    touched -= {str(t) for t in unreproduced.get("tests") or []}
     flaky = result.get("flaky") if isinstance(result.get("flaky"), dict) else None
     if flaky is not None:
         if flaky.get("how") == "tests":

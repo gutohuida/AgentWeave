@@ -1,3 +1,4 @@
+import * as React from 'react'
 import { Icon } from '@/components/common/Icon'
 import { Button } from '@/components/ui/button'
 import { formatAgo, formatMoney } from '@/lib/format'
@@ -7,7 +8,7 @@ import '@/styles/roadmap.css'
  *  retrospective's rule: every task approved and on the main branch. */
 export type SliceState = 'not_drafted' | 'drafting' | 'approved' | 'building' | 'built'
 
-export const SLICE_STATE_LABEL: Record<SliceState, string> = {
+const SLICE_STATE_LABEL: Record<SliceState, string> = {
   not_drafted: 'Not drafted',
   drafting: 'Drafting',
   approved: 'Approved',
@@ -30,6 +31,16 @@ export interface RoadmapSliceView {
   unpriced?: number
   /** When it was built, or when its build started. */
   at?: string
+  /** Keys of the slices it waits for, and whether drafting is offered: the Hub's one rule. Absent in
+   *  a mock, which then derives both from `buildsAfter`. */
+  waitsFor?: string[]
+  offersDrafting?: boolean
+  /** A built slice: a written retrospective, or null when none has been written yet. */
+  retrospective?: { at: string | null } | null
+  /** Listed ahead of a slice it builds after (allowed, and said). */
+  warning?: string | null
+  addedAfterApproval?: boolean
+  addedBy?: string | null
 }
 
 /** Which slices "Draft" is offered on. `ready`: every slice whose prerequisites are built.
@@ -81,6 +92,15 @@ export interface RoadmapSlicesProps {
   onDraft: (key: string) => void
   onOpenDocument: (path: string) => void
   onMove: (key: string, to: number) => void
+  /** Total builds figures from the Hub; absent, the header sums the slices. */
+  figures?: { built: number; total: number; costUsd: number; unpriced: number }
+  onRemove?: (key: string) => void
+  /** Not now: hides the offer for that slice, here and on Overview. */
+  onNotNow?: (key: string) => void
+  /** Opens a built slice's retrospective (its document). */
+  onOpenRetrospective?: (path: string) => void
+  /** What to show in place of a slice's Draft button, or under Add a slice (key `'add'`): the agent picker. */
+  pickerFor?: (target: string) => React.ReactNode
   /** Opens a conversation with the agent the operator picks, seeded with the roadmap; the agent adds the slice (operator, 2026-11-16: agent only). */
   onAddWithAgent: () => void
 }
@@ -90,8 +110,8 @@ export interface RoadmapSlicesProps {
 export function RoadmapSlices(props: RoadmapSlicesProps) {
   const { slices, now } = props
   const offers = draftOffers(slices, props.draftRule)
-  const cost = slices.reduce((sum, s) => sum + (s.costUsd ?? 0), 0)
-  const unpriced = slices.reduce((sum, s) => sum + (s.unpriced ?? 0), 0)
+  const cost = props.figures?.costUsd ?? slices.reduce((sum, s) => sum + (s.costUsd ?? 0), 0)
+  const unpriced = props.figures?.unpriced ?? slices.reduce((sum, s) => sum + (s.unpriced ?? 0), 0)
 
   return (
     <section className="aw-rm" aria-label="Slices">
@@ -100,7 +120,7 @@ export function RoadmapSlices(props: RoadmapSlicesProps) {
         <span className="aw-rm-head-cost" title="What this roadmap's builds have cost so far: building, review, landing and mending">
           <Icon name="coins" size={13} />
           {formatMoney(cost)} so far
-          {unpriced ? <span className="aw-rm-muted"> · {unpriced} unpriced turns</span> : null}
+          {unpriced ? <span className="aw-rm-muted" data-testid="rm-unpriced"> · {unpriced} unpriced {unpriced === 1 ? 'turn' : 'turns'}</span> : null}
         </span>
         <span className="aw-rm-head-actions">
           <Button variant={props.editing ? 'primary' : 'ghost'} size="xs" onClick={() => props.onEditingChange(!props.editing)}>
@@ -112,15 +132,19 @@ export function RoadmapSlices(props: RoadmapSlicesProps) {
 
       <ol className="aw-rm-track">
         {slices.map((slice, i) => {
-          const waiting = unbuiltPrerequisites(slice, slices)
-          const offered = offers.has(slice.key)
-          const early = offered && waiting.length > 0
+          const waiting = slice.waitsFor
+            ? slice.waitsFor.map((k) => slices.find((s) => s.key === k)).filter((s): s is RoadmapSliceView => !!s)
+            : unbuiltPrerequisites(slice, slices)
+          const offered = slice.offersDrafting ?? offers.has(slice.key)
+          const early = slice.offersDrafting === undefined && offered && waiting.length > 0
           const movable = slice.state === 'not_drafted' || slice.state === 'drafting'
           const ahead = slices.slice(0, i).length
           // Warn, don't refuse: a slice moved ahead of one it builds after keeps its link, and says so.
           const outOfOrder = slice.buildsAfter.filter((k) => slices.findIndex((s) => s.key === k) > i)
+          const warning = slice.warning ?? (outOfOrder.length ? `Now ahead of ${outOfOrder.map((k) => slices.find((s) => s.key === k)?.title ?? k).join(', ')}, which it builds after.` : null)
+          const removable = slice.state === 'not_drafted' && !slice.document
           return (
-            <li key={slice.key} className="aw-rm-slice" data-state={slice.state} id={`slice-${slice.key}`}>
+            <li key={slice.key} className="aw-rm-slice" data-state={slice.state} id={`slice-${slice.key}`} data-anchor={`slice-${slice.key}`}>
               <span className="aw-rm-node" data-state={slice.state} aria-hidden>
                 {slice.state === 'built' ? <Icon name="check" size={12} /> : i + 1}
               </span>
@@ -128,6 +152,16 @@ export function RoadmapSlices(props: RoadmapSlicesProps) {
                 <div className="aw-rm-card-head">
                   <strong className="aw-rm-title">{slice.title}</strong>
                   <SliceStateChip state={slice.state} />
+                  {slice.addedAfterApproval ? (
+                    <span className="aw-rm-added" data-testid="rm-added" title="Added after the roadmap was approved; listed among its amendments to review">
+                      Added after approval{slice.addedBy ? ` by ${slice.addedBy}` : ''}
+                    </span>
+                  ) : null}
+                  {props.editing && removable && props.onRemove ? (
+                    <button data-slot="rm-remove" type="button" className="aw-rm-iconbtn aw-rm-remove" onClick={() => props.onRemove!(slice.key)} aria-label={`Remove ${slice.title}`} title="Remove this slice">
+                      <Icon name="delete" size={12} />
+                    </button>
+                  ) : null}
                   {props.editing && movable ? (
                     <span className="aw-rm-move">
                       <button data-slot="rm-move" type="button" className="aw-rm-iconbtn" disabled={ahead === 0} onClick={() => props.onMove(slice.key, i - 1)} aria-label="Move up">
@@ -154,10 +188,10 @@ export function RoadmapSlices(props: RoadmapSlicesProps) {
                     </div>
                   ) : null}
                 </dl>
-                {props.editing && outOfOrder.length ? (
-                  <p className="aw-rm-warn">
+                {warning ? (
+                  <p className="aw-rm-warn" data-testid="rm-warning">
                     <Icon name="alert_triangle" size={12} />
-                    Now ahead of {outOfOrder.map((k) => slices.find((s) => s.key === k)?.title ?? k).join(', ')}, which it builds after.
+                    {warning}
                   </p>
                 ) : null}
                 <div className="aw-rm-foot">
@@ -185,7 +219,19 @@ export function RoadmapSlices(props: RoadmapSlicesProps) {
                       {slice.state === 'built' ? 'built' : 'started'} {formatAgo(slice.at, now)}
                     </span>
                   ) : null}
-                  {offered ? (
+                  {slice.state === 'built' && slice.document ? (
+                    slice.retrospective ? (
+                      <button data-slot="link-button" type="button" className="aw-sp-textbutton" data-testid="rm-retro" onClick={() => props.onOpenRetrospective?.(slice.document!.path)}>
+                        <Icon name="article" size={12} />
+                        Retrospective
+                      </button>
+                    ) : slice.retrospective === null ? (
+                      <span className="aw-rm-stat aw-rm-muted" data-testid="rm-no-retro">No retrospective has been written yet</span>
+                    ) : null
+                  ) : null}
+                  {offered && props.pickerFor?.(slice.key) ? (
+                    <span className="aw-rm-draft">{props.pickerFor(slice.key)}</span>
+                  ) : offered ? (
                     <span className="aw-rm-draft">
                       {early ? (
                         <span className="aw-rm-warn" data-inline="true">
@@ -197,6 +243,11 @@ export function RoadmapSlices(props: RoadmapSlicesProps) {
                         <Icon name="sparkles" size={12} />
                         {early ? 'Draft early' : 'Draft this slice'}
                       </Button>
+                      {props.onNotNow && !early ? (
+                        <Button variant="ghost" size="xs" onClick={() => props.onNotNow!(slice.key)}>
+                          Not now
+                        </Button>
+                      ) : null}
                     </span>
                   ) : slice.state === 'not_drafted' && waiting.length ? (
                     <span className="aw-rm-stat aw-rm-muted aw-rm-draft">Waits for {waiting.map((s) => s.title).join(', ')}</span>
@@ -211,9 +262,11 @@ export function RoadmapSlices(props: RoadmapSlicesProps) {
             <span className="aw-rm-node" data-state="new" aria-hidden>
               <Icon name="add" size={12} />
             </span>
-            <button data-slot="rm-add" type="button" className="aw-rm-add" onClick={props.onAddWithAgent}>
-              <Icon name="sparkles" size={12} /> Add a slice with an agent
-            </button>
+            {props.pickerFor?.('add') ?? (
+              <button data-slot="rm-add" type="button" className="aw-rm-add" onClick={props.onAddWithAgent}>
+                <Icon name="sparkles" size={12} /> Add a slice with an agent
+              </button>
+            )}
           </li>
         ) : null}
       </ol>

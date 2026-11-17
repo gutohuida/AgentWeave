@@ -134,6 +134,37 @@ describe("the drawer shows approved work's landing beside Land", () => {
     expect(screen.queryByTestId('task-landing-went-past-task-1')).toBeNull()
   })
 
+  it("says a batch the Hub landed past a failure reproduced on no task's work held it against no task", () => {
+    // `a-landing-failure-is-blamed-on-a-task-only-when-it-reproduces-there` FR-6, ac-landing-record:
+    // the reason as `landing_queue._unreproduced_reason` words it, the override as the batch records it.
+    const reason =
+      "Landed past a failure reproduced on no task's work: in landing batch lbat-1, `pytest` failed " +
+      'test_flaky::test_flaky (check run chk-1), and no task\'s work reproduced it when probed on its own ' +
+      'prefix. The batch passed when its checks ran once more, so it was held against no task. On the ' +
+      'known-failing list as flaky: test_flaky::test_flaky.'
+    show(
+      landing('landed', {
+        landed_sha: 'b'.repeat(40),
+        override_reason: reason,
+        batch: batch({ state: 'landed', override_reason: reason, override_by: 'hub' }),
+      }),
+    )
+    const line = screen.getByText(/Landed past failures held against no task/)
+    expect(line).toHaveTextContent("reproduced on no task's work")
+    expect(line).toHaveTextContent('test_flaky::test_flaky')
+    expect(screen.queryByText(/failures main shares/)).toBeNull()
+  })
+
+  it("keeps the operator's override worded as failures main shares", () => {
+    show(
+      landing('landed', {
+        override_reason: 'main is red; fixed separately',
+        batch: batch({ state: 'landed', override_reason: 'main is red; fixed separately', override_by: 'operator' }),
+      }),
+    )
+    expect(screen.getByText(/Landed over failures main shares/)).toHaveTextContent('main is red; fixed separately')
+  })
+
   it('shows why a task was sent back, with the failing output', () => {
     const report = 'Landing batch lbat-1 found that task task-1\'s work ... FAILED test_suite.py::test_no_marker'
     expect(show(landing('sent_back', { reason: report }))).toHaveTextContent('Sent back by its landing batch')

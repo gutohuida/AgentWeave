@@ -194,6 +194,9 @@ async def test_the_next_slice_is_offered_not_queued(
     (task_id,) = approved.json()["tasks_created"]
 
     await _move(app, auth_headers, task_id, "in_progress", "completed", "under_review", "approved")
+    from .test_next_slice_offer import land
+
+    await land(task_id)
     await _settle()
 
     offers = await app.get(f"{BASE}/next-slice-offers", headers=auth_headers)

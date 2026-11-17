@@ -180,11 +180,28 @@ async def test_a_second_unjudged_timeout_is_narrowed_never_held(app, tmp_path, m
 
 
 async def _run_and_decide_again(tmp_path: Path, monkeypatch, batch_id: str, landings):
+    """The batch again, its one task's prefix a commit of its own: the check runs out of time on
+    it and passes on the base before it, so narrowing proves the timeout is that task's
+    (`a-landing-failure-is-blamed-on-a-task-only-when-it-reproduces-there`, FR-1)."""
     base = git(tmp_path, "rev-parse", "HEAD").stdout.strip()
+    git(tmp_path, "checkout", "-q", "-b", "the-work")
+    (tmp_path / "work.txt").write_text("slow\n", encoding="utf-8")
+    git(tmp_path, "add", "work.txt")
+    git(tmp_path, "commit", "-q", "-m", "the work")
+    prefix = git(tmp_path, "rev-parse", "HEAD").stdout.strip()
+    git(tmp_path, "checkout", "-q", "main")
     await _batch(batch_id, base, landings)
-    monkeypatch.setattr(project_checks, "run_one", lambda *a, **k: _result())
+    monkeypatch.setattr(
+        project_checks,
+        "run_one",
+        lambda check, path, owner: (
+            _result()
+            if (Path(path) / "work.txt").exists()
+            else _result(exit_code=0, timed_out=False)
+        ),
+    )
     outcome = await landing_queue.run_batch_checks(
-        tmp_path, "proj-test", batch_id, base, base, [CHECK], landings
+        tmp_path, "proj-test", batch_id, base, prefix, [CHECK], landings
     )
     decided = await landing_queue._decide(
         tmp_path,
@@ -193,7 +210,7 @@ async def _run_and_decide_again(tmp_path: Path, monkeypatch, batch_id: str, land
         batch_id,
         base,
         [landing.task_id for landing in landings],
-        [base],
+        [prefix],
         landings,
         [CHECK],
         outcome,

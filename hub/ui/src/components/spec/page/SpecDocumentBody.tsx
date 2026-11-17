@@ -21,6 +21,7 @@ import {
 } from './model'
 import { useEnter } from './hooks'
 import { ThreadRail } from './threads/ThreadRail'
+import { RoadmapSection } from './RoadmapSection'
 import '@/styles/spec-page.css'
 
 export type BodyPart = 'document' | 'tasks' | 'builds'
@@ -57,6 +58,8 @@ export function SpecDocumentBody(props: SpecDocumentBodyProps) {
   const findingsFor = (kind: CheckFinding['target']['kind'], id: string) => findings.filter((f) => f.target.kind === kind && f.target.id === id)
   const agents = Array.from(new Set(doc.tasks.map((t) => t.agent).filter((a): a is string => Boolean(a)))).sort()
   const show = (part: BodyPart) => parts.includes(part)
+  const isRoadmap = doc.kind === 'roadmap' && Boolean(doc.slices?.length)
+  const [now] = React.useState(() => new Date())
 
   return (
     <div className="aw-sp-body" data-compact={props.compact ? 'true' : 'false'}>
@@ -76,8 +79,13 @@ export function SpecDocumentBody(props: SpecDocumentBodyProps) {
           <Section id="summary" title="Summary" onCopyLink={props.onCopyLink} flash={props.flash} findings={findingsFor('section', 'summary')}>
             <p className="aw-sp-lede">{doc.summary}</p>
           </Section>
+          {isRoadmap ? (
+            <Section id="slices" title="Slices" count={String(doc.slices?.length ?? 0)} onCopyLink={props.onCopyLink} flash={props.flash} findings={findingsFor('section', 'slices')}>
+              <RoadmapSection doc={doc} now={now} onOpenDocument={props.onOpenDocument} />
+            </Section>
+          ) : null}
           <Section id="problem" title="Problem" onCopyLink={props.onCopyLink} flash={props.flash} findings={findingsFor('section', 'problem')}>
-            <p className="aw-sp-prose">{doc.problem}</p>
+            <ProblemText problem={doc.problem} />
           </Section>
           <Section id="scope" title="Scope" onCopyLink={props.onCopyLink} flash={props.flash} findings={findingsFor('section', 'scope')}>
             <div className="aw-sp-scope">
@@ -85,7 +93,7 @@ export function SpecDocumentBody(props: SpecDocumentBodyProps) {
               <ScopeList title="Not in this change" icon="remove_circle" items={doc.nonGoals} />
             </div>
           </Section>
-          {doc.slices?.length ? (
+          {doc.slices?.length && !isRoadmap ? (
             <Section id="slices" title="Slices" count={String(doc.slices.length)} onCopyLink={props.onCopyLink} flash={props.flash} findings={findingsFor('section', 'slices')}>
               <ol className="aw-sp-slices">
                 {doc.slices.map((slice, i) => (
@@ -204,7 +212,54 @@ export function SpecDocumentBody(props: SpecDocumentBodyProps) {
           </ul>
         </Section>
       ) : null}
+      {show('document') ? <EvidenceSection doc={doc} props={props} /> : null}
     </div>
+  )
+}
+
+
+/** A problem written as a lead and numbered lines ("1. ...") is a list, one item per line; any
+ *  other problem keeps its line breaks as a paragraph. */
+function problemParts(problem: string): { lead: string; items: string[] } {
+  const lines = problem.split(/\r?\n/).map((l) => l.trim()).filter(Boolean)
+  const first = lines.findIndex((l) => /^\d+[.)]\s+/.test(l))
+  if (first < 0) return { lead: problem, items: [] }
+  const items: string[] = []
+  for (const line of lines.slice(first)) {
+    const numbered = /^\d+[.)]\s+(.*)$/.exec(line)
+    if (numbered) items.push(numbered[1]!)
+    else if (items.length) items[items.length - 1] += ` ${line}`
+  }
+  return { lead: lines.slice(0, first).join(' '), items }
+}
+
+function ProblemText({ problem }: { problem: string }) {
+  const { lead, items } = problemParts(problem)
+  return (
+    <>
+      {lead ? <p className="aw-sp-prose" style={items.length ? undefined : { whiteSpace: 'pre-line' }}>{lead}</p> : null}
+      {items.length ? (
+        <ol className="aw-sp-problem-list" data-testid="problem-list">
+          {items.map((item, i) => (
+            <li key={i}>{item}</li>
+          ))}
+        </ol>
+      ) : null}
+    </>
+  )
+}
+
+/** What the document rests on: what was checked, and where that stops. */
+function EvidenceSection({ doc, props }: { doc: SpecDocumentView; props: SpecDocumentBodyProps }) {
+  const evidence = doc.evidence
+  if (!evidence || (!evidence.checked.length && !evidence.limits.length)) return null
+  return (
+    <Section id="evidence" title="What this rests on" onCopyLink={props.onCopyLink} flash={props.flash} findings={[]}>
+      <div className="aw-sp-scope" data-testid="document-evidence">
+        {evidence.checked.length ? <ScopeList title="Checked" icon="check" items={evidence.checked} /> : null}
+        {evidence.limits.length ? <ScopeList title="Limits" icon="remove_circle" items={evidence.limits} /> : null}
+      </div>
+    </Section>
   )
 }
 
