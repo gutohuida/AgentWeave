@@ -390,6 +390,25 @@ async def test_ac_no_send_back_and_ac_batch_retries(
             assert [row.commit_sha for row in await _merged(task_id)] == [tip]
             assert len(await _moved_to(task_id, "approved")) == 1, "approved once, not again"
         assert all(tip in commits_on(tmp_path, "main") for tip in tips)
+
+        # A landing queued afterwards for the same task is a new landing: the earlier batch's
+        # "could not run" belongs to the earlier one and is not lent to it.
+        async with async_session_factory() as session:
+            task = await session.get(Task, ids[0])
+            fresh = landing_queue.stage(
+                session,
+                task,
+                actor_kind="operator",
+                actor="operator",
+                kind="approval",
+                targets=[],
+            )
+            fresh_id = fresh.id
+            await session.commit()
+        async with async_session_factory() as session:
+            shown = await landing_queue.view(session, ids[0])
+        assert shown["id"] == fresh_id and shown["batch"] is None
+        assert shown["could_not_run"] == []
     finally:
         landing_queue.cancel_timers()
 

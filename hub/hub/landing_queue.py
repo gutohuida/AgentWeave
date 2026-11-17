@@ -2802,6 +2802,9 @@ async def view(session: AsyncSession, task_id: str) -> Optional[Dict[str, Any]]:
         ).all()
         out["position"] = len(ahead) + 1
         if not landing.batch_id:
+            # Only batches made for this landing: an earlier landing of the same task (sent back,
+            # withdrawn, approved again) must not lend its "could not run" to a landing never run.
+            since = [LandingBatch.created_at >= landing.created_at] if landing.created_at else []
             latest = (
                 (
                     await session.execute(
@@ -2809,6 +2812,7 @@ async def view(session: AsyncSession, task_id: str) -> Optional[Dict[str, Any]]:
                         .where(
                             LandingBatch.project_id == landing.project_id,
                             LandingBatch.ended_at.is_not(None),
+                            *since,
                         )
                         .order_by(LandingBatch.created_at.desc())
                         .limit(50)
