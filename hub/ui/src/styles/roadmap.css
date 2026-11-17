@@ -1,3 +1,86 @@
+/* A roadmap's page: its slices as a track (spec-visuals-and-navigability, slice roadmap-page). */
+
+.aw-rm { --rm-not_drafted: var(--text-3); --rm-drafting: var(--text-2); --rm-approved: var(--green); --rm-building: var(--blue); --rm-built: var(--green); }
+
+.aw-rm-head { display: flex; align-items: center; flex-wrap: wrap; gap: 10px 18px; padding: 10px 0 14px; border-bottom: 1px solid var(--border); margin-bottom: 16px; }
+.aw-rm-head-cost { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--text-2); font-variant-numeric: tabular-nums; }
+.aw-rm-head-actions { margin-left: auto; display: inline-flex; gap: 6px; }
+.aw-rm-muted { color: var(--text-3); }
+
+.aw-rm-progress { display: inline-flex; align-items: center; gap: 8px; font-size: 12.5px; font-weight: 600; color: var(--text); font-variant-numeric: tabular-nums; }
+.aw-rm-progress-cells { display: inline-flex; gap: 3px; }
+.aw-rm-progress-cell { width: 22px; height: 6px; border-radius: 999px; background: color-mix(in oklab, var(--text-3) 28%, transparent); }
+.aw-rm-progress[data-compact="true"] { gap: 6px; font-size: 11px; font-weight: 500; color: var(--text-3); }
+.aw-rm-progress[data-compact="true"] .aw-rm-progress-cells { gap: 2px; }
+.aw-rm-progress[data-compact="true"] .aw-rm-progress-cell { width: 7px; height: 5px; }
+.aw-rm-progress-cell[data-state="drafting"] { background: color-mix(in oklab, var(--text-2) 45%, transparent); }
+.aw-rm-progress-cell[data-state="approved"] { background: color-mix(in oklab, var(--green) 45%, transparent); }
+.aw-rm-progress-cell[data-state="building"] { background: var(--blue); }
+.aw-rm-progress-cell[data-state="built"] { background: var(--green); }
+
+.aw-rm-state {
+  --tone: var(--rm-not_drafted);
+  display: inline-flex; align-items: center; gap: 5px; height: 20px; padding: 0 8px; border-radius: 999px;
+  font-size: 11px; font-weight: 600; white-space: nowrap;
+  background: color-mix(in oklab, var(--tone) 13%, transparent); color: var(--tone);
+}
+.aw-rm-state::before { content: ''; width: 6px; height: 6px; border-radius: 999px; background: currentColor; }
+.aw-rm-state[data-state="not_drafted"]::before { background: transparent; box-shadow: inset 0 0 0 1.5px currentColor; }
+.aw-rm-state[data-state="drafting"] { --tone: var(--rm-drafting); }
+.aw-rm-state[data-state="drafting"]::before { background: linear-gradient(90deg, currentColor 50%, transparent 50%); box-shadow: inset 0 0 0 1.5px currentColor; }
+.aw-rm-state[data-state="approved"] { --tone: var(--rm-approved); }
+.aw-rm-state[data-state="approved"]::before { background: transparent; box-shadow: inset 0 0 0 1.5px currentColor; }
+.aw-rm-state[data-state="building"] { --tone: var(--rm-building); }
+.aw-rm-state[data-state="building"]::before { animation: aw-sp-live 1.6s var(--ease-out) infinite; }
+.aw-rm-state[data-state="built"] { --tone: var(--rm-built); }
+
+.aw-rm-track { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.aw-rm-slice { position: relative; display: grid; grid-template-columns: 28px 1fr; gap: 12px; padding-bottom: 14px; }
+.aw-rm-slice:not(:last-child)::before { content: ''; position: absolute; left: 13px; top: 28px; bottom: 0; width: 2px; background: var(--border); }
+.aw-rm-slice[data-state="built"]:not(:last-child)::before { background: color-mix(in oklab, var(--green) 55%, transparent); }
+.aw-rm-node {
+  width: 28px; height: 28px; border-radius: 999px; display: inline-flex; align-items: center; justify-content: center;
+  font-size: 11.5px; font-weight: 600; font-variant-numeric: tabular-nums; z-index: 1;
+  background: var(--surface); color: var(--text-3); box-shadow: inset 0 0 0 1.5px var(--border-hi);
+}
+.aw-rm-node[data-state="drafting"] { color: var(--text-2); box-shadow: inset 0 0 0 1.5px var(--text-2); }
+.aw-rm-node[data-state="approved"] { color: var(--green); box-shadow: inset 0 0 0 1.5px var(--green); }
+.aw-rm-node[data-state="building"] { color: var(--blue); box-shadow: inset 0 0 0 2px var(--blue); }
+.aw-rm-node[data-state="built"] { color: white; background: var(--green); box-shadow: none; }
+.aw-rm-node[data-state="new"] { color: var(--text-3); box-shadow: inset 0 0 0 1.5px var(--border); border: 1px dashed transparent; }
+
+.aw-rm-card { padding: 12px 14px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); display: flex; flex-direction: column; gap: 7px; min-width: 0; }
+.aw-rm-slice[data-state="built"] .aw-rm-card { background: transparent; }
+.aw-rm-slice[data-state="building"] .aw-rm-card { border-color: color-mix(in oklab, var(--blue) 45%, var(--border)); }
+.aw-rm-card[data-offered="true"] { border-color: var(--border-hi); box-shadow: 0 0 0 3px color-mix(in oklab, var(--ring) 18%, transparent); }
+.aw-rm-card-head { display: flex; align-items: center; gap: 8px; }
+.aw-rm-title { font-size: 13.5px; font-weight: 600; color: var(--text); }
+.aw-rm-move { margin-left: auto; display: inline-flex; gap: 2px; }
+.aw-rm-iconbtn { width: 22px; height: 22px; display: inline-flex; align-items: center; justify-content: center; border-radius: var(--radius-sm, 6px); color: var(--text-2); background: transparent; border: 0; cursor: pointer; }
+.aw-rm-iconbtn:hover { background: var(--row-hover); color: var(--text); }
+.aw-rm-iconbtn:disabled { opacity: .35; pointer-events: none; }
+.aw-rm-intent { margin: 0; font-size: 12.5px; line-height: 1.55; color: var(--text-2); }
+.aw-rm-slice[data-state="built"] .aw-rm-intent { color: var(--text-3); }
+.aw-rm-facts { margin: 0; display: flex; flex-direction: column; gap: 3px; font-size: 12px; line-height: 1.5; }
+.aw-rm-facts div { display: flex; gap: 8px; }
+.aw-rm-facts dt { flex: none; width: 78px; color: var(--text-3); font-size: 11px; text-transform: uppercase; letter-spacing: .04em; padding-top: 1px; }
+.aw-rm-facts dd { margin: 0; color: var(--text-2); }
+.aw-rm-slice[data-state="built"] .aw-rm-facts { display: none; }
+.aw-rm-foot { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 14px; padding-top: 2px; }
+.aw-rm-stat { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; color: var(--text-2); font-variant-numeric: tabular-nums; }
+.aw-rm-draft { margin-left: auto; display: inline-flex; align-items: center; gap: 10px; }
+.aw-rm-warn { margin: 0; display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--amber); }
+
+.aw-rm-add { height: 28px; padding: 0 12px; display: inline-flex; align-items: center; gap: 6px; justify-self: start; border-radius: var(--radius); border: 1px dashed var(--border-hi); background: transparent; color: var(--text-2); font-size: 12.5px; cursor: pointer; }
+.aw-rm-add:hover { color: var(--text); background: var(--row-hover); }
+.aw-rm-form { gap: 6px; }
+.aw-rm-label { font-size: 11px; color: var(--text-3); text-transform: uppercase; letter-spacing: .04em; margin-top: 4px; }
+.aw-rm-after { display: flex; flex-wrap: wrap; gap: 6px; }
+.aw-rm-form-actions { display: flex; justify-content: flex-end; gap: 6px; margin-top: 6px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .aw-rm-state[data-state="building"]::before { animation: none; }
+}
 
 .aw-rm-section { display: flex; flex-direction: column; gap: 10px; }
 .aw-rm-done { display: flex; align-items: center; flex-wrap: wrap; gap: 10px 14px; padding: 10px 14px; border-radius: var(--radius); background: color-mix(in oklab, var(--green) 12%, transparent); color: var(--text); font-size: 13px; }
