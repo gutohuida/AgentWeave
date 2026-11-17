@@ -701,13 +701,16 @@ def check_touched(fx, page):
         text = rows.nth(i).inner_text()
         if state == "folded":
             need(bool(re.search(r"\d{4}-\d{2}-\d{2}|\b[A-Z][a-z]{2}\s+\d{1,2}\b|\bago\b|today|just now", text)), f"folded row {path} shows no fold date :: {text[:80]!r}")
-    first = rows.nth(0)
-    target = first.get_attribute("data-path")
-    link = first.locator("a, button").first
-    (link if link.count() else first).click()
-    page.wait_for_timeout(1200)
-    need(opens(page.url, target), f"a touched row opened {decoded(page.url)}, wanted {target}")
-    record("ac-touched", True, True, "three rows, two folded (newest fold first, dated) and one waiting, each opens its change")
+    for path, _state in got:
+        goto(page, spec_url(fx.b, fx.p["tango"]))
+        need(present(page, "[data-testid=capability-touched-row]", 6000), "the capability's page lost its touched rows on return")
+        row = page.locator(f"[data-testid=capability-touched-row][data-path='{path}']")
+        need(row.count() == 1, f"touched row for {path} is missing on return")
+        link = row.locator("a, button").first
+        (link if link.count() else row).click()
+        page.wait_for_timeout(1200)
+        need(opens(page.url, path), f"touched row {path} opened {decoded(page.url)}")
+    record("ac-touched", True, True, "three rows, two folded (newest fold first, dated) and one waiting, each opens its own change")
 
 
 def check_live(fx, page):
