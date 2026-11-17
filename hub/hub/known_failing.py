@@ -350,6 +350,13 @@ def observe(result: Dict[str, Any]) -> Observed:
     seen = Observed()
     if not isinstance(result, dict) or result.get("skipped"):
         return seen
+    from .project_checks import could_not_run
+
+    if could_not_run(result):
+        # Its command never started: it says nothing of any test or of the whole check, so no run
+        # -- a main-branch one included -- lists it or counts it either way
+        # (`a-check-that-cannot-run-says-so-and-is-never-silently-excused`, FR-5).
+        return seen
     touched = set(result.get("touched_tests") or [])
     # A failure shown to reproduce on no task's prefix is no task's, touched or not
     # (`a-landing-failure-is-blamed-on-a-task-only-when-it-reproduces-there`, FR-3).
@@ -891,8 +898,10 @@ async def run_on_main(project_id: str, sha: str) -> Optional[str]:
                 tree = await asyncio.to_thread(project_checks.tree_of, root, sha)
                 for check in checks:
                     result = await asyncio.to_thread(project_checks.run_one, check, path, owner)
-                    if project_checks.failed(result) and not project_checks.unjudged_timeout(
-                        result
+                    if (
+                        project_checks.failed(result)
+                        and not project_checks.unjudged_timeout(result)
+                        and not project_checks.could_not_run(result)
                     ):
                         # No task's work is here: nothing is "touched" (`changed=[]`).
                         await asyncio.to_thread(
@@ -1104,8 +1113,14 @@ def judge_result(result: Dict[str, Any], listed: Sequence[Dict[str, Any]]) -> No
     Records `listed` (the entries it went past, as `snapshot`s), `shared_tests` (the listed ids),
     `own_tests` (the rest) and `preexisting`: true where every failure is on the list, which is what
     `project_checks.preexisting` and every gate reading it ask."""
-    from .project_checks import failed
+    from .project_checks import could_not_run, failed
 
+    if could_not_run(result):
+        # A check that never started is no failure any entry may excuse, whole-check or per-test
+        # (`a-check-that-cannot-run-says-so-and-is-never-silently-excused`, FR-5).
+        result.pop("listed", None)
+        result["preexisting"] = False
+        return
     if not failed(result):
         return
     named = [str(t) for t in result.get("compared_tests") or result.get("failed_tests") or [] if t]
@@ -1136,7 +1151,14 @@ async def judge(
     """Whether a failed, confirmed check *result* is the work's, decided against the list (FR-7):
     for the completion gate (a task's run, *task_id*) and the landing gate (a batch's, `None`). A
     task's run first applies the twice rule (`judge_unlisted`, FR-13) -- the one run on main's tree
-    either gate may make -- so a test it lists is then found on the list. Never raises."""
+    either gate may make -- so a test it lists is then found on the list. Never raises. A check
+    that could not run is judged by nothing and runs nothing on main (FR-5 of
+    `a-check-that-cannot-run-says-so-and-is-never-silently-excused`)."""
+    from .project_checks import could_not_run
+
+    if could_not_run(result):
+        judge_result(result, [])
+        return
     if task_id is not None:
         await judge_unlisted(
             project_id=project_id,

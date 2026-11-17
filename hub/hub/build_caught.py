@@ -24,7 +24,13 @@ _CLOSED = ("approved", "rejected")
 
 def _entries(result: Any) -> List[Dict[str, Any]]:
     """The failures one check's result names, each with where it came from."""
-    if not isinstance(result, dict) or result.get("skipped"):
+    if (
+        not isinstance(result, dict)
+        or result.get("skipped")
+        or project_checks.could_not_run(result)
+    ):
+        # A check that could not run caught nothing and was introduced by nobody
+        # (`a-check-that-cannot-run-says-so-and-is-never-silently-excused`, FR-6).
         return []
     touched = set(result.get("touched_tests") or [])
     # The file the check's report gave for each failing test (FR-2): what `touched_tests` judged

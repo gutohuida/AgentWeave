@@ -290,6 +290,11 @@ class DependencyLinkFailure:
 _link_failures: Dict[str, List[DependencyLinkFailure]] = {}
 
 
+def link_failures_of(workspace: Path) -> List[DependencyLinkFailure]:
+    """The failures the newest link attempt into *workspace* returned, `[]` where it has none."""
+    return list(_link_failures.get(str(workspace), ()))
+
+
 def shared_dependency_link_failures(
     repo_root: Path, workspace: Path
 ) -> List[DependencyLinkFailure]:
