@@ -10,6 +10,11 @@ Only the repository item can be dismissed (FR-3): a scratch folder may deliberat
 but without a folder, an agent, or an agent that runs, nothing works at all. A dismissal is a
 `SetupDismissal` row; showing the item again deletes it.
 
+A fifth item, `specification`, is shown while the project's corpus is empty
+(`a-project-with-no-specs-is-offered-a-start`, FR-3; `corpus_start.corpus_state`). It opens the
+start offer, can be dismissed like the repository item, and is gone without being dismissed once
+the corpus holds any document.
+
 `SETUP_CHANGED` is broadcast where an item can change and no event the app already re-reads the
 projects on is sent (FR-6): a model bound to an agent, and a dismissal made or undone.
 """
@@ -24,15 +29,15 @@ from pydantic import BaseModel
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from . import blocking, project_workspace, task_integration
+from . import blocking, corpus_start, project_workspace, task_integration
 from .db.models import Agent, Project, Runner, SetupDismissal
 from .launchability import probe_agent
 from .runner_provider import runner_probe_config
 
-SetupKey = Literal["folder", "repository", "agent", "can-run"]
+SetupKey = Literal["folder", "repository", "agent", "can-run", "specification"]
 
 #: The items an operator may dismiss. The rest cannot be waved away (FR-3).
-DISMISSABLE = frozenset({"repository"})
+DISMISSABLE = frozenset({"repository", "specification"})
 
 #: The event the app re-reads a project's set-up items on.
 SETUP_CHANGED = "project_setup_changed"
@@ -117,8 +122,10 @@ async def project_setup(
     candidates: List[SetupItem] = []
 
     root = None
+    workspace = None
     with contextlib.suppress(project_workspace.ProjectWorkspaceError):
-        root = (await project_workspace.resolve_project_workspace(session, project.id)).root
+        workspace = await project_workspace.resolve_project_workspace(session, project.id)
+        root = workspace.root
     if root is None or project.directory_state != "available":
         candidates.append(SetupItem(id="folder", key="folder"))
     # A folder that is not found cannot be asked whether it is a repository: the folder item is
@@ -152,6 +159,12 @@ async def project_setup(
             if verdict.get("runnable"):
                 continue
         candidates.append(_can_run_item(agent, runner, verdict))
+
+    # Asked only of a folder that is found: an empty corpus in a missing folder is not news.
+    if workspace is not None and root is not None and project.directory_state == "available":
+        state = await corpus_start.corpus_state(session, workspace, project.id)
+        if state.empty:
+            candidates.append(SetupItem(id="specification", key="specification", dismissable=True))
 
     dismissed = await dismissed_items(session, project.id)
     return ProjectSetup(

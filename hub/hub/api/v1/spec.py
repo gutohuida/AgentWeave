@@ -33,6 +33,7 @@ from ... import (
     already_built,
     blocking,
     builds,
+    corpus_start,
     deletion,
     loop_history,
     project_workspace,
@@ -3807,13 +3808,14 @@ def _misplaced_query(request: Request, allowed: set) -> None:
     sent in the query string (`approve_anyway`) was ignored. Name what was misplaced instead."""
     misplaced = sorted(set(request.query_params) - allowed)
     if misplaced:
+        where = (
+            f"only {' and '.join(sorted(allowed))} go in the query string, the rest go"
+            if allowed
+            else "nothing goes in this route's query string; every choice goes"
+        )
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=(
-                f"{', '.join(misplaced)} sent as a query parameter; only "
-                f"{' and '.join(sorted(allowed))} go in the query string, the rest go in the JSON "
-                "request body"
-            ),
+            detail=f"{', '.join(misplaced)} sent as a query parameter; {where} in the JSON request body",
         )
 
 
@@ -4685,6 +4687,74 @@ async def decline_next_slice_offer(
         ) from exc
     await session.commit()
     return {"state": "declined", **offer}
+
+
+@router.get("/corpus")
+async def read_corpus_state(
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    """Whether the project's corpus is empty (no document in any phase, archived included, and no
+    spec file waiting to be adopted), whether its folder holds code and so which start is
+    recommended, and the open agents with the one a start preselects
+    (`a-project-with-no-specs-is-offered-a-start`, FR-1, FR-4)."""
+    project_id, _ = project
+    workspace = await _workspace(session, project_id)
+    return (await corpus_start.corpus_state(session, workspace, project_id)).to_dict()
+
+
+class CorpusStart(RequestModel):
+    """Which start, and the agent that does it (left out, the preselected one)."""
+
+    start: corpus_start.Start
+    agent: Optional[_AgentName] = None
+
+
+@router.post("/corpus/start", status_code=status.HTTP_201_CREATED)
+async def take_corpus_start(
+    request: Request,
+    # Optional so a start sent in the query string reaches the misplaced-query 400 rather than a
+    # missing-body 422 (FR-10).
+    body: Optional[CorpusStart] = None,
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    """Start an empty corpus: create a system map (existing code) or a roadmap (greenfield) in
+    exploring, as the operator, and queue the chosen agent's turn on it in a new conversation
+    (FR-5). 409 `corpus_not_empty`, naming the document, once the corpus holds anything; the
+    choices go in the JSON body, never the query string (FR-10)."""
+    from ...project_setup import publish_setup_changed
+    from ...turn_scheduler import schedule_accepted
+
+    _misplaced_query(request, set())
+    if body is None:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "message": 'send the start in the JSON body: {"start": "existing-code" or '
+                '"greenfield", "agent": ...}',
+                "code": "start_missing",
+            },
+        )
+    project_id, _ = project
+    workspace = await _workspace(session, project_id)
+    try:
+        started = await corpus_start.start(
+            session, workspace, project_id, which=body.start, agent=body.agent
+        )
+    except corpus_start.StartRefused as exc:
+        raise HTTPException(
+            status_code=exc.status_code,
+            detail={"message": str(exc), "code": exc.code, **exc.detail},
+        ) from exc
+    await session.commit()
+    document = started["document"]
+    await sse_manager.broadcast(
+        project_id, "spec_updated", {"path": document["path"], "phase": document["phase"]}
+    )
+    await publish_setup_changed(project_id)
+    await schedule_accepted(project_id, started["agent"])
+    return {"state": "queued", **started}
 
 
 class SliceMove(RequestModel):

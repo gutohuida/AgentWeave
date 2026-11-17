@@ -36,8 +36,8 @@ export interface ProjectSummary {
  */
 export interface ProjectSetupItem {
   id: string
-  key: 'folder' | 'repository' | 'agent' | 'can-run'
-  /** Only the repository item. */
+  key: 'folder' | 'repository' | 'agent' | 'can-run' | 'specification'
+  /** Only the repository and specification items. */
   dismissable: boolean
   agent: string | null
   provider: string | null
