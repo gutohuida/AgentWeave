@@ -1718,7 +1718,11 @@ async def decide(
         from . import drive_baseline
 
         if drive_baseline.is_baseline(evidence):
-            bad = drive_baseline.bad_checks(evidence)
+            # Checks named for the document's guard criteria are exempt (operator, 2026-11-17).
+            owner = await session.get(Task, evidence.task_id) if evidence.task_id else None
+            bad = drive_baseline.bad_checks(
+                evidence, await drive_baseline.guard_keys(session, owner)
+            )
             if bad:
                 raise EvidenceRefusedError(
                     drive_baseline.not_failing_sentence(evidence.task_id or "its task", bad),

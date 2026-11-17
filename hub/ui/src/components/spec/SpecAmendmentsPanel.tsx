@@ -302,14 +302,19 @@ export function ProposalRow({ path, amendment }: { path: string; amendment: Spec
 function ReportAnswer({ path, amendment }: { path: string; amendment: SpecAmendment }) {
   const respond = useRespondToReport()
   const before = (amendment.before ?? {}) as Record<string, string>
+  const wasGuard = (amendment.before as Record<string, unknown> | null)?.guard === true
   const [mode, setMode] = useState<'amend' | 'reject' | null>(null)
   const [then, setThen] = useState(before.then ?? '')
   const [howToCheck, setHowToCheck] = useState(before.how_to_check ?? '')
+  // A guard states behaviour the code already had: its acceptance-drive check need not fail
+  // before the build (`drive_baseline`), which is the usual reason such a criterion is reported.
+  const [guard, setGuard] = useState(wasGuard)
   const [reason, setReason] = useState('')
 
   function send(response: 'amend' | 'accept' | 'reject') {
-    const change: Record<string, string> = {}
+    const change: Record<string, string | boolean> = {}
     if (response === 'amend') {
+      if (guard !== wasGuard) change.guard = guard
       if (then.trim() && then.trim() !== (before.then ?? '')) change.then = then.trim()
       if (howToCheck.trim() && howToCheck.trim() !== (before.how_to_check ?? ''))
         change.how_to_check = howToCheck.trim()
@@ -326,7 +331,10 @@ function ReportAnswer({ path, amendment }: { path: string; amendment: SpecAmendm
     )
   }
 
-  const amendReady = then.trim() !== (before.then ?? '') || howToCheck.trim() !== (before.how_to_check ?? '')
+  const amendReady =
+    then.trim() !== (before.then ?? '') ||
+    howToCheck.trim() !== (before.how_to_check ?? '') ||
+    guard !== wasGuard
   return (
     <div className="flex flex-col gap-1" data-testid={`report-answer-${amendment.id}`}>
       <div className="flex flex-wrap items-center gap-1.5">
@@ -353,6 +361,15 @@ function ReportAnswer({ path, amendment }: { path: string; amendment: SpecAmendm
               value={howToCheck}
               onChange={(e) => setHowToCheck(e.target.value)}
             />
+          </label>
+          <label className="flex items-center gap-1.5">
+            <input
+              type="checkbox"
+              aria-label="Criterion is a guard"
+              checked={guard}
+              onChange={(e) => setGuard(e.target.checked)}
+            />
+            <span>Guard: the code already does this, so its drive check need not fail before the build</span>
           </label>
           <input
             aria-label="Reason for the amendment"

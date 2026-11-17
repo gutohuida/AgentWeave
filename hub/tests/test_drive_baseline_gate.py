@@ -54,7 +54,7 @@ GOOD_BASELINE = (
 )
 
 
-async def drive_document(app, auth_headers, run_headers):
+async def drive_document(app, auth_headers, run_headers, criteria=None):
     """A change of two tasks whose first, `drive`, every other waits on: its acceptance drive."""
     created = await app.post(
         f"{BASE}/documents", json={"path": PATH, "title": "Greeting"}, headers=auth_headers
@@ -69,6 +69,7 @@ async def drive_document(app, auth_headers, run_headers):
                 "kind": "change-spec",
                 "title": "Greeting",
                 "requirements": [ALPHA],
+                **({"acceptance_criteria": criteria} if criteria else {}),
                 "tasks": [
                     {
                         "key": "drive",
@@ -112,10 +113,12 @@ async def spec_task(app, auth_headers, key, title, depends_on=None):
     return task_id
 
 
-async def staged_drive(app, auth_headers, author, root, *, kind, output, key="drive"):
+async def staged_drive(
+    app, auth_headers, author, root, *, kind, output, key="drive", criteria=None
+):
     """The drive task with one awaiting piece of *kind* at a commit on its branch, under review."""
     make_repo(root)
-    await drive_document(app, auth_headers, author)
+    await drive_document(app, auth_headers, author, criteria)
     await set_main_branch("main")
     task = await spec_task(app, auth_headers, key, "Acceptance drive")
     branch = worktrees.task_branch_name(task)
@@ -357,3 +360,108 @@ def test_a_baseline_line_reads_its_check_and_a_bad_check_is_named():
     good = RequirementEvidence(id="ev-y", kind="drive_baseline", output=GOOD_BASELINE, summary="")
     assert [c.key for c in drive_baseline.checks_of(good)] == ["c-one", "c-two"]
     assert drive_baseline.bad_checks(good) == []
+
+
+# ---------------------------------------------------------------------------
+# Guard criteria (operator, 2026-11-17, after CTCRS-1): a check for behaviour the code already had
+# passes before the build, so the document marks it `guard` and the gate exempts it -- only it.
+# ---------------------------------------------------------------------------
+
+GUARD, NEW = "c-guard", "c-new"
+
+
+def criterion(key, *, guard=None):
+    body = {"key": key, "requirement": "alpha", "given": "g", "when": "w", "then": "t"}
+    if guard is not None:
+        body["guard"] = guard
+    return body
+
+
+GUARDED = [criterion(GUARD, guard=True), criterion(NEW), criterion(VACUOUS, guard=False)]
+GUARD_BASELINE = (
+    f"check {NEW}: reached=yes failed_at_assertion=yes -- expected could-not-run, got failed\n"
+    f"check {GUARD}: reached=yes failed_at_assertion=no -- passed: the code already did this"
+)
+
+
+@pytest.mark.asyncio
+async def test_a_guard_check_passing_before_the_build_does_not_refuse_the_drive(
+    app, auth_headers, author, tmp_path
+):
+    """The reviewer accepts the baseline with its own reproduction and approves: the only check
+    that did not fail is the document's guard."""
+    task, evidence = await staged_drive(
+        app,
+        auth_headers,
+        author,
+        tmp_path,
+        kind="drive_baseline",
+        output=GUARD_BASELINE,
+        criteria=GUARDED,
+    )
+    reviewer = await reviewing_run(task)
+    at = await verifies.footprint_commit(evidence)
+    accepted = await app.post(
+        AGENT_DECIDE.format(evidence),
+        json=verifies.reproduce(commit=at, command="python drive_check.py", output=GUARD_BASELINE),
+        headers=reviewer,
+    )
+    assert accepted.status_code == 200, accepted.text
+    approved = await app.patch(
+        f"{AGENT_TASKS}/{task}", json={"status": "approved"}, headers=reviewer
+    )
+    assert approved.status_code == 200, approved.text
+    assert await state_of(evidence) == "accepted"
+
+
+@pytest.mark.asyncio
+async def test_a_non_guard_check_passing_before_the_build_is_still_refused(
+    app, auth_headers, author, tmp_path
+):
+    """Beside a guard, a check whose criterion is not one (here `guard: false`) that passed before
+    the build is refused at acceptance and at approval, naming it and not the guard."""
+    output = GUARD_BASELINE + (
+        f"\ncheck {VACUOUS}: reached=yes failed_at_assertion=no -- passed on the pre-build code"
+    )
+    task, evidence = await staged_drive(
+        app,
+        auth_headers,
+        author,
+        tmp_path,
+        kind="drive_baseline",
+        output=output,
+        criteria=GUARDED,
+    )
+    reviewer = await reviewing_run(task)
+    at = await verifies.footprint_commit(evidence)
+    accepted = await app.post(
+        AGENT_DECIDE.format(evidence),
+        json=verifies.reproduce(commit=at, command="python drive_check.py", output=output),
+        headers=reviewer,
+    )
+    assert accepted.status_code == 409, accepted.text
+    message = accepted.json()["detail"]["message"]
+    assert VACUOUS in message and GUARD not in message
+
+    approving = await app.patch(
+        f"{AGENT_TASKS}/{task}", json={"status": "approved"}, headers=reviewer
+    )
+    assert approving.status_code == 409, approving.text
+    detail = approving.json()["detail"]
+    assert detail["code"] == drive_baseline.NOT_FAILING
+    assert {check["check"] for check in detail["checks"]} == {VACUOUS}
+    assert await status_of(task) == "under_review"
+
+
+def test_only_a_bare_true_marks_a_guard():
+    payload = {
+        "acceptance_criteria": [
+            criterion("a", guard=True),
+            criterion("b", guard=False),
+            {**criterion("c"), "guard": "true"},
+            criterion("d"),
+        ]
+    }
+    assert drive_baseline.guard_criteria(payload) == {"a"}
+    row = RequirementEvidence(id="ev-g", kind="drive_baseline", output=BAD_BASELINE, summary="")
+    assert [c.key for c in drive_baseline.bad_checks(row, {VACUOUS})] == [UNREACHED]
