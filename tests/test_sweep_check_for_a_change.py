@@ -111,6 +111,87 @@ def test_windows_separators_and_blank_lines_are_read():
     )
 
 
+@pytest.mark.parametrize(
+    "helper, importer",
+    [
+        ("hub/tests/_background_runs.py", "hub/tests/test_conversation_contract.py"),
+        (
+            "hub/tests/_background_runs.py",
+            "hub/tests/test_rebinding_an_agents_runner_starts_clean.py",
+        ),
+        ("hub/tests/_git_timeout.py", "hub/tests/test_a_refused_review_leaves_nothing_behind.py"),
+        (
+            "hub/tests/test_agent_trigger.py",
+            "hub/tests/test_a_refused_review_leaves_nothing_behind.py",
+        ),
+        ("hub/tests/test_task_integration.py", "hub/tests/test_every_send_back_says_why.py"),
+        ("hub/tests/test_title_generation.py", "hub/tests/test_manager_jobs.py"),
+        ("hub/tests/_spec_versions.py", "hub/tests/test_vault_archive.py"),
+        (
+            "hub/tests/test_a_refused_review_leaves_nothing_behind.py",
+            "hub/tests/test_an_event_is_announced_after_commit.py",
+        ),
+        # through another module: _git_timeout -> test_a_refused_review... -> test_an_event...
+        ("hub/tests/_git_timeout.py", "hub/tests/test_an_event_is_announced_after_commit.py"),
+    ],
+)
+def test_a_changed_hub_tests_module_runs_the_sweep_tests_that_import_it(helper, importer):
+    """QA's send-back at ab73a94: a helper or test a sweep test imports must select that test."""
+    assert importer in _affected(helper)
+
+
+def _tree(root: Path, files: dict) -> Path:
+    for name, text in files.items():
+        path = root / "hub" / "tests" / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text, encoding="utf-8")
+    return root
+
+
+def test_every_import_form_is_read_and_followed_through_other_modules(tmp_path):
+    root = _tree(
+        tmp_path,
+        {
+            "__init__.py": "",
+            "_helper.py": "",
+            "_other.py": "",
+            "_absolute.py": "",
+            "test_middle.py": "from ._helper import thing\n",
+            "test_top.py": "def f():\n    from .test_middle import (\n        x,\n    )\n",
+            "test_package_form.py": "from . import _other\n",
+            "test_absolute.py": "import hub.tests._absolute\nfrom hub.tests import _other\n",
+            "sub/__init__.py": "",
+            "sub/test_deep.py": "from .._helper import thing\n",
+            "test_alone.py": "import os\n",
+        },
+    )
+    importers = sweep_check.importers_of_tests(root)
+    assert importers["hub/tests/_helper.py"] == {
+        "hub/tests/test_middle.py",
+        "hub/tests/test_top.py",
+        "hub/tests/sub/test_deep.py",
+    }
+    assert importers["hub/tests/_other.py"] == {
+        "hub/tests/test_package_form.py",
+        "hub/tests/test_absolute.py",
+    }
+    assert importers["hub/tests/_absolute.py"] == {"hub/tests/test_absolute.py"}
+    assert "hub/tests/test_alone.py" not in importers
+
+
+def test_a_hub_tests_file_that_does_not_parse_runs_the_full_sweep(tmp_path, monkeypatch):
+    root = _tree(tmp_path, {"_helper.py": "", "test_broken.py": "def (:\n"})
+    assert sweep_check.importers_of_tests(root) is None
+    monkeypatch.setattr(sweep_check, "importers_of_tests", lambda: None)
+    assert _affected("hub/tests/_helper.py") is None
+    # a path outside hub/tests needs no import scan
+    assert _affected("docs/index.md") == []
+
+
+def test_the_hub_tests_package_init_runs_the_full_sweep():
+    assert _affected("hub/tests/__init__.py") is None
+
+
 def _main(tmp_path, monkeypatch, paths):
     listing = tmp_path / "changed.txt"
     listing.write_text("".join(f"{p}\n" for p in paths), encoding="utf-8")

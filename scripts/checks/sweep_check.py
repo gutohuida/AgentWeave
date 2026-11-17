@@ -30,6 +30,7 @@ it writes an empty report and passes.
 
 from __future__ import annotations
 
+import ast
 import os
 import re
 import sys
@@ -65,7 +66,13 @@ def sweep_files(sweep_set: Path = SWEEP_SET) -> list[str]:
 #: Paths every test depends on, so a change to one runs the full sweep: the packages' and pytest's
 #: configuration, the database's migration config, any conftest, any fixture, and this check's own
 #: scripts and list.
-SHARED_FILES = {"pyproject.toml", "hub/pyproject.toml", "constraints-dev.txt", "hub/alembic.ini"}
+SHARED_FILES = {
+    "pyproject.toml",
+    "hub/pyproject.toml",
+    "constraints-dev.txt",
+    "hub/alembic.ini",
+    "hub/tests/__init__.py",
+}
 SHARED_PREFIXES = ("scripts/checks/",)
 SHARED = re.compile(r"(^|/)(conftest\.py$|fixtures/)")
 
@@ -125,9 +132,91 @@ KNOWN_PREFIXES = (
 KNOWN_FILES = {"README.md", "CHANGELOG.md", "CLAUDE.md", "AGENTS.md", "mkdocs.yml"}
 
 
-def affected_tests(changed: list[str], sweep: list[str]) -> Optional[list[str]]:
+HUB_TESTS = "hub/tests/"
+
+
+def _imported_test_modules(path: Path, tests_root: Path) -> Optional[set[str]]:
+    """The `hub/tests` modules *path* imports, as repo-relative paths that exist, or `None` when
+    it does not parse. Relative imports (`from .x import`, `from . import x`, from a subpackage
+    too) and absolute ones (`hub.tests.x`) are read, wherever in the file they are."""
+    try:
+        tree = ast.parse(path.read_text(encoding="utf-8-sig"))
+    except (OSError, SyntaxError, ValueError):
+        return None
+    package = list(path.relative_to(tests_root).parent.parts)
+    names: list[list[str]] = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom):
+            module = node.module.split(".") if node.module else []
+            if node.level:
+                if node.level - 1 > len(package):
+                    continue
+                module = package[: len(package) - (node.level - 1)] + module
+            elif module[:2] == ["hub", "tests"]:
+                module = module[2:]
+            else:
+                continue
+            names.append(module)
+            names.extend([*module, alias.name] for alias in node.names)
+        elif isinstance(node, ast.Import):
+            for alias in node.names:
+                parts = alias.name.split(".")
+                if parts[:2] == ["hub", "tests"]:
+                    names.append(parts[2:])
+    found: set[str] = set()
+    for parts in names:
+        if not parts:
+            continue
+        for candidate in (
+            tests_root.joinpath(*parts[:-1], parts[-1] + ".py"),
+            tests_root.joinpath(*parts, "__init__.py"),
+        ):
+            if candidate.is_file():
+                found.add(candidate.relative_to(tests_root.parents[1]).as_posix())
+    return found
+
+
+def importers_of_tests(repo_root: Path = REPO_ROOT) -> Optional[dict[str, set[str]]]:
+    """For each `hub/tests` module, the `hub/tests` files that import it, directly or through
+    another; `None` when some file does not parse, so its imports are unknown."""
+    tests_root = repo_root / "hub" / "tests"
+    imports: dict[str, set[str]] = {}
+    for path in tests_root.rglob("*.py"):
+        if "fixtures" in path.relative_to(tests_root).parts:
+            continue
+        found = _imported_test_modules(path, tests_root)
+        if found is None:
+            return None
+        imports[path.relative_to(repo_root).as_posix()] = found
+    direct: dict[str, set[str]] = {}
+    for importer, modules in imports.items():
+        for module in modules:
+            direct.setdefault(module, set()).add(importer)
+    closure: dict[str, set[str]] = {}
+    for module in direct:
+        seen: set[str] = set()
+        stack = [module]
+        while stack:
+            for importer in direct.get(stack.pop(), ()):
+                if importer not in seen:
+                    seen.add(importer)
+                    stack.append(importer)
+        closure[module] = seen
+    return closure
+
+
+def affected_tests(
+    changed: list[str],
+    sweep: list[str],
+    importers: Optional[dict[str, set[str]]] = None,
+) -> Optional[list[str]]:
     """The tests of *sweep* the *changed* paths can affect, in *sweep*'s order, or `None` for the
-    full sweep: a shared path, a path outside the known tree, or a sweep test with no scope."""
+    full sweep: a shared path, a path outside the known tree, a sweep test with no scope, or a
+    changed `hub/tests` module whose importers cannot be read.
+
+    A changed `hub/tests` module also runs every sweep test that imports it, directly or through
+    another module (*importers*, from `importers_of_tests` when not given): sweep tests reuse helpers
+    and other tests' fixtures, so a change to one of those can break them."""
     if any(test not in SCOPES for test in sweep):
         return None
     selected: set[str] = set()
@@ -139,6 +228,12 @@ def affected_tests(changed: list[str], sweep: list[str]) -> Optional[list[str]]:
         if path.startswith(HUB_PACKAGE) and not path.startswith(HUB_BUNDLE):
             return list(sweep)
         selected.update(t for t in sweep if t == path or path.startswith(SCOPES[t]))
+        if path.startswith(HUB_TESTS) and path.endswith(".py"):
+            if importers is None:
+                importers = importers_of_tests()
+                if importers is None:
+                    return None
+            selected.update(t for t in sweep if t in importers.get(path, ()))
     return [test for test in sweep if test in selected]
 
 
