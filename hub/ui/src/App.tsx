@@ -561,8 +561,8 @@ export default function App() {
           anchor={destination.anchor ?? null}
           // Replace: which document the Spec screen resolved to is not a place the operator
           // navigated to, and Back should leave the screen rather than walk its documents.
-          onOpenDocument={(path) =>
-            navigateTo(projectDestination(destination.projectId, 'spec', path), { replace: true })
+          onOpenDocument={(path, anchor) =>
+            navigateTo(projectDestination(destination.projectId, 'spec', path, anchor ?? null), { replace: true })
           }
           // A coverage row's task-count link, clicked: switch to the Tasks tab filtered to what
           // it names. The filter is set on the global store because the board it applies to is

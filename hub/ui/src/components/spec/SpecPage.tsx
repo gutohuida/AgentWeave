@@ -5,6 +5,7 @@ import { toast } from '@/lib/toast'
 import { useConfigStore } from '@/store/configStore'
 import { useProjectEvidence, useSpecDocumentRename, useSpecEvents } from '@/api/spec'
 import type { LoopSummary } from '@/api/loops'
+import { SpecHomeView } from './home/SpecHomeView'
 import { SpecDocList } from './page/SpecDocList'
 import { SpecPlainDocument } from './page/SpecPlainDocument'
 import { SpecWorkspace } from './page/SpecWorkspace'
@@ -20,7 +21,7 @@ interface SpecPageProps {
   document: string | null
   /** The position a link named (a requirement, a task, a section, a build). */
   anchor?: string | null
-  onOpenDocument: (path: string | null) => void
+  onOpenDocument: (path: string | null, anchor?: string) => void
   /** Switches to the Tasks tab, filtered to a coverage row's linked tasks. */
   onOpenTasks?: (taskIds: string[], specDocumentId?: string) => void
   /** Opens a flow's loop tab; the Spec screen has no panel shell, so the host navigates too. */
@@ -85,8 +86,10 @@ export function SpecPage({ document: openDocument, anchor, onOpenDocument, onOpe
       }
       return
     }
-    const resolved = resolveSelection(inventory, null, list.specList?.home)
+    /* Nothing remembered: the project's own home document if it names one, else the Spec home. */
+    const resolved = resolveSelection(inventory, null, list.specList?.home, false)
     if (resolved) onOpenDocument(resolved)
+    else setListMode(true)
   }, [openDocument, children, listMode, projectId, inventory, list.specList?.home, onOpenDocument])
 
   const showList = useCallback(() => {
@@ -153,10 +156,10 @@ export function SpecPage({ document: openDocument, anchor, onOpenDocument, onOpe
     )
   } else if (listMode && !openDocument) {
     main = (
-      <div className="aw-sp" data-layout="column">
-        {column(null)}
-        <div className="aw-sp-main">
-          <EmptyState icon="article" title="Pick a document" description="Choose one from the list, or press Ctrl/Cmd+Shift+K to search." />
+      <div className="aw-sp-home-page" data-testid="spec-home-page">
+        <SpecHomeView onOpen={(path, anchor) => onOpenDocument(path, anchor)} />
+        <div className="aw-sp aw-sp-home-list" data-layout="column">
+          {column(null)}
         </div>
       </div>
     )
@@ -202,13 +205,13 @@ function OpenDocument({
   column: ReactNode
   footer: ReactNode
   onShowList: () => void
-  onOpenDocument: (path: string | null) => void
+  onOpenDocument: (path: string | null, anchor?: string) => void
   onOpenTasks?: (taskIds: string[], specDocumentId?: string) => void
   onOpenLoop?: (loop: LoopSummary) => void
 }) {
   const list = useSpecListData()
   const result = useSpecSurface(path, {
-    onOpenDocument: (next) => onOpenDocument(next),
+    onOpenDocument: (next, nextAnchor) => (nextAnchor ? onOpenDocument(next, nextAnchor) : onOpenDocument(next)),
     onOpenTasks,
     onOpenLoop,
     onDeleted: () => onOpenDocument(null),

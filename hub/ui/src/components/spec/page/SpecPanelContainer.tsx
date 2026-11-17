@@ -61,7 +61,7 @@ function PanelFor(props: React.ComponentProps<typeof SpecPanelContainer>) {
             <SpecPlainDocument plain={result.plain} message={result.message} />
           )}
           <div className="aw-sp-banner">
-            <SpecDocumentFacts path={props.path} specList={list.specList} onOpenTasks={props.onOpenTasks} onOpenRequirement={() => undefined} />
+            <SpecDocumentFacts path={props.path} specList={list.specList} onOpenTasks={props.onOpenTasks} onOpenRequirement={() => undefined} onOpenDocument={props.onOpenDocument} />
           </div>
         </div>
       </div>

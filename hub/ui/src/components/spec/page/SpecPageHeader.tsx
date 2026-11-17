@@ -49,7 +49,7 @@ export interface SpecPageHeaderProps {
   onForward: () => void
   onAction: (action: SpecAction) => void
   onJumpToFindings: () => void
-  onOpenDocument: (path: string) => void
+  onOpenDocument: (path: string, anchor?: string) => void
   onCopyLink: () => void
   onCopyPath: () => void
   /** Left out when the document cannot be archived (a capability, a document already archived). */
@@ -108,7 +108,7 @@ export function SpecPageHeader(props: SpecPageHeaderProps) {
         <nav className="aw-sp-crumbs" aria-label="Where this document sits">
           {doc.roadmap ? (
             <>
-              <button data-slot="crumb" type="button" className="aw-sp-crumb" onClick={() => props.onOpenDocument(doc.roadmap!.path)} title="Open the roadmap">
+              <button data-slot="crumb" type="button" className="aw-sp-crumb" onClick={() => props.onOpenDocument(doc.roadmap!.path, doc.roadmap!.sliceKey ? `slice-${doc.roadmap!.sliceKey}` : undefined)} title="Open the roadmap at this slice">
                 <Icon name="list_tree" size={13} />
                 <span className="truncate">{doc.roadmap.title}</span>
               </button>

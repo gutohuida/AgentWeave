@@ -243,7 +243,7 @@ export function roadmapOf(path: string, entries: SpecListEntry[]): SpecDocumentV
   const slices = entries.filter((e) => e.roadmap?.path === roadmap.path).sort((a, b) => a.roadmap!.order - b.roadmap!.order)
   const at = slices.findIndex((e) => e.path === path)
   const link = (e: SpecListEntry | undefined) => (e ? { path: e.path, title: e.title } : null)
-  return { path: roadmap.path, title: roadmap.title, sliceTitle: self.title, previous: link(slices[at - 1]), next: link(slices[at + 1]) }
+  return { path: roadmap.path, title: roadmap.title, sliceTitle: self.title, sliceKey: self.roadmap.slice, previous: link(slices[at - 1]), next: link(slices[at + 1]) }
 }
 
 // ── The list ────────────────────────────────────────────────────────────
@@ -288,9 +288,9 @@ export function listEntries(specs: SpecEntry[], records: SpecDocumentRecord[]): 
       shown: shownOf(state, record?.display_phase ?? entry.display_phase),
       updatedAt: record?.updated_at ?? entry.updated_at ?? '',
       roadmap: parentIsRoadmap
-        ? { path: entry.parent!, order: entry.order ?? 0 }
+        ? { path: entry.parent!, order: entry.order ?? 0, slice: record?.roadmap?.slice }
         : named
-          ? { path: named.document, order: named.order ?? Number.MAX_SAFE_INTEGER }
+          ? { path: named.document, order: named.order ?? Number.MAX_SAFE_INTEGER, slice: named.slice }
           : null,
       waiting: waitingReason(record),
       waitingCount: record?.waiting_count,

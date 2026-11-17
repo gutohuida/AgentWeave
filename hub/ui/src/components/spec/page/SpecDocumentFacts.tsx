@@ -17,7 +17,7 @@ import { useDocumentTasks } from '@/api/tasks'
 import { useCheckVaultWarnings, useVaultChecked, useVaultWarnings } from '@/api/vault'
 import { toast } from '@/lib/toast'
 import { SpecApprovalReport } from '../SpecApprovalReport'
-import { CapabilityWaitingList } from '../CapabilityWaitingList'
+import { CapabilityTouchedList } from '../CapabilityTouchedList'
 import { ChangeCapabilities } from '../ChangeCapabilities'
 import { SpecCoverageBar } from '../SpecCoverageBar'
 import { SpecDriftPanel } from '../SpecDriftPanel'
@@ -114,12 +114,15 @@ export function SpecDocumentFacts({
   specList,
   onOpenTasks,
   onOpenRequirement,
+  onOpenDocument,
   inHeader = false,
 }: {
   path: string
   specList: SpecListResponse | undefined
   onOpenTasks?: (taskIds: string[], specDocumentId?: string) => void
   onOpenRequirement: (identifier: string) => void
+  /** Opens a document the facts name (a capability a change touches, a change a capability lists). */
+  onOpenDocument?: (path: string) => void
   /** In the redesigned header's second row: the facts flow beside the phase and a detail opens
    *  over the body. A fact that could not be read is the header's notice. */
   inHeader?: boolean
@@ -146,8 +149,8 @@ export function SpecDocumentFacts({
 
   return (
     <div data-testid="spec-document-facts" className={inHeader ? 'aw-sp-head-facts' : undefined}>
-      {record?.kind === 'change-spec' ? <ChangeCapabilities record={record} /> : null}
-      {record?.kind === 'capability' ? <CapabilityWaitingList record={record} /> : null}
+      {record?.kind === 'change-spec' ? <ChangeCapabilities record={record} onOpenDocument={onOpenDocument} /> : null}
+      {record?.kind === 'capability' ? <CapabilityTouchedList record={record} onOpenDocument={onOpenDocument} /> : null}
       {record?.acronym ? <AcronymEditor path={path} acronym={record.acronym} /> : null}
       {unread ? (
         <p className="aw-spec-message" data-tone="warn" data-testid="spec-facts-unread">

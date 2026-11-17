@@ -26,7 +26,7 @@
 @keyframes aw-home-pulse { 70% { box-shadow: 0 0 0 6px transparent; } 100% { box-shadow: 0 0 0 0 transparent; } }
 @media (prefers-reduced-motion: reduce) { .aw-home-dot[data-state="running"] { animation: none; } }
 
-/* Option A: links on each row. */
+/* Links on each row. */
 .aw-home-rel { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; font-size: 12px; color: var(--text-2); }
 .aw-home-crumb { display: inline-flex; align-items: center; gap: 5px; color: var(--text-3); }
 .aw-home-sep { color: var(--text-3); }
@@ -46,21 +46,7 @@
 .aw-home-cap-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .aw-home-cap-waiting { flex: none; font-size: 11px; color: var(--amber); }
 
-/* Option B: an outline, roadmap > slice > change > capabilities. */
-.aw-tree { list-style: none; margin: 0; padding: 12px 14px; display: flex; flex-direction: column; gap: 14px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); }
-.aw-tree-children { list-style: none; margin: 6px 0 0 6px; padding: 0 0 0 16px; border-left: 1px solid var(--border-hi); display: flex; flex-direction: column; gap: 8px; }
-.aw-tree-item { position: relative; display: grid; grid-template-columns: minmax(0, 1fr); gap: 3px; }
-.aw-tree-item::before { content: ''; position: absolute; left: -16px; top: 12px; width: 12px; height: 1px; background: var(--border-hi); }
-.aw-tree-slice { font-size: 11px; color: var(--text-3); }
-.aw-tree-node { all: unset; cursor: pointer; display: inline-flex; align-items: center; gap: 7px; font-size: 13px; color: var(--text); transition: opacity var(--dur-fast) var(--ease); }
-.aw-tree-node[data-kind="roadmap"] { font-weight: 650; }
-.aw-tree-node[data-kind="none"] { cursor: default; font-weight: 600; color: var(--text-3); }
-.aw-tree-node .aw-home-dot { margin-top: 0; }
-.aw-tree-node:not([data-kind="none"]):hover { text-decoration: underline; text-underline-offset: 3px; }
-.aw-tree-node[data-lit="false"] { opacity: .4; }
-.aw-tree-caps { list-style: none; margin: 0; padding: 0 0 0 15px; display: flex; flex-wrap: wrap; gap: 4px; }
-
-/* Option C: a drawn map, three columns joined by threads. */
+/* The drawn map, three columns joined by threads. */
 .aw-map-heads { display: grid; grid-template-columns: 23% 1fr 23%; gap: 0; padding: 0 2px; font-size: 11px; color: var(--text-3); }
 .aw-map-heads span:nth-child(2) { text-align: center; }
 .aw-map-heads span:nth-child(3) { text-align: right; }
@@ -78,3 +64,8 @@
 .aw-map-node[data-col="capability"] { right: 1%; width: 22%; background: color-mix(in oklab, var(--purple) 8%, var(--bg)); border-color: color-mix(in oklab, var(--purple) 25%, transparent); }
 .aw-map-node:hover, .aw-map-node[data-lit="true"] { border-color: var(--ring); }
 .aw-map-node[data-lit="false"] { opacity: .35; }
+
+/* The home above the unchanged document list, in the Spec tab. */
+.aw-sp-home-page { flex: 1; min-height: 0; overflow-y: auto; padding: 20px 24px 32px; display: flex; flex-direction: column; gap: 28px; }
+.aw-sp-home-list { flex: none; height: 560px; border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+.aw-sp-home-list .aw-sp-list { width: 100%; border-right: 0; }

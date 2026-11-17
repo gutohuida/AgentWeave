@@ -123,6 +123,8 @@ export interface SpecDocumentView {
     path: string
     title: string
     sliceTitle: string
+    /** The slice's key on the roadmap, so a link can open the roadmap at it. */
+    sliceKey?: string
     previous?: { path: string; title: string } | null
     next?: { path: string; title: string } | null
   } | null
@@ -415,7 +417,7 @@ export interface SpecListEntry {
   shown: ShownState
   updatedAt: string
   /** A slice: the roadmap's path and its position in the roadmap's build order. */
-  roadmap?: { path: string; order: number } | null
+  roadmap?: { path: string; order: number; slice?: string } | null
   building: boolean
   /** On disk, but the Hub keeps no record of it: it can be adopted. */
   untracked?: boolean
