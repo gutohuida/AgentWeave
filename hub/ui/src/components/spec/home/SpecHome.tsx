@@ -74,6 +74,10 @@ export function SpecHome({
                   data-testid="spec-home-capability-row"
                   data-path={c.path}
                   data-lit={focus ? String(litBy(shown, focus).has(c.path)) : undefined}
+                  onMouseEnter={() => setFocus(c.path)}
+                  onMouseLeave={() => setFocus(null)}
+                  onFocus={() => setFocus(c.path)}
+                  onBlur={() => setFocus(null)}
                   onClick={() => onOpen(c.path)}
                 >
                   <span className="aw-home-cap-title">{c.title}</span>

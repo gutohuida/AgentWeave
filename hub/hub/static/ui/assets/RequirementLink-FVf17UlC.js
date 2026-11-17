@@ -1,0 +1,1 @@
+import{u as a,j as r,ai as u,da as l}from"./index-BgGeZT-x.js";function p({document:n,identifier:o,children:i="history",testId:s}){const e=a(t=>t.selectedProjectId);return e?r.jsx("button",{type:"button",className:"aw-link aw-link-inline","data-testid":s,onClick:t=>{t.stopPropagation(),u(l(e,n,o))},children:i}):null}export{p as R};

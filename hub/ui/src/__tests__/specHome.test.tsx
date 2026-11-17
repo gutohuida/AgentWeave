@@ -155,6 +155,40 @@ describe('the Spec home', () => {
     expect(document.querySelector('.aw-map-node[data-col=capability][data-lit=true]')).toHaveTextContent('C cap')
   })
 
+  it('lights the builds and roadmap a hovered Capabilities row connects to, and clears on leaving', async () => {
+    const builds = homeBuilds([
+      row('x', 'x', 'running', { roadmap: { path: doc('r'), title: 'R roadmap', slice: { key: 's', title: 'S' } }, capabilities: [{ path: cap('c'), title: 'C cap' }] }),
+      row('y', 'y', 'running', { capabilities: [{ path: cap('d'), title: 'D cap' }] }),
+    ])
+    const onOpen = vi.fn()
+    render(
+      <SpecHome
+        builds={builds}
+        capabilities={[
+          { path: cap('c'), title: 'C cap', waiting: 0 },
+          { path: cap('d'), title: 'D cap', waiting: 0 },
+        ]}
+        now={NOW}
+        onOpen={onOpen}
+      />,
+    )
+    const capRows = screen.getAllByTestId('spec-home-capability-row')
+    await userEvent.hover(capRows[0])
+    expect(screen.getAllByTestId('spec-home-build-row').map((r) => r.getAttribute('data-lit'))).toEqual(['true', 'false'])
+    expect([...document.querySelectorAll('.aw-map-node')].map((n) => [n.textContent, n.getAttribute('data-lit')])).toEqual([
+      ['R roadmap', 'true'],
+      ['x change', 'true'],
+      ['y change', 'false'],
+      ['C cap', 'true'],
+      ['D cap', 'false'],
+    ])
+    expect(capRows.map((c) => c.getAttribute('data-lit'))).toEqual(['true', 'false'])
+    await userEvent.unhover(capRows[0])
+    expect(document.querySelectorAll('[data-lit]')).toHaveLength(0)
+    await userEvent.tab()
+    expect(document.querySelectorAll('[data-lit=true]').length).toBeGreaterThan(0)
+  })
+
   it('lights a capability row in Capabilities when its build is hovered', async () => {
     show()
     await userEvent.hover(screen.getAllByTestId('spec-home-recent-row')[0])
