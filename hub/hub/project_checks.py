@@ -628,16 +628,30 @@ def _run_one(check: Dict[str, Any], cwd: Path, owner: Optional[str] = None) -> D
     clear_report(check, cwd)
     spawn = _spawn_arguments(check)
     creationflags = spawn.pop("creationflags", 0) | no_console_kwargs().get("creationflags", 0)
-    proc = subprocess.Popen(
-        **spawn,
-        creationflags=creationflags,
-        cwd=str(cwd),
-        env=env,
-        stdin=subprocess.DEVNULL,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        start_new_session=not IS_WINDOWS,
-    )
+    try:
+        proc = subprocess.Popen(
+            **spawn,
+            creationflags=creationflags,
+            cwd=str(cwd),
+            env=env,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            start_new_session=not IS_WINDOWS,
+        )
+    except OSError as exc:
+        # The operating system refused to create the process: this check could not run, and the
+        # run goes on to the next (`a-check-that-cannot-run-says-so...`, FR-4, D3).
+        error = scrub(f"{type(exc).__name__}: {exc}", removed)
+        return {
+            "name": check["name"],
+            "exit_code": None,
+            "timed_out": False,
+            "duration_seconds": round(time.monotonic() - started, 1),
+            "output_tail": f"[the check could not start: {error}]",
+            "outcome": COULD_NOT_RUN,
+            "spawn_error": error,
+        }
     if owner is not None:
         _processes[owner] = proc
         if owner in _superseded:
@@ -683,7 +697,79 @@ def _run_one(check: Dict[str, Any], cwd: Path, owner: Optional[str] = None) -> D
     }
     # The report names the failing tests; the console is for people (FR-2, FR-7).
     _judge_by_report(check, cwd, result, timed_out)
+    classify_could_not_run(check, result)
     return result
+
+
+# --- a check that could not run (`a-check-that-cannot-run-says-so-and-is-never-silently-excused`) --
+
+#: A result's `outcome` where its command could not start (FR-1): neither a pass nor the work's
+#: failure, never excused by the known-failing list (FR-5, FR-6).
+COULD_NOT_RUN = "could_not_run"
+#: What a shell prints when it cannot find a program (D1), each naming it as `program`: cmd's
+#: sentence, bash's, and sh/dash's (`sh: 1: eslint: not found`). Anchored to the shell's own
+#: wording, so a test printing "file not found" does not match.
+_NOT_FOUND_SENTENCES = (
+    re.compile(r"'(?P<program>[^'\r\n]+)' is not recognized as an internal or external command"),
+    re.compile(r"(?m)(?:^|: )(?P<program>[^\s:'\"]+): command not found\s*$"),
+    re.compile(
+        r"(?m)^(?:\S*/)?(?:sh|dash|ash): (?:(?:line )?\d+: )?(?P<program>[^\s:]+): not found\s*$"
+    ),
+)
+#: The shell's own exit code for a program it could not find (FR-1).
+_NOT_FOUND_EXIT_WINDOWS = 9009
+_NOT_FOUND_EXIT_POSIX = 127
+
+
+def missing_program(output: str) -> Optional[str]:
+    """The program a shell's not-found sentence in *output* names, else `None` (FR-1, FR-2)."""
+    for sentence in _NOT_FOUND_SENTENCES:
+        found = sentence.search(output or "")
+        if found:
+            return found.group("program").strip()
+    return None
+
+
+def classify_could_not_run(check: Dict[str, Any], result: Dict[str, Any]) -> None:
+    """Mark *result* 'could not run' where its command could not start (the algorithm "classify
+    one check result", steps 2-5): not a timeout, not a pass, naming no failing test (D2: tests ran,
+    so the command started -- FR-3), and its output holds a shell's not-found sentence or it exited
+    with the shell's own not-found code. Names the program (FR-2): from the sentence, else the
+    command's first word."""
+    from .pty_runner import IS_WINDOWS
+
+    if result.get("timed_out") or result.get("skipped") or result.get("exit_code") in (0, None):
+        return
+    if result.get("failed_tests") or result.get("named_failures"):
+        return
+    program = missing_program(str(result.get("output_tail") or ""))
+    code = _NOT_FOUND_EXIT_WINDOWS if IS_WINDOWS else _NOT_FOUND_EXIT_POSIX
+    if program is None and result.get("exit_code") != code:
+        return
+    if program is None:
+        words = str(check.get("command") or "").split()
+        program = words[0].strip("\"'") if words else None
+    result["outcome"] = COULD_NOT_RUN
+    result["missing_program"] = program
+    result.pop("whole_check", None)  # why a failure names no test: this is no failure of tests
+
+
+def could_not_run(result: Any) -> bool:
+    """Whether *result* is a check whose command could not start (FR-1)."""
+    return isinstance(result, dict) and result.get("outcome") == COULD_NOT_RUN
+
+
+def could_not_run_results(results: Optional[Sequence[Any]]) -> List[Dict[str, Any]]:
+    """The results of a run that could not run (FR-6, FR-11, FR-12)."""
+    return [result for result in results or [] if could_not_run(result)]
+
+
+def could_not_run_summary(results: Optional[Sequence[Any]]) -> str:
+    """`hub-ui (eslint), lint (OSError: ...)`: each check that could not run, with what it lacked."""
+    return ", ".join(
+        f"{r.get('name')} ({r.get('missing_program') or r.get('spawn_error') or 'unknown'})"
+        for r in could_not_run_results(results)
+    )
 
 
 # --- the check's report (`checks-report-which-tests-failed-in-any-language`) --------------------
@@ -1306,9 +1392,16 @@ def preexisting(result: Dict[str, Any]) -> bool:
     return failed(result) and bool(result.get("preexisting"))
 
 
+def counts_against(result: Dict[str, Any]) -> bool:
+    """Whether *result* is a failure of the work's own: failed, not on the known-failing list,
+    and not a check that could not run, which is never the work's (FR-6)."""
+    return failed(result) and not preexisting(result) and not could_not_run(result)
+
+
 def own_failure(results: Optional[Sequence[Dict[str, Any]]]) -> bool:
-    """Whether a run's results hold a failure that is the task's (not one on the list)."""
-    return any(failed(result) and not preexisting(result) for result in results or [])
+    """Whether a run's results hold a failure that is the task's (not one on the list, and not a
+    check that could not run)."""
+    return any(counts_against(result) for result in results or [])
 
 
 def send_back_class(results: Optional[Sequence[Dict[str, Any]]]) -> str:
@@ -1317,7 +1410,7 @@ def send_back_class(results: Optional[Sequence[Dict[str, Any]]]) -> str:
     file the task changes, FR-4), else `broken-check`."""
     from .task_transitions import SEND_BACK_BROKEN_CHECK, SEND_BACK_FLAKY
 
-    own = [r for r in results or [] if failed(r) and not preexisting(r)]
+    own = [r for r in results or [] if counts_against(r)]
     confirmed = [r.get("confirmed") for r in own]
     if own and all(
         isinstance(c, dict) and c.get("exit_code") == 0 and not c.get("timed_out")
@@ -1866,13 +1959,17 @@ async def _execute(
                     results.append(result)
                     timed_out = check
                     return "timeout"
-                if failed(result) and task_id not in _superseded:
+                # A check whose command never started has nothing to confirm, and nothing the
+                # known-failing list may excuse or blame (`a-check-that-cannot-run-says-so...`,
+                # FR-5, FR-6): it is recorded as it is, and the run goes on to the next check.
+                judged = failed(result) and not could_not_run(result)
+                if judged and task_id not in _superseded:
                     # Confirmed on the same tree first: only a reproduced failure stands.
                     await asyncio.to_thread(confirm_failure, check, path, result, task_id, changed)
                     if result.get("flaky"):
                         # Raised to the operator, not only to the reviewer (`flaky_tests`).
                         await flaky_tests.record_flake(run_id, result)
-                if failed(result) and task_id not in _superseded:
+                if judged and failed(result) and task_id not in _superseded:
                     # Whose it is, the known-failing list decides: nothing runs on main for it but
                     # the twice rule's one test (`failures-already-known-are-on-a-list-not-re-
                     # argued`, FR-7, FR-13).
@@ -1890,7 +1987,7 @@ async def _execute(
                 result.update(tree=tree, check_digest=check_digest(check))
             results.append(result)
             await _finish(run_id, merged_sha=merged, results=list(results))
-            if failed(result) and not preexisting(result):
+            if counts_against(result):
                 # The task's own failure already decides the run; the checks after it would only
                 # make its author wait for them (operator, 2026-10-24). A listed failure does not
                 # stop it: it is not the task's, and what follows may still be.
@@ -2577,14 +2674,12 @@ async def fast_checks_at_completion(
     failing = [
         result
         for result in run.results or []
-        if result.get("name") in fast and failed(result) and not preexisting(result)
+        if result.get("name") in fast and counts_against(result)
     ]
     if run.state == "failed" and own_failure(run.results):
         # Decided before this completion asked (a re-completion of unchanged work) or within its
         # wait: every failure of the task's own is the builder's to fix now.
-        failing = [
-            result for result in run.results or [] if failed(result) and not preexisting(result)
-        ]
+        failing = [result for result in run.results or [] if counts_against(result)]
     if run.state == "error":
         failing = []  # the Hub could not produce a result: not the builder's to fix (D6)
     outcome = CompletionChecks(
@@ -2608,7 +2703,7 @@ def failure_report(
 ) -> str:
     """The failing checks of a run, the commit checked and their output: what a refused completion
     says and what a returned task's notes carry (FR-3, FR-7)."""
-    failing = [r for r in results if failed(r) and not preexisting(r)]
+    failing = [r for r in results if counts_against(r)]
     names = ", ".join(str(r.get("name")) for r in failing) or "a check"
     commit = (merged_sha or "")[:12] or "the merged work"
     lines = [
@@ -2672,8 +2767,9 @@ def _aware(moment: datetime) -> datetime:
 class ReviewWait:
     """Why a review of a completed task waits for its checks (FR-6, D6)."""
 
-    #: `running`, `missing`, `stale`, `interrupted`, `failed` (the task's own failure), or
-    #: `conflict` (its work does not merge onto main, FR-7).
+    #: `running`, `missing`, `stale`, `interrupted`, `failed` (the task's own failure),
+    #: `conflict` (its work does not merge onto main, FR-7), or `could_not_run` (a check's command
+    #: never started: it waits for a run in which it does, `a-check-that-cannot-run-says-so...`).
     state: str
     run_id: Optional[str]
     reason: str
@@ -2734,6 +2830,17 @@ async def review_wait(session: AsyncSession, task: Task) -> Optional[ReviewWait]
             return _conflict_wait(run) if conflicted(run) else None
     run_id = run.id if run is not None else None
     if seen.state == "failed":
+        if run is not None and not own_failure(run.results) and could_not_run_results(run.results):
+            # A check that never ran judged nothing: the work is neither reviewed nor sent back,
+            # and waits for a run in which that check runs (`a-check-that-cannot-run-says-so...`,
+            # FR-12) -- the operator's re-run, or the next main move.
+            return ReviewWait(
+                COULD_NOT_RUN,
+                run_id,
+                f"its check {could_not_run_summary(run.results)} could not run (check run "
+                f"{run_id}), so its work was not checked; it waits for its checks to run again, "
+                f"neither reviewed nor sent back",
+            )
         if run is None or not own_failure(run.results):
             return None  # a failure main shares, or a flake: slice M's, and the review proceeds
         return ReviewWait(
