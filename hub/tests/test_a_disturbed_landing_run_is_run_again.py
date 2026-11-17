@@ -158,4 +158,3 @@ async def test_a_run_again_waits_until_no_check_run_holds_a_slot():
     await asyncio.wait_for(waiter, timeout=5)
     assert not semaphore.locked()
     project_checks._semaphores.clear()
-    project_checks._every_slot_locks.clear()

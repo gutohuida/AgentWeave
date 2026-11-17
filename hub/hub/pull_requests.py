@@ -1169,6 +1169,8 @@ async def land(landing_id: str, checks: List[Dict[str, Any]]) -> bool:
                 prefixes=[],
                 results=[],
                 narrowing=[],
+                ready_at=landing.created_at,  # its landing record (FR-7)
+                check_runs=0,
             )
         )
         await session.commit()

@@ -3647,6 +3647,16 @@ class LandingBatch(Base):
     error: Mapped[str] = mapped_column(Text, nullable=False, default="")
     created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, nullable=False)
     ended_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), nullable=True)
+    # The batch's landing record (`landing-time-and-test-flakiness-are-measured`, FR-7, migration
+    # 0181). Null on a batch from before it: not recorded, never zero.
+    #: When the earliest of its tasks became ready to land (that landing's `created_at`).
+    ready_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), nullable=True)
+    #: When its checks first held a check slot; its wait is `slot_at - ready_at`.
+    slot_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), nullable=True)
+    #: When its last check run ended; its check time is `checks_ended_at - slot_at`.
+    checks_ended_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), nullable=True)
+    #: How many check runs it made: first runs, confirmation re-runs, probes and re-runs together.
+    check_runs: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
 
     __table_args__ = (Index("ix_landing_batches_project", "project_id", "created_at"),)
 
@@ -3802,3 +3812,57 @@ class DashboardVersion(Base):
     panels: Mapped[Any] = mapped_column(JSON, nullable=False, default=list)
     edited_by: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
     edited_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), nullable=True)
+
+
+class CheckTestOutcome(Base):
+    """One test's outcome in one check run (`landing-time-and-test-flakiness-are-measured`, FR-5,
+    migration 0180): every test a check run's report names, passed or failed, is a row.
+
+    `check_name` and `test_id` identify the test: the id exactly as the report gives it
+    (`classname::name`). `file` is the file the report names for it, or `""` where it names none
+    (pytest's xunit2). `outcome` is `passed`, `failed`, or `flipped` -- it failed and then passed
+    on the confirmation re-run of the same tree in the same check run. `check_run_id` is a
+    `TaskCheckRun` id, or a `MainCheckRun` id for a run on main's tree; `phase` is `review`,
+    `landing` or `main`; `commit_sha` the commit the checks ran on. History starts at deployment:
+    nothing is rebuilt from older runs. `check_history.flake_rates` reads it.
+    """
+
+    __test__ = False  # not a pytest test class, whatever its name
+
+    __tablename__ = "test_history"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    project_id: Mapped[str] = mapped_column(String(64), ForeignKey("projects.id"), nullable=False)
+    check_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    test_id: Mapped[str] = mapped_column(String(1024), nullable=False)
+    # The file the report names for the test, `""` where it names none (pytest's xunit2).
+    file: Mapped[str] = mapped_column(String(1024), nullable=False, default="", server_default="")
+    # `passed`, `failed`, or `flipped` (failed, then passed on the re-run of the same tree).
+    outcome: Mapped[str] = mapped_column(String(16), nullable=False)
+    # The check run: a `task_check_runs` id, or a `main_check_runs` id for a run on main's tree.
+    check_run_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    # `review` (a task's pre-review run), `landing` (a landing batch's) or `main` (main's tree).
+    phase: Mapped[str] = mapped_column(String(16), nullable=False)
+    # The commit the checks ran on.
+    commit_sha: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    recorded_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, nullable=False)
+
+    __table_args__ = (
+        Index("ix_test_history_test", "project_id", "check_name", "test_id", "id"),
+        Index("ix_test_history_run", "check_run_id"),
+    )
+
+
+class HubSettings(Base):
+    """The Hub's own settings, one row (`id` 1), not a project's (migration 0180). No row, or a
+    NULL column: the Hub's default.
+
+    `check_concurrency` is how many check runs the Hub runs at once
+    (`landing-time-and-test-flakiness-are-measured`, FR-10); NULL means
+    `project_checks.DEFAULT_CHECK_CONCURRENCY`.
+    """
+
+    __tablename__ = "hub_settings"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    check_concurrency: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)

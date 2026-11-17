@@ -15,7 +15,7 @@ from typing import Any, Optional
 from sqlalchemy import Table, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from . import project_repository, readable_ids
+from . import landing_dashboard, project_repository, readable_ids
 from .data_notes import seed_project as seed_data_notes
 from .db.models import RUNNER_CLIS, Base, Charter, DeletedProject, Project, Run, Runner
 from .project_workspace import (
@@ -603,6 +603,9 @@ class ProjectLifecycleService:
                 )
             )
         project.charters_seeded = True
+        # Every project has it from the start (`landing-time-and-test-flakiness-are-measured`,
+        # FR-8); one created before it was given it by migration 0181.
+        await landing_dashboard.seed(self.session, project.id)
 
     async def _write_marker_and_commit(self, project: Project, root: Path) -> None:
         # Every file call here runs off the loop: on a slow disk or a share each waits as long as

@@ -39,7 +39,7 @@ async def test_a_run_waiting_for_a_slot_says_it_is_queued_not_running(
         checks=lambda repo: [_slow(tmp_path)],
     )
     slots = project_checks._semaphore()
-    for _ in range(project_checks.MAX_CONCURRENT_RUNS):
+    for _ in range(project_checks.check_concurrency()):
         await slots.acquire()  # two other runs hold every slot
     try:
         run_id = await project_checks.request_run("proj-test", "task-1")
@@ -50,7 +50,7 @@ async def test_a_run_waiting_for_a_slot_says_it_is_queued_not_running(
         assert "for a check slot" in wait.reason and "queued is not hung" in wait.reason
         assert "checks have run" not in wait.reason
     finally:
-        for _ in range(project_checks.MAX_CONCURRENT_RUNS):
+        for _ in range(project_checks.check_concurrency()):
             slots.release()
     await project_checks.drain()
     async with async_session_factory() as db:

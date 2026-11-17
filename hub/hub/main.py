@@ -618,8 +618,18 @@ async def lifespan(app: FastAPI):
     # D4), and run again now for a task still waiting for review: nothing about its work was judged
     # (`checks-know-their-phase-and-give-way-to-the-user`, FR-8).
     from . import landing_queue
-    from .project_checks import interrupt_leftover_runs, schedule_rerun_after_hub_stop
+    from .project_checks import (
+        interrupt_leftover_runs,
+        load_check_concurrency,
+        schedule_rerun_after_hub_stop,
+    )
 
+    # How many check runs at once is the operator's (`landing-time-and-test-flakiness-are-
+    # measured`, FR-10), read before any run is started again below.
+    try:
+        await load_check_concurrency()
+    except Exception:  # noqa: BLE001 -- the default stands
+        logger.warning("could not read the Hub's check concurrency", exc_info=True)
     # A run left `running` by a batch that is no longer checking takes the batch's outcome first.
     try:
         await landing_queue.close_orphaned_check_runs()
