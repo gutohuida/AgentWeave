@@ -27,7 +27,7 @@ export interface SpecSurfaceProps {
    *  `the-spec-header-redesigned`, FR-7). Check's findings are added to them here. */
   notices?: HeaderNotice[]
   onAction: (action: SpecAction) => void
-  onOpenDocument: (path: string) => void
+  onOpenDocument: (path: string, anchor?: string) => void
   /** The Tasks board, narrowed to this document (F1129). */
   onOpenBoard?: () => void
   onCopyLink: (anchor: string | null) => void

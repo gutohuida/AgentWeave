@@ -275,7 +275,9 @@ function isReadable(inv: SpecInventory, path: string | null | undefined): boolea
 export function resolveSelection(
   inv: SpecInventory,
   current: string | null,
-  home: string | null | undefined
+  home: string | null | undefined,
+  /** Whether any readable current document will do when there is no home or baseline. */
+  anyCurrent = true
 ): string | null {
   if (isReadable(inv, current)) return current
 
@@ -284,6 +286,8 @@ export function resolveSelection(
 
   const baseline = inv.byPath.get('spec/spec.json')
   if (baseline && !baseline.missing && !baseline.archived) return baseline.path
+
+  if (!anyCurrent) return null
 
   const firstCurrent = inv.nodes
     .filter((n) => !n.archived && !n.missing)

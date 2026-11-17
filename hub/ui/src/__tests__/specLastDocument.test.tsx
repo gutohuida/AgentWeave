@@ -93,7 +93,7 @@ const shown = async (title: string) => {
   await waitFor(() => expect(screen.getByTestId('spec-document-header')).toHaveTextContent(title))
 }
 const listOnly = async () => {
-  await screen.findByText('Pick a document')
+  await screen.findByTestId('spec-home')
   expect(screen.queryByTestId('spec-document-header')).toBeNull()
 }
 

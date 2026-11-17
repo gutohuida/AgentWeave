@@ -85,7 +85,7 @@ function useFactsUnread(path: string): boolean {
 
 export interface SpecSurfaceHost {
   /** Open another document (a roadmap, a neighbouring slice, a link). */
-  onOpenDocument: (path: string) => void
+  onOpenDocument: (path: string, anchor?: string) => void
   /** The Tasks tab, filtered to these tasks. */
   onOpenTasks?: (taskIds: string[], specDocumentId?: string) => void
   onOpenLoop?: (loop: LoopSummary) => void
@@ -273,7 +273,7 @@ export function useSpecSurface(path: string, host: SpecSurfaceHost): SpecSurface
   if (retiredNotice) notices.push(retiredNotice)
 
   const health = ({ jump }: { jump: (anchor: string) => void }) => (
-    <SpecDocumentFacts path={path} specList={list.specList} onOpenTasks={host.onOpenTasks} onOpenRequirement={jump} inHeader />
+    <SpecDocumentFacts path={path} specList={list.specList} onOpenTasks={host.onOpenTasks} onOpenRequirement={jump} onOpenDocument={host.onOpenDocument} inHeader />
   )
 
   const node = list.specList?.specs.find((e) => e.path === path)

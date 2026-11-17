@@ -15,7 +15,7 @@ Fixture, one throwaway git project on `main` (project A) and a second for the ca
      changes  Foxtrot (finished build, in no roadmap, changes Cobalt), Yankee (running, no roadmap,
               changes Dune), Xray (running, newest build, slice s2 of Rho, changes Cobalt)
      capabilities  Cobalt (waiting: Xray, Foxtrot = 2), Dune (waiting: Yankee = 1), Ember (no change)
-     Zulu, an approved change nothing builds until ac-live starts it
+     Zulu, a change nothing builds until ac-live starts it
   B  capability "Tango cap" with changes T1 and T2 folded in that order (T1 archived by its fold,
      T2 left approved-and-folded), and T3 approved and waiting
 
@@ -390,7 +390,8 @@ def arrange(fx):
     a.build(yankee)
     time.sleep(1.2)
     a.build(xray)
-    a.approve(zulu)
+    # Zulu is left written, not approved: the Build button approves and builds in one call, and
+    # refuses a document that is already approved (`phase_unchanged`).
     fx.p.update(cobalt=cobalt, dune=dune, ember=ember, rho=rho, foxtrot=foxtrot, yankee=yankee, xray=xray, zulu=zulu)
 
     b = fx.b
