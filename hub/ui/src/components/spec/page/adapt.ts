@@ -6,13 +6,14 @@
  *  is tested against the shape the route returns. */
 import { plainGap } from '../gapWords'
 import type { BuildFigures } from '@/api/buildFigures'
-import type { CoverageEntry, SpecBlockingFinding, SpecBuild, SpecDocumentRecord, SpecEntry } from '@/api/spec'
+import type { CoverageEntry, RoadmapProgressFigures, RoadmapSliceRow, SpecBlockingFinding, SpecBuild, SpecDocumentRecord, SpecEntry } from '@/api/spec'
 import type { Task } from '@/api/tasks'
 import {
   type BuildView,
   type CheckFinding,
   type DocState,
   type EvidenceState,
+  type SliceProgress,
   type SpecDocumentView,
   type SpecKind,
   type SpecListEntry,
@@ -38,6 +39,7 @@ export interface SpecPayload {
   open_questions?: Array<{ question: string; resolved?: boolean }>
   slices?: Array<{ key: string; title?: string; intent?: string; done?: string; builds_after?: string[] }>
   algorithms?: Array<{ name: string; steps?: string[] }>
+  evidence?: { checked?: string[]; limits?: string[] }
   /** `{ requirements: { key: 'FR-n' } }`: the identifiers the Hub minted. */
   aw_identity?: { requirements?: Record<string, string> }
 }
@@ -127,6 +129,34 @@ export interface DocumentInputs {
   foldReady?: boolean
   /** `{slice key: path}` of the change documents that name a roadmap's slices. */
   sliceDocuments?: Record<string, string>
+  /** A roadmap's derived slice rows and figures, as the Hub's read returns them. */
+  sliceRows?: RoadmapSliceRow[]
+  progress?: RoadmapProgressFigures
+}
+
+const SLICE_STATES: Record<RoadmapSliceRow['state'], SliceProgress['state']> = {
+  'Not drafted': 'not_drafted',
+  Drafting: 'drafting',
+  Approved: 'approved',
+  Building: 'building',
+  Built: 'built',
+}
+
+/** A slice row of the Hub's roadmap read as the page's slice progress. */
+export function progressOf(row: RoadmapSliceRow): SliceProgress {
+  return {
+    state: SLICE_STATES[row.state] ?? 'not_drafted',
+    tasks: row.document ? { landed: row.tasks_on_main, total: row.tasks_total } : null,
+    costUsd: row.cost_usd,
+    unpriced: row.unpriced_turns,
+    at: row.state === 'Built' ? (row.built_at ?? row.started_at) : row.started_at,
+    waitsFor: row.waits_for,
+    offersDrafting: row.offers_drafting,
+    retrospective: row.retrospective ? { at: row.retrospective.at } : null,
+    warning: row.warning,
+    addedBy: row.added_by,
+    addedAfterApproval: row.added_after_approval,
+  }
 }
 
 export function documentView(input: DocumentInputs): SpecDocumentView {
@@ -182,15 +212,21 @@ export function documentView(input: DocumentInputs): SpecDocumentView {
     slices: (payload.slices ?? []).map((slice) => {
       const at = input.sliceDocuments?.[slice.key]
       const entry = at ? entries.find((e) => e.path === at) : undefined
+      const row = input.sliceRows?.find((r) => r.key === slice.key)
       return {
         key: slice.key,
         title: slice.title || slice.key,
         intent: slice.intent ?? '',
         done: slice.done ?? '',
         buildsAfter: slice.builds_after ?? [],
-        document: at ? { path: at, title: entry?.title ?? at, state: entry?.state ?? 'writing' } : null,
+        document: at ? { path: at, title: entry?.title ?? row?.document_title ?? at, state: entry?.state ?? 'writing', archived: entry?.phase === 'archived' } : null,
+        progress: row ? progressOf(row) : undefined,
       }
     }),
+    progress: input.progress
+      ? { built: input.progress.built, total: input.progress.total, costUsd: input.progress.cost_usd, unpriced: input.progress.unpriced_turns }
+      : undefined,
+    evidence: payload.evidence ? { checked: payload.evidence.checked ?? [], limits: payload.evidence.limits ?? [] } : undefined,
     algorithms: (payload.algorithms ?? []).map((a) => ({ name: a.name, steps: a.steps ?? [] })),
     openQuestions: (payload.open_questions ?? []).map((q) => ({ question: q.question, resolved: q.resolved === true })),
     roadmap: roadmapOf(record.path, entries),

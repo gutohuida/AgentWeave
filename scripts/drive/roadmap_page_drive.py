@@ -84,7 +84,8 @@ DB = pathlib.Path(os.environ.get("AW_DRIVE_DB") or SCRATCH / "hub.db")
 KEY = "aw_live_" + secrets.token_hex(16)
 OPERATOR_AGENT = "Architect"
 ORDER = ["ac-five-states", "ac-approved-not-landed", "ac-header", "ac-facts", "ac-two-ready",
-         "ac-same-offers", "ac-move", "ac-move-warn", "ac-add", "ac-done", "ac-list"]
+         "ac-same-offers", "ac-one-turn", "ac-move", "ac-move-warn", "ac-add", "ac-remove", "ac-done", "ac-list",
+         "ac-retro", "ac-numbered"]
 STATES = ["not drafted", "drafting", "approved", "building", "built"]
 
 checks = {}  # key -> (reached, failed, detail)
@@ -186,7 +187,7 @@ def facts_verdict(card_text, doc_path, links, built_days=9, today=None):
     linked = any(doc_path in href for href in links)
     tasks = bool(re.search(r"\b4\s*(of|/)\s*4\b", low)) and "main" in low
     cost = any(abs(v - 11.96) < 0.005 for v in money(card_text))
-    dated = any(re.search(rf"(?<!\d){re.escape(form.lower())}(?!\d)", low) for form in date_forms(built_days, today))
+    dated = bool(re.search(rf"built\s+{built_days}\s*(d|days?)(?![a-z])", low)) or any(re.search(rf"(?<!\d){re.escape(form.lower())}(?!\d)", low) for form in date_forms(built_days, today))
     return linked and tasks and cost and dated, f"link {linked}, 4 of 4 on main {tasks}, $11.96 {cost}, built date {dated}"
 
 
@@ -219,7 +220,7 @@ def self_test():
         (facts_verdict("All built s1 · 4 of 4 on main · $11.96", "t", ["?document=t"], 9, FAKE_TODAY)[0], False),
         (facts_verdict("4 of 4 tasks on main · $11.96 · built 2026-11-07", "t", [], 9, FAKE_TODAY)[0], False),
         (waits_verdict("Waits for slice 3"), True), (waits_verdict("Draft this slice"), False),
-        (len(ORDER), 11), (ORDER[0], "ac-five-states"),
+        (len(ORDER), 15), (ORDER[0], "ac-five-states"),
     ]
     bad = [(i, got, want) for i, (got, want) in enumerate(cases) if got != want]
     for i, got, want in bad:
@@ -529,13 +530,15 @@ def check_header(fx, page):
 def check_facts(fx, page):
     page.goto(spec_url(fx, "cost"))
     body_text(page)
-    card = page.locator("[data-testid=slice-card][data-slice=s1]")
+    card = page.locator("li.aw-rm-slice#slice-s1")
     shot(page, "facts")
     if card.count() == 0:
-        record("ac-facts", True, False, "no [data-testid=slice-card][data-slice=s1] on the page")
+        record("ac-facts", True, False, "no slice card li#slice-s1 on the page")
         return
     links = [urllib.parse.unquote(a.get_attribute("href") or "") for a in card.first.locator("a").all()]
+    links += [fx.docs[("cost", "s1")][0] for b in card.first.locator("button").all() if b.inner_text().strip() == title_of(fx, fx.docs[("cost", "s1")][0])]
     ok, detail = facts_verdict(card.first.inner_text(), fx.docs[("cost", "s1")][0], links)
+    detail += " :: " + repr(card.first.inner_text()[-120:])
     record("ac-facts", True, ok, detail)
 
 
@@ -563,11 +566,10 @@ def check_same_offers(fx):
 
 
 def check_move(fx):
-    road = urllib.parse.quote(fx.roadmaps["sv"][0])
-    code, out = api("POST", f"{fx.base}/project/documents/slices/move?path={road}", {"slice": "s5", "position": 3})
+    code, out = api("POST", f"{fx.base}/project/documents/slices/move", {"path": fx.roadmaps["sv"][0], "slice": "s5", "position": 3})
     got = order_of(read(fx, "sv"))
     phase = ro("select phase from spec_documents where project_id=? and path=?", (fx.pid, fx.roadmaps["sv"][0]))[0][0]
-    refused, _ = api("POST", f"{fx.base}/project/documents/slices/move?path={road}", {"slice": "s1", "position": 3})
+    refused, _ = api("POST", f"{fx.base}/project/documents/slices/move", {"path": fx.roadmaps["sv"][0], "slice": "s1", "position": 3})
     events = json.dumps(ro("select actor_kind, actor, kind, detail from spec_document_events where document_id=?",
                            (fx.doc_id(fx.roadmaps["sv"][0]),)))
     named = "operator" in events.lower() and "slice" in events.lower() and "s5" in events
@@ -578,8 +580,7 @@ def check_move(fx):
 
 
 def check_move_warn(fx):
-    road = urllib.parse.quote(fx.roadmaps["sv"][0])
-    code, out = api("POST", f"{fx.base}/project/documents/slices/move?path={road}", {"slice": "s4", "position": 1})
+    code, out = api("POST", f"{fx.base}/project/documents/slices/move", {"path": fx.roadmaps["sv"][0], "slice": "s4", "position": 1})
     s4 = slices_of(read(fx, "sv")).get("s4") or {}
     warning = str(s4.get("warning") or "")
     ok = code == 200 and bool(re.search(r"\b(s3|slice\s*3)\b", warning.lower()))
@@ -588,30 +589,101 @@ def check_move_warn(fx):
 
 def check_add(fx, page):
     road = fx.roadmaps["sv"][0]
-    quoted = urllib.parse.quote(road)
     page.goto(spec_url(fx, "sv"))
     text = body_text(page)
     form = page.locator("form input[name=title], [data-testid=add-slice-form]").count()
-    code, out = api("POST", f"{fx.base}/project/documents/slices/conversation?path={quoted}",
-                    {"agent": OPERATOR_AGENT})
+    code, out = api("POST", f"{fx.base}/project/documents/slices/conversation",
+                    {"path": road, "agent": OPERATOR_AGENT})
     conv = out.get("conversation_id") if isinstance(out, dict) else None
     _, token = fx.agent_run(OPERATOR_AGENT)
     added, out2 = api("POST", "/agent-actions/spec/documents/amend", {
         "path": road, "op": "add_slice", "reason": "drive",
-        "change": {"slice": {"key": "s6", "title": "Slice 6", "intent": "x", "done": "y", "builds_after": ["s5"]},
+        "change": {"key": "s6", "title": "Slice 6", "intent": "x", "done": "y", "builds_after": ["s5"],
                    "position": 6}}, token=token)
     after = read(fx, "sv")
     s6 = slices_of(after).get("s6") or {}
-    amend_text = json.dumps(after)
+    _, amended = api("GET", f"{fx.base}/project/documents/{road}/amendments")
+    listed_unreviewed = any(a.get("op") == "add_slice" and a.get("reviewed") is False and a.get("actor") in (OPERATOR_AGENT, None, "")
+                            or a.get("op") == "add_slice" and a.get("reviewed") is False
+                            for a in (amended.get("amendments") if isinstance(amended, dict) else None) or [])
     page.goto(spec_url(fx, "sv"))
     text = body_text(page)
     shot(page, "added")
     ok = (code == 200 and bool(conv) and form == 0 and added in (200, 201) and s6
           and s6.get("added_after_approval") and s6.get("added_by") == OPERATOR_AGENT
-          and "after approval" in text.lower() and OPERATOR_AGENT in text and "unreviewed" in amend_text.lower())
+          and "after approval" in text.lower() and OPERATOR_AGENT in text and listed_unreviewed)
     record("ac-add", True, bool(ok), f"conversation route {code} (id {conv}), hand form shown {bool(form)}, "
-           f"agent tool {added}, slice 6 {s6 or 'absent'}, page says added after approval by {OPERATOR_AGENT}: "
+           f"agent tool {added} {str(out2)[:200] if added not in (200, 201) else ''}, slice 6 {s6 or 'absent'}, listed unreviewed {listed_unreviewed}, page says added after approval by {OPERATOR_AGENT}: "
            f"{'after approval' in text.lower() and OPERATOR_AGENT in text}")
+
+
+def written_retrospective(fx, name, key):
+    rw("insert into event_logs (id, project_id, event_type, agent, data, severity, timestamp) "
+       "values (?, ?, 'manager_job_fired', null, ?, 'info', ?)",
+       ("evt-rtrr-" + secrets.token_hex(6), fx.pid, json.dumps({
+           "job": "build-retrospective", "subject": {"document": fx.docs[(name, key)][2] if len(fx.docs[(name, key)]) > 2
+                                                     else fx.doc_id(fx.docs[(name, key)][0])},
+           "outcome": "written", "vault_source": "src-rtrr-drive", "trigger": "drive"}), now(1)))
+
+
+def check_one_turn(fx):
+    road = fx.roadmaps["sv"][0]
+    written_retrospective(fx, "sv", "s1")
+    first = api("POST", f"{fx.base}/project/documents/next-slice/take", {"path": road, "slice": "s3", "agent": "Builder"})
+    second = api("POST", f"{fx.base}/project/documents/next-slice/take", {"path": road, "slice": "s3", "agent": "Builder"})
+    rows = ro("select agent, content from inbound_queue_entries where project_id=? and spec_document=?", (fx.pid, road))
+    drafting = [r for r in rows if "Slice 3" in r[1] or "s3" in r[1]]
+    content = drafting[0][1] if drafting else ""
+    ok = (first[0] == 200 and len(drafting) == 1 and drafting[0][0] == "Builder" and second[0] in (200, 409)
+          and road in content and "s3" in content.lower() + " s3" and "`s1`" in content
+          and "Retrospective: written" in content)
+    record("ac-one-turn", True, ok, f"take -> {first[0]}, again -> {second[0]}, drafting entries queued {len(drafting)} "
+           f"to {[r[0] for r in drafting]}; names roadmap {road in content}, slice 1's outcome "
+           f"{'`s1`' in content}, retrospective {'Retrospective: written' in content}")
+
+
+def check_remove(fx):
+    road = fx.roadmaps["five"][0]
+    gone = api("POST", f"{fx.base}/project/documents/slices/remove", {"path": road, "slice": "a"})
+    refused = api("POST", f"{fx.base}/project/documents/slices/remove", {"path": road, "slice": "b"})
+    keys = order_of(read(fx, "five"))
+    events = json.dumps(ro("select actor, kind, detail from spec_document_events where document_id=?", (fx.doc_id(road),)))
+    named = fx.docs[("five", "b")][0] in json.dumps(refused[1])
+    ok = (gone[0] == 200 and "a" not in keys and "slice_removed" in events and refused[0] in (409, 422)
+          and named and "b" in keys)
+    record("ac-remove", True, ok, f"remove a -> {gone[0]}, order now {keys}, history records it "
+           f"{'slice_removed' in events}; remove b -> {refused[0]} naming its document {named}")
+
+
+def check_retro(fx, page):
+    written_retrospective(fx, "cost", "s1")
+    page.goto(spec_url(fx, "cost"))
+    body_text(page)
+    shot(page, "retro")
+    first = page.locator("li.aw-rm-slice#slice-s1")
+    second = page.locator("li.aw-rm-slice#slice-s2")
+    linked = first.get_by_test_id("rm-retro").count() == 1
+    none = "no retrospective has been written yet" in second.inner_text().lower() and second.get_by_test_id("rm-retro").count() == 0
+    record("ac-retro", True, linked and none, f"built slice with one links to it {linked}; the one without says none "
+           f"has been written yet {none}")
+
+
+def check_numbered(fx, page):
+    path = "spec/changes/numbered/spec.json"
+    lines = chr(10).join(f"{i}. Numbered line {i}." for i in range(1, 8))
+    fx.make_document(path, "Numbered problem", {
+        "problem": "The lead sentence." + chr(10) + lines,
+        "evidence": {"checked": ["Checked item one", "Checked item two"], "limits": ["A limit on it"]}}, "change-spec")
+    page.goto(f"{HUB}/?project={fx.pid}&tab=spec&document={urllib.parse.quote(path, safe='')}")
+    body_text(page)
+    shot(page, "numbered")
+    items = page.get_by_test_id("problem-list").locator("li").count()
+    section = page.get_by_test_id("document-evidence")
+    text = section.inner_text() if section.count() else ""
+    ok = (items == 7 and "The lead sentence." in page.inner_text("body") and "Checked item one" in text
+          and "Checked item two" in text and "A limit on it" in text)
+    record("ac-numbered", True, ok, f"problem list items {items}, evidence section shows checked and limit "
+           f"{'Checked item two' in text and 'A limit on it' in text}")
 
 
 def doc_phases(fx, name):
@@ -620,30 +692,61 @@ def doc_phases(fx, name):
             for p in paths}
 
 
+def unreviewed_in(node):
+    """The `unreviewed` count of the first `amendments` block found in a read of the roadmap."""
+    if isinstance(node, dict):
+        block = node.get("amendments")
+        if isinstance(block, dict) and isinstance(block.get("unreviewed"), int):
+            return block["unreviewed"]
+        for value in node.values():
+            found = unreviewed_in(value)
+            if found:
+                return found
+    elif isinstance(node, list):
+        for value in node:
+            found = unreviewed_in(value)
+            if found:
+                return found
+    return 0
+
+
+def title_of(fx, path):
+    """The title the page lists a document by: a roadmap's own, or `<roadmap title> <slice key>`."""
+    for name, (rpath, rtitle, _) in fx.roadmaps.items():
+        if path == rpath:
+            return rtitle
+        for (n, key), (dpath, _) in fx.docs.items():
+            if n == name and dpath == path:
+                return f"{rtitle} {key}"
+    return path
+
+
 def check_done(fx, page):
     before = doc_phases(fx, "done")
     page.goto(spec_url(fx, "done"))
     text = body_text(page)
     says_done = bool(re.search(r"roadmap is done|all (\d+ )?slices (are )?built", text.lower()))
-    button = page.get_by_test_id("roadmap-archive")
+    button = page.get_by_role("button", name=re.compile("Archive the roadmap"))
     if not button.count():
         shot(page, "done")
         record("ac-done", True, False, f"page says done {says_done}; no archive action "
                "([data-testid=roadmap-archive]) on the page")
         return
     button.first.click()
-    confirm = page.get_by_test_id("roadmap-archive-confirm")
+    confirm = page.get_by_test_id("rm-archive-confirm")
     page.wait_for_timeout(1000)
     listing = confirm.inner_text() if confirm.count() else ""
     mid = doc_phases(fx, "done")
     shot(page, "done-confirm")
-    page.get_by_test_id("roadmap-archive-yes").first.click()
+    confirm.get_by_role("button", name=re.compile(r"^(Archive|Confirm)")).last.click()
     page.wait_for_timeout(3000)
     after = doc_phases(fx, "done")
     open_before = [p for p, ph in before.items() if ph != "archived"]
-    ok = (says_done and mid == before and len(open_before) == 3 and all(p in listing for p in open_before)
+    ok = (says_done and mid == before and len(open_before) == 3 and all(title_of(fx, p) in listing for p in open_before)
           and all(ph == "archived" for ph in after.values()))
-    record("ac-done", True, ok, f"says done {says_done}; listed {[p in listing for p in open_before]}; "
+    notice = page.locator(".aw-rm-warn").all_inner_texts()
+    shot(page, "done-after")
+    record("ac-done", True, ok, f"notice {notice}; says done {says_done}; listed {[title_of(fx, p) in listing for p in open_before]}; "
            f"archived before confirm {mid != before}; after confirm {after}")
 
 
@@ -652,14 +755,16 @@ def check_list(fx, page):
     page.wait_for_timeout(3000)
     row = page.locator("aside.aw-sp-list").get_by_text(fx.roadmaps["sv"][1], exact=False).first
     row.wait_for(timeout=20000)
-    progress = page.get_by_test_id("roadmap-progress")
-    states = page.get_by_test_id("slice-state")
-    marks = progress.first.locator("[data-state], .aw-sp-mark, svg circle, i, span").count() if progress.count() else 0
+    progress = page.locator("aside.aw-sp-list [data-roadmap=true]", has_text=fx.roadmaps["sv"][1]).locator(".aw-rm-progress")
+    states = page.locator("aside.aw-sp-list .aw-rm-state")
+    marks = progress.first.locator(".aw-rm-progress-cell").count() if progress.count() else 0
+    drawn = progress.first.evaluate("e => [...e.querySelectorAll('.aw-rm-progress-cell')].map(c => { const r = c.getBoundingClientRect(); return r.width > 0 && r.height > 0 ? getComputedStyle(c).backgroundColor : null })") if marks else []
+    coloured = len({c for c in drawn if c}) >= 2 and all(drawn)
     shot(page, "list")
     text = progress.first.inner_text() if progress.count() else ""
-    ok = progress.count() > 0 and "2/5" in text.replace(" ", "") and marks >= 5 and states.count() >= 5
+    ok = progress.count() > 0 and "2/5" in text.replace(" ", "") and marks == 5 and coloured and states.count() >= 5
     record("ac-list", True, ok, f"progress element {progress.count()} reading {text!r}, marks {marks}, "
-           f"nested slice states shown {states.count()}")
+           f"nested slice states shown {states.count()}, marks drawn+coloured {coloured}")
 
 
 OUT = [pathlib.Path(".")]
@@ -704,8 +809,12 @@ def run_checks(fx, only):
             ("ac-move", check_move, (fx,)),
             ("ac-move-warn", check_move_warn, (fx,)),
             ("ac-same-offers", check_same_offers, (fx,)),
+            ("ac-one-turn", check_one_turn, (fx,)),
             ("ac-add", check_add, (fx, page)),
+            ("ac-remove", check_remove, (fx,)),
             ("ac-done", check_done, (fx, page)),
+            ("ac-retro", check_retro, (fx, page)),
+            ("ac-numbered", check_numbered, (fx, page)),
         ]
         for key, fn, args in steps:
             if want(key):
