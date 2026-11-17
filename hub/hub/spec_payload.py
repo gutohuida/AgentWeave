@@ -132,6 +132,10 @@ class AcceptanceCriterion(_Part):
         default=None,
         description="'agent' when an agent can check it unaided, 'operator' when only the operator can.",
     )
+    guard: Optional[bool] = Field(
+        default=None,
+        description="True when this criterion guards behaviour the code already has (it must keep holding, and passes before the build). An acceptance drive's check for a guard criterion is not required to fail on the pre-build code; every other check still is.",
+    )
 
 
 class ImportedFrom(_Part):
@@ -901,7 +905,7 @@ def payload_to_dict(payload: SpecPayload) -> Dict[str, Any]:
             requirement.pop("facts", None)
     # And the criterion check fields: optional (FR-9), so a criterion without them stores as before.
     for criterion in data.get("acceptance_criteria") or []:
-        for key in ("how_to_check", "checked_by"):
+        for key in ("how_to_check", "checked_by", "guard"):
             if criterion.get(key) is None:
                 criterion.pop(key, None)
     return data
