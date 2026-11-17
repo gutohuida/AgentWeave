@@ -2330,6 +2330,12 @@ async def read_spec_document(
     if document.kind == "change-spec":
         view["capabilities"] = spec_capability_links.named(payload)
         view["folded_into"] = await spec_capability_links.folded_into(session, document)
+    elif document.kind == "system-map":
+        # The capabilities the map proposes, and each one's draft (no-specs start FR-8, FR-12).
+        view["capabilities"] = spec_capability_links.named(payload)
+        view["proposed_capabilities"] = await spec_capability_links.map_drafts(
+            session, workspace, actor.project_id, view["capabilities"]
+        )
     elif document.kind == "capability" and include in ("waiting", "full"):
         view["waiting_changes"] = await spec_capability_links.waiting_for(
             session, workspace, actor.project_id, document.path

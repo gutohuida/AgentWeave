@@ -475,12 +475,18 @@ async def readiness(
     board_served = await served_keys(session, document, payload)
     approved_paths = await spec_lifecycle.approved_document_paths(session, document.project_id)
     roadmaps = await roadmap_states(session, workspace, document.project_id, payload)
+    proposed = (
+        await spec_capability_links.proposed_titles(session, workspace, document.project_id)
+        if payload.kind == "change-spec" and not payload.tasks and payload.capabilities
+        else frozenset()
+    )
     findings = [
         *spec_completeness.check(
             payload,
             board_served=board_served,
             approved_document_paths=approved_paths,
             roadmaps=roadmaps,
+            proposed_capabilities=proposed,
         ),
         *spec_completeness.approval_gaps(payload),
         # Same-file tasks with no order between them run in parallel and collide (F694).
