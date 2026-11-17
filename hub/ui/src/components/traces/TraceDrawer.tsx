@@ -1,3 +1,4 @@
+import type * as React from 'react'
 import { useRef, useState, type CSSProperties } from 'react'
 import { useRunTrace, useTrace } from '@/api/traces'
 import { Icon } from '@/components/common/Icon'
@@ -37,13 +38,19 @@ export function TraceDrawerPanel({
   traceId,
   open,
   onOpenChange,
+  header,
+  triggerRef: givenTriggerRef,
 }: {
   runId?: string
   traceId?: string
   open: boolean
   onOpenChange: (open: boolean) => void
+  /** A line above the trace (the build view puts the run's name and its conversation link there). */
+  header?: React.ReactNode
+  /** The control focus returns to when the drawer closes. */
+  triggerRef?: React.RefObject<HTMLButtonElement | null>
 }) {
-  const triggerRef = useRef<HTMLButtonElement>(null)
+  const ownTriggerRef = useRef<HTMLButtonElement>(null)
   return (
     <Drawer
       open={open}
@@ -51,8 +58,9 @@ export function TraceDrawerPanel({
       title="Trace"
       side="right"
       width={DRAWER_WIDTH}
-      triggerRef={triggerRef}
+      triggerRef={givenTriggerRef ?? ownTriggerRef}
     >
+      {open && header ? <div className="aw-trace-drawer-header">{header}</div> : null}
       {open && <TraceDrawerBody key={runId ?? traceId} runId={runId} traceId={traceId} />}
     </Drawer>
   )

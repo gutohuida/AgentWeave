@@ -1,4 +1,5 @@
 import * as React from 'react'
+import { BuildSummary } from '@/components/builds/BuildSummary'
 import { Icon } from '@/components/common/Icon'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent } from '@/components/ui/dialog'
@@ -151,6 +152,8 @@ function BuildCard({ build: b, now, flash, onOpenRuns, onStop }: { build: BuildV
           </span>
         ))}
       </div>
+
+      {b.summary ? <BuildSummary variant="strip" summary={b.summary.model} hrefFor={b.summary.hrefFor} onOpen={b.summary.onOpen} /> : null}
 
       <div className="aw-sp-build-grid">
         <Meter

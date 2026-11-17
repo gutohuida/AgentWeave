@@ -231,3 +231,27 @@ where it was and an added one glows once (`usePanelPresence`); hovering a mark d
 shows the app-styled tooltip; a skeleton stands in while the queries first run. All of it stops
 under `prefers-reduced-motion`. In the mock, opening takes 0.9 s, Refresh returns varied numbers,
 and Undo on "Where the spend goes" removes and re-adds "Runs per day".
+
+## The build view (mock, 2026-11-17)
+
+Spec `spec/changes/a-build-view-showing-every-task-and-run-of-a-build`. The components are
+`src/components/builds/BuildView.tsx` (the full view) and `BuildSummary.tsx` (the compact summary,
+`panel` in the Running tab's build row, `strip` on the spec page's build card), with every count,
+word and order in the pure `buildViewModel.ts`, whose `*Read` types are the read route's contract;
+`src/styles/builds.css` styles them. Runs open the app's own `TraceDrawerPanel`, which gained a
+head line (the run, and its conversation link) and a focus-return ref. The cost cell is
+`lib/format`'s `formatCost`/`CostCell`, now shared with Traces (its own `money()` is gone). The
+fixtures are six of this repository's builds, recorded read-only from the operator's Hub by
+`py -3.11 mock/record_builds.py <db> <project>` (`builds.json`, and `builds_traces.json` for the
+drawer); the states they lack are `?state=` in `mock/buildsMock.ts` (`// mock state`).
+
+```
+http://localhost:5199/mock.html#build/build-04e780a89c1c?task=LFBTO-2                # sent back, rebuilt
+http://localhost:5199/mock.html#build/build-04e780a89c1c?task=LFBTO-2&run=run-8473bd53a398   # a trace open
+http://localhost:5199/mock.html#build/build-e36c054f9e59?state=live&task=PNSOS-3     # running, a stalled task
+http://localhost:5199/mock.html#build/build-76f63278bad5?state=unpriced&task=LTTFA-2  # live | unpriced | all-unpriced | empty | loading | error | stale
+http://localhost:5199/mock.html#build-summaries                                      # both summaries, real containers
+http://localhost:5199/mock.html#conversation/Architect/conv-9cdda4865e0b/running     # the summary in the panel
+```
+
+Awaiting the operator's look.

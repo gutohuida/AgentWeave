@@ -38,6 +38,8 @@ import {
 } from '../panelMock'
 import type { MockRoute, ScreenProps } from '../routes'
 import { RUNNING_BUILDS, RUNNING_JOBS, RUNNING_LOOPS } from '../runningMock'
+import { buildFor, buildHref, nowFor, projectRowOf } from '../buildsMock'
+import { needsLine, summaryOf } from '@/components/builds/buildViewModel'
 
 export type SidePanelTab = 'running' | 'changes' | 'files' | 'terminal' | 'terminal-full' | 'terminal-remote' | 'terminal-docker' | 'watch'
 
@@ -68,7 +70,21 @@ export function SidePanelMock({ tab, agent, go, now, route }: { tab: SidePanelTa
     store.activateTab(PROJECT_ID, ID[tab.startsWith('terminal') ? 'terminal' : (tab as 'running' | 'changes' | 'files' | 'watch')])
   }, [tab])
 
-  const items = React.useMemo(() => runningItems({ builds: RUNNING_BUILDS, loops: RUNNING_LOOPS, jobs: RUNNING_JOBS, now }), [now])
+  // The build view's summary under a build's row: two of this repository's recorded builds join the
+  // hand-written ones (the running one in its `live` mock state), each with its summary.
+  const recorded = React.useMemo(() => [buildFor('build-e36c054f9e59', 'live'), buildFor('build-04e780a89c1c', 'recorded')].filter((r): r is NonNullable<typeof r> => r !== null), [])
+  const buildSummaries = React.useMemo(() => Object.fromEntries(recorded.map((r) => [r.build.id, summaryOf(r, nowFor(r))])), [recorded])
+  const items = React.useMemo(
+    () =>
+      runningItems({
+        builds: [...recorded.map((r) => projectRowOf(r, now)), ...RUNNING_BUILDS],
+        loops: RUNNING_LOOPS,
+        jobs: RUNNING_JOBS,
+        now,
+        buildNeeds: Object.fromEntries(recorded.map((r) => [r.build.id, needsLine(r)])),
+      }),
+    [now, recorded],
+  )
   const live = items.filter((i) => i.phase === 'needs-you' || i.phase === 'working').length
   const [location, setLocation] = React.useState<PanelLocation>('worktree')
   const term = useMockShells(agent, tab === 'terminal-full')
@@ -103,6 +119,11 @@ export function SidePanelMock({ tab, agent, go, now, route }: { tab: SidePanelTa
           colorIndexOf={(name) => agents.find((a) => a.name === name)?.color_index}
           onOpen={(item) => (item.kind === 'job' ? go({ kind: 'tab', tab: 'jobs' }) : toast({ title: item.kind === 'build' ? 'Opens the spec at its builds' : 'Opens the loop', description: item.title }))}
           onAttend={(item) => toast({ title: item.attention?.kind === 'question' ? 'Opens the question to answer' : 'Shows what is stuck', description: item.title })}
+          buildSummaries={buildSummaries}
+          buildHref={(id, task) => buildHref(id, task, id === 'build-e36c054f9e59' ? 'live' : undefined)}
+          onOpenBuild={(id, task) => {
+            window.location.hash = buildHref(id, task, id === 'build-e36c054f9e59' ? 'live' : undefined).slice(1)
+          }}
         />
       )
     }

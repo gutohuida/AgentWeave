@@ -99,6 +99,9 @@ export interface RunningBuildInput {
   build: ProjectBuildRow
   loop: LoopSummary | null
   nextRun?: string | null
+  /** What of the build waits on the operator beyond its questions (a stalled task), from the build
+   *  view's model, so the row sits under "Needs you" when its summary says something does. */
+  needs?: string | null
 }
 
 const DONE_STATUSES = new Set(['approved', 'rejected'])
@@ -164,7 +167,8 @@ function runningLoopPhase(phase: RunningPhase): RunningPhase {
 export function buildItem(input: RunningBuildInput, now: Date): RunningItem {
   const { build, loop } = input
   const workers = workersOf(loop)
-  const attention = build.state === 'running' ? attentionOf(loop, build.open_questions) : null
+  const attention =
+    build.state === 'running' ? attentionOf(loop, build.open_questions) ?? (input.needs ? { kind: 'stall' as const, text: input.needs } : null) : null
   const phase: RunningPhase =
     build.state === 'finished'
       ? 'finished'
@@ -257,7 +261,14 @@ export function jobItem(job: Job, now: Date): RunningItem {
 
 /** Builds, loops that are not a build's, and jobs that are not a loop's: each piece of work once.
  *  A build's own loop (and that loop's job) supply its workers, stall and next firing. */
-export function runningItems(input: { builds: ProjectBuildRow[]; loops: LoopSummary[]; jobs: Job[]; now: Date }): RunningItem[] {
+export function runningItems(input: {
+  builds: ProjectBuildRow[]
+  loops: LoopSummary[]
+  jobs: Job[]
+  now: Date
+  /** Per build id, what of it waits on the operator beyond its questions (`RunningBuildInput.needs`). */
+  buildNeeds?: Record<string, string | null | undefined>
+}): RunningItem[] {
   // A build can stop pointing at the loop that ran it (reopened build: old loop archived, new loop_id;
   // finished build: loop_id null), so a flow loop is also a build's when its document has a build.
   const buildLoops = new Set(input.builds.map((b) => b.loop_id).filter(Boolean))
@@ -266,7 +277,10 @@ export function runningItems(input: { builds: ProjectBuildRow[]; loops: LoopSumm
   const loopJobs = new Map(input.jobs.filter((j) => j.loop).map((j) => [j.loop!.id, j]))
   return [
     ...input.builds.map((b) =>
-      buildItem({ build: b, loop: (b.loop_id && loopById.get(b.loop_id)) || null, nextRun: b.loop_id ? loopJobs.get(b.loop_id)?.next_run : null }, input.now),
+      buildItem(
+        { build: b, loop: (b.loop_id && loopById.get(b.loop_id)) || null, nextRun: b.loop_id ? loopJobs.get(b.loop_id)?.next_run : null, needs: input.buildNeeds?.[b.id] },
+        input.now,
+      ),
     ),
     ...input.loops
       .filter((l) => !buildLoops.has(l.id) && !(l.spec_document_id && buildDocuments.has(l.spec_document_id)))

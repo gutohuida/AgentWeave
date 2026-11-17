@@ -1,4 +1,6 @@
 import * as React from 'react'
+import { BuildSummary } from '@/components/builds/BuildSummary'
+import type { BuildSummaryModel } from '@/components/builds/buildViewModel'
 import { Icon } from '@/components/common/Icon'
 import { Button } from '@/components/ui/button'
 import { MenuSelect } from '@/components/ui/menu'
@@ -37,10 +39,15 @@ export interface RunningTabProps {
   onOpen: (item: RunningItem) => void
   /** A `needs-you` row's action: the question to answer, or the stall to look at. */
   onAttend: (item: RunningItem) => void
+  /** A build's compact summary, by build id, drawn under its row in place of its progress line;
+   *  it opens the build view (`buildHref`, `onOpenBuild`). */
+  buildSummaries?: Record<string, BuildSummaryModel | undefined>
+  buildHref?: (buildId: string, task?: string) => string
+  onOpenBuild?: (buildId: string, task?: string) => void
 }
 
 /** The side panel's Running tab: every build, loop and scheduled job, what needs the operator first. */
-export function RunningTab({ items, colorIndexOf, onOpen, onAttend }: RunningTabProps) {
+export function RunningTab({ items, colorIndexOf, onOpen, onAttend, buildSummaries, buildHref, onOpenBuild }: RunningTabProps) {
   const [filter, setFilter] = React.useState<RunningFilter>('now')
   const [kind, setKind] = React.useState<RunningKindFilter>('any')
   const count = (f: RunningFilter) => items.filter((i) => matchesFilter(i, f, kind)).length
@@ -91,7 +98,16 @@ export function RunningTab({ items, colorIndexOf, onOpen, onAttend }: RunningTab
               </h3>
               <ul className="aw-run-list">
                 {group.items.map((item) => (
-                  <RunningRow key={item.id} item={item} colorIndexOf={colorIndexOf} onOpen={onOpen} onAttend={onAttend} />
+                  <RunningRow
+                    key={item.id}
+                    item={item}
+                    colorIndexOf={colorIndexOf}
+                    onOpen={onOpen}
+                    onAttend={onAttend}
+                    summary={item.kind === 'build' ? buildSummaries?.[item.id] : undefined}
+                    buildHref={buildHref}
+                    onOpenBuild={onOpenBuild}
+                  />
                 ))}
               </ul>
             </section>
@@ -102,7 +118,15 @@ export function RunningTab({ items, colorIndexOf, onOpen, onAttend }: RunningTab
   )
 }
 
-function RunningRow({ item, colorIndexOf, onOpen, onAttend }: { item: RunningItem } & Omit<RunningTabProps, 'items'>) {
+function RunningRow({
+  item,
+  colorIndexOf,
+  onOpen,
+  onAttend,
+  summary,
+  buildHref,
+  onOpenBuild,
+}: { item: RunningItem; summary?: BuildSummaryModel } & Omit<RunningTabProps, 'items' | 'buildSummaries'>) {
   const extra = item.workers.length - WORKERS_SHOWN
   return (
     <li className="aw-run-item" data-phase={item.phase}>
@@ -115,6 +139,7 @@ function RunningRow({ item, colorIndexOf, onOpen, onAttend }: { item: RunningIte
             <span className="aw-run-title">{item.title}</span>
             <span className="aw-run-when">{item.when}</span>
           </span>
+          {summary ? null : (
           <span className="aw-run-meta">
             <span className="aw-run-kind">{KIND_LABEL[item.kind]}</span>
             {item.progress ? (
@@ -133,6 +158,7 @@ function RunningRow({ item, colorIndexOf, onOpen, onAttend }: { item: RunningIte
             ) : null}
             {item.spentUsd != null && item.spentUsd > 0 ? <span className="aw-run-spent">{formatMoney(item.spentUsd)}</span> : null}
           </span>
+          )}
           {item.workers.length > 0 ? (
             <span className="aw-run-workers">
               {item.workers.slice(0, WORKERS_SHOWN).map((w) => (
@@ -150,6 +176,14 @@ function RunningRow({ item, colorIndexOf, onOpen, onAttend }: { item: RunningIte
           ) : null}
         </span>
       </button>
+      {summary ? (
+        <BuildSummary
+          variant="panel"
+          summary={summary}
+          hrefFor={(task) => buildHref?.(item.id, task) ?? '#'}
+          onOpen={onOpenBuild ? (task) => onOpenBuild(item.id, task) : undefined}
+        />
+      ) : null}
       {item.landings.length > 0 ? (
         <ul className="aw-run-landings" aria-label="On the way to main">
           {item.landings.map((landing) => (

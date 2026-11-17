@@ -58,3 +58,11 @@
 .mock-rm-points { margin: 8px 0 0; padding-left: 22px; list-style: decimal; display: flex; flex-direction: column; gap: 6px; max-width: 76ch; font-size: 13px; line-height: 1.55; color: var(--text-2); }
 .mock-rm-points[data-plain="true"] { list-style: none; padding-left: 0; }
 .mock-rm-points code { font-size: 11.5px; color: var(--text-2); word-break: break-word; }
+
+/* The build view's summaries, side by side in their real containers (mock/screens/BuildSummaries). */
+.mock-build-summaries { display: flex; min-height: 100%; }
+.mock-build-summaries-spec { flex: 1; min-width: 0; padding-top: 12px; }
+.mock-build-summaries-panel { display: flex; flex: none; width: 360px; flex-direction: column; border-left: 1px solid var(--border); background: var(--bg); }
+.mock-build-summaries-frame { flex: 1; min-height: 0; }
+.mock-build-summaries-label { margin: 0; padding: 8px 14px; font-size: 11px; font-weight: 600; letter-spacing: .03em; text-transform: uppercase; color: var(--text-3); }
+.mock-build-summaries-spec .mock-build-summaries-label { padding-left: 28px; }
