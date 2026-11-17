@@ -1285,7 +1285,7 @@ export function useRespondToReport() {
       id: string
       response: 'amend' | 'accept' | 'reject'
       reason: string
-      change?: Record<string, string>
+      change?: Record<string, string | boolean>
     },
     { response: string; task_unblocked: boolean }
   >((projectId, { path, id, response, reason, change }) =>

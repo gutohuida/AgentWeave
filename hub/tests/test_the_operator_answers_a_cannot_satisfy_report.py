@@ -103,6 +103,27 @@ async def test_amending_changes_the_criterion_and_unblocks_the_task(
 
 
 @pytest.mark.asyncio
+async def test_amending_can_mark_the_criterion_a_guard(app, auth_headers, author_headers, tmp_path):
+    """The answer to a guard criterion that cannot fail before the build (CTCRS-1, 2026-11-17):
+    the operator marks it `guard`, which the acceptance-drive gate then exempts."""
+    task_id, report_id = await reported(app, auth_headers, author_headers)
+
+    answered = await respond(
+        app,
+        auth_headers,
+        report_id,
+        {"response": "amend", "reason": "it guards existing behaviour", "change": {"guard": True}},
+    )
+
+    assert answered.status_code == 200, answered.text
+    c1 = next(c for c in (await _stored(tmp_path))["acceptance_criteria"] if c["key"] == "c1")
+    assert c1["guard"] is True
+    assert await status_of(task_id) == ("in_progress", None)
+    [note] = await entries_for("dev")
+    assert "guard: True" in note, note
+
+
+@pytest.mark.asyncio
 async def test_accepting_unblocks_the_task_and_keeps_the_criterion(
     app, auth_headers, author_headers, tmp_path
 ):
