@@ -7,6 +7,7 @@ argument:
 
     --report PATH        write the JUnit XML report to PATH (relative to the current directory)
     --rerun ID [ID ...]  run only these `classname::name` ids, serially (`-n 0`)
+    --changed-files LIST run only the tests the paths listed in LIST (one per line) affect
 
 The report is pytest's xunit1 family, so each testcase also carries its file, and pytest's rootdir
 is the current directory, so a classname is the test's path from here with dots
@@ -119,3 +120,28 @@ def parse_options(argv: Sequence[str]) -> Tuple[Optional[str], Optional[List[str
 def rerun_args(test_ids: Sequence[str], report: Optional[str], root: Path) -> List[str]:
     """The pytest arguments that run *test_ids* alone, serially, writing *report* if given."""
     return [*RERUN_ARGS, *(report_args(report) if report else []), *node_ids(test_ids, root)]
+
+
+def extract_changed_files(argv: list[str]) -> tuple[Optional[str], list[str]]:
+    """(the `--changed-files` path or `None`, argv without the option)."""
+    args = list(argv)
+    for i, arg in enumerate(args):
+        if arg == "--changed-files":
+            if i + 1 >= len(args):
+                raise UsageError("--changed-files needs a path")
+            path = args[i + 1]
+            return path, args[:i] + args[i + 2 :]
+        if arg.startswith("--changed-files="):
+            return arg.split("=", 1)[1], args[:i] + args[i + 1 :]
+    return None, args
+
+
+def write_empty_report(report: str) -> None:
+    """Write a report of no tests to *report*, for a run sized to a change that relates to none."""
+    path = Path(report)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        '<?xml version="1.0" encoding="utf-8"?><testsuites><testsuite name="pytest" '
+        'errors="0" failures="0" skipped="0" tests="0" time="0"/></testsuites>',
+        encoding="utf-8",
+    )

@@ -38,6 +38,22 @@ What the scripts do with them (`scripts/checks/junit_rerun.py`):
   `-n 0`: re-runs are serial (`a-red-main-does-not-hold-the-night`, FR-2). `hub_suite.py`'s
   re-run does not wait for the full suite's lock. An id naming no test file exits 4.
 
+## Since 2026-11-17: `sweep` runs only the sweep tests a change affects (AW-164)
+
+One field is added to `sweep`; every other field stays:
+
+| Check | Field | Value |
+|---|---|---|
+| `sweep` | Command for a change | `py -3.11 scripts/checks/sweep_check.py --report .agentweave/check-reports/sweep.xml --changed-files {changed_files}` |
+
+`sweep_check.py --changed-files LIST` (`affected_tests`) runs every sweep test for a Hub source
+change (each imports the Hub and most scan it), the few that read the UI source, `scripts/`,
+`src/` or `hub/tests/` for a change there, and none for docs, specs or the built bundle, writing
+an empty report and passing. A conftest, any `fixtures/` path, `scripts/checks/`, a packaging
+file or a path outside the known tree runs the full sweep. Landing runs `command`, the full sweep,
+as before. A new sweep test must be given its scope in `SCOPES`
+(`tests/test_sweep_check_for_a_change.py` fails until it is).
+
 ## The whole list, as it reads after the change
 
 The content of `scripts/checks/check_settings.json`:
@@ -46,7 +62,7 @@ The content of `scripts/checks/check_settings.json`:
 [
   {"name": "ruff", "command": "py -3.11 -m ruff check src/ hub/ tests/ && py -3.11 -m ruff check scripts/ --select E9,F63,F7,F82,F401,F841", "timeout_seconds": 360, "paths": [], "fast": false, "phase": "both"},
   {"name": "black", "command": "py -3.11 -m black --check --target-version py311 src/ hub/hub/ hub/tests/ tests/", "timeout_seconds": 360, "paths": [], "fast": false, "phase": "both"},
-  {"name": "sweep", "command": "py -3.11 scripts/checks/sweep_check.py --report .agentweave/check-reports/sweep.xml", "timeout_seconds": 3600, "paths": [], "fast": false, "phase": "both", "report_path": ".agentweave/check-reports/sweep.xml", "rerun_command": "py -3.11 scripts/checks/sweep_check.py --report .agentweave/check-reports/sweep.xml --rerun {tests}"},
+  {"name": "sweep", "command": "py -3.11 scripts/checks/sweep_check.py --report .agentweave/check-reports/sweep.xml", "timeout_seconds": 3600, "paths": [], "fast": false, "phase": "both", "report_path": ".agentweave/check-reports/sweep.xml", "change_command": "py -3.11 scripts/checks/sweep_check.py --report .agentweave/check-reports/sweep.xml --changed-files {changed_files}", "rerun_command": "py -3.11 scripts/checks/sweep_check.py --report .agentweave/check-reports/sweep.xml --rerun {tests}"},
   {"name": "hub-ui", "command": "cd hub/ui && (node -e \"process.exit(require('fs').existsSync('node_modules/.bin/eslint.cmd')||require('fs').existsSync('node_modules/.bin/eslint')?0:1)\" || npm ci --no-audit --no-fund --prefer-offline) && npm run lint && npx tsc --noEmit && npx vitest run", "timeout_seconds": 1800, "paths": ["hub/ui/"], "fast": false, "phase": "both"},
   {"name": "hub-tests", "command": "py -3.11 scripts/checks/hub_suite.py --report .agentweave/check-reports/hub-tests.xml", "timeout_seconds": 3600, "paths": [], "fast": false, "change_command": "py -3.11 scripts/checks/hub_suite.py --report .agentweave/check-reports/hub-tests.xml --changed-files {changed_files}", "phase": "both", "report_path": ".agentweave/check-reports/hub-tests.xml", "rerun_command": "py -3.11 scripts/checks/hub_suite.py --report .agentweave/check-reports/hub-tests.xml --rerun {tests}"}
 ]
