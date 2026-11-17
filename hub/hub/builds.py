@@ -344,7 +344,7 @@ async def project_rows(
     for build in builds:
         pair = loops.get(build.loop_id or "")
         asked = questions.get(build.id, [])
-        spent, _ = await spend(session, build)
+        spent, unpriced = await spend(session, build)
         progress = counts.get(build.id, {"total": 0, "done": 0, "landing": 0})
         rows.append(
             {
@@ -374,6 +374,7 @@ async def project_rows(
                 "tasks_landing": progress["landing"],
                 "landings": on_the_way.get(build.id, []),
                 "spent_usd": usd(spent),
+                "unpriced_turns": unpriced,
                 "stop_reason": build.stop_reason,
                 "created_at": _iso(build.created_at),
                 "stopped_at": _iso(build.stopped_at),
