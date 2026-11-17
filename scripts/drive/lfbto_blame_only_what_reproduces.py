@@ -26,7 +26,8 @@ Steps:
   batch    CLEAN_A adds a.txt, CLEAN_B adds b.txt, both approved together (one batch).
            PASS needs: both land; neither is sent back; neither is in revision_needed.
   breaks   once the batch has settled, BREAKS adds `test_broken.py` (a test that always fails) and
-           is approved alone. PASS needs: it is sent back (revision_needed, landing sent_back);
+           is approved alone. PASS needs: it is sent back (a recorded move approved ->
+           revision_needed, landing sent_back -- its status by then is the restart's);
            the send-back's note carries its proof -- the batch's base commit and the prefix commit
            both named, the re-run command, the failing test id, and at least two exit codes;
            and a turn of its author `builder` bound to the task (a queue entry or a run whose
@@ -278,6 +279,11 @@ class Project:
     def task(self, task: str) -> dict:
         return self.hub.call("GET", f"/projects/{self.id}/tasks/{task}")
 
+    def moves(self, task: str) -> list[tuple[str, str]]:
+        """The task's recorded moves, oldest first, as (from, to)."""
+        rows = self.hub.call("GET", f"/projects/{self.id}/tasks/{task}/transitions")
+        return [(r["from_status"], r["to_status"]) for r in rows.get("transitions") or []]
+
     def landing(self, task: str) -> dict:
         view = self.hub.call("GET", f"/projects/{self.id}/tasks/{task}/checks")
         return view.get("landing") or {}
@@ -486,10 +492,13 @@ def drive(hub: Hub, keep: list, db: pathlib.Path | None) -> None:
     note(f"{broken} landing: {brief(view)}")
     batch = view.get("batch") or {}
     note(f"narrowing of {batch.get('id')}: {json.dumps(narrowing(db, batch.get('id')))[:900]}")
+    # Sent back is a recorded move approved -> revision_needed, not the status read now: the
+    # author's restart (FR-7) takes the task on to in_progress within seconds of the send-back.
+    moves = project.moves(broken)
     check(
         "breaks: the task that breaks a test is sent back",
-        view.get("state") == "sent_back" and task.get("status") == "revision_needed",
-        f"landing {view.get('state')}, task {task.get('status')}",
+        view.get("state") == "sent_back" and ("approved", "revision_needed") in moves,
+        f"landing {view.get('state')}, task {task.get('status')}, moves {moves}",
     )
     proof = "\n".join(str(x or "") for x in (view.get("reason"), task.get("notes")))
     base, prefix = batch.get("base_sha") or "", batch.get("merged_sha") or ""
