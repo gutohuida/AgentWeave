@@ -21,6 +21,8 @@ const Traces = React.lazy(() => import('./Traces'))
 const Checkpoints = React.lazy(() => import('./Checkpoints'))
 const ConversationTrace = React.lazy(() => import('./ConversationTrace'))
 const TaskThreads = React.lazy(() => import('./TaskThreads'))
+const Roadmap = React.lazy(() => import('./Roadmap'))
+const SpecHome = React.lazy(() => import('./SpecHome'))
 
 export function screenFor(route: MockRoute): ScreenComponent {
   switch (route.kind) {
@@ -30,6 +32,10 @@ export function screenFor(route: MockRoute): ScreenComponent {
       return TaskRedesign
     case 'task-threads':
       return TaskThreads
+    case 'roadmap':
+      return Roadmap
+    case 'spec-home':
+      return SpecHome
     case 'thread':
       return Thread
     case 'traces':
@@ -57,6 +63,8 @@ export const SCREENS: Array<{ id: string; label: string; route: MockRoute }> = [
   { id: 'task-redesign', label: 'Tasks · Card and story redesign', route: { kind: 'task-redesign' } },
   { id: 'spec', label: 'Spec', route: { kind: 'tab', tab: 'spec' } },
   { id: 'task-threads', label: 'Spec · Task threads, three ways', route: { kind: 'task-threads' } },
+  { id: 'roadmap', label: 'Spec · A roadmap’s own page', route: { kind: 'roadmap' } },
+  { id: 'spec-home', label: 'Spec · Home, three ways to relate', route: { kind: 'spec-home' } },
   { id: 'checkpoints', label: 'Checkpoints', route: { kind: 'tab', tab: 'checkpoints' } },
   { id: 'vault', label: 'Vault', route: { kind: 'tab', tab: 'vault' } },
   { id: 'jobs', label: 'Jobs', route: { kind: 'tab', tab: 'jobs' } },
