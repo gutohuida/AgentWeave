@@ -509,7 +509,13 @@ def check_building(fx, page):
         need(ok, f"row {doc}: {detail} :: {rows.nth(i).inner_text()[:140]!r}")
     section = page.locator("[data-testid=spec-home-building]").inner_text()
     need(fx.p["foxtrot"] not in "".join(docs), "the finished build is among Building now")
-    record("ac-building", True, True, f"two rows newest first with facts; section reads {section[:60]!r}")
+    goto(page, spec_url(fx.b))
+    need(present(page, "[data-testid=spec-home-building]", 4000), "project with no running build: no [data-testid=spec-home-building] section")
+    need(building_rows(page).count() == 0, f"{building_rows(page).count()} build rows in a project with no running build")
+    empty = page.locator("[data-testid=spec-home-building]").inner_text().lower()
+    need(re.search(r"nothing (is )?(being )?built|no (running )?builds?", empty) is not None,
+         f"with no running build the section does not say nothing is being built :: {empty[:120]!r}")
+    record("ac-building", True, True, f"two rows newest first with facts; section reads {section[:60]!r}; empty state says {empty[:40]!r}")
 
 
 def first_link(page, scope, rel):
@@ -543,6 +549,24 @@ def threads(page):
     return page.locator("[data-testid=spec-home-relations] .aw-map-thread")
 
 
+def thread_joins(page):
+    """Each map thread as (end, end, stroke-dasharray), the ends named by the box nearest each endpoint."""
+    return [tuple(t) for t in page.evaluate(
+        """() => {
+        const home = document.querySelector('[data-testid=spec-home-relations]');
+        const boxes = [...home.querySelectorAll('.aw-map-node')].map(n => ({t: n.innerText.trim(), r: n.getBoundingClientRect()}));
+        const near = (x, y) => { let best = null, bd = 1e9;
+          for (const b of boxes) { const dx = Math.max(b.r.left - x, 0, x - b.r.right), dy = Math.max(b.r.top - y, 0, y - b.r.bottom);
+            const d = Math.hypot(dx, dy); if (d < bd) { bd = d; best = b.t; } }
+          return bd < 24 ? best : '?'; };
+        return [...home.querySelectorAll('.aw-map-thread')].map(p => {
+          const svg = p.ownerSVGElement, m = p.getScreenCTM(), n = p.getTotalLength();
+          const at = len => { const q = svg.createSVGPoint(); const pt = p.getPointAtLength(len); q.x = pt.x; q.y = pt.y; return q.matrixTransform(m); };
+          const a = at(0), b = at(n);
+          return [near(a.x, a.y), near(b.x, b.y), getComputedStyle(p).strokeDasharray];
+        }); }""")]
+
+
 def check_map(fx, page):
     open_home(fx, page)
     need(present(page, "[data-testid=spec-home-relations] .aw-map-node", 4000), "no .aw-map-node in [data-testid=spec-home-relations]")
@@ -552,12 +576,17 @@ def check_map(fx, page):
         need(node(page, col, title).count() == 1, f"no .aw-map-node[data-col={col}] titled {title!r}")
     xs = [node(page, col, title).first.bounding_box()["x"] for col, title in (wanted[0], wanted[1], wanted[3])]
     need(xs[0] < xs[1] < xs[2], f"columns not roadmap < change < capability: x {xs}")
-    count = threads(page).count()
+    joined = thread_joins(page)
+    count = len(joined)
     need(count >= 3, f"{count} .aw-map-thread paths; wanted at least Xray to Rho, Xray to Cobalt, Foxtrot to Cobalt")
-    styles = page.evaluate(
-        "() => [...document.querySelectorAll('[data-testid=spec-home-relations] .aw-map-thread')]"
-        ".map(e => getComputedStyle(e).strokeDasharray)")
-    need(len(set(styles)) >= 2, f"a running build's threads do not differ from a finished one's (stroke-dasharray {sorted(set(styles))})")
+    seen = {(a, b) for a, b, _ in joined}
+    for a, b in (("Xray change", "Rho roadmap"), ("Xray change", "Cobalt cap"), ("Foxtrot change", "Cobalt cap")):
+        need((a, b) in seen or (b, a) in seen, f"no thread joins {a!r} to {b!r}: threads join {sorted(seen)}")
+    xray = {d for a, b, d in joined if "Xray change" in (a, b)}
+    foxtrot = {d for a, b, d in joined if "Foxtrot change" in (a, b)}
+    need(len(xray) == 1 and not (xray & foxtrot),
+         f"a running build's threads do not all differ from a finished one's (Xray stroke-dasharray {sorted(xray)}, Foxtrot {sorted(foxtrot)})")
+    styles = xray | foxtrot
     node(page, "capability", "Cobalt cap").first.click()
     page.wait_for_timeout(1200)
     need(opens(page.url, fx.p["cobalt"]), f"clicking the capability's box went to {decoded(page.url)}")
