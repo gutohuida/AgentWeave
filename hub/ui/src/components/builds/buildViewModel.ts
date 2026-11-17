@@ -480,14 +480,6 @@ function groupOf(items: Array<TimelineRun | TimelineSendBack>, times: number): T
   }
 }
 
-/** Just the latest attempt of each role (P11): changes what is shown, never the totals. */
-export function latestOnly(items: TimelineItem[]): TimelineItem[] {
-  const lastSendBack = [...items].reverse().find((i) => i.kind === 'send-back')
-  const lastOf = new Map<string, string>()
-  for (const item of items) if (item.kind === 'run') lastOf.set(item.run.role, item.key)
-  return items.filter((i) => (i.kind === 'run' ? lastOf.get(i.run.role) === i.key : i === lastSendBack || i.kind === 'group'))
-}
-
 // ── Figures ─────────────────────────────────────────────────────────────
 
 export interface TaskFigures {
