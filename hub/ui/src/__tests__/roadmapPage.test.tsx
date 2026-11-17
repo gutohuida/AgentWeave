@@ -180,14 +180,52 @@ describe('a roadmap page', () => {
     // Two of the four documents are archived already; two are still approved.
     doc.slices![0]!.document!.archived = true
     doc.slices![1]!.document!.archived = true
+    const paths = [RM, 'spec/changes/c/spec.json', 'spec/changes/d/spec.json']
+    // The Hub's check: the roadmap archives plainly, the two approved slices state they change no capability.
+    archive.mockImplementation((args: { check_only?: boolean }, options?: { onSuccess?: (r: unknown) => void }) => {
+      if (args.check_only) {
+        options?.onSuccess?.({
+          archived: [],
+          refused: [],
+          plan: [
+            { path: paths[0], will: 'archive' },
+            { path: paths[1], will: 'archive_no_capability_change' },
+            { path: paths[2], will: 'archive_no_capability_change' },
+          ],
+        })
+      }
+    })
     renderBody(doc)
     expect(screen.getByTestId('rm-done')).toHaveTextContent('This roadmap is done')
     await userEvent.click(screen.getByRole('button', { name: /Archive the roadmap and its slices/ }))
     const dialog = screen.getByTestId('rm-archive-confirm')
-    expect(archive).not.toHaveBeenCalled()
-    expect(within(dialog).getAllByRole('listitem').map((li) => li.textContent)).toEqual(['Roadmap', 'Doc c', 'Doc d'])
+    // Only the check has gone out: nothing is archived before the confirmation.
+    expect(archive).toHaveBeenCalledTimes(1)
+    expect(archive).toHaveBeenCalledWith({ paths, check_only: true, no_capability_change: true }, expect.anything())
+    const items = within(dialog).getAllByRole('listitem').map((li) => li.textContent ?? '')
+    expect(items).toHaveLength(3)
+    expect(items[0]).toContain('Roadmap')
+    expect(items[0]).toContain('will be archived')
+    expect(items[1]).toContain('Doc c')
+    expect(items[1]).toContain('changes none')
+    expect(items[2]).toContain('Doc d')
+    expect(items[2]).toContain('changes none')
     await userEvent.click(within(dialog).getByRole('button', { name: 'Archive' }))
-    expect(archive).toHaveBeenCalledWith({ paths: [RM, 'spec/changes/c/spec.json', 'spec/changes/d/spec.json'] }, expect.anything())
+    expect(archive).toHaveBeenCalledTimes(2)
+    expect(archive).toHaveBeenLastCalledWith({ paths, all_or_none: true, no_capability_change: true }, expect.anything())
+  })
+
+  it('does not offer to archive while the Hub would refuse a document', async () => {
+    const built = ['a', 'b'].map((k) => row(k, { state: 'Built', document: `spec/changes/${k}/spec.json`, document_title: `Doc ${k}`, tasks_on_main: 1, tasks_total: 1, built_at: '2026-11-16T10:00:00Z' }))
+    archive.mockImplementation((args: { check_only?: boolean }, options?: { onSuccess?: (r: unknown) => void }) => {
+      if (args.check_only)
+        options?.onSuccess?.({ archived: [], refused: [], plan: [{ path: RM, will: 'archive' }, { path: 'spec/changes/a/spec.json', will: 'refuse', reason: 'open tasks' }, { path: 'spec/changes/b/spec.json', will: 'archive' }] })
+    })
+    renderBody(view(built))
+    await userEvent.click(screen.getByRole('button', { name: /Archive the roadmap and its slices/ }))
+    const dialog = screen.getByTestId('rm-archive-confirm')
+    expect(dialog).toHaveTextContent('cannot be archived: open tasks')
+    expect(within(dialog).getByRole('button', { name: 'Archive' })).toBeDisabled()
   })
 
   it('follows the slices with Problem, Scope, questions and evidence', () => {

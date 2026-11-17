@@ -72,13 +72,24 @@ export function useSupersededDocuments() {
 export interface ArchiveBatchResult {
   archived: string[]
   refused: { path: string; code: string; reason: string }[]
+  /** Present on `all_or_none` and `check_only`: what archiving does to each document. */
+  plan?: { path: string; will: 'archive' | 'archive_no_capability_change' | 'refuse'; code?: string; reason?: string }[]
 }
 
 export function useArchiveBatch() {
   const { base } = usePrefix()
   const refresh = useRefreshSpecs()
   return useMutation({
-    mutationFn: (args: { paths: string[]; reason?: string }) =>
+    mutationFn: (args: {
+      paths: string[]
+      reason?: string
+      /** Check every document first and archive none when any would be refused. */
+      all_or_none?: boolean
+      /** Answer what archiving would do to each document, and do nothing. */
+      check_only?: boolean
+      /** An approved change folded into no capability is archived saying it changes none. */
+      no_capability_change?: boolean
+    }) =>
       postJson<ArchiveBatchResult>(`${base}/documents/archive-batch`, args),
     onSuccess: refresh,
   })
