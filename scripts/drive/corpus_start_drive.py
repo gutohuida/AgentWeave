@@ -656,16 +656,14 @@ def check_overview_gone(fx, page):
     need(overview_item(page, p), "Overview of an empty corpus shows no specification set-up item to watch")
     shot(page, "overview-gone-before")
     p.create("First change", "change-spec", "spec/changes/first/spec.json")
-    live = poll(lambda: page.locator(SETUP_ITEM.format(place="overview")).count() == 0, 10, 0.5)
-    if not live:
-        page.reload(wait_until="domcontentloaded")
-        page.wait_for_timeout(2000)
+    # No reload: the document's `spec_updated` has to clear the item on the open page (PNSOS-5).
+    live = poll_page(page, lambda: page.locator(SETUP_ITEM.format(place="overview")).count() == 0, 10)
     shot(page, "overview-gone-after")
-    need(page.locator(SETUP_ITEM.format(place="overview")).count() == 0, "a document exists and the set-up item is still shown")
+    need(live, "a document exists and the set-up item is still shown without a reload")
     summary = p.summary()
     need("specification" not in setup_ids(summary, "items"), "the Hub still lists the specification item")
     need("specification" not in setup_ids(summary, "dismissed"), "the item is recorded as dismissed")
-    record("ac-overview-gone", True, True, f"gone {'without' if live else 'after'} a reload, not recorded as dismissed")
+    record("ac-overview-gone", True, True, "gone without a reload, not recorded as dismissed")
 
 
 def check_agent_choice(fx, page):
