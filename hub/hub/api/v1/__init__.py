@@ -18,6 +18,7 @@ from .dashboards import router as dashboards_router
 from .events import instance_router as instance_events_router
 from .events import router as events_router
 from .fs_browse import router as fs_browse_router
+from .hub_settings import router as hub_settings_router
 from .inbound_queue import router as inbound_queue_router
 from .inbound_queue import statuses_router as queue_statuses_router
 from .instructions import router as instructions_router
@@ -57,6 +58,7 @@ v1_router.include_router(model_catalog_router)
 v1_router.include_router(fs_browse_router)
 v1_router.include_router(native_dialog_router)
 v1_router.include_router(notify_settings_router)
+v1_router.include_router(hub_settings_router)
 v1_router.include_router(instance_conversations_router)
 v1_router.include_router(instance_work_router)
 

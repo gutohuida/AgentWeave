@@ -30,6 +30,7 @@ from hub.db.models import (
     Charter,
     Checkpoint,
     CheckpointNote,
+    CheckTestOutcome,
     Conversation,
     Dashboard,
     DashboardVersion,
@@ -160,6 +161,8 @@ PROJECT_SCOPED_TABLE_NAMES = [
     "dashboards",
     # A dashboard's one kept earlier version (`change-a-dashboard-by-asking`, FR-9).
     "dashboard_versions",
+    # Every test's outcome in every check run (`landing-time-and-test-flakiness-are-measured`).
+    "test_history",
 ]
 
 
@@ -581,6 +584,16 @@ async def _seed_full_project(session, project_id: str, tag: str) -> None:
             test="t::y",
             task_id=f"task-{tag}",
             run_id=f"checkrun-{tag}",
+        )
+    )
+    session.add(
+        CheckTestOutcome(
+            project_id=project_id,
+            check_name="pytest",
+            test_id="t::x",
+            outcome="flipped",
+            check_run_id=f"mchk-{tag}",
+            phase="main",
         )
     )
     session.add(

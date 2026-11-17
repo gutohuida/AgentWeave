@@ -377,7 +377,7 @@ def test_a_checks_auto_workers_are_its_share_of_the_cpus(monkeypatch):
     monkeypatch.delenv(project_checks.XDIST_AUTO_WORKERS_VARIABLE, raising=False)
     env, _ = project_checks.check_environment()
     assert env[project_checks.XDIST_AUTO_WORKERS_VARIABLE] == str(project_checks.auto_workers())
-    assert project_checks.MAX_CONCURRENT_RUNS == 2
+    assert project_checks.check_concurrency() == 2
     assert project_checks.auto_workers(20) == 6, "two runs and the agents share 20 CPUs"
     assert project_checks.auto_workers(2) == 1
 

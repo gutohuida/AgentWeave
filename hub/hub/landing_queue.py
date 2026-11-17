@@ -44,7 +44,7 @@ from sqlalchemy import event, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
 
-from . import blocking, generated_files, project_checks, task_integration
+from . import blocking, check_history, generated_files, project_checks, task_integration
 from .db.engine import async_session_factory
 from .db.models import LandingBatch, Project, Task, TaskCheckRun, TaskLanding
 from .task_transitions import SEND_BACK_MERGE_NEEDED
@@ -1511,7 +1511,7 @@ async def run_batch_checks(
     state, error = "passed", ""
     unjudged = False
     try:
-        slots = project_checks._every_slot() if quiet else project_checks._semaphore()
+        slots = project_checks._every_slot() if quiet else project_checks.check_slot(landing=True)
         async with slots:
             await project_checks._took_slot(run_id)  # FR-1: the batch's wait survives a restart
             for check, already in zip(checks, planned, strict=True):
@@ -1521,10 +1521,14 @@ async def run_batch_checks(
                         path = await asyncio.to_thread(
                             project_checks._checkout, root, owner, merged
                         )
-                    result = await asyncio.to_thread(project_checks.run_one, check, path, owner)
+                    result = await asyncio.to_thread(
+                        project_checks.run_one, check_history.recording(check), path, owner
+                    )
+                    outcomes = check_history.take(result)
                     if project_checks.unjudged_timeout(result):
                         # Out of time naming no failing test: it says nothing about the work, so
                         # it is neither confirmed nor narrowed (FR-10, as a task's own run).
+                        await _record_history(project_id, run_id, merged, check, outcomes, result)
                         result.update(tree=tree, check_digest=project_checks.check_digest(check))
                         results.append(result)
                         unjudged = True
@@ -1548,6 +1552,7 @@ async def run_batch_checks(
                             from . import flaky_tests
 
                             await flaky_tests.record_flake(run_id, result)
+                    await _record_history(project_id, run_id, merged, check, outcomes, result)
                     if judged and project_checks.failed(result):
                         # Whose it is, the list decides (FR-7): nothing runs on main for it.
                         await known_failing.judge(
@@ -1590,6 +1595,26 @@ async def run_batch_checks(
         # batch's run is read again as a run on main's tree, counting nothing twice.
         await known_failing.record_run(run_id)
     return BatchChecks(state=state, results=results, run_id=run_id, error=error, unjudged=unjudged)
+
+
+async def _record_history(
+    project_id: str,
+    run_id: str,
+    merged: str,
+    check: Dict[str, Any],
+    outcomes: Optional[check_history.Outcomes],
+    result: Dict[str, Any],
+) -> None:
+    """Every test the batch's run of *check* names, flips included (`check_history`, FR-5)."""
+    await check_history.record(
+        project_id=project_id,
+        check_run_id=run_id,
+        phase=check_history.PHASE_LANDING,
+        commit_sha=merged,
+        check_name=check["name"],
+        taken=outcomes,
+        result=result,
+    )
 
 
 async def _record_run(
@@ -2276,7 +2301,7 @@ async def _narrow(
         commit = prefixes[k - 1] if k else base
         path = await asyncio.to_thread(project_checks._checkout, root, owner, commit)
         try:
-            async with project_checks._semaphore():
+            async with project_checks.check_slot(landing=True):
                 result = await asyncio.to_thread(project_checks.run_one, probe, path, owner)
         finally:
             await asyncio.to_thread(project_checks._remove_checkout, root, path)

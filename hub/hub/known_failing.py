@@ -866,7 +866,7 @@ async def run_on_main(project_id: str, sha: str) -> Optional[str]:
     failure confirmed on the same tree, then the run read into the list as a run on main's tree.
     The run's id, or `None` where none was made (no checks, no workspace, or *sha* already run).
     Never raises."""
-    from . import project_checks
+    from . import check_history, project_checks
     from .project_workspace import ProjectWorkspaceError, resolve_project_workspace
 
     key = (project_id, sha)
@@ -893,11 +893,14 @@ async def run_on_main(project_id: str, sha: str) -> Optional[str]:
         path: Optional[Path] = None
         state, error = "passed", ""
         try:
-            async with project_checks._semaphore():
+            async with project_checks.check_slot():
                 path = await asyncio.to_thread(project_checks._checkout, root, owner, sha)
                 tree = await asyncio.to_thread(project_checks.tree_of, root, sha)
                 for check in checks:
-                    result = await asyncio.to_thread(project_checks.run_one, check, path, owner)
+                    result = await asyncio.to_thread(
+                        project_checks.run_one, check_history.recording(check), path, owner
+                    )
+                    outcomes = check_history.take(result)
                     if (
                         project_checks.failed(result)
                         and not project_checks.unjudged_timeout(result)
@@ -907,6 +910,16 @@ async def run_on_main(project_id: str, sha: str) -> Optional[str]:
                         await asyncio.to_thread(
                             project_checks.confirm_failure, check, path, result, owner, []
                         )
+                    # Every test main's tree ran, flips included (`check_history`, FR-5).
+                    await check_history.record(
+                        project_id=project_id,
+                        check_run_id=run_id,
+                        phase=check_history.PHASE_MAIN,
+                        commit_sha=sha,
+                        check_name=check["name"],
+                        taken=outcomes,
+                        result=result,
+                    )
                     result.update(tree=tree, check_digest=project_checks.check_digest(check))
                     results.append(result)
                     await _end_main_run(run_id, results, "running")
