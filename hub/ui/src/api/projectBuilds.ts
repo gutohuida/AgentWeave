@@ -26,6 +26,8 @@ export interface ProjectBuildRow {
    *  build's tasks were created. */
   landings: ProjectBuildLanding[]
   spent_usd: number | null
+  /** Turns of the build that carry no price; above zero, spent_usd is not a cost, so show "unpriced". */
+  unpriced_turns?: number
   stop_reason: string | null
   created_at: string | null
   stopped_at: string | null
