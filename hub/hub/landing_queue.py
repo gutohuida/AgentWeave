@@ -2323,6 +2323,7 @@ async def _narrow(
         report,
         project_checks.send_back_class([failing]),
         reason,
+        restart_author=True,
     )
     after = landings[culprit:]
     # A task after the culprit built on its work waits for it.
@@ -2595,11 +2596,19 @@ async def _own_accepted_on_main(session, task_id: str) -> frozenset:
 
 
 async def _send_back(
-    landing_id: str, batch_id: str, report: str, reason_class: str, reason: str
+    landing_id: str,
+    batch_id: str,
+    report: str,
+    reason_class: str,
+    reason: str,
+    *,
+    restart_author: bool = False,
 ) -> bool:
     """The task goes back to its author (approved -> revision_needed, the operator's edge, origin
     `checks`, as slice L returns failed work), its landing recorded sent back with *report*, its
-    history row with *reason_class* and the sentence *reason* (FR-8/FR-9)."""
+    history row with *reason_class* and the sentence *reason* (FR-8/FR-9). With *restart_author*
+    (a failure proven on its work), the author's turn is asked for once this commits
+    (`send_back_restart`, capped and left to a live build or flow there)."""
     from .run_task_binding import withdraw_review_entries_for
     from .sse import sse_manager
     from .task_transition_service import ORIGIN_CHECKS, TransitionRefusedError, apply_transition
@@ -2660,6 +2669,10 @@ async def _send_back(
                 task.notes = report
                 await withdraw_review_entries_for(session, task)
                 moved = True
+                if restart_author:
+                    from . import send_back_restart
+
+                    send_back_restart.ask_after_commit(session, task.id)
             except TransitionRefusedError:
                 logger.warning("could not send %s back", landing.task_id, exc_info=True)
         await session.commit()
