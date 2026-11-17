@@ -760,7 +760,6 @@ def _forget_module_level_background_state() -> None:
         _project_checks._starting,
         _project_checks._pending,
         _project_checks._semaphores,
-        _project_checks._every_slot_locks,
         _project_checks._fast_waiters,
         _project_checks._waiting_for_slot,
         _landing_queue._jobs,
@@ -782,6 +781,8 @@ def _forget_module_level_background_state() -> None:
         _review_on_completion._pending,
     ):
         registry.clear()
+    # The Hub's check concurrency a test set (FR-10) is not the next test's.
+    _project_checks._concurrency = None
 
 
 @pytest.fixture(autouse=True)

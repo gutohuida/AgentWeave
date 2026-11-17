@@ -84,7 +84,7 @@ async def test_runs_queued_behind_full_slots_record_their_slot_and_it_survives_a
     await _batch("lbat-slot0001", tip, [landing])
 
     slots = project_checks._semaphore()
-    for _ in range(project_checks.MAX_CONCURRENT_RUNS):
+    for _ in range(project_checks.check_concurrency()):
         await slots.acquire()  # two other runs hold both slots
     held = True
     try:
@@ -105,14 +105,14 @@ async def test_runs_queued_behind_full_slots_record_their_slot_and_it_survives_a
         # task-3's work changes while its run waits: that run ends without ever getting a slot.
         project_checks._superseded["task-3"] = project_checks._NEW_WORK
         await asyncio.sleep(0.05)  # the slot is strictly later than every queued run's start
-        for _ in range(project_checks.MAX_CONCURRENT_RUNS):
+        for _ in range(project_checks.check_concurrency()):
             slots.release()
         held = False
         outcome = await batch
         await project_checks.drain()
     finally:
         if held:
-            for _ in range(project_checks.MAX_CONCURRENT_RUNS):
+            for _ in range(project_checks.check_concurrency()):
                 slots.release()
     assert outcome.state == "passed"
 
