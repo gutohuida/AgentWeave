@@ -85,7 +85,8 @@ KEY = "aw_live_" + secrets.token_hex(16)
 OPERATOR_AGENT = "Architect"
 ORDER = ["ac-five-states", "ac-approved-not-landed", "ac-header", "ac-facts", "ac-two-ready",
          "ac-same-offers", "ac-one-turn", "ac-move", "ac-move-warn", "ac-add", "ac-remove", "ac-done", "ac-list",
-         "ac-retro", "ac-numbered"]
+         "ac-retro", "ac-numbered", "fr5-take-answers-both", "fr6-default-agent", "fr9-drops-builds-after",
+         "fr13-sections-follow-track"]
 STATES = ["not drafted", "drafting", "approved", "building", "built"]
 
 checks = {}  # key -> (reached, failed, detail)
@@ -220,7 +221,7 @@ def self_test():
         (facts_verdict("All built s1 · 4 of 4 on main · $11.96", "t", ["?document=t"], 9, FAKE_TODAY)[0], False),
         (facts_verdict("4 of 4 tasks on main · $11.96 · built 2026-11-07", "t", [], 9, FAKE_TODAY)[0], False),
         (waits_verdict("Waits for slice 3"), True), (waits_verdict("Draft this slice"), False),
-        (len(ORDER), 15), (ORDER[0], "ac-five-states"),
+        (len(ORDER), 19), (ORDER[0], "ac-five-states"),
     ]
     bad = [(i, got, want) for i, (got, want) in enumerate(cases) if got != want]
     for i, got, want in bad:
@@ -767,6 +768,76 @@ def check_list(fx, page):
            f"nested slice states shown {states.count()}, marks drawn+coloured {coloured}")
 
 
+def authored_roadmap(fx, name, title, slices, built=()):
+    """An approved roadmap whose content the agent OPERATOR_AGENT wrote before approval; each key in
+    `built` gets an approved document with every task landed."""
+    path = fx.roadmap(name, title, slices)
+    rw("insert into spec_document_events (id, document_id, project_id, kind, actor_kind, actor, origin, detail, created_at)"
+       " values (?, ?, ?, 'content', 'agent', ?, 'submission', null, ?)",
+       ("evt-rtrr-" + secrets.token_hex(6), fx.doc_id(path), fx.pid, OPERATOR_AGENT, now(11)))
+    for i, key in enumerate(built):
+        fx.slice_document(name, key, "approved", tasks=[("approved", "landed")], built_days=8 - i)
+    fx.phase(path, "approved")
+    return path
+
+
+def check_take_answers_both(fx):
+    """FR-5: taking an offer answers it in both places (the roadmap's read and Overview's offers)."""
+    road = authored_roadmap(fx, "tk", "Take roadmap", [("t1", "T one", []), ("t2", "T two", ["t1"]), ("t3", "T three", ["t1"])],
+                            built=["t1"])
+    before = (offered(read(fx, "tk")), overview_offers(offers(fx), road))
+    code, out = api("POST", f"{fx.base}/project/documents/next-slice/take", {"path": road, "slice": "t2"})
+    after = (offered(read(fx, "tk")), overview_offers(offers(fx), road))
+    again, _ = api("POST", f"{fx.base}/project/documents/next-slice/take", {"path": road, "slice": "t2"})
+    queued = [r[0] for r in ro("select agent from inbound_queue_entries where project_id=? and spec_document=?", (fx.pid, road))]
+    ok = (before == (["t2", "t3"], ["t2", "t3"]) and code == 200 and after == (["t3"], ["t3"])
+          and again == 409 and queued == [OPERATOR_AGENT])
+    fx.take_agent = (out.get("agent") if isinstance(out, dict) else None, queued)
+    record("fr5-take-answers-both", True, ok, f"before page/Overview {before}; take t2 -> {code}; after {after}; "
+           f"second take -> {again}; queued to {queued}")
+
+
+def check_default_agent(fx):
+    """FR-6: no agent chosen, the turn goes to the roadmap's author, once."""
+    agent, queued = getattr(fx, "take_agent", (None, []))
+    if not queued:
+        raise NotReached("fr5-take-answers-both queued nothing to read")
+    record("fr6-default-agent", True, agent == OPERATOR_AGENT and queued == [OPERATOR_AGENT],
+           f"take with no agent named answered agent {agent!r}; queued to {queued}; the roadmap's author is {OPERATOR_AGENT!r}")
+
+
+def check_remove_drops(fx):
+    """FR-9: removing a slice others build after drops it from their builds-after and says so."""
+    road = authored_roadmap(fx, "rmv", "Remove roadmap", [("r1", "R one", []), ("r2", "R two", ["r1"]), ("r3", "R three", ["r1"])])
+    code, out = api("POST", f"{fx.base}/project/documents/slices/remove", {"path": road, "slice": "r1"})
+    got = read(fx, "rmv")
+    left = {k: s.get("builds_after") for k, s in slices_of(got).items()}
+    said = sorted((out or {}).get("dropped_from_builds_after") or []) if isinstance(out, dict) else []
+    ok = code == 200 and order_of(got) == ["r2", "r3"] and left == {"r2": [], "r3": []} and said == ["r2", "r3"]
+    record("fr9-drops-builds-after", True, ok, f"remove r1 -> {code}, said dropped {said}, order {order_of(got)}, builds-after now {left}")
+
+
+def check_sections_follow_track(fx, page):
+    """FR-13: on a roadmap's page, Problem, Scope, questions and evidence come after the slice track."""
+    path = "spec/roadmaps/order/spec.json"
+    fx.make_document(path, "Order roadmap", {
+        "slices": [{"key": "o1", "title": "O one", "intent": "x", "done": "y", "builds_after": []}],
+        "open_questions": [{"question": "Which comes first?"}],
+        "evidence": {"checked": ["Checked order"], "limits": ["Limit order"]},
+        "requirements": [], "acceptance_criteria": [], "tasks": []}, "roadmap")
+    fx.phase(path, "approved")
+    page.goto(f"{HUB}/?project={fx.pid}&tab=spec&document={urllib.parse.quote(path, safe='')}")
+    body_text(page)
+    shot(page, "order")
+    tops = {}
+    for name, title in (("track", "Slices"), ("problem", "Problem"), ("scope", "Scope"),
+                        ("questions", "Open questions"), ("evidence", "What this rests on")):
+        loc = page.locator("section.aw-sp-section", has=page.locator("h2.aw-sp-section-title", has_text=re.compile(f"^{title}"))).first
+        tops[name] = loc.evaluate("e => e.getBoundingClientRect().top + window.scrollY") if loc.count() else None
+    ok = all(v is not None for v in tops.values()) and all(tops["track"] < tops[k] for k in ("problem", "scope", "questions", "evidence"))
+    record("fr13-sections-follow-track", True, ok, f"vertical positions {tops}")
+
+
 OUT = [pathlib.Path(".")]
 
 
@@ -815,6 +886,10 @@ def run_checks(fx, only):
             ("ac-done", check_done, (fx, page)),
             ("ac-retro", check_retro, (fx, page)),
             ("ac-numbered", check_numbered, (fx, page)),
+            ("fr5-take-answers-both", check_take_answers_both, (fx,)),
+            ("fr6-default-agent", check_default_agent, (fx,)),
+            ("fr9-drops-builds-after", check_remove_drops, (fx,)),
+            ("fr13-sections-follow-track", check_sections_follow_track, (fx, page)),
         ]
         for key, fn, args in steps:
             if want(key):
