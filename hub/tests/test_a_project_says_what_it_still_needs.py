@@ -44,10 +44,18 @@ def broadcasts(monkeypatch) -> list[tuple[str, str]]:
     return seen
 
 
-def _folder(tmp_path: Path, name: str = "scratch", *, git: bool = False) -> Path:
+def _folder(
+    tmp_path: Path, name: str = "scratch", *, git: bool = False, specs: bool = True
+) -> Path:
+    """A project folder. With `specs` it holds a spec file, so its corpus is not empty and the
+    specification item (`a-project-with-no-specs-is-offered-a-start`) stays out of the tests about
+    the other four."""
     root = tmp_path / name
     root.mkdir()
     (root / "notes.txt").write_text("hi\n", encoding="utf-8")
+    if specs:
+        (root / "spec" / "changes" / "x").mkdir(parents=True)
+        (root / "spec" / "changes" / "x" / "spec.json").write_text("{}", encoding="utf-8")
     if git:
         subprocess.run(["git", "init", "-q"], cwd=root, check=True)
     return root
@@ -74,13 +82,13 @@ def _ids(items: list[dict]) -> list[str]:
 async def test_a_fresh_folder_lists_the_repository_and_agent_items_and_nothing_else(
     app, auth_headers, tmp_path
 ) -> None:
-    """ac-fresh-folder (FR-1): no git and no agents."""
-    project_id = await _open(app, auth_headers, _folder(tmp_path))
+    """ac-fresh-folder (FR-1): no git, no agents and, since the corpus start, no specs."""
+    project_id = await _open(app, auth_headers, _folder(tmp_path, specs=False))
 
     setup = await _setup(app, auth_headers, project_id)
 
-    assert _ids(setup["items"]) == ["repository", "agent"]
-    assert [i["dismissable"] for i in setup["items"]] == [True, False]
+    assert _ids(setup["items"]) == ["repository", "agent", "specification"]
+    assert [i["dismissable"] for i in setup["items"]] == [True, False, True]
     assert setup["dismissed"] == []
 
 

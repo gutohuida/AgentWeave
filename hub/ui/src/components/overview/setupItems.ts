@@ -1,5 +1,5 @@
 import type { ProjectSetupItem } from '@/api/projects'
-import { agentSettingsDestination, environmentDestination, goTo } from '@/lib/navigation'
+import { agentSettingsDestination, environmentDestination, goTo, projectDestination } from '@/lib/navigation'
 import type { SetupItem } from './SetupList'
 
 /** Scroll an element into view once its screen has rendered it (the navigation is asynchronous). */
@@ -65,6 +65,13 @@ export function describeSetupItem(
         title: 'Add an agent',
         detail: 'A project with no agent has nobody to give work to.',
         action: { label: 'Add an agent', onClick: () => onAddAgent?.() },
+      }
+    case 'specification':
+      return {
+        ...base,
+        title: 'Start your specifications',
+        detail: 'This project has no specification documents yet. An agent can write down what its code does, or interview you to plan it.',
+        action: { label: 'Start…', onClick: () => goTo(projectDestination(projectId, 'spec')) },
       }
     case 'can-run': {
       const agent = item.agent ?? ''

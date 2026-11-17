@@ -9,7 +9,7 @@ import '@/styles/setup.css'
  * Presentational: the container works the items out from the Hub's state.
  */
 
-export type SetupItemKey = 'folder' | 'repository' | 'agent' | 'can-run'
+export type SetupItemKey = 'folder' | 'repository' | 'agent' | 'can-run' | 'specification'
 
 export interface SetupItem {
   /** One per kind, except `can-run`, which is one per agent that cannot run. */
@@ -18,7 +18,7 @@ export interface SetupItem {
   title: string
   detail: string
   action: { label: string; onClick: () => void }
-  /** Only the repository item may be dismissed: without the others nothing works. */
+  /** Only the repository and specification items may be dismissed: without the others nothing works. */
   dismissable?: boolean
 }
 
@@ -27,6 +27,7 @@ const ICON: Record<SetupItemKey, string> = {
   repository: 'call_split',
   agent: 'person_add',
   'can-run': 'terminal',
+  specification: 'description',
 }
 
 export function SetupList({

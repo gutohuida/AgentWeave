@@ -103,7 +103,8 @@ def test_a_project_row_from_before_0175_carries_the_agent_item(tmp_path, monkeyp
     # Alembic's env runs its own event loop, so the migration steps above are synchronous.
     setup = asyncio.run(_read())
 
-    assert [item.id for item in setup.items] == ["repository", "agent"]
+    # An empty folder has an empty corpus too (`a-project-with-no-specs-is-offered-a-start`).
+    assert [item.id for item in setup.items] == ["repository", "agent", "specification"]
     assert setup.dismissed == []
 
 
