@@ -42003,3 +42003,19 @@ Launchability showed claude `present/authorized/runnable` while every turn faile
 On `:8000` the Hub's `git checkout` in QA2's review checkout died after about 1 s with exit 1 and empty stderr, which is what `taskkill /F` / `TerminateProcess(h, 1)` leaves, and left a stale `index.lock`. AW-152 traced the lock to the only live run at 15:07:17 UTC (DCUSW-4).
 
 **Status:** hazard closed (AW-159); cause **suspected, not proven**. Drive cleanups walked `ParentProcessId` from a seconds-old `Get-CimInstance` table and from remembered pids, then `taskkill /T /F`'d each, so a reused pid could have been ended. Now `scripts/drive/proc_safe.py` walks a Toolhelp table with creation times through `hub/hub/process_job.descendants` (a child counts only if created no earlier than its parent), drops remembered roots older than the drive, and ends processes only through handles whose creation time matches the snapshot. Converted: `d1105_own_app`, `d1107_updates_itself`, `d1108_windows_notifications`, `s1022_tr_drive`, `s1023_tc_drive`, `f907_drive`, `s1023_rn_busy`, `s1023_rn_stop_tree`; `test_pty_runner` no longer tree-kills a pid it has already seen exit. Left alone: drives that `taskkill` only a `Popen` they still hold (the handle keeps the pid from being reused), `panel_terminal_drive`/`t_row19_crash`/`t_sweep_row5_runs` (they only observe; `t_row19_crash` stops the Hub it started by pid from its own state), and `d1_0909_shutdown` (one CIM pipeline kills each pid it just listed). **Test:** `tests/test_drive_proc_safe.py`.
+
+## F1199 (A) -- a fact superseded by a re-distil still counts as current, so the spec-vault check keeps warning with it
+
+**Status:** open
+**Source:** found by the operator, 2026-11-17, approving `a-build-view-showing-every-task-and-run-of-a-build`; diagnosed by the Architect by reading the code and calling it read-only.
+**Theme:** Knowledge vault
+**Ready:** yes
+**Tier:** 0
+
+FR-7 was corrected to five evidence states, and the vault note's passage was rewritten to match (`vault_replace_passage`). The re-distil marked the old fact `fct-c40175cb07db` "SUPERSEDED by a later distillation … at 22:46:09" (its `superseded_at` and `superseded_by` are set, and `vault_read` says so). The spec's `vault_warning` still cites that fact. The manager's check compared FR-7 against it and judged a contradiction.
+
+The cause is that `vault.dated_facts(..., current_only=True)` (`hub/hub/vault.py:696`) leaves out only facts that `_all_flags` marks superseded, which means facts superseded by a contradiction decision or a corrected report (F586's fix). It does not leave out a fact whose own meta carries `superseded_at` from a re-distil. Read-only check on this repository: `fct-c40175cb07db` is in `dated_facts(current_only=True)`, and `_all_flags` holds nothing for it.
+
+`vault_spec_check` uses that set in two places: as what it sends to the model (`prepare`, line ~295), and as the "fact still stands" filter on stored conflicts (`document_warnings`, line ~180). So a fact its own source no longer says keeps producing warnings until something else supersedes it. `distillation._check` also uses `current_only` and may compare new facts against such dead ones.
+
+**Expected:** a fact with `superseded_at` is not current: `current_only` leaves it out, and a stored conflict naming it is no longer shown. **Test seam:** `dated_facts(current_only=True)` after a `vault_replace_passage` re-distil that drops a claim. The test fails today.
