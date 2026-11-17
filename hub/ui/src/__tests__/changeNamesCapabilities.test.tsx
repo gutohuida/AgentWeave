@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { FoldIntoCapabilityDialog } from '@/components/spec/FoldIntoCapabilityDialog'
 import { ChangeCapabilities } from '@/components/spec/ChangeCapabilities'
-import { CapabilityWaitingList } from '@/components/spec/CapabilityWaitingList'
+import { CapabilityTouchedList } from '@/components/spec/CapabilityTouchedList'
 import { SpecDocList } from '@/components/spec/page/SpecDocList'
 import { listEntries } from '@/components/spec/page/adapt'
 import type { ListPreferences } from '@/components/spec/page/model'
@@ -118,13 +118,13 @@ describe('the change page', () => {
 })
 
 describe('a capability', () => {
-  it('shows its waiting list in the order the Hub gave, built on the first only', () => {
-    wrap(<CapabilityWaitingList record={alpha} />)
-    expect(screen.getByTestId('capability-waiting-list')).toBeInTheDocument()
-    const rows = screen.getAllByTestId('capability-waiting-row')
-    expect(rows.map((r) => r.getAttribute('data-path'))).toEqual(['spec/changes/built/spec.json', 'spec/changes/unbuilt/spec.json'])
-    expect(rows.map((r) => r.getAttribute('data-built'))).toEqual(['true', 'false'])
-    // Titles are plain text: nothing on the row looks clickable but does nothing.
+  it('lists its waiting changes newest first, built on the first only', () => {
+    wrap(<CapabilityTouchedList record={alpha} />)
+    expect(screen.getByTestId('capability-touched-list')).toBeInTheDocument()
+    const rows = screen.getAllByTestId('capability-touched-row')
+    expect(rows.map((r) => r.getAttribute('data-path'))).toEqual(['spec/changes/unbuilt/spec.json', 'spec/changes/built/spec.json'])
+    expect(rows.map((r) => r.getAttribute('data-built'))).toEqual(['false', 'true'])
+    // Without a way to open a document the titles are plain text, not dead buttons.
     expect(screen.queryAllByRole('button')).toHaveLength(0)
   })
 

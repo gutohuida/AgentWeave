@@ -66,12 +66,13 @@ export interface ProjectBuildLanding {
   reason: string
 }
 
-export function useProjectBuilds() {
+export function useProjectBuilds(refetchMs?: number) {
   const { isConfigured, selectedProjectId: projectId } = useConfigStore()
   return useQuery<ProjectBuildRow[]>({
     queryKey: ['project', projectId, 'builds'],
     queryFn: async () =>
       (await getJson<{ builds: ProjectBuildRow[] }>(`/api/v1/projects/${projectId}/project/builds`)).builds,
     enabled: isConfigured && !!projectId,
+    refetchInterval: refetchMs,
   })
 }

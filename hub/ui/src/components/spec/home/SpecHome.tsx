@@ -1,62 +1,34 @@
 import * as React from 'react'
 import { Icon } from '@/components/common/Icon'
-import { formatAgo, formatMoney } from '@/lib/format'
+import { formatAgo, formatDateTime, formatMoney } from '@/lib/format'
+import { latestFinished, litBy, type HomeBuild, type HomeCapability, type HomeDocRef } from './homeModel'
 import '@/styles/spec-home.css'
 
 /** The Spec tab's home (`spec-home-shows-what-is-being-built-what-was-built-and-how-it-relates`):
  *  what is being built, what was built, and how each relates to its roadmap and capabilities.
- *  Presentational: rows in, `onOpen` out. `relations` picks one of the three ways of showing how
- *  documents relate that the operator is choosing between (2026-11-17). */
-
-export interface HomeDocRef {
-  path: string
-  title: string
-}
-
-export interface HomeBuild {
-  id: string
-  state: 'running' | 'finished'
-  document: HomeDocRef
-  roadmap: { document: HomeDocRef; slice: { key: string; title: string } } | null
-  capabilities: HomeDocRef[]
-  tasksDone: number
-  tasksTotal: number
-  /** Approved tasks whose work has not landed yet. */
-  tasksLanding: number
-  startedAt: string
-  finishedAt: string | null
-  /** Null when no run of it was priced. */
-  spentUsd: number | null
-}
-
-export interface HomeCapability extends HomeDocRef {
-  waiting: number
-}
-
-/** `links-map`: links on every row, and the drawn map below the builds (the operator's A + C). */
-export type RelationsView = 'links' | 'tree' | 'map' | 'links-map'
+ *  Presentational: rows in, `onOpen` out. Every row names its roadmap, slice and capabilities as
+ *  links, and the drawn map below shows how the shown builds relate. */
 
 export function SpecHome({
   builds,
   capabilities,
-  relations,
   now,
   onOpen,
 }: {
   /** As `GET /project/builds` returns them: newest build first. */
   builds: HomeBuild[]
   capabilities: HomeCapability[]
-  relations: RelationsView
   now: Date
   onOpen: (path: string, anchor?: string) => void
 }) {
   const running = builds.filter((b) => b.state === 'running')
   const recent = latestFinished(builds, 10)
   const [focus, setFocus] = React.useState<string | null>(null)
-  const shown = [...running, ...recent]
+  /* A document with a build running and an older one finished is one box in the map. */
+  const shown = [...running, ...recent].filter((b, i, all) => all.findIndex((o) => o.document.path === b.document.path) === i)
 
   return (
-    <div className="aw-home" data-testid="spec-home" data-relations={relations}>
+    <div className="aw-home" data-testid="spec-home">
       <section className="aw-home-section" data-testid="spec-home-building">
         <h2 className="aw-home-h">
           Building now <span className="aw-home-count">{running.length}</span>
@@ -66,7 +38,7 @@ export function SpecHome({
         ) : (
           <ul className="aw-home-rows">
             {running.map((b) => (
-              <BuildRow key={b.id} build={b} now={now} relations={relations} focus={focus} onFocus={setFocus} onOpen={onOpen} />
+              <BuildRow key={b.id} build={b} now={now} shown={shown} focus={focus} onFocus={setFocus} onOpen={onOpen} />
             ))}
           </ul>
         )}
@@ -79,16 +51,15 @@ export function SpecHome({
         ) : (
           <ul className="aw-home-rows">
             {recent.map((b) => (
-              <BuildRow key={b.id} build={b} now={now} relations={relations} focus={focus} onFocus={setFocus} onOpen={onOpen} />
+              <BuildRow key={b.id} build={b} now={now} shown={shown} focus={focus} onFocus={setFocus} onOpen={onOpen} />
             ))}
           </ul>
         )}
       </section>
 
-      {relations === 'tree' ? <RelationTree builds={shown} focus={focus} onFocus={setFocus} onOpen={onOpen} /> : null}
-      {relations === 'map' || relations === 'links-map' ? <RelationMap builds={shown} focus={focus} onFocus={setFocus} onOpen={onOpen} /> : null}
+      <RelationMap builds={shown} focus={focus} onFocus={setFocus} onOpen={onOpen} />
 
-      {relations !== 'map' ? (
+      {(
         <section className="aw-home-section" data-testid="spec-home-capabilities">
           <h2 className="aw-home-h">
             Capabilities <span className="aw-home-count">{capabilities.length}</span>
@@ -103,6 +74,10 @@ export function SpecHome({
                   data-testid="spec-home-capability-row"
                   data-path={c.path}
                   data-lit={focus ? String(litBy(shown, focus).has(c.path)) : undefined}
+                  onMouseEnter={() => setFocus(c.path)}
+                  onMouseLeave={() => setFocus(null)}
+                  onFocus={() => setFocus(c.path)}
+                  onBlur={() => setFocus(null)}
                   onClick={() => onOpen(c.path)}
                 >
                   <span className="aw-home-cap-title">{c.title}</span>
@@ -112,49 +87,29 @@ export function SpecHome({
             ))}
           </ul>
         </section>
-      ) : null}
+      )}
     </div>
   )
-}
-
-/** The `limit` most recently finished builds, one per document at its latest finish. A stopped
- *  build is not built. */
-export function latestFinished(builds: HomeBuild[], limit: number): HomeBuild[] {
-  const seen = new Set<string>()
-  return builds
-    .filter((b) => b.state === 'finished' && b.finishedAt)
-    .sort((a, b) => (b.finishedAt! < a.finishedAt! ? -1 : 1))
-    .filter((b) => (seen.has(b.document.path) ? false : (seen.add(b.document.path), true)))
-    .slice(0, limit)
-}
-
-/** Every path one focused document connects to, itself included. */
-function litBy(builds: HomeBuild[], focus: string): Set<string> {
-  const lit = new Set<string>([focus])
-  for (const b of builds) {
-    const paths = [b.document.path, ...(b.roadmap ? [b.roadmap.document.path] : []), ...b.capabilities.map((c) => c.path)]
-    if (paths.includes(focus)) paths.forEach((p) => lit.add(p))
-  }
-  return lit
 }
 
 function BuildRow({
   build,
   now,
-  relations,
+  shown,
   focus,
   onFocus,
   onOpen,
 }: {
   build: HomeBuild
   now: Date
-  relations: RelationsView
+  /** The builds on the home, for what a focus connects to. */
+  shown: HomeBuild[]
   focus: string | null
   onFocus: (path: string | null) => void
   onOpen: (path: string, anchor?: string) => void
 }) {
   const running = build.state === 'running'
-  const lit = focus ? litBy([build], focus).has(focus) && [build.document.path, build.roadmap?.document.path, ...build.capabilities.map((c) => c.path)].includes(focus) : false
+  const lit = focus ? litBy(shown, focus).has(build.document.path) : false
   return (
     <li
       className="aw-home-row"
@@ -166,13 +121,15 @@ function BuildRow({
       data-lit={focus ? (lit ? 'true' : 'false') : undefined}
       onMouseEnter={() => onFocus(build.document.path)}
       onMouseLeave={() => onFocus(null)}
+      onFocus={() => onFocus(build.document.path)}
+      onBlur={() => onFocus(null)}
     >
       <span className="aw-home-dot" data-state={build.state} aria-hidden />
       <div className="aw-home-main">
         <button data-slot="home-open" type="button" className="aw-home-title" onClick={() => onOpen(build.document.path)}>
           {build.document.title}
         </button>
-        {relations === 'links' || relations === 'links-map' ? <RelationLinks build={build} onOpen={onOpen} /> : null}
+        <RelationLinks build={build} onOpen={onOpen} />
       </div>
       <div className="aw-home-facts">
         {running ? (
@@ -180,12 +137,18 @@ function BuildRow({
             <span>
               {build.tasksDone} of {build.tasksTotal} done
             </span>
-            {build.tasksLanding ? <span className="aw-home-landing">{build.tasksLanding} landing</span> : null}
-            <span className="aw-home-muted">started {formatAgo(build.startedAt, now)}</span>
+            <span className="aw-home-landing" data-waiting={build.tasksLanding ? 'true' : undefined}>
+              {build.tasksLanding} waiting to land
+            </span>
+            <span className="aw-home-muted" title={formatDateTime(build.startedAt, now)}>
+              started {formatAgo(build.startedAt, now)}
+            </span>
           </>
         ) : (
           <>
-            <span className="aw-home-muted">{formatAgo(build.finishedAt!, now)}</span>
+            <span className="aw-home-muted" title={formatDateTime(build.finishedAt!, now)}>
+              {formatAgo(build.finishedAt!, now)}
+            </span>
             <span className="aw-home-cost">{build.spentUsd === null ? 'unpriced' : formatMoney(build.spentUsd)}</span>
           </>
         )}
@@ -194,7 +157,7 @@ function BuildRow({
   )
 }
 
-/** Option A: each row names its roadmap, slice and capabilities as links. */
+/** Each row names its roadmap, slice and capabilities as links. */
 function RelationLinks({ build, onOpen }: { build: HomeBuild; onOpen: (path: string, anchor?: string) => void }) {
   return (
     <div className="aw-home-rel">
@@ -222,72 +185,10 @@ function RelationLinks({ build, onOpen }: { build: HomeBuild; onOpen: (path: str
   )
 }
 
-/** Option B: one outline, roadmap › slice › change › capabilities, for the shown builds. */
-function RelationTree({
-  builds,
-  focus,
-  onFocus,
-  onOpen,
-}: {
-  builds: HomeBuild[]
-  focus: string | null
-  onFocus: (path: string | null) => void
-  onOpen: (path: string, anchor?: string) => void
-}) {
-  const groups = new Map<string, { roadmap: HomeDocRef | null; builds: HomeBuild[] }>()
-  for (const b of builds) {
-    const key = b.roadmap?.document.path ?? ''
-    if (!groups.has(key)) groups.set(key, { roadmap: b.roadmap?.document ?? null, builds: [] })
-    groups.get(key)!.builds.push(b)
-  }
-  const ordered = [...groups.values()].sort((a, b) => (a.roadmap ? 0 : 1) - (b.roadmap ? 0 : 1))
-  const lit = focus ? litBy(builds, focus) : null
-  return (
-    <section className="aw-home-section" data-testid="spec-home-relations">
-      <h2 className="aw-home-h">How it relates</h2>
-      <ul className="aw-tree">
-        {ordered.map((g) => (
-          <li key={g.roadmap?.path ?? 'none'} className="aw-tree-group">
-            {g.roadmap ? (
-              <button data-slot="home-link" type="button" className="aw-tree-node" data-kind="roadmap" data-lit={lit ? String(lit.has(g.roadmap.path)) : undefined} onClick={() => onOpen(g.roadmap!.path)} onMouseEnter={() => onFocus(g.roadmap!.path)} onMouseLeave={() => onFocus(null)}>
-                <Icon name="route" size={13} />
-                {g.roadmap.title}
-              </button>
-            ) : (
-              <span className="aw-tree-node" data-kind="none">Not in a roadmap</span>
-            )}
-            <ul className="aw-tree-children">
-              {g.builds.map((b) => (
-                <li key={b.id} className="aw-tree-item">
-                  {b.roadmap ? <span className="aw-tree-slice">{b.roadmap.slice.title}</span> : null}
-                  <button data-slot="home-link" type="button" className="aw-tree-node" data-kind="change" data-state={b.state} data-lit={lit ? String(lit.has(b.document.path)) : undefined} onClick={() => onOpen(b.document.path)} onMouseEnter={() => onFocus(b.document.path)} onMouseLeave={() => onFocus(null)}>
-                    <span className="aw-home-dot" data-state={b.state} aria-hidden />
-                    {b.document.title}
-                  </button>
-                  <ul className="aw-tree-caps">
-                    {b.capabilities.map((c) => (
-                      <li key={c.path}>
-                        <button data-slot="home-link" type="button" className="aw-home-chip" data-lit={lit ? String(lit.has(c.path)) : undefined} onClick={() => onOpen(c.path)} onMouseEnter={() => onFocus(c.path)} onMouseLeave={() => onFocus(null)}>
-                          <Icon name="layers" size={11} />
-                          {c.title}
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                </li>
-              ))}
-            </ul>
-          </li>
-        ))}
-      </ul>
-    </section>
-  )
-}
-
 const ROW = 40
 const NODE_H = 30
 
-/** Option C: a drawn map. Roadmaps, the shown changes and their capabilities in three columns,
+/** A drawn map. Roadmaps, the shown changes and their capabilities in three columns,
  *  joined by threads; hovering anything lights what it connects to. */
 function RelationMap({
   builds,
@@ -327,7 +228,7 @@ function RelationMap({
         <svg className="aw-map-threads" viewBox={`0 0 100 ${height}`} preserveAspectRatio="none" aria-hidden>
           {changes.map((b) =>
             b.roadmap ? (
-              <path key={`r-${b.id}`} className="aw-map-thread" data-lit={on(b.roadmap.document.path, b.document.path)} d={curve(X.r1, yR.get(b.roadmap.document.path)!, X.c0, yC.get(b.document.path)!)} />
+              <path key={`r-${b.id}`} className="aw-map-thread" data-state={b.state} data-lit={on(b.roadmap.document.path, b.document.path)} d={curve(X.r1, yR.get(b.roadmap.document.path)!, X.c0, yC.get(b.document.path)!)} />
             ) : null,
           )}
           {changes.flatMap((b) =>

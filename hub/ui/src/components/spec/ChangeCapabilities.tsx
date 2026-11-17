@@ -8,7 +8,7 @@ import { useSetCapabilities, useSpecDocuments, type SpecDocumentRecord } from '@
  * changes, the ones it will create by title, and where it was folded. The operator edits the link
  * until the change is folded; after a fold it is fixed, so the edit is not offered.
  */
-export function ChangeCapabilities({ record }: { record: SpecDocumentRecord }) {
+export function ChangeCapabilities({ record, onOpenDocument }: { record: SpecDocumentRecord; onOpenDocument?: (path: string) => void }) {
   const { data: documents, isError: documentsError, error: documentsReadError } = useSpecDocuments()
   const save = useSetCapabilities()
   const [editing, setEditing] = useState(false)
@@ -50,6 +50,14 @@ export function ChangeCapabilities({ record }: { record: SpecDocumentRecord }) {
     }
   }
 
+  const titled = (path: string) =>
+    onOpenDocument ? (
+      <button data-slot="link-button" type="button" className="aw-inline-link" onClick={() => onOpenDocument(path)}>
+        {titleOf(path)}
+      </button>
+    ) : (
+      titleOf(path)
+    )
   const none = link.changes.length === 0 && link.creates.length === 0
   return (
     <div className="flex flex-col gap-1 text-xs" style={{ color: 'var(--text-3)' }}>
@@ -59,7 +67,7 @@ export function ChangeCapabilities({ record }: { record: SpecDocumentRecord }) {
           {none ? 'none named' : null}
           {link.changes.map((path) => (
             <span key={path} data-path={path} className="mr-2">
-              {titleOf(path)}
+              {titled(path)}
             </span>
           ))}
           {link.creates.map((c) => (
@@ -67,7 +75,7 @@ export function ChangeCapabilities({ record }: { record: SpecDocumentRecord }) {
               {c.title} (new)
             </span>
           ))}
-          {record.folded_into ? <span> — folded into {titleOf(record.folded_into)}</span> : null}
+          {record.folded_into ? <span> — folded into {titled(record.folded_into)}</span> : null}
         </span>
         {!fixed && !editing ? (
           <Button variant="ghost" size="xs" data-testid="change-capabilities-edit" onClick={open}>
