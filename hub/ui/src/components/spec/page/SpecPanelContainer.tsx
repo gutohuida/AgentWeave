@@ -10,6 +10,8 @@ import { SpecOpenPicker } from './SpecOpenPicker'
 import { SpecSidePanel } from './SpecWorkspace'
 import type { SpecListEntry } from './model'
 import type { LoopSummary } from '@/api/loops'
+import type { SpecReference } from '@/lib/specReference'
+import { SpecInsertButton } from '../SpecInsertButton'
 
 /** The conversation's spec panel for one document: the redesigned page in one column. */
 export function SpecPanelContainer(props: {
@@ -23,6 +25,8 @@ export function SpecPanelContainer(props: {
   /** Documents opened lately (the panel's open tabs), most recent first. */
   recent?: string[]
   onNew?: () => void
+  /** Put a box for the open spec in the composer; distinct from closing or opening. */
+  onInsert?: (spec: SpecReference) => void
   onClose?: () => void
   /** Where the document opens: the Running tab opens a build's document at its builds. */
   initialAnchor?: string | null
@@ -72,6 +76,7 @@ function PanelFor(props: React.ComponentProps<typeof SpecPanelContainer>) {
       <SpecSidePanel
         {...result.surface}
         onClose={props.onClose}
+        onInsert={props.onInsert}
         list={{
           entries: list.entries,
           prefs: list.prefs,
@@ -95,6 +100,8 @@ export function SpecPickerContainer(props: {
   openPath?: string | null
   recent?: string[]
   autoFocus?: boolean
+  /** Put a box for the spec in the composer, from a row's own button beside opening it. */
+  onInsert?: (spec: SpecReference) => void
 }) {
   const list = useSpecListData()
   const progress = useBuildProgress()
@@ -115,7 +122,10 @@ export function SpecPickerContainer(props: {
         recent={props.recent}
         progress={progress}
         autoFocus={props.autoFocus}
-        rowAction={(entry: SpecListEntry) => (entry.untracked ? <SpecAdoptButton path={entry.path} onAdopted={() => setAdopted(true)} /> : null)}
+        rowAction={(entry: SpecListEntry) => {
+          if (entry.untracked) return <SpecAdoptButton path={entry.path} onAdopted={() => setAdopted(true)} />
+          return props.onInsert ? <SpecInsertButton spec={{ id: entry.id, title: entry.title }} onInsert={props.onInsert} /> : null
+        }}
       />
     </div>
   )

@@ -556,6 +556,98 @@ def check_timeline_boxes(browser, hub):
         context.close()
 
 
+def check_panel_insert_not_open(browser, hub):
+    """panel-insert-not-open, through the real app: the side panel's spec list and an open spec's
+    header each insert a box at the composer's caret, and clicking a row's title opens the spec and
+    adds no box."""
+    root = hub.scratch / "insert-project"
+    root.mkdir()
+    (root / "README.md").write_text("A scratch project for inserting from the panel.", encoding="utf-8")
+    project = hub.need("POST", "/projects/open", {"path": str(root), "name": "spec-reference-insert"})
+    base = f"/projects/{project['id']}"
+    runner = hub.need("POST", f"{base}/runners", {"name": "Haiku", "cli": "claude", "model": HAIKU})
+    hub.need("POST", f"{base}/agents", {"name": "Alpha", "runner_id": runner["id"]})
+    first, second = "Insert Subject One", "Insert Subject Two"
+    for title in (first, second):
+        hub.need("POST", f"{base}/project/documents", {"title": title, "kind": "change-spec"})
+    context = browser.new_context(viewport={"width": 1440, "height": 1000})
+    context.add_init_script(
+        "try { sessionStorage.setItem('agentweave-session', JSON.stringify({apiKey: %s, hubUrl: %s})) } catch (e) {}"
+        % (json.dumps(hub.key), json.dumps(hub.url)))
+    page = context.new_page()
+
+    def panel_tabs():
+        return page.locator("[data-testid^=panel-tab-close-]").count()
+
+    def boxes():
+        return read(page).count("[[")
+
+    def active():
+        return page.evaluate(
+            "() => { const a = document.activeElement; return a ? (a.dataset.testid || a.tagName) + '|' + (a.className || '') : '' }")
+
+    def composer_focused():
+        return page.evaluate(
+            "() => document.activeElement && document.activeElement.matches('[data-testid=composer-input], textarea.composer-textarea')")
+
+    def focus_settled(quiet_ms=500, limit_ms=8000):
+        """Wait until document.activeElement has not changed for quiet_ms (menus hand focus back late)."""
+        last, since, waited = active(), 0, 0
+        while since < quiet_ms and waited < limit_ms:
+            page.wait_for_timeout(100)
+            waited += 100
+            now = active()
+            since = since + 100 if now == last else 0
+            last = now
+
+    try:
+        page.goto(f"{hub.url}/?project={project['id']}&agent=Alpha", wait_until="domcontentloaded")
+        field(page).wait_for(timeout=30000)
+        field(page).click()
+        page.keyboard.type("Say hello, nothing else.")
+        page.keyboard.press("Enter")
+        page.wait_for_url(re.compile(r"conversation=conv-"), timeout=30000)
+        page.locator("[data-testid=conversation-header]").first.wait_for(timeout=30000)
+        field(page).click()
+        page.keyboard.type("note ")
+        page.get_by_test_id("conversation-more").click(timeout=15000)
+        page.get_by_test_id("conversation-toggle-panel").click(timeout=15000)
+        launch = page.locator("[data-testid=panel-launch-specs], [data-testid=panel-tab-specs]").first
+        launch.click(timeout=15000)
+        row = page.locator("[data-slot=spec-row]").filter(has_text=first).first
+        row.wait_for(timeout=15000)
+        insert = page.locator("[data-testid=spec-insert-row][aria-label*='%s']" % first)
+        if insert.count() == 0:
+            return False, f"the spec list shows {row.count()} row(s) for {first!r} and no insert action on any of them"
+        focus_settled()
+        insert.click(timeout=5000)
+        after_row = settle(page, lambda: read(page), lambda t: t.count("[[") == 1, ms=5000)
+        row_ok = boxes() == 1 and f"[[{first}]]" in after_row
+        tabs_before = panel_tabs()
+        page.wait_for_timeout(600)
+        focused = composer_focused()
+        page.locator("[data-slot=spec-row]").filter(has_text=second).first.click()
+        opened = settle(page, panel_tabs, lambda n: n > tabs_before, ms=8000)
+        open_ok = opened > tabs_before and boxes() == 1
+        header_insert = page.locator("[data-testid=spec-insert-header]")
+        try:
+            header_insert.first.wait_for(timeout=15000)
+        except Exception:  # noqa: BLE001 - the action is not there: fail at the assertion
+            return False, f"the open spec's header has no insert action; the composer reads {read(page)!r}"
+        header_insert.first.click(timeout=15000)
+        after_header = settle(page, lambda: read(page), lambda t: t.count("[[") == 2, ms=5000)
+        header_ok = f"[[{second}]]" in after_header
+        page.wait_for_timeout(600)
+        header_focused = composer_focused()
+        return (row_ok, bool(focused), open_ok, header_ok, bool(header_focused)) == (True,) * 5, (
+            f"row insert -> {after_row!r}; composer focused after it={focused}; clicking {second!r} took panel tabs "
+            f"{tabs_before} -> {opened} with {boxes() - (1 if header_ok else 0)} boxes; header insert -> {after_header!r}; "
+            f"composer focused after it={header_focused}"
+        )
+    finally:
+        context.close()
+
+
 def report(key, fn, *args):
     try:
         ok, detail = fn(*args)
@@ -606,11 +698,17 @@ def main():
             except RuntimeError as exc:
                 failed += 1
                 print(f"check timeline-boxes: reached=no failed_at_assertion=no -- {exc}")
+            try:
+                with Hub() as hub:
+                    failed += not report("panel-insert-not-open", check_panel_insert_not_open, browser, hub)
+            except RuntimeError as exc:
+                failed += 1
+                print(f"check panel-insert-not-open: reached=no failed_at_assertion=no -- {exc}")
             browser.close()
     finally:
         if proc is not None:
             stop(proc)
-    total = len(CHECKS) + 2
+    total = len(CHECKS) + 3
     print(f"{total - failed}/{total} checks passed")
     return 1 if failed else 0
 
