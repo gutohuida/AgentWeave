@@ -77,6 +77,11 @@ vi.mock('@/api/queue', () => ({
   withdrawQueueEntry: vi.fn(),
 }))
 
+// The composer's @ menu lists the project's documents (reference-a-spec-in-a-sentence-from-the-composer).
+vi.mock('@/api/spec', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/api/spec')>()),
+  useSpecDocuments: () => ({ data: { documents: [] } }),
+}))
 vi.mock('@/api/workspace', () => ({
   useWorkspacePaths: () => ({ data: [] }),
 }))
@@ -124,8 +129,8 @@ describe('a conversation whose agent is busy in another conversation (F844)', ()
 
     await waitFor(() => expect(screen.getByRole('textbox')).toBeInTheDocument())
     expect(screen.queryByRole('button', { name: /^stop/i })).not.toBeInTheDocument()
-    expect(screen.getByRole('textbox')).not.toHaveAttribute('placeholder', expect.stringContaining('is responding'))
-    expect(screen.getByRole('textbox')).toHaveAttribute('placeholder', expect.stringContaining('queue'))
+    expect(screen.getByRole('textbox')).not.toHaveAttribute('aria-placeholder', expect.stringContaining('is responding'))
+    expect(screen.getByRole('textbox')).toHaveAttribute('aria-placeholder', expect.stringContaining('queue'))
     const busy = screen.getByTestId('conversation-busy-elsewhere')
     expect(busy).toHaveTextContent('The one that is running')
   })

@@ -5,6 +5,7 @@ import type { AgentConversation, ChatHistoryResponse } from '@/api/agentChat'
 import { useConfigStore } from '@/store/configStore'
 import { AgentOutputPanel } from '@/components/agents/AgentOutputPanel'
 import { MODEL_CATALOG_FIXTURE } from './support/modelCatalogFixture'
+import { setComposerText } from './testUtils/composerField'
 
 /**
  * The composer's Permissions pill against an agent that has a default posture.
@@ -83,6 +84,11 @@ vi.mock('@/api/queue', () => ({
 }))
 
 vi.mock('@/api/workspace', () => ({ useWorkspacePaths: () => ({ data: [] }) }))
+// The composer's @ menu lists the project's documents (reference-a-spec-in-a-sentence-from-the-composer).
+vi.mock('@/api/spec', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/api/spec')>()),
+  useSpecDocuments: () => ({ data: { documents: [] } }),
+}))
 
 vi.mock('@/api/runners', () => ({
   useRunners: () => ({
@@ -172,7 +178,7 @@ describe("the composer shows the agent's default posture", () => {
     )
     render(<AgentOutputPanel agent={roster[0]} conversationId={conversation.id} />)
 
-    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'go' } })
+    setComposerText(screen.getByRole('textbox'), 'go')
     fireEvent.click(screen.getByRole('button', { name: 'Send message' }))
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalled())

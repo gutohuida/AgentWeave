@@ -6,6 +6,7 @@ import type { Question } from '@/api/questions'
 import { useConfigStore } from '@/store/configStore'
 import { activeQuestionFor } from '@/lib/pendingQuestions'
 import { AgentOutputPanel } from '@/components/agents/AgentOutputPanel'
+import { setComposerText, getComposerByPlaceholder, queryComposerByPlaceholder } from './testUtils/composerField'
 
 /** The batch the panel is holding, newest state per test. */
 let openQuestions: Question[] = []
@@ -73,6 +74,11 @@ vi.mock('@/api/queue', () => ({
 }))
 
 vi.mock('@/api/workspace', () => ({ useWorkspacePaths: () => ({ data: [] }) }))
+// The composer's @ menu lists the project's documents (reference-a-spec-in-a-sentence-from-the-composer).
+vi.mock('@/api/spec', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/api/spec')>()),
+  useSpecDocuments: () => ({ data: { documents: [] } }),
+}))
 vi.mock('@/api/runners', () => ({ useRunners: () => ({ data: [] }) }))
 vi.mock('@/api/accounting', () => ({
   useAccounting: () => ({ data: undefined }),
@@ -156,15 +162,15 @@ describe('the composer and a question nobody waits on', () => {
     openQuestions = [asked({ conversation_id: 'conv-A', asker_waiting: false })]
     render(<AgentOutputPanel agent={agent} conversationId="conv-1" />)
     expect(screen.queryByText('Which name should the helper have?')).not.toBeInTheDocument()
-    expect(screen.queryByPlaceholderText('Answer codex-1…')).not.toBeInTheDocument()
+    expect(queryComposerByPlaceholder('Answer codex-1…')).not.toBeInTheDocument()
   })
 
   it('sends typed text as a message when the question in this conversation is no longer waited on', async () => {
     openQuestions = [asked({ conversation_id: 'conv-1', asker_waiting: false })]
     render(<AgentOutputPanel agent={agent} conversationId="conv-1" />)
 
-    const composer = screen.getByPlaceholderText(/^Answer codex-1/)
-    fireEvent.change(composer, { target: { value: 'New task: add subtract()' } })
+    const composer = getComposerByPlaceholder(/^Answer codex-1/)
+    setComposerText(composer, 'New task: add subtract()')
     fireEvent.keyDown(composer, { key: 'Enter' })
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalled())
@@ -186,8 +192,8 @@ describe('the composer and a question nobody waits on', () => {
   it('still routes typed text to a question that is waited on', async () => {
     openQuestions = [asked({ conversation_id: 'conv-1', asker_waiting: true })]
     render(<AgentOutputPanel agent={agent} conversationId="conv-1" />)
-    const composer = screen.getByPlaceholderText(/^Answer codex-1/)
-    fireEvent.change(composer, { target: { value: 'triple' } })
+    const composer = getComposerByPlaceholder(/^Answer codex-1/)
+    setComposerText(composer, 'triple')
     fireEvent.keyDown(composer, { key: 'Enter' })
     await waitFor(() => expect(answerMutation).toHaveBeenCalled())
     expect(answerMutation.mock.calls[0][0]).toMatchObject({ id: 'q-stale', answer: 'triple' })

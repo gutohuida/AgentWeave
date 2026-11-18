@@ -84,6 +84,11 @@ vi.mock('@/api/queue', () => ({
   withdrawQueueEntry: vi.fn(),
 }))
 
+// The composer's @ menu lists the project's documents (reference-a-spec-in-a-sentence-from-the-composer).
+vi.mock('@/api/spec', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/api/spec')>()),
+  useSpecDocuments: () => ({ data: { documents: [] } }),
+}))
 vi.mock('@/api/workspace', () => ({ useWorkspacePaths: () => ({ data: [] }) }))
 vi.mock('@/api/runners', () => ({ useRunners: () => ({ data: [] }) }))
 vi.mock('@/api/accounting', () => ({
@@ -236,7 +241,7 @@ describe('interjections float over the conversation', () => {
     const surface = container.querySelector('.conversation-composer-surface') as HTMLElement
     // One object: the question is the surface's top section, the text box below it the answer.
     expect(surface).toContainElement(question)
-    expect(surface.querySelector('textarea')).not.toBeNull()
+    expect(surface.querySelector('[data-testid=composer-input]')).not.toBeNull()
     expect(surface).toHaveAttribute('data-has-question', 'true')
     // Capped and scrolling inside itself, so it cannot take the transcript's height or push the
     // send button -- which confirms a chosen option -- off the panel.

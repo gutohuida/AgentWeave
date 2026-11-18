@@ -6,6 +6,7 @@ import type { AgentConversation } from '@/api/agentChat'
 import { useConfigStore } from '@/store/configStore'
 
 import { ControlledConversation } from './support/ControlledConversation'
+import { setComposerText } from './testUtils/composerField'
 
 let outputLines: AgentOutputLine[] = []
 let conversations: AgentConversation[] = []
@@ -58,6 +59,11 @@ vi.mock('@/api/queue', () => ({
   withdrawQueueEntry: vi.fn(),
 }))
 
+// The composer's @ menu lists the project's documents (reference-a-spec-in-a-sentence-from-the-composer).
+vi.mock('@/api/spec', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/api/spec')>()),
+  useSpecDocuments: () => ({ data: { documents: [] } }),
+}))
 vi.mock('@/api/workspace', () => ({
   useWorkspacePaths: () => ({ data: [] }),
 }))
@@ -241,9 +247,7 @@ describe('agent conversation handoff', () => {
       />,
     )
 
-    fireEvent.change(screen.getByRole('textbox'), {
-      target: { value: 'Continue implementing the feature.' },
-    })
+    setComposerText(screen.getByRole('textbox'), 'Continue implementing the feature.')
     fireEvent.click(screen.getByRole('button', { name: 'Send message' }))
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1))

@@ -4,6 +4,7 @@ import type { AgentSummary } from '@/api/agents'
 import type { AgentConversation, ChatHistoryResponse, TimelineEntry } from '@/api/agentChat'
 import { useConfigStore } from '@/store/configStore'
 import { AgentOutputPanel } from '@/components/agents/AgentOutputPanel'
+import { setComposerText, composerText } from './testUtils/composerField'
 
 let recordedEntries: TimelineEntry[] = []
 
@@ -68,6 +69,11 @@ vi.mock('@/api/queue', () => ({
   withdrawQueueEntry: vi.fn(),
 }))
 
+// The composer's @ menu lists the project's documents (reference-a-spec-in-a-sentence-from-the-composer).
+vi.mock('@/api/spec', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/api/spec')>()),
+  useSpecDocuments: () => ({ data: { documents: [] } }),
+}))
 vi.mock('@/api/workspace', () => ({
   useWorkspacePaths: () => ({ data: [] }),
 }))
@@ -149,14 +155,14 @@ describe('running-agent composer', () => {
     await waitFor(() =>
       expect(screen.getByTestId('session-continuity')).toHaveTextContent(conversation.title as string),
     )
-    expect(composer).toBeEnabled()
+    expect(composer).toHaveAttribute('contenteditable', 'true')
 
-    fireEvent.change(composer, { target: { value: 'First follow-up' } })
+    setComposerText(composer, 'First follow-up')
     expect(send).toBeEnabled()
     fireEvent.click(send)
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1))
-    await waitFor(() => expect(composer).toHaveValue(''))
+    await waitFor(() => expect(composerText(composer)).toBe(''))
     expect(triggerBody(0)).toEqual({
       agent: 'claude',
       message: 'First follow-up',
@@ -169,7 +175,7 @@ describe('running-agent composer', () => {
     expect(await screen.findByText('First follow-up')).toBeInTheDocument()
     expect(screen.getAllByText('queued')).toHaveLength(1)
 
-    fireEvent.change(composer, { target: { value: 'Second follow-up' } })
+    setComposerText(composer, 'Second follow-up')
     fireEvent.click(send)
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2))
     expect(triggerBody(1)).toEqual({
@@ -199,16 +205,16 @@ describe('running-agent composer', () => {
 
     render(<AgentOutputPanel agent={idleAgent} conversationId={conversation.id} />)
     const composer = screen.getByRole('textbox')
-    fireEvent.change(composer, { target: { value: 'Please preserve this draft' } })
+    setComposerText(composer, 'Please preserve this draft')
     fireEvent.click(screen.getByRole('button', { name: 'Send message' }))
 
-    expect(composer).toHaveValue('')
-    expect(composer).toBeDisabled()
+    expect(composerText(composer)).toBe('')
+    expect(composer).toHaveAttribute('aria-disabled', 'true')
 
     finishRequest(new Response('failed', { status: 503 }))
 
-    await waitFor(() => expect(composer).toHaveValue('Please preserve this draft'))
-    expect(composer).toBeEnabled()
+    await waitFor(() => expect(composerText(composer)).toBe('Please preserve this draft'))
+    expect(composer).toHaveAttribute('contenteditable', 'true')
     // Unchanged by F108, and that is deliberate: `readableRefusal` renders the Hub's own words
     // only when the body is a structured refusal. A bare 503 whose body is the word "failed" is
     // not one, so the generic sentence stands rather than putting a stray token in front of a
@@ -228,7 +234,7 @@ describe('running-agent composer', () => {
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined)
 
     render(<AgentOutputPanel agent={idleAgent} conversationId={conversation.id} />)
-    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'Review it' } })
+    setComposerText(screen.getByRole('textbox'), 'Review it')
     fireEvent.click(screen.getByRole('button', { name: 'Send message' }))
 
     await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent(refusal))
@@ -241,7 +247,7 @@ describe('running-agent composer', () => {
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined)
 
     render(<AgentOutputPanel agent={idleAgent} conversationId={conversation.id} />)
-    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'Anything' } })
+    setComposerText(screen.getByRole('textbox'), 'Anything')
     fireEvent.click(screen.getByRole('button', { name: 'Send message' }))
 
     await waitFor(() =>
