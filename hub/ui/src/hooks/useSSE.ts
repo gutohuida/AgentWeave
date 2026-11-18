@@ -122,6 +122,10 @@ let reconnectTimer: ReturnType<typeof setTimeout> | null = null
 let connectedUrl = ''
 let connectedKey = ''
 let hasEverConnected = false
+/** When the stream last went down; a reconnect inside RECONNECT_GRACE_MS of that (a page swap that
+ *  unmounts and remounts the last subscriber) missed nothing worth a full re-read. */
+let streamDownAt = 0
+const RECONNECT_GRACE_MS = 2000
 let subscriberCount = 0
 let connectingUrl = ''
 let connectingKey = ''
@@ -199,6 +203,7 @@ export function cancelReconnect(): void {
   if (activeStream) {
     activeStream.cancel()
     activeStream = null
+    streamDownAt = Date.now()
   }
   connectedUrl = ''
   connectedKey = ''
@@ -218,6 +223,7 @@ export function __resetSSEStateForTest(): void {
   listeners.clear()
   reconnectListeners.clear()
   hasEverConnected = false
+  streamDownAt = 0
   subscriberCount = 0
   eventBuffer.length = 0
   IDLE_TIMEOUT_MS = 40_000
@@ -288,6 +294,7 @@ async function connect(hubUrl: string, apiKey: string): Promise<void> {
   if (activeStream) {
     activeStream.cancel()
     activeStream = null
+    streamDownAt = Date.now()
   }
   setConnectionState(hasEverConnected ? 'reconnecting' : 'connecting')
   const generation = ++connectGeneration
@@ -367,7 +374,7 @@ async function connect(hubUrl: string, apiKey: string): Promise<void> {
   // connect is NOT a reconnect — it's the initial subscription. Subscribers
   // (e.g. useAgentOutput) use this to schedule a one-shot reconciliation
   // poll to catch up on events that arrived while the stream was down.
-  if (hasEverConnected) {
+  if (hasEverConnected && Date.now() - streamDownAt > RECONNECT_GRACE_MS) {
     fireReconnect()
   }
   hasEverConnected = true
@@ -416,6 +423,7 @@ async function connect(hubUrl: string, apiKey: string): Promise<void> {
     } finally {
       clearInterval(idleTimer)
       if (!cancelled) {
+        streamDownAt = Date.now() - RECONNECT_GRACE_MS
         // Stream ended unexpectedly → schedule reconnect
         if (activeStream && activeStream.cancel === cancel) {
           activeStream = null
