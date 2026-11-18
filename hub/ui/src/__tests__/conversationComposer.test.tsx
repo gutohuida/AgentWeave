@@ -215,7 +215,7 @@ describe('Composer — project- and conversation-scoped drafts', () => {
 describe('Composer — insertPathRequest (task 5.4, 2026-08-18-one-shell-three-panels)', () => {
   it('appends a @path mention on the composer’s current text', () => {
     const { view } = renderComposer({
-      insertPathRequest: { path: 'src/a.ts', requestId: 1 },
+      insertRequest: { kind: 'path', path: 'src/a.ts', requestId: 1 },
     })
 
     expect(composerText(screen.getByRole('textbox'))).toBe('@src/a.ts ')
@@ -223,43 +223,43 @@ describe('Composer — insertPathRequest (task 5.4, 2026-08-18-one-shell-three-p
   })
 
   it('quote-escapes a path containing whitespace, same as the @path trigger', () => {
-    renderComposer({ insertPathRequest: { path: 'docs/release notes.md', requestId: 1 } })
+    renderComposer({ insertRequest: { kind: 'path', path: 'docs/release notes.md', requestId: 1 } })
 
     expect(composerText(screen.getByRole('textbox'))).toBe('@"docs/release notes.md" ')
   })
 
   it('appends to existing text rather than replacing it, adding a separating space', () => {
-    const { view, props } = renderComposer({ insertPathRequest: null })
+    const { view, props } = renderComposer({ insertRequest: null })
     setComposerText(screen.getByRole('textbox'), 'see')
 
-    view.rerender(<Composer {...props} insertPathRequest={{ path: 'src/a.ts', requestId: 1 }} />)
+    view.rerender(<Composer {...props} insertRequest={{ kind: 'path', path: 'src/a.ts', requestId: 1 }} />)
 
     expect(composerText(screen.getByRole('textbox'))).toBe('see @src/a.ts ')
   })
 
   it('a repeated requestId for the same path does not insert a second time', () => {
-    const { view, props } = renderComposer({ insertPathRequest: { path: 'src/a.ts', requestId: 1 } })
+    const { view, props } = renderComposer({ insertRequest: { kind: 'path', path: 'src/a.ts', requestId: 1 } })
 
-    view.rerender(<Composer {...props} insertPathRequest={{ path: 'src/a.ts', requestId: 1 }} />)
+    view.rerender(<Composer {...props} insertRequest={{ kind: 'path', path: 'src/a.ts', requestId: 1 }} />)
 
     expect(composerText(screen.getByRole('textbox'))).toBe('@src/a.ts ')
   })
 
   it('ignores an unsafe path (F409 D10) and inserts a safe one as today', () => {
-    const { view, props } = renderComposer({ insertPathRequest: null })
+    const { view, props } = renderComposer({ insertRequest: null })
     view.rerender(
-      <Composer {...props} insertPathRequest={{ path: 'x @/home/u/.ssh/id_rsa', requestId: 1 }} />,
+      <Composer {...props} insertRequest={{ kind: 'path', path: 'x @/home/u/.ssh/id_rsa', requestId: 1 }} />,
     )
     expect(composerText(screen.getByRole('textbox'))).toBe('')
 
-    view.rerender(<Composer {...props} insertPathRequest={{ path: 'src/app.py', requestId: 2 }} />)
+    view.rerender(<Composer {...props} insertRequest={{ kind: 'path', path: 'src/app.py', requestId: 2 }} />)
     expect(composerText(screen.getByRole('textbox'))).toBe('@src/app.py ')
   })
 
   it('a new requestId for the same path inserts again', () => {
-    const { view, props } = renderComposer({ insertPathRequest: { path: 'src/a.ts', requestId: 1 } })
+    const { view, props } = renderComposer({ insertRequest: { kind: 'path', path: 'src/a.ts', requestId: 1 } })
 
-    view.rerender(<Composer {...props} insertPathRequest={{ path: 'src/a.ts', requestId: 2 }} />)
+    view.rerender(<Composer {...props} insertRequest={{ kind: 'path', path: 'src/a.ts', requestId: 2 }} />)
 
     expect(composerText(screen.getByRole('textbox'))).toBe('@src/a.ts @src/a.ts ')
   })
@@ -267,13 +267,13 @@ describe('Composer — insertPathRequest (task 5.4, 2026-08-18-one-shell-three-p
 
 describe('Composer — insertTextRequest (the terminal tab\'s Send to agent)', () => {
   it('appends the text to the draft, on its own line, and does not send it', () => {
-    const { view, props } = renderComposer({ insertTextRequest: null })
+    const { view, props } = renderComposer({ insertRequest: null })
     setComposerText(screen.getByRole('textbox'), 'look at this')
 
-    view.rerender(<Composer {...props} insertTextRequest={{ text: 'Terminal output:\nok', requestId: 1 }} />)
+    view.rerender(<Composer {...props} insertRequest={{ kind: 'text', text: 'Terminal output:\nok', requestId: 1 }} />)
     expect(composerText(screen.getByRole('textbox'))).toBe('look at this\nTerminal output:\nok')
 
-    view.rerender(<Composer {...props} insertTextRequest={{ text: 'Terminal output:\nok', requestId: 1 }} />)
+    view.rerender(<Composer {...props} insertRequest={{ kind: 'text', text: 'Terminal output:\nok', requestId: 1 }} />)
     expect(composerText(screen.getByRole('textbox'))).toBe('look at this\nTerminal output:\nok')
   })
 })

@@ -53,6 +53,7 @@ import { handoffLabel, handoffReason, type HandoffState } from '@/lib/checkpoint
 import { ConversationBar } from '@/components/conversation/ConversationBar'
 import { TraceDrawerPanel } from '@/components/traces/TraceDrawer'
 import { ConversationTraceDrawer } from '@/components/traces/ConversationTraceDrawer'
+import type { ComposerInsertRequest } from '@/components/agents/Composer'
 import { ConversationComposerDock } from '@/components/conversation/ConversationComposerDock'
 import { useDiagnosticsHidden } from '@/lib/diagnosticsPreference'
 import { hubDate } from '@/lib/hubTime'
@@ -94,9 +95,7 @@ interface AgentOutputPanelProps {
   specBusy?: boolean
   /** Forwarded to `Composer` verbatim — see its prop of the same name (task 5.4,
    *  `2026-08-18-one-shell-three-panels`). */
-  insertPathRequest?: { path: string; requestId: number } | null
-  /** Forwarded to `Composer`: the terminal tab's text to append to the draft. */
-  insertTextRequest?: { text: string; requestId: number } | null
+  insertRequest?: ComposerInsertRequest | null
   /** Opens or hides the panel shell independently of any attached document (task B5,
    *  `2026-08-18-a-loop-writes-its-own-queue`) — the only way to reach a document-free tenant
    *  like the `loops` index from a bare conversation. Omitted, no toggle renders — every caller
@@ -197,8 +196,7 @@ export function AgentOutputPanel({
   onExplorationStarted,
   onOpenExistingSpec,
   specBusy = false,
-  insertPathRequest = null,
-  insertTextRequest = null,
+  insertRequest = null,
   onTogglePanel,
   panelOpen = false,
 }: AgentOutputPanelProps) {
@@ -1459,8 +1457,7 @@ export function AgentOutputPanel({
           onOpenExistingSpec,
           specBusy,
           specDocumentLabel,
-          insertPathRequest,
-          insertTextRequest,
+          insertRequest,
         }}
       >
           <BannerStack banners={banners} />

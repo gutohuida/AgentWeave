@@ -10,6 +10,8 @@ import { SpecPageHeader, type HeaderChrome } from './SpecPageHeader'
 import { SpecPanelDocSwitcher, SpecPanelNav, type PanelListProps } from './SpecPanelNav'
 import type { HeaderNotice } from './SpecNotices'
 import { Segmented } from '@/components/ui/segmented'
+import type { SpecReference } from '@/lib/specReference'
+import { SpecInsertButton } from '../SpecInsertButton'
 import '@/styles/spec-page.css'
 
 /** Everything both layouts of the page need: the document, its builds and check, the list, and
@@ -238,7 +240,7 @@ function tabFor(anchor: string): PanelTab {
 
 /** The conversation's spec panel (FR-8): the same header, actions, document, filters and builds, in
  *  one column. The outline is a menu, and the document, its tasks and its builds are tabs. */
-export function SpecSidePanel(props: SpecSurfaceProps & { onClose?: () => void; list?: PanelListProps }) {
+export function SpecSidePanel(props: SpecSurfaceProps & { onClose?: () => void; onInsert?: (spec: SpecReference) => void; list?: PanelListProps }) {
   const scroller = React.useRef<HTMLDivElement>(null)
   const [tab, setTab] = React.useState<PanelTab>(() => (props.initialAnchor ? tabFor(props.initialAnchor) : 'document'))
   const { nav, findings, running, findingAnchor, onAction } = useSurface(props, scroller)
@@ -296,6 +298,7 @@ export function SpecSidePanel(props: SpecSurfaceProps & { onClose?: () => void; 
           trailing={
             <>
               <SpecOutlineMenu doc={doc} findings={findings} builds={props.builds} active={active} onJump={jump} />
+              {props.onInsert ? <SpecInsertButton spec={{ id: doc.id, title: doc.title }} onInsert={props.onInsert} header /> : null}
               {props.onClose ? (
                 <button data-slot="icon-button" type="button" className="aw-icon-button" data-testid="spec-document-close" onClick={props.onClose} aria-label="Close document" title="Close document">
                   <Icon name="close" size={15} />

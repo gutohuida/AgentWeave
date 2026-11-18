@@ -1,4 +1,5 @@
 import { SpecPickerContainer } from './page/SpecPanelContainer'
+import type { SpecReference } from '@/lib/specReference'
 import { specTabId, usePanelTabsStore } from '@/store/panelTabsStore'
 
 interface SpecIndexTabProps {
@@ -11,6 +12,8 @@ interface SpecIndexTabProps {
   keyFor: (path: string) => string
   /** Start a new change from the conversation. */
   onNew?: () => void
+  /** Put a box for this spec in the composer; distinct from opening it. */
+  onInsert?: (spec: SpecReference) => void
 }
 
 /**
@@ -18,13 +21,14 @@ interface SpecIndexTabProps {
  * Choosing a document only opens it for **reading**, a `spec:<key>` tab; it never touches the
  * conversation's attached document. Attaching is the composer's control alone (design D9).
  */
-export function SpecIndexTab({ projectId, attachedPath, recent, keyFor, onNew }: SpecIndexTabProps) {
+export function SpecIndexTab({ projectId, attachedPath, recent, keyFor, onNew, onInsert }: SpecIndexTabProps) {
   const openTab = usePanelTabsStore((state) => state.openTab)
   return (
     <SpecPickerContainer
       attachedPath={attachedPath}
       recent={recent}
       onNew={onNew ?? (() => undefined)}
+      onInsert={onInsert}
       onOpen={(path) => openTab(projectId, specTabId(keyFor(path)))}
     />
   )

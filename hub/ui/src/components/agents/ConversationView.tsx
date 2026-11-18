@@ -28,6 +28,8 @@ import { PanelShell, type PanelTabDescriptor } from '@/components/spec/PanelShel
 import { SpecPanelContainer } from '@/components/spec/page/SpecPanelContainer'
 import { SpecDocumentPicker } from '@/components/spec/SpecDocumentPicker'
 import { SpecIndexTab } from '@/components/spec/SpecIndexTab'
+import type { ComposerInsertRequest } from '@/components/agents/Composer'
+import type { SpecReference } from '@/lib/specReference'
 import { fileIconFor } from '@/components/spec/fileIcons'
 import { buildInventory, resolveTabPath, tabKeyForNode } from '@/components/spec/specNavigation'
 import {
@@ -109,6 +111,8 @@ interface ConversationViewProps {
  * There is no agent selector here. The agent is whichever conversation the operator is in; the
  * rail is the one place that changes it.
  */
+type DistributiveOmit<T, K extends keyof never> = T extends unknown ? Omit<T, K> : never
+
 export function ConversationView({
   agent,
   conversationId,
@@ -384,20 +388,17 @@ export function ConversationView({
   // again" — a plain boolean or the raw path could not tell a second insert of the same file
   // apart from the first.
   const insertRequestCounter = useRef(0)
-  const [insertPathRequest, setInsertPathRequest] = useState<{ path: string; requestId: number } | null>(
-    null,
-  )
-  const insertIntoComposer = useCallback((path: string) => {
+  const [insertRequest, setInsertRequest] = useState<ComposerInsertRequest | null>(null)
+  const requestInsert = useCallback((request: DistributiveOmit<ComposerInsertRequest, 'requestId'>) => {
     insertRequestCounter.current += 1
-    setInsertPathRequest({ path, requestId: insertRequestCounter.current })
+    setInsertRequest({ ...request, requestId: insertRequestCounter.current })
   }, [])
-
-  const insertTextCounter = useRef(0)
-  const [insertTextRequest, setInsertTextRequest] = useState<{ text: string; requestId: number } | null>(null)
-  const sendToComposer = useCallback((text: string) => {
-    insertTextCounter.current += 1
-    setInsertTextRequest({ text, requestId: insertTextCounter.current })
-  }, [])
+  const insertIntoComposer = useCallback((path: string) => requestInsert({ kind: 'path', path }), [requestInsert])
+  const sendToComposer = useCallback((text: string) => requestInsert({ kind: 'text', text }), [requestInsert])
+  const insertSpecIntoComposer = useCallback(
+    (spec: SpecReference) => requestInsert({ kind: 'spec', spec }),
+    [requestInsert],
+  )
 
   const ownerOf = useCallback(
     (location: 'worktree' | 'root') =>
@@ -415,6 +416,7 @@ export function ConversationView({
             recent={recentPaths}
             keyFor={keyForPath}
             onNew={() => startExplorationRef.current()}
+            onInsert={insertSpecIntoComposer}
           />
         )
       }
@@ -491,6 +493,7 @@ export function ConversationView({
           attachedPath={document}
           recent={recentPaths}
           onNew={() => startExplorationRef.current()}
+          onInsert={insertSpecIntoComposer}
           onOpenDocument={(nextPath) => openTab(projectId, specTabId(keyForPath(nextPath)))}
           /* Closing this tab is reading-pane tidying, not an edit to what the agent is attached
            * to (design D9) — it closes *this* tab, and only this tab, the same as the tab strip's
@@ -517,6 +520,7 @@ export function ConversationView({
       onOpenTasks,
       insertIntoComposer,
       sendToComposer,
+      insertSpecIntoComposer,
       panelActiveTabId,
       runningItems,
       runningLoadFailed,
@@ -607,8 +611,7 @@ export function ConversationView({
         setShellOpen(projectId, false)
       }}
       specBusy={createDocument.isPending}
-      insertPathRequest={insertPathRequest}
-      insertTextRequest={insertTextRequest}
+      insertRequest={insertRequest}
       onTogglePanel={() => {
         const opening = !shellIsOpen
         setShellOpen(projectId, opening)
