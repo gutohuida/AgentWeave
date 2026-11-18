@@ -1,0 +1,173 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>composer box spike</title>
+<style>
+  body { font: 14px system-ui; margin: 24px; }
+  #ed { border: 1px solid #888; padding: 6px 8px; width: 420px; min-height: 20px; max-height: 120px;
+        overflow-y: auto; white-space: pre-wrap; word-break: break-word; outline: none; line-height: 20px; }
+  .box { display: inline-block; padding: 0 6px; margin: 0 1px; border-radius: 4px; background: #dde7ff;
+         border: 1px solid #7a9be0; user-select: all; white-space: nowrap; line-height: 18px; }
+  #menu { color: #a00; }
+</style>
+</head>
+<body>
+<div id="ed" contenteditable="true" spellcheck="false"></div>
+<div id="menu"></div>
+<script>
+// mode=native : the box is a contenteditable=false span; the browser decides everything.
+// mode=guarded: same markup, plus keydown handling for Backspace/Delete/ArrowLeft/ArrowRight,
+//               a selectionchange guard, and a plain-text paste handler.
+// mode=hybrid : native keys; only the selectionchange guard and the plain-text paste handler.
+const mode = new URLSearchParams(location.search).get('mode') || 'guarded'
+const ed = document.getElementById('ed')
+const menu = document.getElementById('menu')
+
+function makeBox(id) {
+  const s = document.createElement('span')
+  s.className = 'box'
+  s.contentEditable = 'false'
+  s.dataset.ref = id
+  s.textContent = id
+  return s
+}
+
+// Serialise the field: text as-is, a box as [[id]], the caret (collapsed selection) as |.
+function serialise() {
+  const sel = getSelection()
+  let out = ''
+  const caretHere = (node, off) => sel.rangeCount && sel.isCollapsed &&
+    sel.anchorNode === node && sel.anchorOffset === off
+  function walk(node) {
+    if (node.nodeType === 3) {
+      const t = node.textContent
+      for (let i = 0; i <= t.length; i++) {
+        if (caretHere(node, i)) out += '|'
+        if (i < t.length) out += t[i]
+      }
+      return
+    }
+    if (node.classList && node.classList.contains('box')) {
+      // A caret reported inside the box is the failure we are looking for.
+      if (sel.rangeCount && node.contains(sel.anchorNode)) out += '[[' + node.dataset.ref + '<INSIDE>]]'
+      else out += '[[' + node.dataset.ref + ']]'
+      return
+    }
+    const kids = node.childNodes
+    for (let i = 0; i <= kids.length; i++) {
+      if (caretHere(node, i)) out += '|'
+      if (i < kids.length) walk(kids[i])
+    }
+  }
+  walk(ed)
+  return out.replace(/​/g, '')
+}
+
+// Put the field in a known state: text, [[id]] for a box, | for the caret.
+function load(spec) {
+  ed.innerHTML = ''
+  // The caret is a marker character so it survives merging adjacent text nodes.
+  const MARK = ''
+  for (const part of spec.replace('|', MARK).split(/(\[\[[^\]]+\]\])/)) {
+    if (!part) continue
+    const m = part.match(/^\[\[(.+)\]\]$/)
+    ed.appendChild(m ? makeBox(m[1]) : document.createTextNode(part))
+  }
+  ed.normalize()
+  ed.focus()
+  const r = document.createRange()
+  const holder = [...ed.childNodes].find((n) => n.nodeType === 3 && n.textContent.includes(MARK))
+  if (holder) {
+    const at = holder.textContent.indexOf(MARK)
+    holder.textContent = holder.textContent.replace(MARK, '')
+    if (holder.textContent === '') {
+      const idx = [...ed.childNodes].indexOf(holder); holder.remove(); r.setStart(ed, idx)
+    } else r.setStart(holder, at)
+  } else r.setStart(ed, ed.childNodes.length)
+  r.collapse(true)
+  const sel = getSelection(); sel.removeAllRanges(); sel.addRange(r)
+}
+
+// Box adjacent to a collapsed caret: returns the box element directly before/after it, or null.
+function adjacentBox(dir) {
+  const sel = getSelection()
+  if (!sel.rangeCount || !sel.isCollapsed) return null
+  let node = sel.anchorNode, off = sel.anchorOffset
+  if (node.nodeType === 3) {
+    if (dir < 0 && off > 0) return null
+    if (dir > 0 && off < node.textContent.length) return null
+    const sib = dir < 0 ? node.previousSibling : node.nextSibling
+    return sib && sib.classList && sib.classList.contains('box') ? sib : null
+  }
+  const sib = dir < 0 ? node.childNodes[off - 1] : node.childNodes[off]
+  return sib && sib.classList && sib.classList.contains('box') ? sib : null
+}
+
+function placeAround(box, after) {
+  const r = document.createRange()
+  const parent = box.parentNode
+  const idx = Array.prototype.indexOf.call(parent.childNodes, box)
+  r.setStart(parent, after ? idx + 1 : idx)
+  r.collapse(true)
+  const sel = getSelection(); sel.removeAllRanges(); sel.addRange(r)
+}
+
+if (mode === 'guarded') {
+  ed.addEventListener('keydown', (e) => {
+    if (e.isComposing) return
+    if (e.shiftKey || e.altKey || e.ctrlKey || e.metaKey) return
+    if (e.key === 'Backspace' || e.key === 'Delete') {
+      const box = adjacentBox(e.key === 'Backspace' ? -1 : 1)
+      if (!box) return
+      e.preventDefault()
+      // Select the box and let the browser delete it: a direct box.remove() bypasses the
+      // undo stack, and the next Ctrl+Z then replays a stale step (drive: 'see nownow').
+      const r = document.createRange(); r.selectNode(box)
+      const sel = getSelection(); sel.removeAllRanges(); sel.addRange(r)
+      document.execCommand('delete')
+    } else if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+      const left = e.key === 'ArrowLeft'
+      const box = adjacentBox(left ? -1 : 1)
+      if (!box) return
+      e.preventDefault()
+      placeAround(box, !left)
+    }
+  })
+}
+if (mode !== 'native') {
+  // Never let a caret rest inside a box (a click on it, a programmatic range).
+  document.addEventListener('selectionchange', () => {
+    const sel = getSelection()
+    if (!sel.rangeCount || !sel.isCollapsed) return
+    const n = sel.anchorNode
+    const el = n && (n.nodeType === 3 ? n.parentElement : n)
+    const box = el && el.closest && el.closest('#ed .box')
+    if (box) placeAround(box, true)
+  })
+  ed.addEventListener('paste', (e) => {
+    e.preventDefault()
+    const text = e.clipboardData.getData('text/plain')
+    document.execCommand('insertText', false, text)
+  })
+}
+
+// '@' trigger: the text immediately before the caret, back to whitespace or a box, starts with @.
+ed.addEventListener('input', () => {
+  const sel = getSelection()
+  let q = null
+  if (sel.rangeCount && sel.isCollapsed && sel.anchorNode.nodeType === 3) {
+    const before = sel.anchorNode.textContent.slice(0, sel.anchorOffset)
+    const m = before.match(/(?:^|\s)@(\S*)$/)
+    if (m) q = m[1]
+  }
+  menu.textContent = q === null ? '' : 'trigger:@' + q
+})
+
+window.spike = { load, serialise, mode, insertBox(id) {
+  const sel = getSelection(); const r = sel.getRangeAt(0)
+  const box = makeBox(id); r.insertNode(box); placeAround(box, true)
+} }
+</script>
+</body>
+</html>
