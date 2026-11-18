@@ -111,6 +111,40 @@ def ok(label, cond, detail=""):
         raise StepError(f"{label}" + (f" -- {detail}" if detail else ""))
 
 
+#: The document's criteria this drive checks, in the order the steps reach them, with the
+#: requirement each serves. A criterion is *reached* when its own assertions run: a step's setup
+#: failing first leaves the criteria after it unreached, and the summary says so.
+CHECKS = [
+    ("ac-two-tasks-at-once", "FR-3"),
+    ("ac-flow-two-offers", "FR-4"),
+    ("ac-two-chats", "FR-9"),
+    ("ac-separate-trees", "FR-8"),
+    ("ac-thread-branch", "FR-13"),
+    ("ac-thread-visible", "FR-17"),
+    ("ac-conversation-serial", "FR-6"),
+    ("ac-stop-one", "FR-10"),
+]
+
+
+def criterion(state, key, fn):
+    """Run one criterion's assertions; its first failing one is recorded, not raised, so the
+    step's other criteria still run."""
+    try:
+        fn()
+    except StepError as exc:
+        state.setdefault("checks", {})[key] = (False, str(exc))
+        print(f"  -> {key} failed")
+    else:
+        state.setdefault("checks", {})[key] = (True, "")
+        print(f"  -> {key} held")
+
+
+def raise_failed(state, keys):
+    bad = [f"{k}: {state['checks'][k][1]}" for k in keys if not state["checks"].get(k, (1,))[0]]
+    if bad:
+        raise StepError("; ".join(bad))
+
+
 def git(*args):
     r = subprocess.run(
         ["git", "-C", ROOT, *args],
@@ -457,11 +491,24 @@ def step_flow(state):
     seen = wait_until("both task runs running", both_running, timeout=240)
     rows = runs(f"task_id in {ids_sql([t1, t2])}")
     state["flow_runs"] = [r["id"] for r in rows]
-    ok(
-        "two runs of the one profile are running at once, one per task",
-        bool(seen),
-        "runs: " + str([(r["task_id"], r["status"]) for r in rows]),
-    )
+
+    def two_at_once():
+        ok(
+            "two runs of the one profile are running at once, one per task",
+            bool(seen),
+            "runs: " + str([(r["task_id"], r["status"]) for r in rows]),
+        )
+
+    def two_offers():
+        ok(
+            "one flow firing started both of the builder's tasks",
+            {r["task_id"] for r in rows} == {t1, t2} and bool(seen),
+            "runs: " + str([(r["task_id"], r["status"]) for r in rows]),
+        )
+
+    criterion(state, "ac-two-tasks-at-once", two_at_once)
+    criterion(state, "ac-flow-two-offers", two_offers)
+    raise_failed(state, ("ac-two-tasks-at-once", "ac-flow-two-offers"))
 
 
 def step_chats(state):
@@ -471,90 +518,135 @@ def step_chats(state):
     out_b = trigger(held_turn(names["B"], "chat B"))
     state["chat_A"], state["chat_B"] = out_a["conversation_id"], out_b["conversation_id"]
     ok("two new chats are two conversations", state["chat_A"] != state["chat_B"])
-    ok(
-        "chat B starts at once while chat A runs (not queued)",
-        out_b.get("status") == "running" and out_b.get("run_id"),
-        f"status={out_b.get('status')!r} waiting_reason={out_b.get('waiting_reason')!r}",
-    )
-    ids = [out_a["run_id"], out_b["run_id"]]
 
-    def both_running():
-        rows = runs(f"id in {ids_sql(ids)} and status = 'running'")
-        return rows if len(rows) == 2 else None
+    def two_chats():
+        ok(
+            "chat B starts at once while chat A runs (not queued)",
+            out_b.get("status") == "running" and out_b.get("run_id"),
+            f"status={out_b.get('status')!r} waiting_reason={out_b.get('waiting_reason')!r}",
+        )
+        ids = [out_a["run_id"], out_b["run_id"]]
 
-    ok(
-        "both chats' runs are running together",
-        bool(wait_until("both chats running", both_running, 60)),
-    )
+        def both_running():
+            rows = runs(f"id in {ids_sql(ids)} and status = 'running'")
+            return rows if len(rows) == 2 else None
+
+        ok(
+            "both chats' runs are running together",
+            bool(wait_until("both chats running", both_running, 60)),
+        )
+
+    criterion(state, "ac-two-chats", two_chats)
+
+    # Whether chat B ran at once or waited its turn, both chats have a writing turn before the
+    # worktree, branch and Changes checks below read what those turns left -- so those checks
+    # reach their own assertions even where chat B was queued.
+    def chat_run(conv):
+        rows = runs(f"conversation_id = {lit(conv)}")
+        return rows[0]["id"] if rows else None
+
+    ids = [
+        wait_until(f"a run of {conv}", lambda c=conv: chat_run(c), HOLD_SECONDS * 4 + 300)
+        for conv in (state["chat_A"], state["chat_B"])
+    ]
+    ok("both chats got a run", all(ids), str(ids))
     ended = wait_ended(ids)
     ok(
         "both chat turns completed",
         all(r["status"] == "completed" for r in ended),
         str([(r["conversation_id"], r["status"]) for r in ended]),
     )
-
     seen_trees = {}
-    for key, conv in (("A", state["chat_A"]), ("B", state["chat_B"])):
+    for key in ("A", "B"):
         trees = holding(names[key])
         ok(
-            f"chat {key}'s file is in exactly one worktree",
-            len(trees) == 1,
+            f"chat {key}'s file is in a worktree",
+            bool(trees),
             str([(w["path"], w["branch"]) for w in trees]),
         )
-        tree = trees[0]
-        seen_trees[key] = tree
-        branch = tree["branch"] or ""
+        seen_trees[key] = trees
+
+    def separate_trees():
+        for key in ("A", "B"):
+            ok(
+                f"chat {key}'s file is in exactly one worktree",
+                len(seen_trees[key]) == 1,
+                str([(w["path"], w["branch"]) for w in seen_trees[key]]),
+            )
+        a, b = seen_trees["A"][0], seen_trees["B"][0]
         ok(
-            f"chat {key}'s worktree is on a thread branch of {AGENT}",
-            branch.startswith(f"thread/{AGENT}/"),
-            f"{tree['path']} on {branch or 'no branch'}",
+            "the two chats worked in different worktrees on different branches",
+            a["path"] != b["path"] and a["branch"] != b["branch"],
+            f"A {a['path']} on {a['branch']}; B {b['path']} on {b['branch']}",
         )
+        for key, other in (("A", "B"), ("B", "A")):
+            tree = seen_trees[other][0]["path"]
+            ok(
+                f"chat {key}'s file is not visible in chat {other}'s tree",
+                not (pathlib.Path(tree) / names[key]).exists(),
+                tree,
+            )
+
+    criterion(state, "ac-separate-trees", separate_trees)
+
+    def thread_branch():
+        for key, conv in (("A", state["chat_A"]), ("B", state["chat_B"])):
+            tree = seen_trees[key][0]
+            branch = tree["branch"] or ""
+            ok(
+                f"chat {key}'s worktree is on a thread branch of {AGENT}",
+                branch.startswith(f"thread/{AGENT}/"),
+                f"{tree['path']} on {branch or 'no branch'}",
+            )
+            ok(
+                f"chat {key}'s worktree is not the project's own checkout",
+                pathlib.Path(tree["path"]).resolve() != pathlib.Path(ROOT).resolve(),
+                tree["path"],
+            )
+            _, first = git("rev-list", "--reverse", f"{MAIN}..{branch}")
+            first = first.splitlines()[0] if first else ""
+            _, parent = git("rev-parse", f"{first}^") if first else (1, "")
+            ok(
+                f"{branch} was created from {MAIN}'s head",
+                first and parent == master_head,
+                f"first commit {first[:12]} parent {parent[:12]}, {MAIN} was {master_head[:12]}",
+            )
+            run = next(r for r in ended if r["conversation_id"] == conv)
+            sha = run.get("snapshot_commit_sha") or ""
+            _, holders = (
+                git("branch", "--contains", sha, "--format=%(refname:short)") if sha else (1, "")
+            )
+            ok(
+                f"chat {key}'s end-of-turn commit is on {branch} only",
+                sha and holders.split() == [branch],
+                f"{sha[:12]} on {holders.split()}",
+            )
+
+    criterion(state, "ac-thread-branch", thread_branch)
+
+    def thread_visible():
+        for key, conv in (("A", state["chat_A"]), ("B", state["chat_B"])):
+            branch = seen_trees[key][0]["branch"]
+            changes = must(f"chat {key}'s Changes view", "GET", f"~/conversations/{conv}/changes")
+            turn_files = [f.get("path") for f in changes.get("turn") or []]
+            ok(
+                f"chat {key}'s Changes view shows a thread branch of {AGENT} and its own file",
+                (changes.get("branch") or "").startswith(f"thread/{AGENT}/")
+                and changes.get("branch") == branch
+                and names[key] in turn_files,
+                f"branch={changes.get('branch')!r} worktree branch={branch!r} turn={turn_files}",
+            )
+        listing = must("worktree listing", "GET", "~/worktrees")
+        branches = {w.get("branch") for w in listing.get("worktrees") or []}
         ok(
-            f"chat {key}'s worktree is not the project's own checkout",
-            pathlib.Path(tree["path"]).resolve() != pathlib.Path(ROOT).resolve(),
-            tree["path"],
+            "the worktree listing includes two thread worktrees of the profile",
+            len({b for b in branches if b and b.startswith(f"thread/{AGENT}/")}) >= 2,
+            str(sorted(b for b in branches if b)),
         )
-        _, first = git("rev-list", "--reverse", f"{MAIN}..{branch}")
-        first = first.splitlines()[0] if first else ""
-        _, parent = git("rev-parse", f"{first}^") if first else (1, "")
-        ok(
-            f"{branch} was created from {MAIN}'s head",
-            first and parent == master_head,
-            f"first commit {first[:12]} parent {parent[:12]}, {MAIN} was {master_head[:12]}",
-        )
-        run = next(r for r in ended if r["conversation_id"] == conv)
-        sha = run.get("snapshot_commit_sha") or ""
-        _, holders = (
-            git("branch", "--contains", sha, "--format=%(refname:short)") if sha else (1, "")
-        )
-        ok(
-            f"chat {key}'s end-of-turn commit is on {branch} only",
-            sha and holders.split() == [branch],
-            f"{sha[:12]} on {holders.split()}",
-        )
-        changes = must(f"chat {key}'s Changes view", "GET", f"~/conversations/{conv}/changes")
-        turn_files = [f.get("path") for f in changes.get("turn") or []]
-        ok(
-            f"chat {key}'s Changes view shows its own branch and file",
-            changes.get("branch") == branch and names[key] in turn_files,
-            f"branch={changes.get('branch')!r} turn={turn_files}",
-        )
-    ok(
-        "the two chats worked in different worktrees on different branches",
-        seen_trees["A"]["path"] != seen_trees["B"]["path"]
-        and seen_trees["A"]["branch"] != seen_trees["B"]["branch"],
-    )
-    for key, other in (("A", "B"), ("B", "A")):
-        ok(
-            f"chat {key}'s file is not visible in chat {other}'s tree",
-            not (pathlib.Path(seen_trees[other]["path"]) / names[key]).exists(),
-        )
-    listing = must("worktree listing", "GET", "~/worktrees")
-    branches = {w.get("branch") for w in listing.get("worktrees") or []}
-    ok(
-        "the worktree listing includes both thread worktrees with their branches",
-        {seen_trees["A"]["branch"], seen_trees["B"]["branch"]} <= branches,
-        str(sorted(b for b in branches if b)),
+
+    criterion(state, "ac-thread-visible", thread_visible)
+    raise_failed(
+        state, ("ac-two-chats", "ac-separate-trees", "ac-thread-branch", "ac-thread-visible")
     )
 
 
@@ -571,68 +663,79 @@ def step_serial(state):
         first.get("status") == "running",
         str(first.get("status")),
     )
-    second = trigger(held_turn(f"serial2_{RUN}.txt", "second"), conversation_id=conv)
-    ok(
-        "a second message to the running chat waits",
-        second.get("status") == "queued",
-        f"status={second.get('status')!r} run_id={second.get('run_id')!r}",
-    )
-    peak, first_end, second_start = 0, None, None
-    end = time.time() + 900
-    while time.time() < end:
-        rows = runs(
-            f"conversation_id = {lit(conv)} and id != {lit(first['run_id'])} "
-            f"and started_at >= (select started_at from runs where id = "
-            f"{lit(first['run_id'])})"
+
+    def serial():
+        second = trigger(held_turn(f"serial2_{RUN}.txt", "second"), conversation_id=conv)
+        ok(
+            "a second message to the running chat waits",
+            second.get("status") == "queued",
+            f"status={second.get('status')!r} run_id={second.get('run_id')!r}",
         )
-        mine = runs(f"id = {lit(first['run_id'])}") + rows
-        peak = max(peak, sum(1 for r in mine if r["status"] == "running"))
-        if mine[0]["status"] != "running" and first_end is None:
-            first_end = mine[0]["ended_at"]
-        if rows and second_start is None:
-            second_start = rows[0]["started_at"]
-        if rows and all(r["status"] != "running" for r in mine):
-            break
-        time.sleep(3)
-    ok("never two running runs of that chat", peak <= 1, f"peak={peak}")
-    ok(
-        "the second turn started only after the first ended",
-        bool(second_start and first_end and str(second_start) >= str(first_end)),
-        f"first ended {first_end}, second started {second_start}",
-    )
+        peak, first_end, second_start = 0, None, None
+        end = time.time() + 900
+        while time.time() < end:
+            rows = runs(
+                f"conversation_id = {lit(conv)} and id != {lit(first['run_id'])} "
+                f"and started_at >= (select started_at from runs where id = "
+                f"{lit(first['run_id'])})"
+            )
+            mine = runs(f"id = {lit(first['run_id'])}") + rows
+            peak = max(peak, sum(1 for r in mine if r["status"] == "running"))
+            if mine[0]["status"] != "running" and first_end is None:
+                first_end = mine[0]["ended_at"]
+            if rows and second_start is None:
+                second_start = rows[0]["started_at"]
+            if rows and all(r["status"] != "running" for r in mine):
+                break
+            time.sleep(3)
+        ok("never two running runs of that chat", peak <= 1, f"peak={peak}")
+        ok(
+            "the second turn started only after the first ended",
+            bool(second_start and first_end and str(second_start) >= str(first_end)),
+            f"first ended {first_end}, second started {second_start}",
+        )
+
+    criterion(state, "ac-conversation-serial", serial)
+    raise_failed(state, ("ac-conversation-serial",))
 
 
 def step_stop(state):
-    older = trigger(held_turn(f"stopC_{RUN}.txt", "chat C"))
-    newer = trigger(held_turn(f"stopD_{RUN}.txt", "chat D"))
-    ids = [older.get("run_id"), newer.get("run_id")]
-    ok(
-        "two chats are running",
-        all(ids) and newer.get("status") == "running",
-        f"older={older.get('status')!r} newer={newer.get('status')!r} "
-        f"waiting_reason={newer.get('waiting_reason')!r}",
-    )
-    wait_until(
-        "both running", lambda: len(runs(f"id in {ids_sql(ids)} and status = 'running'")) == 2, 60
-    )
-    time.sleep(10)
-    code, out = api(
-        "POST",
-        f"~/agent/{AGENT}/stop?run_id={ids[0]}&conversation_id=" f"{older['conversation_id']}",
-        {"run_id": ids[0], "conversation_id": older["conversation_id"]},
-    )
-    print(f"  stop the older run {ids[0]}: {code} {json.dumps(out, default=str)[:300]}")
-    ended = {r["id"]: r["status"] for r in wait_ended(ids)}
-    ok(
-        "the chosen run ended stopped",
-        ended.get(ids[0]) == "stopped",
-        f"{ids[0]}: {ended.get(ids[0])}",
-    )
-    ok(
-        "the other run ended completed",
-        ended.get(ids[1]) == "completed",
-        f"{ids[1]}: {ended.get(ids[1])}",
-    )
+    def stop_one():
+        older = trigger(held_turn(f"stopC_{RUN}.txt", "chat C"))
+        newer = trigger(held_turn(f"stopD_{RUN}.txt", "chat D"))
+        ids = [older.get("run_id"), newer.get("run_id")]
+        ok(
+            "two chats are running",
+            all(ids) and newer.get("status") == "running",
+            f"older={older.get('status')!r} newer={newer.get('status')!r} "
+            f"waiting_reason={newer.get('waiting_reason')!r}",
+        )
+        wait_until(
+            "both running",
+            lambda: len(runs(f"id in {ids_sql(ids)} and status = 'running'")) == 2,
+            60,
+        )
+        time.sleep(10)
+        code, out = api(
+            "POST",
+            f"~/agent/{AGENT}/stop?run_id={ids[0]}&conversation_id=" f"{older['conversation_id']}",
+            {"run_id": ids[0], "conversation_id": older["conversation_id"]},
+        )
+        print(f"  stop the older run {ids[0]}: {code} {json.dumps(out, default=str)[:300]}")
+        ended = {r["id"]: r["status"] for r in wait_ended(ids)}
+        ok(
+            "the chosen run ended stopped",
+            ended.get(ids[0]) == "stopped",
+            f"{ids[0]}: {ended.get(ids[0])}",
+        )
+        ok(
+            "the other run ended completed",
+            ended.get(ids[1]) == "completed",
+            f"{ids[1]}: {ended.get(ids[1])}",
+        )
+
+    criterion(state, "ac-stop-one", stop_one)
+    raise_failed(state, ("ac-stop-one",))
 
 
 STEPS = [
@@ -674,6 +777,16 @@ def cmd_run(keep_going):
             code, _ = api("PUT", "~/settings", {SWITCH: bool(state.get("switch_before"))})
             print(f"  {SWITCH} restored to {bool(state.get('switch_before'))}: {code}")
     head("RESULT")
+    checks = state.get("checks", {})
+    for key, req in CHECKS:
+        if key in checks:
+            held, why = checks[key]
+            print(
+                f"  check {key}: reached=yes failed_at_assertion={'no' if held else 'yes'} "
+                f"-- {req}: " + ("held" if held else why)
+            )
+        else:
+            print(f"  check {key}: reached=no failed_at_assertion=no -- {req}: not reached")
     if not failures:
         print("  every step held")
         return 0
