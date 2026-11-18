@@ -43,12 +43,12 @@ const LIVE_REFRESH_MS = 5000
 
 /** The figures of each build, by build id. A running build is read again every few seconds (its
  *  numbers move as it works); a finished one is read once. */
-export function useBuildFigures(builds: SpecBuild[]): Record<string, BuildFigures | undefined> {
+export function useBuildFigures(builds: Array<Pick<SpecBuild, 'id' | 'state'>>):Record<string, BuildFigures | undefined> {
   const { isConfigured, selectedProjectId: projectId } = useConfigStore()
   const results = useQueries({
     queries: builds.map((build) => ({
       queryKey: ['project', projectId, 'buildFigures', build.id],
-      queryFn: () => getJson<BuildFigures>(`/api/v1/projects/${projectId}/project/builds/${build.id}/figures`),
+      queryFn: () => getJson<BuildFigures>(`/api/v1/projects/${projectId}/project/builds/${build.id}/figures`, { first: true }),
       enabled: isConfigured && !!projectId,
       refetchInterval: build.state === 'running' ? LIVE_REFRESH_MS : false,
     })),

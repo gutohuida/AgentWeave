@@ -43,7 +43,7 @@ export function useCorpusState() {
   const { isConfigured, selectedProjectId: projectId } = useConfigStore()
   return useQuery<CorpusState>({
     queryKey: ['project', projectId, 'corpus'],
-    queryFn: () => getJson<CorpusState>(`/api/v1/projects/${projectId}/project/corpus`),
+    queryFn: () => getJson<CorpusState>(`/api/v1/projects/${projectId}/project/corpus`, { background: true }),
     enabled: isConfigured && !!projectId,
   })
 }

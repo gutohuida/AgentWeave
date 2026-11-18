@@ -230,6 +230,7 @@ export function useBuildRetrospectives(path: string) {
       (
         await getJson<{ retrospectives: BuildRetrospective[] }>(
           `/api/v1/projects/${projectId}/manager/jobs/build-retrospective/retrospectives?path=${encodeURIComponent(path)}`,
+          { background: true },
         )
       ).retrospectives,
     enabled: isConfigured && !!projectId && !!path,

@@ -1,0 +1,1 @@
+import{u as r,j as a,aj as u,dj as l}from"./index-CMqNTEOf.js";function j({document:n,identifier:o,children:i="history",testId:s}){const e=r(t=>t.selectedProjectId);return e?a.jsx("button",{type:"button",className:"aw-link aw-link-inline","data-testid":s,onClick:t=>{t.stopPropagation(),u(l(e,n,o))},children:i}):null}export{j as R};

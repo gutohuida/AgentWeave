@@ -158,12 +158,17 @@ async def list_specs(
         for document in await spec_lifecycle.list_documents(session, project_id)
     }
     shown = await spec_lifecycle.display_phases(session, list(tracked.values()))
+    # The open page starts the build's reads from the entry, ahead of the heavier document reads.
+    latest = await work_tally.latest_builds(session, project_id)
     specs = [
         {
             **entry,
             "phase": tracked[entry["path"]].phase if entry["path"] in tracked else None,
             "display_phase": shown[tracked[entry["path"]].id] if entry["path"] in tracked else None,
             "document_id": tracked[entry["path"]].id if entry["path"] in tracked else None,
+            "last_build": (
+                latest.get(tracked[entry["path"]].id) if entry["path"] in tracked else None
+            ),
         }
         for entry in state.specs
     ]
@@ -357,6 +362,22 @@ async def _retirement(session: AsyncSession, document) -> Dict[str, Any]:
         "absorbed_by": detail.get("absorbed_by"),
         "at": event.created_at.isoformat() if event is not None else None,
     }
+
+
+@router.get("/spec/last-build")
+async def get_spec_last_build(
+    path: str = Query(...),
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    """The newest build of one document, `{last_build: {id, state} | null}`. A light read: it
+    touches no file and walks no tree, so the open page's build strip need not wait on the
+    listing or on the document's own read."""
+    project_id, _ = project
+    document = await spec_lifecycle.get_document(session, project_id, path)
+    if document is None:
+        return {"last_build": None}
+    return {"last_build": await work_tally.latest_build_of(session, document.id)}
 
 
 @router.get("/spec")

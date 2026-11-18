@@ -248,7 +248,7 @@ export function useProjectSettings(projectId: string | null) {
   const { isConfigured } = useConfigStore()
   return useQuery<ProjectSettings>({
     queryKey: ['project', projectId, 'settings'],
-    queryFn: () => getJson<ProjectSettings>(`/api/v1/projects/${projectId}/settings`),
+    queryFn: () => getJson<ProjectSettings>(`/api/v1/projects/${projectId}/settings`, { background: true }),
     enabled: isConfigured && !!projectId,
   })
 }

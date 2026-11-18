@@ -85,7 +85,7 @@ export function useMainAgainstGitHub() {
   return useQuery<MainAgainstGitHub | null>({
     queryKey: ['project', projectId, 'mainAgainstGitHub'],
     queryFn: async () =>
-      (await getJson<{ main: MainAgainstGitHub | null }>(`/api/v1/projects/${projectId}/main/github`))
+      (await getJson<{ main: MainAgainstGitHub | null }>(`/api/v1/projects/${projectId}/main/github`, { background: true }))
         .main,
     enabled: isConfigured && !!projectId,
   })

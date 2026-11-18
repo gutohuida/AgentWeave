@@ -22,7 +22,7 @@ export function useBuildRead(buildId: string | null) {
   const { isConfigured, selectedProjectId: projectId } = useConfigStore()
   return useQuery({
     queryKey: buildReadKey(projectId, buildId ?? ''),
-    queryFn: () => getJson<BuildRead>(readUrl(projectId, buildId ?? '')),
+    queryFn: () => getJson<BuildRead>(readUrl(projectId, buildId ?? ''), { first: true }),
     enabled: isConfigured && !!projectId && !!buildId,
     // Until the first answer says otherwise, the build is taken to be running.
     refetchInterval: (query) => (query.state.data && query.state.data.build.state !== 'running' ? false : BUILD_READ_REFRESH_MS),
@@ -38,7 +38,7 @@ export function useBuildReads(builds: Array<{ id: string; running: boolean }>): 
   const results = useQueries({
     queries: builds.map((build) => ({
       queryKey: buildReadKey(projectId, build.id),
-      queryFn: () => getJson<BuildRead>(readUrl(projectId, build.id)),
+      queryFn: () => getJson<BuildRead>(readUrl(projectId, build.id), { first: true }),
       enabled: isConfigured && !!projectId,
       refetchInterval: build.running ? BUILD_READ_REFRESH_MS : false,
     })),

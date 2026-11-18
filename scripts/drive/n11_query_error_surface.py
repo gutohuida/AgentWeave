@@ -147,6 +147,7 @@ CLASSIFIED: list[tuple[str, str, int, str, str, str]] = [
     ('components/questions/QuestionsPanel.tsx', 'useAgents', 1, 'BLANK', '', 'the per-agent timeout lookup (:143)'),
     ('components/settings/AppSettingsScreen.tsx', 'useHubVersion', 1, 'BLANK', '', '`if (!data?.version) return null` (:141): the version row is absent'),
     ('components/spec/SpecCoverageBar.tsx', 'useSpecCoverage', 1, 'BLANK', '', '`if (!data …) return null` (:87)'),
+    ('components/spec/page/useSpecSurface.tsx', 'useSpecLastBuild', 1, 'BLANK', '', 'only names the newest build early (:135); the list entry and the document read carry it too'),
     ('components/tasks/TaskDetailDrawer.tsx', 'useTaskIntegrationPreview', 1, 'SUPPRESSED', '', "`if (!canApprove || !data) return null` (:36) drops the 'Approving will not merge anything' warning"),
     ('components/tasks/TaskDetailDrawer.tsx', 'useAllowedTransitions', 1, 'SUPPRESSED', '', '`moves = allowed?.transitions?.[status] ?? []` (:191) — every status button disappears'),
     ('components/tasks/TaskDetailDrawer.tsx', 'useAgents', 1, 'BLANK', '', 'assignee name list (:153)'),
