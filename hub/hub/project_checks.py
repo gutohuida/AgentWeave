@@ -65,7 +65,7 @@ from typing import Any, Dict, List, Optional, Sequence, Set, Tuple
 from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from . import check_history, flaky_tests, known_failing, readable_ids, traces
+from . import check_history, flaky_tests, known_failing, quarantine, readable_ids, traces
 from .db.engine import async_session_factory
 from .db.models import Project, Run, Task, TaskCheckRun, TaskTransition
 from .subprocess_windows import no_console_kwargs
@@ -1224,7 +1224,8 @@ async def passes_on_tree(session: AsyncSession, project_id: str, tree: str) -> D
             digest = result.get("check_digest") if isinstance(result, dict) else None
             if not digest or digest in found or result.get("tree") != tree:
                 continue
-            if result.get("skipped") or failed(result):
+            if result.get("skipped") or failed(result) or quarantine.excused_by_quarantine(result):
+                # A pass only quarantine made is not reused: the test may have left since.
                 continue
             found[digest] = {**result, "reused_from": result.get("reused_from") or run.id}
     return found
@@ -1455,7 +1456,8 @@ def confirm_failure(
             if flaked:
                 result["flaky_tests"] = flaked
             return
-    if failed(again):
+    if failed(again) and not quarantine.only_excused_fail(again, quarantine.excused_ids(result)):
+        # A whole-check re-run failing only quarantined tests confirms nothing of the rest (FR-2).
         result["confirmed"] = attempt
         return
     first = {
@@ -2205,6 +2207,12 @@ async def _execute(
                 # known-failing list may excuse or blame (`a-check-that-cannot-run-says-so...`,
                 # FR-5, FR-6): it is recorded as it is, and the run goes on to the next check.
                 judged = failed(result) and not could_not_run(result)
+                if judged and task_id not in _superseded:
+                    # A quarantined test's failure is excused before anything is confirmed: it is
+                    # never re-run, and a check failing only those passes (`quarantine`, FR-2,
+                    # FR-3). Unreadable quarantine excuses nothing.
+                    await quarantine.excuse(project_id, check, result, changed)
+                    judged = failed(result)
                 if judged and task_id not in _superseded:
                     # Confirmed on the same tree first: only a reproduced failure stands.
                     await asyncio.to_thread(confirm_failure, check, path, result, task_id, changed)

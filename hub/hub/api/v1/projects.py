@@ -333,6 +333,12 @@ class ProjectSettings(BaseModel):
     # operator's own work (`checks-know-their-phase-and-give-way-to-the-user`, FR-5). Off by
     # default, for new and existing projects alike (FR-6).
     checks_give_way: bool = False
+    # Quarantine (`the-slow-checks-run-once-per-landing-not-once-per-task-and-flaky-tests-are-
+    # quarantined`, FR-9): a test whose flake rate, counting a flip just recorded, is above the
+    # threshold is quarantined; it leaves after this many consecutive passes. Read at each decision,
+    # so a change applies without a restart and releases or admits nothing by itself.
+    quarantine_threshold: float = Field(default=0.05, gt=0, le=1)
+    quarantine_exit_passes: int = Field(default=20, ge=1, le=1000)
     # The files a command rebuilds, which landing rebuilds instead of sending a conflict back. Null
     # is none, and every conflict sends the task back as before (FR-1, FR-2). Operator only.
     generated_files: Optional[GeneratedFiles] = None
