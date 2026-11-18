@@ -364,6 +364,22 @@ async def _retirement(session: AsyncSession, document) -> Dict[str, Any]:
     }
 
 
+@router.get("/spec/last-build")
+async def get_spec_last_build(
+    path: str = Query(...),
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    """The newest build of one document, `{last_build: {id, state} | null}`. A light read: it
+    touches no file and walks no tree, so the open page's build strip need not wait on the
+    listing or on the document's own read."""
+    project_id, _ = project
+    document = await spec_lifecycle.get_document(session, project_id, path)
+    if document is None:
+        return {"last_build": None}
+    return {"last_build": await work_tally.latest_build_of(session, document.id)}
+
+
 @router.get("/spec")
 async def get_spec(
     path: str = Query(...),

@@ -555,6 +555,23 @@ export function useSpec(path: string | null, options?: { enabled?: boolean; back
   })
 }
 
+/** The newest build of one document, from a light read that walks no tree: the page's build strip
+ *  draws from it without waiting on the list or the document's own read. */
+export function useSpecLastBuild(path: string | null) {
+  const { isConfigured, selectedProjectId: projectId } = useConfigStore()
+  return useQuery<NonNullable<SpecEntry['last_build']> | null>({
+    queryKey: ['project', projectId, 'spec', 'last-build', path],
+    queryFn: async () =>
+      (
+        await getJson<{ last_build: SpecEntry['last_build'] }>(
+          `/api/v1/projects/${projectId}/project/spec/last-build?path=${encodeURIComponent(path ?? '')}`,
+          { first: true },
+        )
+      ).last_build ?? null,
+    enabled: isConfigured && !!projectId && !!path,
+  })
+}
+
 /** A system map's proposed capabilities and their drafts (`a-project-with-no-specs-is-offered-a-start`
  *  FR-8). Read from the document route, but keyed under `specDocuments`: a draft's save, approval,
  *  archive or fold is broadcast with the draft's path, never the map's, and the list's key is the

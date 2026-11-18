@@ -10,6 +10,7 @@ import { summaryOf } from '@/components/builds/buildViewModel'
 import { readableApiError } from '@/api/client'
 import {
   useSpec,
+  useSpecLastBuild,
   useSpecCoverage,
   useSpecDocuments,
   useSpecList,
@@ -129,11 +130,13 @@ export function useSpecSurface(path: string, host: SpecSurfaceHost): SpecSurface
   const { data: coverage, error: coverageError } = useSpecCoverage(path)
   const { data: tasks, error: tasksError } = useDocumentTasks(record?.id ?? listed?.document_id ?? null)
   const builds = React.useMemo(() => specDoc?.builds ?? [], [specDoc?.builds])
-  // The spec list's entry names the newest build, so its reads are sent without waiting for the
-  // document's own read to answer behind the page's first-load burst; the same keys serve both.
+  // A light read names the newest build, so its reads are sent without waiting for the document's
+  // own read or the list to answer behind the page's first-load burst; the same keys serve both.
+  const { data: lastBuild } = useSpecLastBuild(path)
+  const earlyLast = lastBuild ?? listed?.last_build ?? null
   const earlyBuilds = React.useMemo(
-    () => (builds.length || !listed?.last_build ? builds : [listed.last_build]),
-    [builds, listed?.last_build],
+    () => (builds.length || !earlyLast ? builds : [earlyLast]),
+    [builds, earlyLast],
   )
   const figures = useBuildFigures(earlyBuilds)
   const reads = useBuildReads(earlyBuilds.map((b) => ({ id: b.id, running: b.state === 'running' })))
