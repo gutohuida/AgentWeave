@@ -1550,6 +1550,12 @@ async def run_batch_checks(
                         result
                     )
                     if judged:
+                        # Quarantined failures are excused first, never re-run (FR-2, FR-3).
+                        from . import quarantine
+
+                        await quarantine.excuse(project_id, check, result, changed)
+                        judged = project_checks.failed(result)
+                    if judged:
                         await asyncio.to_thread(
                             project_checks.confirm_failure, check, path, result, owner, changed
                         )
