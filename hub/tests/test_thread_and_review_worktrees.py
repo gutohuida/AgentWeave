@@ -437,6 +437,84 @@ async def test_with_the_switch_on_a_job_conversation_keeps_the_shared_worktree(
     assert _thread_branches(repo) == []
 
 
+@pytest.mark.asyncio
+async def test_with_the_switch_on_a_peer_turn_waits_for_a_firing_then_shares_its_worktree(
+    app, auth_headers, bind_runner, bind_project_workspace, tmp_path, monkeypatch
+):
+    """ac-shared-worktree-serial, its wait half: a job firing is running in the agent's shared
+    worktree; a peer message's new conversation is queued behind it, then runs in that same
+    worktree once the firing ends. Neither gets a thread worktree."""
+    import asyncio
+    import threading
+    from unittest.mock import MagicMock
+
+    repo = _init_repo(tmp_path / "repo")
+    await bind_project_workspace(repo)
+    _real_worktrees(monkeypatch)
+    await _agent(app, auth_headers, bind_runner, "writer")
+    await _set_project(profiles_run_in_parallel=True)
+    ids = {}
+    async with async_session_factory() as session:
+        for origin in ("job", "peer"):
+            conversation = new_conversation(project_id="proj-test", agent="writer", origin=origin)
+            await give_own_worktree_if_parallel(session, conversation)
+            assert conversation.own_worktree is False
+            session.add(conversation)
+            ids[origin] = conversation.id
+        await session.commit()
+
+    release = threading.Event()
+    cwds = []
+
+    def _spawn(*args, **kwargs):
+        cwds.append(kwargs["cwd"])
+        hanging = MagicMock()
+        hanging.pid = 999
+        hanging.read.side_effect = lambda size=4096: (release.wait(), "")[1]
+        hanging.wait.return_value = 0
+        return hanging
+
+    with patch("hub.api.v1.agent_trigger.PtySession.spawn", _spawn):  # noqa: SIM117
+        with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
+            try:
+                firing = await app.post(
+                    "/api/v1/projects/proj-test/agent/trigger",
+                    json={"agent": "writer", "message": "scheduled", "conversation_id": ids["job"]},
+                    headers=auth_headers,
+                )
+                assert firing.status_code == 200, firing.text
+                assert firing.json()["status"] == "running"
+                for _ in range(500):
+                    if cwds:
+                        break
+                    await asyncio.sleep(0.01)
+                peer = await app.post(
+                    "/api/v1/projects/proj-test/agent/trigger",
+                    json={
+                        "agent": "writer",
+                        "message": "from a peer",
+                        "conversation_id": ids["peer"],
+                    },
+                    headers=auth_headers,
+                )
+                assert peer.status_code == 200, peer.text
+                assert peer.json()["status"] == "queued"
+                assert "already running" in peer.json()["waiting_reason"]
+                assert len(cwds) == 1
+            finally:
+                release.set()
+            for _ in range(1000):
+                if len(cwds) == 2:
+                    break
+                await asyncio.sleep(0.01)
+            await _await_background_run()
+
+    shared = worktrees.worktree_path(repo, "writer")
+    assert [Path(cwd) for cwd in cwds] == [shared, shared]
+    assert _thread_branches(repo) == []
+    assert not worktrees.thread_root(repo).exists()
+
+
 # ---------------------------------------------------------------------------
 # FR-17: the routes show the thread's branch
 # ---------------------------------------------------------------------------
@@ -644,10 +722,12 @@ async def test_with_the_switch_on_a_read_only_run_in_the_project_directory_has_i
     await _agent(app, auth_headers, bind_runner, "reader", {"read_only": True})
     await _set_project(profiles_run_in_parallel=True)
     seen = []
+    calls_seen = []
 
     def _spawn(*args, **kwargs):
         assert Path(kwargs["cwd"]) == repo
         seen.append(sorted(p.name for p in (repo / ".agentweave" / "context").iterdir()))
+        calls_seen.append(sorted(p.name for p in (repo / ".agentweave" / "calls").iterdir()))
         return _fake_pty(_RESULT)(*args, **kwargs)
 
     run_ids = []
@@ -665,6 +745,9 @@ async def test_with_the_switch_on_a_read_only_run_in_the_project_directory_has_i
 
     assert seen == [[f"reader.{run_ids[0]}.md"], [f"reader.{run_ids[1]}.md"]]
     assert list((repo / ".agentweave" / "context").iterdir()) == []
+    # ...and a calls directory of its own inside the calls root, removed when the run ends.
+    assert calls_seen == [[run_ids[0]], [run_ids[1]]]
+    assert list((repo / ".agentweave" / "calls").iterdir()) == []
 
 
 def test_0184_adds_own_worktree_false_for_every_conversation_and_round_trips(tmp_path):

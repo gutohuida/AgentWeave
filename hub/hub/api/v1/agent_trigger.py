@@ -407,7 +407,44 @@ def work_dir_in_hub_directory(root: Path, resolved: Path) -> bool:
     return target == hub_directory or target.startswith(hub_directory + os.sep)
 
 
-def prepare_calls_dir(work_dir: str, *, empty: bool) -> None:
+def run_calls_dir(work_dir: str, run_id: str) -> Path:
+    """A run's own calls directory (FR-8), inside the calls root so the call command and the
+    approver accept its files unchanged: given only where several runs of one agent share a
+    directory, the project directory while the parallel switch is on."""
+    return Path(work_dir) / ".agentweave" / "calls" / run_id
+
+
+def run_calls_dir_notice(run_id: str) -> str:
+    """What a run with its own calls directory is told: the path to write its arguments files in."""
+    where = f".agentweave/calls/{run_id}/"
+    return (
+        f"[AgentWeave] This run's calls directory is `{where}`: other runs of you share this "
+        f"workspace, so write each `aw-tool` arguments file there (`{where}1.json`, …) rather "
+        "than directly in `.agentweave/calls/`, and name it the same way in the `aw-tool` command."
+    )
+
+
+def remove_run_calls_dir(work_dir: Optional[str], run_id: str) -> None:
+    """Remove a run's own calls directory once it has ended. Best effort, and never through a
+    link: a junction or symlink there is removed as itself, its target untouched."""
+    if not work_dir:
+        return
+    folder = str(run_calls_dir(work_dir, run_id))
+    with contextlib.suppress(OSError):
+        if not os.path.lexists(folder):
+            return
+        if os.path.normcase(os.path.realpath(folder)) != os.path.normcase(
+            os.path.join(os.path.realpath(os.path.dirname(folder)), run_id)
+        ):
+            if os.path.isdir(folder) and os.name == "nt":
+                os.rmdir(folder)
+            else:
+                os.unlink(folder)
+        else:
+            shutil.rmtree(folder)
+
+
+def prepare_calls_dir(work_dir: str, *, empty: bool, run_id: Optional[str] = None) -> None:
     """Make `<work_dir>/.agentweave/calls/` a real directory for this turn (design D14).
 
     The call command reads its arguments files only from there, and the approver gives standing
@@ -443,8 +480,34 @@ def prepare_calls_dir(work_dir: str, *, empty: bool) -> None:
             else:
                 os.unlink(calls)
     os.makedirs(calls, exist_ok=True)
+    if run_id is not None:
+        # FR-8: this run's own folder in a shared directory, which only it stands in.
+        if (
+            os.path.sep in run_id
+            or (os.altsep and os.altsep in run_id)
+            or run_id in ("", ".", "..")
+        ):
+            raise ValueError(f"not a run id: {run_id!r}")
+        _prepare_own_calls_dir(os.path.join(calls, run_id))
     if not empty:
         return
+    _empty_calls_dir(calls)
+
+
+def _prepare_own_calls_dir(own: str) -> None:
+    """A run's own calls folder: a link there is removed as itself, then a real, empty folder."""
+    if os.path.lexists(own) and (
+        os.path.normcase(os.path.realpath(own)) != os.path.normcase(own) or not os.path.isdir(own)
+    ):
+        if os.path.isdir(own) and os.name == "nt":
+            os.rmdir(own)
+        else:
+            os.unlink(own)
+    os.makedirs(own, exist_ok=True)
+    _empty_calls_dir(own)
+
+
+def _empty_calls_dir(calls: str) -> None:
     for name in os.listdir(calls):
         entry = os.path.join(calls, name)
         try:
@@ -1844,14 +1907,12 @@ async def _trigger_agent_directly(
             }
     # FR-8: named by the run only where several runs of this agent may stand in one directory at
     # once -- the project directory, while the parallel switch is on. Off, it is what it was.
-    context_file = run_context_file(
-        effective_work_dir,
-        agent,
-        run_id,
-        shared=isolated_workspace is None
+    shares_directory = (
+        isolated_workspace is None
         and project_row is not None
-        and project_row.profiles_run_in_parallel,
+        and project_row.profiles_run_in_parallel
     )
+    context_file = run_context_file(effective_work_dir, agent, run_id, shared=shares_directory)
 
     def _write_context() -> None:
         context_file.parent.mkdir(parents=True, exist_ok=True)
@@ -1871,7 +1932,10 @@ async def _trigger_agent_directly(
     # this turn alone stands (F663): a shared directory may hold another agent's file in flight.
     try:
         await blocking.run(
-            prepare_calls_dir, effective_work_dir, empty=isolated_workspace is not None
+            prepare_calls_dir,
+            effective_work_dir,
+            empty=isolated_workspace is not None,
+            run_id=run_id if shares_directory else None,
         )
     except (OSError, ValueError) as exc:
         raise TriggerAgentError(
@@ -1902,6 +1966,10 @@ async def _trigger_agent_directly(
     # no worktree at all (`isolated_workspace is None`) has nothing this notice would help with.
     if isolated_workspace is not None and review_context is None:
         notices.append(auto_snapshot_notice())
+    # FR-8: where runs of this agent share the directory, this run's arguments files go in a
+    # folder of its own, so no two running runs share one calls directory.
+    if shares_directory and (tests_first or described_path == "shim"):
+        notices.append(run_calls_dir_notice(run_id))
     notices.extend(workspace_notes)
     # F567: a shared dependency directory that could not be linked into this checkout is told to
     # the agent here and recorded on the run below (`setup_events`), with the reason and the
@@ -3921,6 +3989,7 @@ async def _execute_run(
                 )
 
         remove_run_context_file(work_dir, agent, run_id)
+        remove_run_calls_dir(work_dir, run_id)
         await _release_review_run_checkout(work_dir)
         snapshot_sha: Optional[str] = None
         if worktree is not None:
@@ -5033,6 +5102,7 @@ async def _execute_rpc_run(
             return
 
         remove_run_context_file(work_dir, agent, run_id)
+        remove_run_calls_dir(work_dir, run_id)
         await _release_review_run_checkout(work_dir)
         snapshot_sha: Optional[str] = None
         if worktree is not None:
