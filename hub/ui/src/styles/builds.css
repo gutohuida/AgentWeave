@@ -266,7 +266,7 @@
 .aw-bv-drawer-sub { font-weight: 400; color: var(--text-2); }
 
 /* Loading: the view's own shape. */
-.aw-bv-skeleton .aw-bv-header { margin-bottom: 52px; }
+.aw-bv-placeholder .aw-bv-header { margin-bottom: 52px; }
 .aw-bv-skel-line { border-radius: var(--radius-sm); background: var(--surface-3); }
 .aw-bv-skel-row { border-bottom: 1px solid var(--border); }
 
@@ -306,6 +306,33 @@
   .aw-bv-run > :nth-child(5) { grid-area: move; }
   .aw-bv-run > :nth-child(6) { grid-area: cost; }
   .aw-bv-group-body > .aw-bv-run > :nth-child(2) { grid-column: auto; grid-area: who; }
+}
+
+/* Narrower still, as when the Spec tab's document list sits beside the view on a small window: the task
+   keeps the first line to itself with its status, and the figures drop to a line of their own. */
+@container (max-width: 600px) {
+  .aw-bv-row {
+    grid-template-columns: 16px 32px 52px minmax(0, 1fr) 40px 84px;
+    column-gap: 8px;
+    grid-template-areas:
+      'chev task task task task status'
+      '.    people people people evidence evidence'
+      '.    runs sb cost changed changed';
+  }
+  .aw-bv-head-row { grid-template-areas: 'chev task task task task status' '. runs sb cost changed changed'; }
+  .aw-bv-row > :nth-child(6) { justify-self: start; }
+  .aw-bv-row > :nth-child(8) { justify-self: end; }
+  .aw-bv-row > :nth-child(9) { justify-self: end; }
+  .aw-bv-run {
+    grid-template-columns: 64px minmax(0, 1fr) 52px 76px;
+    grid-template-areas: 'label who took cost' '. when move move';
+  }
+  .aw-bv-run > :nth-child(1) { grid-area: label; }
+  .aw-bv-run > :nth-child(2) { grid-area: who; }
+  .aw-bv-run > :nth-child(3) { grid-area: when; }
+  .aw-bv-run > :nth-child(4) { grid-area: took; }
+  .aw-bv-run > :nth-child(5) { grid-area: move; }
+  .aw-bv-run > :nth-child(6) { grid-area: cost; }
 }
 
 /* ── The compact summary ─────────────────────────────────────────────── */

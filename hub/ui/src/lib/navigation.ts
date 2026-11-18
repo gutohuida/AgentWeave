@@ -156,8 +156,13 @@ export type WorkspaceDestination =
       // repeats in every document). Linkable, so every mention of evidence opens the pieces it means.
       // `requirement` (slice requirement-story) is one requirement's story: `document` names its
       // document and `focus` its `FR-n`, the pair the requirement's detail route resolves.
-      view?: 'evidence' | 'requirement' | null
+      view?: 'evidence' | 'requirement' | 'build' | null
       focus?: string | null
+      // The build view (`view: 'build'`, `focus` the build's id): the task expanded, the run whose
+      // trace is open and the task filter — a copied address reopens the same view.
+      buildTask?: string | null
+      buildRun?: string | null
+      buildFilter?: 'needs-you' | null
       // The Thread tab's address (FR-10): the knot to bring into view with its ancestors open.
       knot?: string | null
       // The Checkpoints tab's address: the checkpoint opened, and how the list is narrowed. Named
@@ -271,6 +276,45 @@ export function evidenceDestination(
   return cleaned
     ? { kind: 'project', projectId, tab: 'spec', view: 'evidence', focus: cleaned }
     : { kind: 'project', projectId, tab: 'spec', view: 'evidence' }
+}
+
+const BUILD_TOKEN = /^[A-Za-z0-9_.:-]{1,80}$/
+
+export interface BuildViewAddress {
+  task?: string | null
+  run?: string | null
+  filter?: 'all' | 'needs-you' | null
+}
+
+/** One build's view: the build, optionally with a task expanded and a run's trace open. A value that
+ *  does not parse is dropped; a build id that does not parse lands on the Spec tab. */
+export function buildDestination(
+  projectId: string,
+  buildId: string | null,
+  address: BuildViewAddress = {},
+): Extract<WorkspaceDestination, { kind: 'project' }> {
+  if (!buildId || !BUILD_TOKEN.test(buildId)) return { kind: 'project', projectId, tab: 'spec' }
+  const destination: Extract<WorkspaceDestination, { kind: 'project' }> = {
+    kind: 'project',
+    projectId,
+    tab: 'spec',
+    view: 'build',
+    focus: buildId,
+  }
+  // eslint-disable-next-line no-control-regex -- deliberately matches control characters
+  const clean = (v: string | null | undefined) => (v && v.length <= 200 && !/[\x00-\x1f\x7f]/.test(v) ? v : null)
+  const task = clean(address.task)
+  const run = clean(address.run)
+  if (task) destination.buildTask = task
+  if (run) destination.buildRun = run
+  if (address.filter === 'needs-you') destination.buildFilter = 'needs-you'
+  return destination
+}
+
+/** A build view's address as a link, for an anchor's `href`: a copied or new-window address opens
+ *  the same build, task and trace. */
+export function buildHref(projectId: string, buildId: string, task?: string | null, run?: string | null): string {
+  return `${window.location.pathname}${serializeDestination(buildDestination(projectId, buildId, { task, run }))}`
 }
 
 /** One requirement's story: how its wording changed and what proved it (slice requirement-story).
@@ -514,6 +558,14 @@ export function serializeDestination(destination: WorkspaceDestination): string 
     if (destination.focus) params.set('focus', destination.focus)
     return `?${params.toString()}`
   }
+  if (destination.tab === 'spec' && destination.view === 'build' && destination.focus) {
+    params.set('view', 'build')
+    params.set('focus', destination.focus)
+    if (destination.buildTask) params.set('task', destination.buildTask)
+    if (destination.buildRun) params.set('run', destination.buildRun)
+    if (destination.buildFilter) params.set('filter', destination.buildFilter)
+    return `?${params.toString()}`
+  }
   if (
     destination.tab === 'spec' &&
     destination.view === 'requirement' &&
@@ -597,6 +649,13 @@ export function parseDestination(search: string): WorkspaceDestination | null {
   }
   if (tab === 'spec' && params.get('view') === 'evidence') {
     return evidenceDestination(projectId, params.get('focus'))
+  }
+  if (tab === 'spec' && params.get('view') === 'build') {
+    return buildDestination(projectId, params.get('focus'), {
+      task: params.get('task'),
+      run: params.get('run'),
+      filter: params.get('filter') === 'needs-you' ? 'needs-you' : null,
+    })
   }
   if (tab === 'spec' && params.get('view') === 'requirement') {
     return requirementDestination(projectId, params.get('document'), params.get('focus'))

@@ -19,6 +19,7 @@ import { LoopTab } from '@/components/spec/LoopTab'
 import { useLoops } from '@/api/loops'
 import { TerminalTabContainer } from '@/components/panel/TerminalTabContainer'
 import { WatchTabContainer } from '@/components/panel/WatchTabContainer'
+import { buildDestination, buildHref, goTo } from '@/lib/navigation'
 import { RunningTabContainer } from '@/components/panel/RunningTabContainer'
 import { runningCount, useRunningItems } from '@/components/panel/useRunningItems'
 import type { RunningItem } from '@/components/panel/runningModel'
@@ -315,7 +316,7 @@ export function ConversationView({
   // Section 3's first index tenant: the plus affordance can always offer the specs browser,
   // whether or not anything is attached yet. Section 5 adds the files tab beside it.
   // The Running index tab: builds, loops and jobs in one list (`the-side-panel-s-running-tab`).
-  const { items: runningItems, loadFailed: runningLoadFailed } = useRunningItems()
+  const { items: runningItems, loadFailed: runningLoadFailed, buildSummaries } = useRunningItems()
   // Names a `loop:` tab already open (same key the list reads, so no second fetch).
   const { data: runningLoops = [] } = useLoops(true)
   // A build's document opens at its builds; the counter re-opens an already-open tab there again.
@@ -466,7 +467,15 @@ export function ConversationView({
         )
       }
       if (tab.id === 'running') {
-        return <RunningTabContainer items={runningItems} loadFailed={runningLoadFailed} onOpen={openRunningItem} onAttend={attendRunningItem} />
+        return <RunningTabContainer
+            items={runningItems}
+            loadFailed={runningLoadFailed}
+            onOpen={openRunningItem}
+            onAttend={attendRunningItem}
+            buildSummaries={buildSummaries}
+            buildHref={(buildId, task) => buildHref(projectId, buildId, task)}
+            onOpenBuild={(buildId, task) => goTo(buildDestination(projectId, buildId, { task }))}
+          />
       }
       if (isLoopTabId(tab.id)) {
         return <LoopTab loopId={loopIdFromTab(tab.id)} onClose={() => closeTab(projectId, tab.id)} />
@@ -511,6 +520,7 @@ export function ConversationView({
       panelActiveTabId,
       runningItems,
       runningLoadFailed,
+      buildSummaries,
       openRunningItem,
       attendRunningItem,
       buildsRequest,

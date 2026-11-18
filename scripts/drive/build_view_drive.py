@@ -30,7 +30,7 @@ checks that run set against a plain SELECT of the task's runs and the runs in it
 conversations, so the recorder cannot hide a run.
 
 The page contract (the design's accessible names; BVSET-3 may rename, and then fixes the drive):
-  address        `/?project=<id>#build/<build>?task=<ref>&run=<run>` (ADDRESS below)
+  address        `/?project=<id>&tab=spec&view=build&focus=<build>&task=<ref>&run=<run>` (ADDRESS below)
   the view       `[data-testid=build-view][data-build-id=<build>]`, section "Tasks"
   task row       button "Open runs of <ref>" (aria-expanded), row `li#build-task-<task id>`
   timeline       list "Runs of <ref>"; run button "Open trace: <Role> <n>"; folded row
@@ -86,8 +86,8 @@ SOURCE_DB = pathlib.Path.home() / ".agentweave" / "hub" / "data" / "agentweave.d
 PROJECT = "proj-d85a82bf4216"
 HAIKU = "claude-haiku-4-5-20251001"
 ORDER = ["ac-totals", "ac-address", "ac-timeline", "ac-fold-checks-loop", "ac-trace",
-         "ac-open-from-drawer", "ac-live"]
-ADDRESS = "{hub}/?project={pid}#build/{build}{query}"
+         "ac-open-from-drawer", "ac-summaries-open", "ac-unpriced", "ac-no-fold-pairs", "ac-seeded", "ac-matches-mock", "ac-live"]
+ADDRESS = "{hub}/?project={pid}&tab=spec&view=build&focus={build}{query}"
 LIVE_LIMIT = 10.0  # seconds, FR-9
 TURN_WAIT = 10 * 60
 
@@ -325,7 +325,7 @@ def self_test():
         (parse_unpriced("$4.20 +2 unpriced"), 2),
         (parse_unpriced("Leaves out 3 unpriced runs"), 3),
         (figure_leaves({"a": {"send_backs": 3}, "b": [1]}, "send"), [("a.send_backs", 3)]),
-        (ADDRESS.format(hub="h", pid="p", build="b", query="?task=T"), "h/?project=p#build/b?task=T"),
+        (ADDRESS.format(hub="h", pid="p", build="b", query="&task=T"), "h/?project=p&tab=spec&view=build&focus=b&task=T"),
     ]
     bad = [(i, got, want) for i, (got, want) in enumerate(cases) if got != want]
     for i, got, want in bad:
@@ -402,6 +402,90 @@ def now_sql():
     return dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%d %H:%M:%S.%f")
 
 
+SEEDED = {}  # what seed_cases put into the scratch copy: the build and the task of each case
+
+BUILD_FOR_SEEDS = ""  # set by seed_cases: the build the seeded cases sit in
+
+
+def seed_cases(dst, now):
+    """Cases the real data lacks, written into the scratch copy only (`dst` is never the source DB):
+    a task whose runs are all unpriced, a task awaiting the operator (an open question), two
+    mender turns in a row, and a Hub-filed fix task added after the declared ones."""
+    global BUILD_FOR_SEEDS
+    pid = PROJECT
+    dst.row_factory = sqlite3.Row
+    counts, usable = {}, []
+    # The newest finished build with several tasks that ran: the Running tab lists the recent ones.
+    for b in dst.execute("select id from builds where project_id=? and state='finished' "
+                         "order by created_at desc limit 12", (pid,)).fetchall():
+        tasks = dst.execute("select id, readable_id from tasks where build_id=? and spec_task_key is not null "
+                            "order by created_at", (b["id"],)).fetchall()
+        counts = {t["id"]: [r["id"] for r in dst.execute(
+            "select id from runs where task_id=? order by started_at, id", (t["id"],))] for t in tasks}
+        usable = [t for t in tasks if counts[t["id"]]]
+        if len(usable) >= 4:
+            BUILD_FOR_SEEDS = b["id"]
+            break
+    else:
+        return {}
+    by_runs = sorted(usable, key=lambda t: len(counts[t["id"]]))
+    seeded = {}
+    # 1. only unpriced runs: the smallest task, its usage rows left without a price.
+    unpriced = by_runs[0]
+    for rid in counts[unpriced["id"]]:
+        dst.execute("update turn_usage set api_equivalent_usd_micros=null where run_id=?", (rid,))
+    seeded["unpriced_only"] = unpriced["id"]
+    others = [t for t in usable if t["id"] != unpriced["id"]]
+    # 2. two mender turns in a row on the task with the most runs.
+    mender_name = None
+    for (name, config) in dst.execute("select name, config from agents where project_id=?", (pid,)).fetchall():
+        try:
+            if (json.loads(config or "{}") or {}).get("hub_role") == "mender":
+                mender_name = name
+                break
+        except ValueError:
+            continue
+    mend, pair = None, None
+    for t in sorted(others, key=lambda t: -len(counts[t["id"]])):
+        ids = counts[t["id"]]
+        for x, y in zip(ids, ids[1:]):
+            between = dst.execute(
+                "select count(*) from task_transitions where task_id=? and to_status in ('revision_needed', 'rejected') "
+                "and created_at > (select started_at from runs where id=?) "
+                "and created_at <= (select started_at from runs where id=?)", (t["id"], x, y)).fetchone()[0]
+            if not between:
+                mend, pair = t, (x, y)
+                break
+        if mend:
+            break
+    if mender_name and mend:
+        for rid in pair:
+            dst.execute("update runs set agent=? where id=?", (mender_name, rid))
+        seeded["mender"] = mend["id"]
+    else:
+        mend = others[0]
+    # 3. a task awaiting the operator: not done, with an unanswered question.
+    wait = next(t for t in others if t["id"] != mend["id"])
+    dst.execute("update tasks set status='under_review' where id=?", (wait["id"],))
+    dst.execute(
+        "insert into questions (id, project_id, from_agent, question, answered, blocking, options, "
+        "answer_labels, multi_select, batch_index, batch_size, created_at, blocked_task_id, declined) "
+        "values ('q-seeded-1', ?, 'Developer', 'Seeded: which of the two should it be?', 0, 1, '[]', '[]', "
+        "0, 0, 1, ?, ?, 0)", (pid, now, wait["id"]))
+    seeded["needs_operator"] = wait["id"]
+    # 4. a Hub-filed fix task: in the build, declared by no key, made after the rest.
+    src = dst.execute("select * from tasks where id=?", (wait["id"],)).fetchone()
+    row = dict(src)
+    row.update(id="task-seeded-fix", readable_id="SEEDFIX-1", title="Seeded: a Hub-filed fix task",
+               spec_task_key=None, status="pending", created_at=now, updated=now)
+    cols = list(row)
+    dst.execute(f"insert into tasks ({', '.join(cols)}) values ({', '.join('?' for _ in cols)})",
+                [row[c] for c in cols])
+    seeded["fix_task"] = "task-seeded-fix"
+    dst.row_factory = None
+    return seeded
+
+
 def snapshot(source, copy):
     """A consistent copy of `source`, read through a `mode=ro` connection, made inert."""
     copy.parent.mkdir(parents=True, exist_ok=True)
@@ -433,10 +517,15 @@ def snapshot(source, copy):
             spec = pathlib.Path(workdir or "") / "spec"
             if spec.is_dir():
                 shutil.copytree(spec, mirror / "spec", dirs_exist_ok=True)
+            # The marker the Hub asks for, so a project's spec page opens on the copy.
+            (mirror / ".agentweave").mkdir(exist_ok=True)
+            (mirror / ".agentweave" / "project.json").write_text(
+                json.dumps({"version": 1, "project_id": pid}), encoding="utf-8")
             dst.execute("update projects set working_directory=?, path_key=?, main_branch=null, checks=null, "
                         "pr_landing=0 where id=?", (str(mirror), "windows:" + str(mirror).lower(), pid))
         dst.execute("insert into operator_credentials (id, label, revoked, created_at) values (?, 'drive', 0, ?)",
                     (key, now))
+        SEEDED.update(seed_cases(dst, now))
         dst.commit()
     finally:
         dst.close()
@@ -526,7 +615,7 @@ def shot(page, name):
 
 def address(pid, build_id, task=None, run=None):
     q = urllib.parse.urlencode({k: v for k, v in (("task", task), ("run", run)) if v})
-    return ADDRESS.format(hub=HUB, pid=pid, build=build_id, query=f"?{q}" if q else "")
+    return ADDRESS.format(hub=HUB, pid=pid, build=build_id, query=f"&{q}" if q else "")
 
 
 def view(page, build_id=None):
@@ -696,9 +785,11 @@ def check_address(browser, state):
     other = new_page(browser, pid)
     other.goto(copied, wait_until="domcontentloaded")
     same = bool(poll(lambda: view(other, build_id).count(), 20))
-    expanded = bool(poll(lambda: row_button(other, ref).first.get_attribute("aria-expanded") == "true", 15))
+    # The open trace is modal, so the page behind it is out of the accessibility tree: ask for hidden too.
+    hidden_row = row(other, task["id"]).locator(f'button[aria-label="Open runs of {ref}"]')
+    expanded = bool(poll(lambda: hidden_row.count() and hidden_row.first.get_attribute("aria-expanded") == "true", 15))
     trace = bool(poll(lambda: trace_open_on(other, third["label"]), 15))
-    current = run_button(other, third["label"], ref)
+    current = row(other, task["id"]).locator(f'button[aria-label="Open trace: {third["label"]}"]')
     marked = bool(current.count() and current.first.get_attribute("aria-current") == "true")
     shot(other, "address-copied")
     ok = bool(opened) and same and expanded and trace and marked
@@ -787,7 +878,11 @@ def check_fold(browser, state):
 
     def want(read, task, n):
         found = checks_loop_group(timeline(task["runs"], task["send_backs"]))
-        return found is not None and found[1]["reason"]
+        if found is None or not found[1]["reason"]:
+            return False
+        items = timeline(task["runs"], task["send_backs"])
+        # The line after the loop is the build that passes, as its own line (not a fold of its own).
+        return found[0] + 1 < len(items) and items[found[0] + 1]["kind"] == "run"
     read, task = pick(pid, want, limit=80)
     if not task:
         raise Setup("no finished build with a task bounced three or more times running by the landing checks "
@@ -810,7 +905,8 @@ def check_fold(browser, state):
     if not button.count():
         drawn = [(k, nm) for k, nm, _ in drawn_lines(page, ref)]
         return record(key, False, f"build {build_id} task {ref}: no folded row {name!r}; drawn {drawn[:10]}")
-    li = button.first.locator("xpath=ancestor::li[1]")
+    # Chosen by what it holds, not by its button's name: the name flips to "Hide ..." once it is open.
+    li = timeline_list(page, ref).locator('li[data-kind="group"]').filter(has_text=group["detail"]).first
     folded_text = li.inner_text()
     parts = [
         ("says sent back N times", f"Sent back {group['send_backs']} times" in folded_text),
@@ -891,7 +987,6 @@ def check_open_from_drawer(browser, state):
     if not task:
         raise Setup("no finished build with an approved first task")
     build_id, ref, doc = read["build"]["id"], task["ref"], read["build"]["document_id"]
-    running = {r["id"] for r in ro("select id from builds where project_id=? and state='running'", (pid,))}
     page = new_page(browser, pid)
     page.add_init_script("try { localStorage.setItem(%s, %s); localStorage.setItem(%s, 'true'); } catch (e) {}" % (
         json.dumps(f"aw.boardScope.{pid}"), json.dumps(json.dumps({"kind": "spec", "id": doc})),
@@ -917,20 +1012,319 @@ def check_open_from_drawer(browser, state):
         expanded = bool(poll(lambda: row_button(page, ref).first.get_attribute("aria-expanded") == "true", 10))
         parts.append((f"opens {build_id} with {ref} expanded", at_build and expanded))
         shot(page, "drawer-opened")
-    page.goto(f"{HUB}/?project={pid}&tab=overview", wait_until="domcontentloaded")
-    over = page.get_by_role("link", name="Open in its build").or_(
-        page.get_by_role("button", name="Open in its build"))
-    poll(lambda: over.count(), 15)
-    shot(page, "overview")
-    if not over.count():
-        parts.append((f"Overview offers Open in its build (running: {sorted(running)})", False))
-    else:
-        over.first.click()
-        shown = poll(lambda: view(page).first.get_attribute("data-build-id"), 20)
-        parts.append((f"Overview opens a running build's view ({shown})", shown in running))
-        shot(page, "overview-opened")
+    # Overview lists running turns, and an inert snapshot has none: its link is driven in ac-live, on a
+    # build that really runs.
     record(key, all(ok for _, ok in parts), f"task {ref} of {build_id}: " + "; ".join(
         f"{p} {'ok' if ok else 'FAILED'}" for p, ok in parts))
+
+
+# --------------------------------------------------------------------------- summaries, parity, unpriced
+
+
+def figures_of(root, prefix):
+    out = {}
+    for name in ("approved", "cost", "send-backs", "needs"):
+        found = root.get_by_test_id(f"{prefix}-{name}")
+        out[name] = re.sub(r"\s+", " ", found.first.inner_text()).strip() if found.count() else None
+    return out
+
+
+def digits(text):
+    return re.findall(r"\d+(?:[.,]\d+)?", text or "")
+
+
+def check_summaries(browser, state):
+    key, pid = "ac-summaries-open", state["pid"]
+    code, listing = api("GET", f"/projects/{pid}/project/builds")
+    builds = (listing or {}).get("builds", []) if code == 200 else []
+    running = [b for b in builds if b.get("state") == "running"]
+    finished = [b for b in builds if b.get("state") == "finished"]
+    if not running or not finished:
+        raise Setup(f"needs one running and one finished build ({len(running)} running, {len(finished)} finished)")
+    parts, parity = [], []
+    for kind, b in (("running", running[0]), ("finished", finished[0])):
+        bid, doc = b["id"], b.get("document_path")
+        page = new_page(browser, pid)
+        if not open_view(page, pid, bid):
+            parts.append((f"{kind} {bid} opens its view", False))
+            continue
+        in_view = figures_of(page, "build")
+        # The spec page's strip.
+        page.goto(f"{HUB}/?project={pid}&tab=spec&document={urllib.parse.quote(doc or '')}", wait_until="domcontentloaded")
+        strip = page.locator(f'[data-testid=build-summary][data-build-id="{bid}"]')
+        poll(lambda: strip.count(), 20)
+        shot(page, f"summary-strip-{kind}")
+        if not strip.count():
+            parts.append((f"{kind} {bid}: spec page shows its summary", False))
+        else:
+            on_page = figures_of(strip.first, "summary")
+            parity.append((f"{kind} spec page", on_page, in_view))
+            strip.first.get_by_role("link", name="Open build").first.click()
+            parts.append((f"{kind} spec-page summary opens its view", bool(poll(lambda: view(page, bid).count(), 20))))
+            page.go_back()
+            chip = strip.first.locator("a[href*='task=']").first
+            poll(lambda: chip.count(), 10)
+            if chip.count():
+                href = chip.get_attribute("href")
+                chip.click()
+                opened = poll(lambda: view(page, bid).count(), 20)
+                task_ref = (re.search(r"[?&]task=([^&]+)", href or "") or [None, None])[1]
+                at = bool(opened and task_ref and poll(lambda: page.locator(
+                    f'button[aria-label="Open runs of {urllib.parse.unquote(task_ref)}"][aria-expanded="true"]').count(), 10))
+                parts.append((f"{kind} spec-page task chip opens the view at {task_ref}", at))
+            else:
+                parts.append((f"{kind} spec-page summary has a task to choose", False))
+        # The side panel's Running tab.
+        page.goto(f"{HUB}/?project={pid}&agent=Developer", wait_until="domcontentloaded")
+        page.get_by_test_id("conversation-more").first.click()
+        if page.get_by_test_id("conversation-toggle-panel").count():
+            if "Show" in page.get_by_test_id("conversation-toggle-panel").first.inner_text():
+                page.get_by_test_id("conversation-toggle-panel").first.click()
+            else:
+                page.keyboard.press("Escape")
+        tab = page.get_by_role("tab", name=re.compile("^Running")).or_(page.get_by_role("button", name=re.compile("^Running")))
+        poll(lambda: tab.count(), 15)
+        if tab.count():
+            tab.first.click()
+            page.wait_for_timeout(800)
+        card = page.locator(f'[data-testid=build-summary][data-build-id="{bid}"]')
+        poll(lambda: card.count(), 10)
+        shot(page, f"summary-panel-{kind}")
+        if card.count():
+            parity.append((f"{kind} Running tab", figures_of(card.first, "summary"), in_view))
+            card.first.get_by_role("link", name="Open build").first.click()
+            parts.append((f"{kind} Running-tab summary opens its view", bool(poll(lambda: view(page, bid).count(), 20))))
+        elif kind == "running":
+            parts.append((f"running {bid}: Running tab shows its summary", False))
+        page.context.close()
+    record(key, all(ok for _, ok in parts) and bool(parity), "; ".join(f"{p} {'ok' if ok else 'FAILED'}" for p, ok in parts))
+    ok_all, notes = True, []
+    for where, got, want in parity:
+        # A surface is compared on the figures it carries: the spec page's strip is the narrow form
+        # (send-backs and who is needed), the Running tab's card carries all four.
+        same = all(digits(got[k]) == digits(want[k]) or (k == "needs" and not digits(got[k]) and not digits(want[k])
+                   and ("nothing" in got[k].lower()) == ("nothing" in want[k].lower()))
+                   for k in got if got[k] is not None)
+        ok_all &= same
+        notes.append(f"{where}: {got} vs view {want} {'equal' if same else 'DIFFER'}")
+    record("ac-parity", ok_all and bool(parity), "; ".join(notes) or "no surface to compare")
+
+
+def check_unpriced_and_pairs(browser, state):
+    pid = state["pid"]
+
+    def mixed(read, task, n):
+        states = [r["cost_state"] for r in task["runs"]]
+        return "measured" in states and "unpriced" in states and len(task["runs"]) <= 12
+
+    def only_unpriced(read, task, n):
+        return task["runs"] and all(r["cost_state"] == "unpriced" for r in task["runs"]) and len(task["runs"]) <= 12
+    parts = []
+    for label, want in (("priced and unpriced runs", mixed), ("only unpriced runs", only_unpriced)):
+        read, task = pick(pid, want, limit=80, smallest=True)
+        if not task:
+            parts.append((f"{label}: NOT DRIVEN, no such task in the data (a fixture covers it in buildView.test.tsx)", True))
+            continue
+        page = new_page(browser, pid)
+        if not open_view(page, pid, read["build"]["id"]):
+            parts.append((f"{label}: view did not open", False))
+            continue
+        ref = task["ref"]
+        expand(page, ref)
+        open_groups(page, ref)
+        cost_cell = row(page, task["id"]).locator(".aw-bv-row > .aw-bv-num").nth(2).inner_text().replace("\n", " ")
+        lines = [x.inner_text() for x in timeline_list(page, ref).locator('li[data-kind="run"]').all()]
+        unpriced_lines = [x for x in lines if "unpriced" in x.lower()]
+        n_unpriced = sum(1 for r in task["runs"] if r["cost_state"] == "unpriced")
+        if label.startswith("priced"):
+            ok = (len(unpriced_lines) >= 1 and re.search(rf"\+\s*{n_unpriced}\s+unpriced", cost_cell) is not None
+                  and "$" in cost_cell)
+        else:
+            ok = (len(unpriced_lines) == len(task["runs"]) and cost_cell.strip().lower().startswith("unpriced")
+                  and "$" not in cost_cell)
+        shot(page, f"unpriced-{label.split()[0]}")
+        parts.append((f"{ref} ({label}): row total {cost_cell!r}, {len(unpriced_lines)} run lines read unpriced "
+                      f"of {len(task['runs'])}", ok))
+        page.context.close()
+    record("ac-unpriced", all(ok for _, ok in parts), "; ".join(f"{p} {'ok' if ok else 'FAILED'}" for p, ok in parts))
+
+    def two_in_a_row(items):
+        for a, b in zip(items, items[1:]):
+            if (a["kind"] == "run" and b["kind"] == "run" and a["run"]["role"] == b["run"]["role"] == "build"
+                    and a["run"]["agent"] == b["run"]["agent"]):
+                return a, b
+        return None
+
+    def pair(read, task, n):
+        return len(task["runs"]) <= 12 and two_in_a_row(timeline(task["runs"], task["send_backs"])) is not None
+    read, task = pick(pid, pair, limit=80, smallest=True)
+    if not task:
+        return record("ac-no-fold-pairs", False, "no finished task with two builds in a row by one agent")
+    a, b = two_in_a_row(timeline(task["runs"], task["send_backs"]))
+    page = new_page(browser, pid)
+    if not open_view(page, pid, read["build"]["id"]):
+        return record("ac-no-fold-pairs", False, what_is_there(page))
+    expand(page, task["ref"])
+    own = []
+    for it in (a, b):
+        li = timeline_list(page, task["ref"]).locator('li[data-kind="run"]').filter(
+            has=page.locator(f'button[aria-label="Open trace: {it["label"]}"]'))
+        own.append(bool(li.count()))
+    shot(page, "no-fold-pairs")
+    record("ac-no-fold-pairs", all(own),
+           f"{task['ref']}: {a['label']} and {b['label']} by {a['run']['agent']}, each its own line: {own}")
+
+
+def open_running_panel(page, pid, show="Finished"):
+    page.goto(f"{HUB}/?project={pid}&agent=Developer", wait_until="domcontentloaded")
+    page.get_by_test_id("conversation-more").first.click()
+    if page.get_by_test_id("conversation-toggle-panel").count():
+        if "Show" in page.get_by_test_id("conversation-toggle-panel").first.inner_text():
+            page.get_by_test_id("conversation-toggle-panel").first.click()
+        else:
+            page.keyboard.press("Escape")
+    tab = page.get_by_role("tab", name=re.compile("^Running")).or_(page.get_by_role("button", name=re.compile("^Running")))
+    poll(lambda: tab.count(), 15)
+    if tab.count():
+        tab.first.click()
+        page.wait_for_timeout(800)
+    finished = page.get_by_role("radio", name=re.compile(f"^{show}")).or_(
+        page.get_by_role("button", name=re.compile(f"^{show}")))
+    if finished.count():
+        finished.first.click()
+        page.wait_for_timeout(600)
+
+
+def check_seeded(browser, state):
+    """The cases the real data lacks, seeded into the scratch copy: FR-2 fix task, FR-4 only-unpriced,
+    FR-14 mender fold, FR-11 a non-zero needs-you count on all three surfaces, FR-10 the Finished
+    filter's card in the Running tab."""
+    pid, bid = state["pid"], BUILD_FOR_SEEDS
+    if len(SEEDED) < 4:
+        raise Setup(f"the scratch copy was not seeded ({SEEDED}); drive a snapshot, not --hub")
+    page = new_page(browser, pid)
+    if not open_view(page, pid, bid):
+        return record("ac-seeded", False, what_is_there(page))
+    ids = [x.get_attribute("id") for x in page.locator("li[id^='build-task-']").all()]
+    in_db = [r["id"] for r in ro("select id from tasks where build_id=?", (bid,))]
+    fix = "build-task-" + SEEDED["fix_task"]
+    declared_first = bool(ids) and ids[-1] == fix and ids.count(fix) == 1 and len(set(ids)) == len(ids)
+    record("ac-tasks-once-in-order", declared_first and len(ids) == len(in_db),
+           f"{len(ids)} rows for {len(in_db)} tasks in the data, the seeded Hub-filed fix {SEEDED['fix_task']} last "
+           f"and once: {declared_first}; rows read: {[i[len('build-task-'):][:14] for i in ids]}")
+    shot(page, "seeded-order")
+    # FR-4: the task with only unpriced runs.
+    unp = SEEDED["unpriced_only"]
+    ref = ro("select readable_id from tasks where id=?", (unp,))[0]["readable_id"]
+    expand(page, ref)
+    cost_cell = row(page, unp).locator(".aw-bv-row > .aw-bv-num").nth(2).inner_text().replace("\n", " ")
+    lines = [x.inner_text() for x in timeline_list(page, ref).locator('li[data-kind="run"]').all()]
+    unp_lines = [x for x in lines if "unpriced" in x.lower()]
+    record("ac-unpriced-only", cost_cell.strip().lower().startswith("unpriced") and "$" not in cost_cell
+           and lines and len(unp_lines) == len(lines),
+           f"{ref}: total reads {cost_cell!r}; {len(unp_lines)} of {len(lines)} run lines read unpriced")
+    shot(page, "seeded-unpriced-only")
+    # FR-14: the two mender turns fold.
+    mend = SEEDED["mender"]
+    mref = ro("select readable_id from tasks where id=?", (mend,))[0]["readable_id"]
+    runs_before = task_row_runs(page, mend)
+    expand(page, mref)
+    group_text = next((n for k, n, _ in drawn_lines(page, mref) if k == "group" and "Mender ×" in n), "")
+    folded = bool(group_text)
+    open_groups(page, mref)
+    runs_after = task_row_runs(page, mend)
+    n_lines = timeline_list(page, mref).locator('li[data-kind="run"]').count()
+    n_runs = ro("select count(*) c from runs where task_id=?", (mend,))[0]["c"]
+    shot(page, "seeded-mender-fold")
+    record("ac-mender-fold", folded and runs_before == runs_after and n_lines >= n_runs - 0,
+           f"{mref}: group row reads {group_text!r}; run count {runs_before} before and {runs_after} after expanding; "
+           f"{n_lines} run lines drawn for {n_runs} runs; first lines {[(k, n) for k, n, _ in drawn_lines(page, mref)]}")
+    in_view = figures_of(page, "build")
+    unpriced_note = re.sub(r"\s+", " ", page.get_by_test_id("build-cost-note").first.inner_text()).strip()
+    page.context.close()
+    # FR-11 / FR-10: the needs-you count on the three surfaces, and the Running tab's Finished card.
+    b = next((x for x in (api("GET", f"/projects/{pid}/project/builds")[1] or {}).get("builds", []) if x["id"] == bid), {})
+    parts, parity = [], []
+    page = new_page(browser, pid)
+    page.goto(f"{HUB}/?project={pid}&tab=spec&document={urllib.parse.quote(b.get('document_path') or '')}",
+              wait_until="domcontentloaded")
+    strip = page.locator(f'[data-testid=build-summary][data-build-id="{bid}"]')
+    poll(lambda: strip.count(), 20)
+    if strip.count():
+        parity.append(("finished spec page", figures_of(strip.first, "summary"), in_view))
+    open_running_panel(page, pid)
+    card = page.locator(f'[data-testid=build-summary][data-build-id="{bid}"]')
+    poll(lambda: card.count(), 6)
+    if not card.count():  # a finished build that still needs the operator sits outside the Finished filter
+        open_running_panel(page, pid, show="All")
+        poll(lambda: card.count(), 10)
+    shot(page, "seeded-running-finished-card")
+    if not card.count():
+        parts.append(("Finished filter lists the build's card", False))
+    else:
+        parity.append(("finished Running tab card", figures_of(card.first, "summary"), in_view))
+        chip = card.first.locator("a[href*='task=']").first
+        href = chip.get_attribute("href") if chip.count() else None
+        card.first.get_by_role("link", name="Open build").first.click()
+        parts.append(("Finished Running-tab summary opens its view", bool(poll(lambda: view(page, bid).count(), 20))))
+        if href:
+            open_running_panel(page, pid, show="All")
+            card = page.locator(f'[data-testid=build-summary][data-build-id="{bid}"]')
+            poll(lambda: card.count(), 10)
+            card.first.locator("a[href*='task=']").first.click()
+            task_ref = (re.search(r"[?&]task=([^&]+)", href) or [None, None])[1]
+            at = bool(poll(lambda: page.locator(
+                f'button[aria-label="Open runs of {urllib.parse.unquote(task_ref or "")}"][aria-expanded="true"]').count(), 15))
+            parts.append((f"Finished Running-tab task chip opens the view at {task_ref}", at))
+    page.context.close()
+    record("ac-summaries-open-finished-card", all(ok for _, ok in parts) and bool(parts),
+           "; ".join(f"{p} {'ok' if ok else 'FAILED'}" for p, ok in parts))
+    notes, ok_all = [], True
+    needs_view = digits(in_view["needs"])
+    for where, got, want in parity:
+        same = all((digits(got[k])[:1] == digits(want[k])[:1]) if k == "cost" else digits(got[k]) == digits(want[k])
+                   for k in got if got[k] is not None)
+        if got["cost"] and "unpriced" in got["cost"]:
+            same &= digits(got["cost"])[1:2] == digits(unpriced_note)[:1]
+        ok_all &= same
+        notes.append(f"{where}: {got} vs view {want} (cost note {unpriced_note!r}) {'equal' if same else 'DIFFER'}")
+    record("ac-parity-needs", ok_all and bool(parity) and bool(needs_view) and needs_view[0] != "0",
+           f"needs-you count in the view {in_view['needs']!r} (non-zero required); " + "; ".join(notes))
+    # The wired error state: a build the Hub does not have reads as an error with its message, not as empty.
+    page = new_page(browser, pid)
+    page.goto(address(pid, "build-doesnotexist00"), wait_until="domcontentloaded")
+    poll(lambda: page.get_by_role("alert").count() or page.locator(".aw-bv-empty").count(), 20)
+    page.wait_for_timeout(500)
+    alert = page.get_by_role("alert")
+    shot(page, "wired-error-state")
+    record("ac-error-state", alert.count() > 0 and not page.locator("[data-slot=build-task-row]").count(),
+           f"a build the Hub does not have: {alert.first.inner_text()[:120]!r}" if alert.count() else "no alert drawn")
+    page.context.close()
+    parts_of = ("ac-tasks-once-in-order", "ac-unpriced-only", "ac-mender-fold", "ac-summaries-open-finished-card",
+                "ac-parity-needs", "ac-error-state")
+    record("ac-seeded", all(checks.get(k, (0, True))[1] is False for k in parts_of),
+           "seeded cases (Hub-filed fix task, unpriced-only task, mender fold, needs-you parity, Finished card): "
+           + ", ".join(f"{k}={'ok' if checks.get(k, (0, True))[1] is False else 'FAILED'}" for k in parts_of))
+
+
+def check_matches_mock(browser, state):
+    """Shots of the wired view in light and dark, wide and narrow, named for the mock's shoot.py."""
+    pid = state["pid"]
+    build_id = "build-04e780a89c1c"  # the mock's DEFAULT_BUILD, recorded from this project's real history
+    if build_id not in finished_builds(pid):
+        raise Setup(f"{build_id}, the mock's recorded build, is not in the data")
+    for mode in ("dark", "light"):
+        for width in (1440, 960):
+            page = new_page(browser, pid, width=width, height=900)
+            page.add_init_script(f"try {{ document.documentElement.dataset.mode = '{mode}' }} catch (e) {{}}")
+            if not open_view(page, pid, build_id):
+                shot(page, f"wired_{mode}_{width}_failed")
+                return record("ac-matches-mock", False, f"{mode} {width}: {what_is_there(page)}")
+            page.evaluate(f"document.documentElement.dataset.mode = '{mode}'")
+            page.wait_for_timeout(900)
+            shot(page, f"wired_{mode}_{width}")
+            page.context.close()
+    record("ac-matches-mock", True, f"shots of {build_id} in {OUT}: wired_{{dark,light}}_{{1440,960}}.png (compared with the mock's by eye, see the task's evidence)")
 
 
 # --------------------------------------------------------------------------- ac-live
@@ -1090,6 +1484,17 @@ def check_live(browser, state):
     started = poll(lambda: live_runs(pid, second["id"]), 120, every=0.25)
     if not started:
         raise Setup(f"the second firing started no run on {second['readable_id']}")
+    # FR-15 on a build that is really running: Overview offers its view while the builder's turn runs.
+    ov = new_page(browser, pid)
+    ov.goto(f"{HUB}/?project={pid}&tab=overview", wait_until="domcontentloaded")
+    ov_link = ov.get_by_role("link", name="Open in its build")
+    poll(lambda: ov_link.count(), 20)
+    ov_opened = None
+    if ov_link.count():
+        ov_link.first.click()
+        ov_opened = poll(lambda: view(ov).first.get_attribute("data-build-id"), 20)
+    shot(ov, "live-overview")
+    ov.close()
     t0 = time.time()
     shown_run = poll(lambda: (task_row_runs(page, second["id"]) or 0) > (runs_seen or 0), LIVE_LIMIT + 5, every=0.25)
     run_latency = time.time() - t0
@@ -1099,7 +1504,8 @@ def check_live(browser, state):
                       LIVE_LIMIT + 5, every=0.25)
     move_latency = time.time() - t1
     kept_top, kept_url = scroll_top(page), page.url
-    expanded = row_button(page, first["readable_id"]).first.get_attribute("aria-expanded") == "true"
+    # The open trace is modal: the rows behind it are out of the accessibility tree, so ask the DOM.
+    expanded = page.locator(f'button[aria-label="Open runs of {first["readable_id"]}"]').first.get_attribute("aria-expanded") == "true"
     trace = trace_open_on(page, "Build 1")
     reloaded = page.evaluate("() => performance.getEntriesByType('navigation').length") != 1
     shot(page, "live-after")
@@ -1110,6 +1516,7 @@ def check_live(browser, state):
         (f"{first['readable_id']} still expanded", expanded),
         ("trace still open", trace and kept_url == url),
         ("no reload", not reloaded),
+        (f"Overview's Open in its build opens the running build ({ov_opened})", ov_opened == build_id),
     ]
     record(key, all(ok for _, ok in parts), f"build {build_id}, {second['readable_id']} run {started[0]['id']}: "
            + "; ".join(f"{p} {'ok' if ok else 'FAILED'}" for p, ok in parts))
@@ -1173,7 +1580,8 @@ def main():
     state = {"pid": args.project}
     steps = {"ac-totals": check_totals, "ac-address": check_address, "ac-timeline": check_timeline,
              "ac-fold-checks-loop": check_fold, "ac-trace": check_trace,
-             "ac-open-from-drawer": check_open_from_drawer, "ac-live": check_live}
+             "ac-open-from-drawer": check_open_from_drawer, "ac-summaries-open": check_summaries,
+             "ac-unpriced": check_unpriced_and_pairs, "ac-no-fold-pairs": lambda *a: None, "ac-matches-mock": check_matches_mock, "ac-seeded": check_seeded, "ac-live": check_live}
     setup_error = None
     try:
         if not args.hub:
