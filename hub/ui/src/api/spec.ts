@@ -542,14 +542,14 @@ export function useSpecList() {
   })
 }
 
-export function useSpec(path: string | null, options?: { enabled?: boolean }) {
+export function useSpec(path: string | null, options?: { enabled?: boolean; background?: boolean }) {
   const { isConfigured, selectedProjectId: projectId } = useConfigStore()
   return useQuery<SpecDocument>({
     queryKey: ['project', projectId, 'spec', path],
     queryFn: () =>
       getJson<SpecDocument>(
         `/api/v1/projects/${projectId}/project/spec?path=${encodeURIComponent(path ?? '')}`,
-        { first: true },
+        options?.background ? { background: true } : { first: true },
       ),
     enabled: isConfigured && !!projectId && !!path && (options?.enabled ?? true),
   })

@@ -31,8 +31,12 @@ export async function fetchWithAuth(path: string, options: RequestInit = {}): Pr
 /** `first` marks a read the open page is waiting on: `priority: 'high'` moves it ahead of queued
  *  background reads for the browser's few connections to the Hub, so a first load that fires dozens
  *  of reads does not leave the page's own data at the back. */
-export async function getJson<T>(path: string, options: { first?: boolean } = {}): Promise<T> {
-  const res = await fetchWithAuth(path, options.first ? ({ priority: 'high' } as RequestInit) : {})
+export async function getJson<T>(
+  path: string,
+  options: { first?: boolean; background?: boolean } = {},
+): Promise<T> {
+  const priority = options.first ? 'high' : options.background ? 'low' : null
+  const res = await fetchWithAuth(path, priority ? ({ priority } as RequestInit) : {})
   return res.json() as Promise<T>
 }
 

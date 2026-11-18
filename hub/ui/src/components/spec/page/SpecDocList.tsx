@@ -177,7 +177,7 @@ function RoadmapGroup({
     const t = window.setTimeout(() => setIdle(true), PROGRESS_READ_DELAY_MS)
     return () => window.clearTimeout(t)
   }, [])
-  const { data, error } = useSpec(roadmap.path, { enabled: idle })
+  const { data, error } = useSpec(roadmap.path, { enabled: idle, background: true })
   const rows = data?.slices ?? []
   const marks = rows.map((r) => ({ key: r.key, title: r.title ?? r.key, state: progressOf(r).state }))
   const stateOf = (path: string) => {
