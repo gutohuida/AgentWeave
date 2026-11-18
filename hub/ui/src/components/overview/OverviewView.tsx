@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { agentColorVars } from '@/lib/agentColors'
 import { formatAgo, formatDateTime, formatDuration, formatMoney, formatTokens, formatTokensExact } from '@/lib/format'
 import '@/styles/overview.css'
+import { OpenInBuild } from './OpenInBuild'
 import { LoadingThread } from '@/components/common/LoadingThread'
 
 /** The Overview: what needs the operator, what is running, what just finished.
@@ -57,6 +58,8 @@ export interface RunningItem {
   startedAt: string
   tokens?: number | null
   onOpen: () => void
+  /** The build the work's task belongs to; its link shows while the build runs (FR-15). */
+  build?: { projectId: string; buildId: string; task: string }
 }
 
 export interface FinishedItem {
@@ -446,6 +449,7 @@ function RunningRow({ item, now }: { item: RunningItem; now: Date }) {
           </span>
         </span>
       </button>
+      {item.build ? <OpenInBuild projectId={item.build.projectId} buildId={item.build.buildId} task={item.build.task} /> : null}
     </li>
   )
 }

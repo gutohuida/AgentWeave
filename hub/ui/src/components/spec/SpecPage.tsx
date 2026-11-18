@@ -3,6 +3,7 @@ import { EmptyState } from '@/components/common/EmptyState'
 import { LoadingThread } from '@/components/common/LoadingThread'
 import { toast } from '@/lib/toast'
 import { useConfigStore } from '@/store/configStore'
+import { BACKGROUND_READ_DELAY_MS, useAfterDelay } from '@/hooks/useAfterDelay'
 import { useProjectEvidence, useSpecDocumentRename, useSpecEvents } from '@/api/spec'
 import type { LoopSummary } from '@/api/loops'
 import { useCorpusState } from '@/api/corpusStart'
@@ -48,7 +49,8 @@ const NEW_CHANGE_HINT = { title: 'Start a change from a conversation', descripti
  */
 export function SpecPage({ document: openDocument, anchor, onOpenDocument, onOpenTasks, onOpenLoop, onOpenEvidence, evidenceOpen = false, children, onAddAgent }: SpecPageProps) {
   const list = useSpecListData()
-  const { data: evidence, isError: evidenceError } = useProjectEvidence(!!onOpenEvidence)
+  const later = useAfterDelay(BACKGROUND_READ_DELAY_MS)
+  const { data: evidence, isError: evidenceError } = useProjectEvidence(!!onOpenEvidence && later)
   useSpecEvents()
   /* The agent renames the document it is exploring, so the open path can move under this screen. */
   useSpecDocumentRename(openDocument, onOpenDocument)

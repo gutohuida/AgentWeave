@@ -121,6 +121,8 @@ class _Acc:
                 "longest_waiting_seconds": g("max.landing.waiting", 0),
             },
             "send_backs": {"made": g("sendbacks.made", 0), "received": g("sendbacks.received", 0)},
+            # Every move into a send-back, whoever made it (the build view lists exactly these).
+            "send_back_moves": g("sendbacks.moves", 0),
             "pieces": {s: g(f"pieces.{s}", 0) for s in PIECE_STATES},
             "beside_failing": {
                 "count": g("beside.count", 0),
@@ -570,13 +572,18 @@ async def tally(
     # ------------------------------------------------------------------------------------------
     counted_reviews: set = set()
     for tr in transitions:
-        if tr.from_status != "under_review" or tr.to_status not in _SEND_BACKS:
+        if tr.to_status not in _SEND_BACKS:
             continue
         when = _aware(tr.created_at)
         if since is not None and when < since:
             continue
         scope = task_scope(tr.task_id)
         scope = (scope[0], scope[1], tr.level or scope[2])
+        # Every move out of review's reach into a send-back, whoever made it (the reviewer, the
+        # landing checks, the operator): what the build view lists under each task.
+        book.book({"sendbacks.moves": 1}, scope)
+        if tr.from_status != "under_review":
+            continue
         reviewer_run = runs.get(tr.run_id) if tr.run_id else None
         reviewer = tr.actor_agent or (reviewer_run.agent if reviewer_run else None)
         book.book({"sendbacks.made": 1}, scope, reviewer, model_of(tr.run_id))
@@ -780,6 +787,8 @@ async def tally(
         "builds": {bid: acc.row() for bid, acc in book.builds.items()},
         #: The runs each build's row counts, so a surface can open exactly those.
         "build_runs": build_runs,
+        #: What each counted run was (`ROLES`), so a surface names a run as the tally counted it.
+        "run_roles": role_of,
         "groups": {
             "spec": spec_entries,
             "agent": group(book.agents, "checks and wall time"),
@@ -945,6 +954,10 @@ def build_figures(whole: Dict[str, Any], build: Build) -> Dict[str, Any]:
             "mend": dollars("mending"),
         },
         "unpriced": row["unpriced"],
+        # Every move of the build's tasks to revision_needed or rejected, and the seconds of agent
+        # work in its runs: the numbers the build view's totals are compared with.
+        "send_backs": row["send_back_moves"],
+        "run_seconds": row["run_seconds"]["total"],
         "checks": row["checks"],
         "landing": row["landing"],
     }
@@ -965,6 +978,34 @@ def spend_by_day(whole: Dict[str, Any]) -> List[Dict[str, Any]]:
 
 def _usd(micros: Optional[int]) -> Optional[float]:
     return None if micros is None else round(micros / MICROS, 4)
+
+
+async def latest_builds(session: AsyncSession, project_id: str) -> Dict[str, Dict[str, Any]]:
+    """For each document with a build of any state: `{id, state}` of its newest. Keyed by document
+    id. The page opens a document's build reads from this, without waiting for the document's own.
+    """
+    rows = (
+        await session.execute(
+            select(Build.document_id, Build.id, Build.state)
+            .where(Build.project_id == project_id)
+            .order_by(Build.created_at, Build.id)
+        )
+    ).all()
+    return {document_id: {"id": build_id, "state": state} for document_id, build_id, state in rows}
+
+
+async def latest_build_of(session: AsyncSession, document_id: str) -> Optional[Dict[str, Any]]:
+    """`{id, state}` of one document's newest build, or None. One indexed read, for the page that
+    needs only this and must not wait on the whole listing."""
+    row = (
+        await session.execute(
+            select(Build.id, Build.state)
+            .where(Build.document_id == document_id)
+            .order_by(Build.created_at.desc(), Build.id.desc())
+            .limit(1)
+        )
+    ).first()
+    return None if row is None else {"id": row[0], "state": row[1]}
 
 
 async def running_progress(session: AsyncSession, project_id: str) -> Dict[str, Dict[str, Any]]:

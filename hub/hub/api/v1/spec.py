@@ -158,12 +158,17 @@ async def list_specs(
         for document in await spec_lifecycle.list_documents(session, project_id)
     }
     shown = await spec_lifecycle.display_phases(session, list(tracked.values()))
+    # The open page starts the build's reads from the entry, ahead of the heavier document reads.
+    latest = await work_tally.latest_builds(session, project_id)
     specs = [
         {
             **entry,
             "phase": tracked[entry["path"]].phase if entry["path"] in tracked else None,
             "display_phase": shown[tracked[entry["path"]].id] if entry["path"] in tracked else None,
             "document_id": tracked[entry["path"]].id if entry["path"] in tracked else None,
+            "last_build": (
+                latest.get(tracked[entry["path"]].id) if entry["path"] in tracked else None
+            ),
         }
         for entry in state.specs
     ]
@@ -357,6 +362,22 @@ async def _retirement(session: AsyncSession, document) -> Dict[str, Any]:
         "absorbed_by": detail.get("absorbed_by"),
         "at": event.created_at.isoformat() if event is not None else None,
     }
+
+
+@router.get("/spec/last-build")
+async def get_spec_last_build(
+    path: str = Query(...),
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    """The newest build of one document, `{last_build: {id, state} | null}`. A light read: it
+    touches no file and walks no tree, so the open page's build strip need not wait on the
+    listing or on the document's own read."""
+    project_id, _ = project
+    document = await spec_lifecycle.get_document(session, project_id, path)
+    if document is None:
+        return {"last_build": None}
+    return {"last_build": await work_tally.latest_build_of(session, document.id)}
 
 
 @router.get("/spec")
@@ -5078,6 +5099,30 @@ async def build_figures_of(
     return work_tally.build_figures(
         await work_tally.tally(session, project_id, build_id=build.id), build
     )
+
+
+@router.get("/builds/{build_id}/tasks")
+async def build_tasks_of(
+    build_id: str,
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    """The build view's one read: the build, its tasks in the document's declared order (then the
+    ones added later) each with its runs, send-backs and evidence, and the build's own runs. The run
+    set is the figures route's (`work_tally`), so the two agree for the same build and moment."""
+    from ... import build_read
+    from ...db.models import SpecDocument
+
+    project_id, _ = project
+    build = await _project_build(session, project_id, build_id)
+    document = await session.get(SpecDocument, build.document_id)
+    payload = None
+    if document is not None:
+        try:
+            payload = _read_payload(await _workspace(session, project_id), document.path)
+        except Exception:  # an unreadable file loses the declared order, not the read
+            payload = None
+    return await build_read.build_read(session, project_id, build, document, payload)
 
 
 @router.post("/builds/{build_id}/stop")

@@ -99,7 +99,7 @@ function BuildSkeleton() {
   // evidence, runs, sent back, cost, changed).
   const cells = ['12px', '78%', '70%', '80%', '70%', '18px', '18px', '48px', '26px']
   return (
-    <div className="aw-bv-skeleton aw-delayed" role="status" aria-busy="true" aria-label="Loading the build">
+    <div className="aw-bv-placeholder aw-delayed" role="status" aria-busy="true" aria-label="Loading the build">
       <div className="aw-bv-header" aria-hidden="true">
         <div className="aw-bv-skel-line" style={{ width: 44, height: 12 }} />
         <div className="aw-bv-skel-line" style={{ width: '36%', height: 22 }} />

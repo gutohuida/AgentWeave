@@ -17,6 +17,9 @@ const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       refetchOnWindowFocus: false,
+      // Without it every component that mounts after a read lands asks for the same read again, and
+      // that second copy queues the page's own reads (the build strip) behind it.
+      staleTime: 5_000,
       retry: 1,
     },
   },

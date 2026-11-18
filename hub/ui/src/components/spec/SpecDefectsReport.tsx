@@ -8,6 +8,7 @@ import {
   useRecordDefect,
   useSpecDefects,
 } from '@/api/spec'
+import { BACKGROUND_READ_DELAY_MS, useAfterDelay } from '@/hooks/useAfterDelay'
 
 /**
  * Where each change's defects were caught (`a-change-is-reconciled-with-its-code-before-it-is-
@@ -22,7 +23,8 @@ export function SpecDefectsReport({
   currentPath?: string | null
   onSelect: (path: string) => void
 }) {
-  const { data, error } = useSpecDefects()
+  const later = useAfterDelay(BACKGROUND_READ_DELAY_MS)
+  const { data, error } = useSpecDefects(later)
   const [open, setOpen] = useState(false)
   const changes = data?.changes ?? []
   const onChange = !!currentPath && currentPath.startsWith('spec/changes/')

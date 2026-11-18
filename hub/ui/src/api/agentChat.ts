@@ -192,7 +192,7 @@ export function useProjectConversations(projectId: string | null, lifecycle: 'op
 const readProjectConversations = coalescedReadsByGroup<ProjectConversations>((lifecycle) =>
   coalescedReads(
     (projectId) =>
-      getJson<ProjectConversations>(`/api/v1/projects/${projectId}/conversations?lifecycle=${lifecycle}`),
+      getJson<ProjectConversations>(`/api/v1/projects/${projectId}/conversations?lifecycle=${lifecycle}`, { background: true }),
     async (projectIds) => {
       const query = projectIds.map((id) => `project_id=${encodeURIComponent(id)}`).join('&')
       const body = await getJson<{ projects: Record<string, ProjectConversations>; missing: string[] }>(

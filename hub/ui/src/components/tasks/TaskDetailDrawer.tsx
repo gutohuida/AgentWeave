@@ -37,6 +37,8 @@ import { TaskWorkView } from '@/components/tasks/TaskViews'
 import { EvidenceLink } from '@/components/evidence/EvidenceLink'
 import { RowMenu } from '@/components/layout/RowMenu'
 import { CloseForm } from './LooseTaskActions'
+import { buildDestination, buildHref, goTo } from '@/lib/navigation'
+import { useConfigStore } from '@/store/configStore'
 import { useDialogFocus } from '@/hooks/useDialogFocus'
 import { hubDate } from '@/lib/hubTime'
 import { builderAndReviewer } from '@/lib/taskStage'
@@ -297,6 +299,7 @@ interface TaskDetailDrawerProps {
  * or Escape.
  */
 export function TaskDetailDrawer({ task, onClose, onOpenRequirement }: TaskDetailDrawerProps) {
+  const buildProjectId = useConfigStore((state) => state.selectedProjectId)
   // The story is the default view (slice task-story): it answers "is this done, and how did it get
   // here?" before the controls. A Hub that predates `/story` answers 404, and the drawer then keeps
   // the details view without offering a switch that leads nowhere.
@@ -590,6 +593,22 @@ export function TaskDetailDrawer({ task, onClose, onOpenRequirement }: TaskDetai
             ) : null}
             <span data-testid={`task-drawer-stored-id-${task.id}`}>{task.id}</span>
           </p>
+          {task.build_id && buildProjectId ? (
+            <a
+              className="mt-1 inline-flex items-center gap-1 text-[12px] underline underline-offset-2"
+              style={{ color: 'var(--text-2)' }}
+              data-testid={`task-drawer-open-build-${task.id}`}
+              href={buildHref(buildProjectId, task.build_id, task.readable_id ?? task.id)}
+              onClick={(event) => {
+                if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) return
+                event.preventDefault()
+                goTo(buildDestination(buildProjectId, task.build_id!, { task: task.readable_id ?? task.id }))
+              }}
+            >
+              Open in its build
+              <Icon name="arrow_forward" size={12} />
+            </a>
+          ) : null}
         </div>
         <button
           data-testid={`task-drawer-close-${task.id}`}

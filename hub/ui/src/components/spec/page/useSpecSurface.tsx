@@ -5,18 +5,22 @@ import * as React from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { MenuItem } from '@/components/ui/menu'
 import { useBuildFigures } from '@/api/buildFigures'
+import { useBuildReads } from '@/api/buildRead'
+import { summaryOf } from '@/components/builds/buildViewModel'
 import { readableApiError } from '@/api/client'
 import {
   useSpec,
+  useSpecLastBuild,
   useSpecCoverage,
   useSpecDocuments,
   useSpecList,
   useStopBuild,
+  type SpecDocumentRecord,
   type SpecListResponse,
 } from '@/api/spec'
 import { useDocumentTasks } from '@/api/tasks'
 import { useVaultChecked } from '@/api/vault'
-import { serializeDestination, projectDestination } from '@/lib/navigation'
+import { buildDestination, buildHref, goTo, serializeDestination, projectDestination } from '@/lib/navigation'
 import { toast } from '@/lib/toast'
 import { useConfigStore } from '@/store/configStore'
 import { openTraces } from '@/store/tracesRequestStore'
@@ -122,10 +126,20 @@ export function useSpecSurface(path: string, host: SpecSurfaceHost): SpecSurface
   const { data: records, error: recordsError } = useSpecDocuments()
   const list = useSpecListData()
   const record = records?.documents.find((d) => d.path === path)
+  const listed = list.specList?.specs.find((e) => e.path === path)
   const { data: coverage, error: coverageError } = useSpecCoverage(path)
-  const { data: tasks, error: tasksError } = useDocumentTasks(record?.id ?? null)
+  const { data: tasks, error: tasksError } = useDocumentTasks(record?.id ?? listed?.document_id ?? null)
   const builds = React.useMemo(() => specDoc?.builds ?? [], [specDoc?.builds])
-  const figures = useBuildFigures(builds)
+  // A light read names the newest build, so its reads are sent without waiting for the document's
+  // own read or the list to answer behind the page's first-load burst; the same keys serve both.
+  const { data: lastBuild } = useSpecLastBuild(path)
+  const earlyLast = lastBuild ?? listed?.last_build ?? null
+  const earlyBuilds = React.useMemo(
+    () => (builds.length || !earlyLast ? builds : [earlyLast]),
+    [builds, earlyLast],
+  )
+  const figures = useBuildFigures(earlyBuilds)
+  const reads = useBuildReads(earlyBuilds.map((b) => ({ id: b.id, running: b.state === 'running' })))
   const stop = useStopBuild()
   const queryClient = useQueryClient()
   const now = useNow()
@@ -149,7 +163,9 @@ export function useSpecSurface(path: string, host: SpecSurfaceHost): SpecSurface
   if (readFailed && !specDoc) {
     return { status: 'unreadable', message: readableApiError(readError, 'The Hub could not read this document.'), plain: null }
   }
-  if (!specDoc || !records) return { status: 'loading' }
+  // The spec list's entry carries the phase, so the page draws without waiting for the documents
+  // read, which answers last behind the first-load burst.
+  if (!specDoc || (!records && !listed)) return { status: 'loading' }
   if (!payload) {
     return {
       status: 'unreadable',
@@ -164,7 +180,7 @@ export function useSpecSurface(path: string, host: SpecSurfaceHost): SpecSurface
     path,
     title: entry?.title ?? path,
     kind: entry?.kind ?? 'baseline',
-    phase: 'current' as const,
+    phase: (listed?.phase ?? 'current') as SpecDocumentRecord['phase'],
     rigor: 'sketch' as const,
     content_digest: null,
     explore_closed: false,
@@ -196,7 +212,19 @@ export function useSpecSurface(path: string, host: SpecSurfaceHost): SpecSurface
         }
       : { status: 'idle' }
 
-  const buildList = buildViews(builds, tasks ?? [], figures)
+  const buildList = buildViews(builds, tasks ?? [], figures).map((view) => {
+    const read = reads[view.id]
+    return read
+      ? {
+          ...view,
+          summary: {
+            model: summaryOf(read, now),
+            hrefFor: (task?: string) => buildHref(projectId, view.id, task),
+            onOpen: (task?: string) => goTo(buildDestination(projectId, view.id, { task })),
+          },
+        }
+      : view
+  })
   const linkTo = (anchor: string | null) =>
     `${window.location.origin}${window.location.pathname}${serializeDestination(projectDestination(projectId, 'spec', path, anchor))}`
 
