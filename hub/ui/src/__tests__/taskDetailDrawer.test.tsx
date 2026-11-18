@@ -7,6 +7,7 @@ import type { Task } from '@/api/tasks'
 import { ApiError } from '@/api/client'
 import { TaskDetailDrawer } from '@/components/tasks/TaskDetailDrawer'
 import { Drawer } from '@/components/layout/Drawer'
+import { useConfigStore } from '@/store/configStore'
 
 /**
  * F5 — the task, opened (`design.md` D8).
@@ -148,6 +149,22 @@ describe('the drawer names the task by both ids', () => {
     renderDrawer(makeTask({ id: 'task-5a9efc6d2670', readable_id: 'BPS-3' }), vi.fn())
     expect(screen.getByTestId('task-drawer-readable-id-task-5a9efc6d2670')).toHaveTextContent('BPS-3')
     expect(screen.getByTestId('task-drawer-stored-id-task-5a9efc6d2670')).toHaveTextContent('task-5a9efc6d2670')
+  })
+})
+
+describe('Open in its build (FR-15)', () => {
+  it('links a task of a build to the build view at that task', () => {
+    useConfigStore.setState({ selectedProjectId: 'proj-1' } as never)
+    renderDrawer(makeTask({ id: 'task-5a9efc6d2670', readable_id: 'BPS-3', build_id: 'build-9' } as Partial<Task>), vi.fn())
+    const link = screen.getByRole('link', { name: /Open in its build/ })
+    expect(link).toHaveAttribute('data-testid', 'task-drawer-open-build-task-5a9efc6d2670')
+    expect(link.getAttribute('href')).toContain('view=build&focus=build-9&task=BPS-3')
+  })
+
+  it('is not offered for a task that belongs to no build', () => {
+    useConfigStore.setState({ selectedProjectId: 'proj-1' } as never)
+    renderDrawer(makeTask({ build_id: null } as Partial<Task>), vi.fn())
+    expect(screen.queryByRole('link', { name: /Open in its build/ })).not.toBeInTheDocument()
   })
 })
 
