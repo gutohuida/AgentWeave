@@ -14,6 +14,8 @@ import { NewCapabilityAction } from './NewCapability'
 import '@/styles/spec-page.css'
 import '@/styles/spec-list-marks.css'
 
+const PROGRESS_READ_DELAY_MS = 3000
+
 const ORDERS: Array<{ value: ListOrder; label: string; detail: string }> = [
   { value: 'roadmap', label: 'Roadmap order', detail: 'Slices under their roadmap, in build order.' },
   { value: 'attention', label: 'What needs you', detail: 'Waiting on you, in progress, finished.' },
@@ -168,7 +170,14 @@ function RoadmapGroup({
   action?: (entry: SpecListEntry) => React.ReactNode
   showWaiting: boolean
 }) {
-  const { data, error } = useSpec(roadmap.path)
+  // The list's progress reads are background work: starting them at mount fills the browser's
+  // per-origin connection limit and the open page's own reads (the build strip) queue behind them.
+  const [idle, setIdle] = React.useState(false)
+  React.useEffect(() => {
+    const t = window.setTimeout(() => setIdle(true), PROGRESS_READ_DELAY_MS)
+    return () => window.clearTimeout(t)
+  }, [])
+  const { data, error } = useSpec(roadmap.path, { enabled: idle })
   const rows = data?.slices ?? []
   const marks = rows.map((r) => ({ key: r.key, title: r.title ?? r.key, state: progressOf(r).state }))
   const stateOf = (path: string) => {

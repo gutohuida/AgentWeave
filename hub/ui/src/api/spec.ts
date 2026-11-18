@@ -539,7 +539,7 @@ export function useSpecList() {
   })
 }
 
-export function useSpec(path: string | null) {
+export function useSpec(path: string | null, options?: { enabled?: boolean }) {
   const { isConfigured, selectedProjectId: projectId } = useConfigStore()
   return useQuery<SpecDocument>({
     queryKey: ['project', projectId, 'spec', path],
@@ -547,7 +547,7 @@ export function useSpec(path: string | null) {
       getJson<SpecDocument>(
         `/api/v1/projects/${projectId}/project/spec?path=${encodeURIComponent(path ?? '')}`,
       ),
-    enabled: isConfigured && !!projectId && !!path,
+    enabled: isConfigured && !!projectId && !!path && (options?.enabled ?? true),
   })
 }
 
