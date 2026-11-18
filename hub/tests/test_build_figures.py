@@ -182,6 +182,8 @@ async def test_the_document_list_marks_a_running_build_and_its_progress(
     (document,) = (await app.get(f"{BASE}/documents", headers=auth_headers)).json()["documents"]
 
     assert document["build"] == {"id": build_id, "done": 1, "total": 2}
+    (entry,) = (await app.get(f"{BASE}/specs", headers=auth_headers)).json()["specs"]
+    assert entry["last_build"] == {"id": build_id, "state": "running"}
     async with async_session_factory() as db:
         assert (
             (await db.execute(select(SpecDocument).where(SpecDocument.path == PATH)))

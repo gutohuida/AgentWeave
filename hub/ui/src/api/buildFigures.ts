@@ -48,7 +48,7 @@ export function useBuildFigures(builds: Array<Pick<SpecBuild, 'id' | 'state'>>):
   const results = useQueries({
     queries: builds.map((build) => ({
       queryKey: ['project', projectId, 'buildFigures', build.id],
-      queryFn: () => getJson<BuildFigures>(`/api/v1/projects/${projectId}/project/builds/${build.id}/figures`),
+      queryFn: () => getJson<BuildFigures>(`/api/v1/projects/${projectId}/project/builds/${build.id}/figures`, { first: true }),
       enabled: isConfigured && !!projectId,
       refetchInterval: build.state === 'running' ? LIVE_REFRESH_MS : false,
     })),

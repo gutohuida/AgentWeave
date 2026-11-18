@@ -158,12 +158,17 @@ async def list_specs(
         for document in await spec_lifecycle.list_documents(session, project_id)
     }
     shown = await spec_lifecycle.display_phases(session, list(tracked.values()))
+    # The open page starts the build's reads from the entry, ahead of the heavier document reads.
+    latest = await work_tally.latest_builds(session, project_id)
     specs = [
         {
             **entry,
             "phase": tracked[entry["path"]].phase if entry["path"] in tracked else None,
             "display_phase": shown[tracked[entry["path"]].id] if entry["path"] in tracked else None,
             "document_id": tracked[entry["path"]].id if entry["path"] in tracked else None,
+            "last_build": (
+                latest.get(tracked[entry["path"]].id) if entry["path"] in tracked else None
+            ),
         }
         for entry in state.specs
     ]

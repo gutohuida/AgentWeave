@@ -30,6 +30,9 @@ export interface SpecEntry {
    *  present only for documents the Hub tracks a record for — `null` for a document discovery
    *  found on disk that was never created through the Hub. */
   document_id?: string | null
+  /** The document's newest build in any state, so the open page's build reads start before the
+   *  document's own read answers; null with none (absent from an older Hub). */
+  last_build?: { id: string; state: 'running' | 'stopped' | 'finished' } | null
 }
 
 /** Whether the delivery a change-spec document declares can actually be honoured, computed fresh
@@ -330,14 +333,14 @@ export interface SpecDefectsChange {
 }
 
 /** Defects per change, by the step that caught them. Oldest first within a change. */
-export function useSpecDefects() {
+export function useSpecDefects(enabled = true) {
   const { isConfigured, selectedProjectId: projectId } = useConfigStore()
   return useQuery<{ changes: SpecDefectsChange[] }>({
     // Under `specs`, so `spec_updated` and every spec mutation refresh it.
     queryKey: ['project', projectId, 'specs', 'defects'],
     queryFn: () =>
       getJson<{ changes: SpecDefectsChange[] }>(`/api/v1/projects/${projectId}/project/spec/defects`),
-    enabled: isConfigured && !!projectId,
+    enabled: isConfigured && !!projectId && enabled,
   })
 }
 
@@ -546,6 +549,7 @@ export function useSpec(path: string | null, options?: { enabled?: boolean }) {
     queryFn: () =>
       getJson<SpecDocument>(
         `/api/v1/projects/${projectId}/project/spec?path=${encodeURIComponent(path ?? '')}`,
+        { first: true },
       ),
     enabled: isConfigured && !!projectId && !!path && (options?.enabled ?? true),
   })

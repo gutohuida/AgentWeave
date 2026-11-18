@@ -980,6 +980,20 @@ def _usd(micros: Optional[int]) -> Optional[float]:
     return None if micros is None else round(micros / MICROS, 4)
 
 
+async def latest_builds(session: AsyncSession, project_id: str) -> Dict[str, Dict[str, Any]]:
+    """For each document with a build of any state: `{id, state}` of its newest. Keyed by document
+    id. The page opens a document's build reads from this, without waiting for the document's own.
+    """
+    rows = (
+        await session.execute(
+            select(Build.document_id, Build.id, Build.state)
+            .where(Build.project_id == project_id)
+            .order_by(Build.created_at, Build.id)
+        )
+    ).all()
+    return {document_id: {"id": build_id, "state": state} for document_id, build_id, state in rows}
+
+
 async def running_progress(session: AsyncSession, project_id: str) -> Dict[str, Dict[str, Any]]:
     """For each document with a running build: `{id, done, total}`, the tasks of that build that are
     approved of those it covers. Keyed by document id; a document with none has no entry."""
