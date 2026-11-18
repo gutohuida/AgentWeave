@@ -1041,7 +1041,7 @@ def check_summaries(browser, state):
     finished = [b for b in builds if b.get("state") == "finished"]
     if not running or not finished:
         raise Setup(f"needs one running and one finished build ({len(running)} running, {len(finished)} finished)")
-    parts, parity = [], []
+    parts, parity, notes_of = [], [], {}
     for kind, b in (("running", running[0]), ("finished", finished[0])):
         bid, doc = b["id"], b.get("document_path")
         page = new_page(browser, pid)
@@ -1049,6 +1049,8 @@ def check_summaries(browser, state):
             parts.append((f"{kind} {bid} opens its view", False))
             continue
         in_view = figures_of(page, "build")
+        note_el = page.get_by_test_id("build-cost-note")
+        notes_of[kind] = re.sub(r"\s+", " ", note_el.first.inner_text()).strip() if note_el.count() else ""
         # The spec page's strip.
         page.goto(f"{HUB}/?project={pid}&tab=spec&document={urllib.parse.quote(doc or '')}", wait_until="domcontentloaded")
         strip = page.locator(f'[data-testid=build-summary][data-build-id="{bid}"]')
@@ -1058,7 +1060,7 @@ def check_summaries(browser, state):
             parts.append((f"{kind} {bid}: spec page shows its summary", False))
         else:
             on_page = figures_of(strip.first, "summary")
-            parity.append((f"{kind} spec page", on_page, in_view))
+            parity.append((f"{kind} spec page", on_page, in_view, notes_of.get(kind, "")))
             strip.first.get_by_role("link", name="Open build").first.click()
             parts.append((f"{kind} spec-page summary opens its view", bool(poll(lambda: view(page, bid).count(), 20))))
             page.go_back()
@@ -1091,7 +1093,7 @@ def check_summaries(browser, state):
         poll(lambda: card.count(), 10)
         shot(page, f"summary-panel-{kind}")
         if card.count():
-            parity.append((f"{kind} Running tab", figures_of(card.first, "summary"), in_view))
+            parity.append((f"{kind} Running tab", figures_of(card.first, "summary"), in_view, notes_of.get(kind, "")))
             card.first.get_by_role("link", name="Open build").first.click()
             parts.append((f"{kind} Running-tab summary opens its view", bool(poll(lambda: view(page, bid).count(), 20))))
         elif kind == "running":
@@ -1099,14 +1101,20 @@ def check_summaries(browser, state):
         page.context.close()
     record(key, all(ok for _, ok in parts) and bool(parity), "; ".join(f"{p} {'ok' if ok else 'FAILED'}" for p, ok in parts))
     ok_all, notes = True, []
-    for where, got, want in parity:
+    for where, got, want, cost_note in parity:
         # A surface is compared on the figures it carries: the spec page's strip is the narrow form
-        # (send-backs and who is needed), the Running tab's card carries all four.
-        same = all(digits(got[k]) == digits(want[k]) or (k == "needs" and not digits(got[k]) and not digits(want[k])
+        # (send-backs and who is needed), the Running tab's card carries all four. The card states its
+        # unpriced runs inside the cost ("$X +N unpriced"); the view states them in its cost note.
+        def agrees(k):
+            if k == "cost":
+                return digits(got[k])[:1] == digits(want[k])[:1]
+            return digits(got[k]) == digits(want[k]) or (k == "needs" and not digits(got[k]) and not digits(want[k])
                    and ("nothing" in got[k].lower()) == ("nothing" in want[k].lower()))
-                   for k in got if got[k] is not None)
+        same = all(agrees(k) for k in got if got[k] is not None)
+        if got.get("cost") and "unpriced" in got["cost"]:
+            same &= digits(got["cost"])[1:2] == digits(cost_note)[:1]
         ok_all &= same
-        notes.append(f"{where}: {got} vs view {want} {'equal' if same else 'DIFFER'}")
+        notes.append(f"{where}: {got} vs view {want} (cost note {cost_note!r}) {'equal' if same else 'DIFFER'}")
     record("ac-parity", ok_all and bool(parity), "; ".join(notes) or "no surface to compare")
 
 
