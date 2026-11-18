@@ -499,7 +499,8 @@ async def test_with_the_switch_on_a_peer_turn_waits_for_a_firing_then_shares_its
                 )
                 assert peer.status_code == 200, peer.text
                 assert peer.json()["status"] == "queued"
-                assert "already running" in peer.json()["waiting_reason"]
+                # Held by the shared worktree, not by the agent being busy (start-gate, step 3).
+                assert "is working in" in peer.json()["waiting_reason"]
                 assert len(cwds) == 1
             finally:
                 release.set()
