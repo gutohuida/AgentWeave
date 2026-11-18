@@ -1,0 +1,88 @@
+{
+  "hash": "30d9d501",
+  "configHash": "865cddec",
+  "lockfileHash": "e3b0c442",
+  "browserHash": "ad7c8f26",
+  "optimized": {
+    "react": {
+      "src": "../../../../../../../../hub/ui/node_modules/react/index.js",
+      "file": "react.js",
+      "fileHash": "ed18c311",
+      "needsInterop": true
+    },
+    "react-dom": {
+      "src": "../../../../../../../../hub/ui/node_modules/react-dom/index.js",
+      "file": "react-dom.js",
+      "fileHash": "f5b81c54",
+      "needsInterop": true
+    },
+    "react/jsx-dev-runtime": {
+      "src": "../../../../../../../../hub/ui/node_modules/react/jsx-dev-runtime.js",
+      "file": "react_jsx-dev-runtime.js",
+      "fileHash": "de51c0ef",
+      "needsInterop": true
+    },
+    "react/jsx-runtime": {
+      "src": "../../../../../../../../hub/ui/node_modules/react/jsx-runtime.js",
+      "file": "react_jsx-runtime.js",
+      "fileHash": "0090ea81",
+      "needsInterop": true
+    },
+    "@radix-ui/react-slot": {
+      "src": "../../../../../../../../hub/ui/node_modules/@radix-ui/react-slot/dist/index.mjs",
+      "file": "@radix-ui_react-slot.js",
+      "fileHash": "1a5e7d3d",
+      "needsInterop": false
+    },
+    "@tanstack/react-query": {
+      "src": "../../../../../../../../hub/ui/node_modules/@tanstack/react-query/build/modern/index.js",
+      "file": "@tanstack_react-query.js",
+      "fileHash": "c38f48fd",
+      "needsInterop": false
+    },
+    "class-variance-authority": {
+      "src": "../../../../../../../../hub/ui/node_modules/class-variance-authority/dist/index.mjs",
+      "file": "class-variance-authority.js",
+      "fileHash": "71d905c0",
+      "needsInterop": false
+    },
+    "lucide-react": {
+      "src": "../../../../../../../../hub/ui/node_modules/lucide-react/dist/esm/lucide-react.mjs",
+      "file": "lucide-react.js",
+      "fileHash": "c90da853",
+      "needsInterop": false
+    },
+    "react-dom/client": {
+      "src": "../../../../../../../../hub/ui/node_modules/react-dom/client.js",
+      "file": "react-dom_client.js",
+      "fileHash": "0cd2af52",
+      "needsInterop": true
+    },
+    "simple-icons": {
+      "src": "../../../../../../../../hub/ui/node_modules/simple-icons/index.mjs",
+      "file": "simple-icons.js",
+      "fileHash": "796e9081",
+      "needsInterop": false
+    },
+    "zustand": {
+      "src": "../../../../../../../../hub/ui/node_modules/zustand/esm/index.mjs",
+      "file": "zustand.js",
+      "fileHash": "9a5ff1de",
+      "needsInterop": false
+    }
+  },
+  "chunks": {
+    "chunk-HHJXRZHD": {
+      "file": "chunk-HHJXRZHD.js"
+    },
+    "chunk-F7XQWYWQ": {
+      "file": "chunk-F7XQWYWQ.js"
+    },
+    "chunk-CGUQWMN5": {
+      "file": "chunk-CGUQWMN5.js"
+    },
+    "chunk-4MBMRILA": {
+      "file": "chunk-4MBMRILA.js"
+    }
+  }
+}
