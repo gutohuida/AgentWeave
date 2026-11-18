@@ -43,7 +43,7 @@ const LIVE_REFRESH_MS = 5000
 
 /** The figures of each build, by build id. A running build is read again every few seconds (its
  *  numbers move as it works); a finished one is read once. */
-export function useBuildFigures(builds: SpecBuild[]): Record<string, BuildFigures | undefined> {
+export function useBuildFigures(builds: Array<Pick<SpecBuild, 'id' | 'state'>>):Record<string, BuildFigures | undefined> {
   const { isConfigured, selectedProjectId: projectId } = useConfigStore()
   const results = useQueries({
     queries: builds.map((build) => ({

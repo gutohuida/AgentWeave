@@ -127,8 +127,14 @@ export function useSpecSurface(path: string, host: SpecSurfaceHost): SpecSurface
   const { data: coverage, error: coverageError } = useSpecCoverage(path)
   const { data: tasks, error: tasksError } = useDocumentTasks(record?.id ?? null)
   const builds = React.useMemo(() => specDoc?.builds ?? [], [specDoc?.builds])
-  const figures = useBuildFigures(builds)
-  const reads = useBuildReads(builds.map((b) => ({ id: b.id, running: b.state === 'running' })))
+  // The documents list already names a running build, so its reads are sent without waiting for the
+  // document's own read to answer behind the page's first-load burst; the same keys serve both.
+  const earlyBuilds = React.useMemo(
+    () => (builds.length || !record?.build ? builds : [{ id: record.build.id, state: 'running' as const }]),
+    [builds, record?.build],
+  )
+  const figures = useBuildFigures(earlyBuilds)
+  const reads = useBuildReads(earlyBuilds.map((b) => ({ id: b.id, running: b.state === 'running' })))
   const stop = useStopBuild()
   const queryClient = useQueryClient()
   const now = useNow()
