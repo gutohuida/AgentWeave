@@ -339,6 +339,11 @@ class ProjectSettings(BaseModel):
     # so a change applies without a restart and releases or admits nothing by itself.
     quarantine_threshold: float = Field(default=0.05, gt=0, le=1)
     quarantine_exit_passes: int = Field(default=20, ge=1, le=1000)
+
+    # --- Parallel runs (`one-profile-runs-many-turns-at-once-on-different-tasks`, FR-15) ---
+    # Whether one profile may run several turns at once on different work. Off by default, for new
+    # and existing projects alike; read at each start, so a change applies without a restart.
+    profiles_run_in_parallel: bool = False
     # The files a command rebuilds, which landing rebuilds instead of sending a conflict back. Null
     # is none, and every conflict sends the task back as before (FR-1, FR-2). Operator only.
     generated_files: Optional[GeneratedFiles] = None

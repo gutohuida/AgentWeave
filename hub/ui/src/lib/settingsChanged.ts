@@ -27,7 +27,7 @@ export function projectChangedSections(settings: ProjectSettings | undefined, tr
   if (settings) {
     const d = PROJECT_DEFAULTS
     const reach = settings.reach_grants
-    if (settings.allow_agent_jobs !== d.allow_agent_jobs || settings.hop_budget !== d.hop_budget || settings.turn_delivery_cap !== d.turn_delivery_cap) out.add('collaboration')
+    if (settings.allow_agent_jobs !== d.allow_agent_jobs || (settings.profiles_run_in_parallel ?? false) !== d.profiles_run_in_parallel || settings.hop_budget !== d.hop_budget || settings.turn_delivery_cap !== d.turn_delivery_cap) out.add('collaboration')
     if (settings.agent_budget !== d.agent_budget) out.add('budgets')
     if (Boolean(settings.default_permission_mode) || Boolean(reach && (reach.roots.length || reach.hosts.length))) out.add('permissions')
     if (
