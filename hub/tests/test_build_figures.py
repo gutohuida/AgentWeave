@@ -141,6 +141,8 @@ async def test_a_builds_figures_split_its_time_cost_and_runs(
         },
         "cost": {"build": 3.0, "review": 1.0, "lead": 0.0, "mend": 0.0},
         "unpriced": 0,
+        "send_backs": 0,
+        "run_seconds": 600,
         "checks": {
             "runs": 1,
             "passed": 1,
