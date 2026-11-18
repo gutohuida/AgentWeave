@@ -3,6 +3,8 @@
 Started in `main.lifespan` and cancelled with it. Each pass, off every request's path:
 
 1. the trace retention sweep (`trace_retention.sweep`), batched so it never stalls a reader;
+   then the removal of archived chats' merged worktrees and ended review runs' checkouts
+   (`thread_cleanup.sweep`);
 2. at least once a day, a refresh of the query planner's statistics. Measured: `ANALYZE` had never
    run on the operator's database (no `sqlite_stat1`), so the planner chose indexes blind.
    `analysis_limit` bounds the work to a sample per index, a few milliseconds on their data.
@@ -19,7 +21,7 @@ import logging
 import time
 from typing import Optional
 
-from . import trace_retention
+from . import thread_cleanup, trace_retention
 from .db.engine import engine
 
 logger = logging.getLogger(__name__)
@@ -47,6 +49,10 @@ async def run_pass(*, statistics_due: bool) -> None:
         await trace_retention.sweep()
     except Exception as exc:  # noqa: BLE001 -- the next pass tries again
         logger.warning("Trace retention sweep failed (retried next pass): %s", exc)
+    try:
+        await thread_cleanup.sweep()
+    except Exception as exc:  # noqa: BLE001 -- the next pass tries again
+        logger.warning("Thread worktree cleanup failed (retried next pass): %s", exc)
     if statistics_due:
         try:
             await refresh_statistics()

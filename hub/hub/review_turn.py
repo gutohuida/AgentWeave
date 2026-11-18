@@ -717,8 +717,12 @@ async def prepare_review_turn(
     reviewer: str,
     task_id: str,
     repo_root: Path,
+    run_id: Optional[str] = None,
 ) -> ReviewContext:
     """Provision *reviewer*'s checkout of the work on *task_id* and describe the turn.
+
+    *run_id* gives this review run a checkout of its own rather than the reviewer's shared one
+    (`worktrees.review_run_path`, FR-8): asked for while the project's parallel switch is on.
 
     Deliberately does **not** gate on the task's status. Which statuses dispatch a reviewer is
     `loop-becomes-a-flow`'s question, and this change's scope is visibility only (design D7); the
@@ -756,8 +760,10 @@ async def prepare_review_turn(
 
     try:
         # Serialized with every other worktree change, as it was on the loop (D5).
+        # The run's own checkout only when asked for: off, the call is exactly what it was.
+        own = {"run_id": run_id} if run_id else {}
         workspace = await blocking.run_serialized(
-            worktrees.ensure_review_checkout, repo_root, reviewer, target.commit_sha
+            worktrees.ensure_review_checkout, repo_root, reviewer, target.commit_sha, **own
         )
     except worktrees.ReviewCommitUnavailableError as exc:
         # The evidence names a commit the repository does not contain — an author's branch pruned,
