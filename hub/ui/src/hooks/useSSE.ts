@@ -44,6 +44,7 @@ const SSE_EVENT_TYPES = [
   'next_slice_answered',
   // The known-failing list changed (`known_failing`); a flake the gate just recorded.
   'known_failing_changed',
+  'quarantine_changed',
   'checks_flaky',
   'agent_heartbeat',
   'agent_created',
@@ -605,6 +606,9 @@ function applyInvalidation(queryClient: QueryClient, event: SSEEvent): void {
         case 'next_slice_offered':
         case 'next_slice_answered':
           inv({ queryKey: ['project', pid, 'nextSliceOffers'] })
+          break
+        case 'quarantine_changed':
+          inv({ queryKey: ['project', pid, 'checks', 'quarantine'] })
           break
         case 'known_failing_changed':
         case 'checks_flaky':

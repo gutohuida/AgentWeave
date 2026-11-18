@@ -262,6 +262,20 @@ def only_excused_fail(again: Dict[str, Any], excused: Iterable[str]) -> bool:
     return bool(allowed) and bool(named) and not again.get("timed_out") and named <= allowed
 
 
+def excused_in(results: Optional[Sequence[Any]]) -> List[Dict[str, Any]]:
+    """The quarantined tests a run's *results* excused, each once, as recorded when excused: what a
+    landing names beside its known-failing entries (FR-11)."""
+    seen: Dict[Tuple[Any, Any], Dict[str, Any]] = {}
+    for result in results or []:
+        record = result.get(RESULT_KEY) if isinstance(result, dict) else None
+        if not isinstance(record, dict):
+            continue
+        for entry in record.get("tests") or []:
+            if isinstance(entry, dict):
+                seen.setdefault((entry.get("check"), entry.get("test")), entry)
+    return list(seen.values())
+
+
 def excused_by_quarantine(result: Any) -> bool:
     """Whether *result* passed only because quarantine excused every failure it had."""
     if not isinstance(result, dict) or not isinstance(result.get(RESULT_KEY), dict):

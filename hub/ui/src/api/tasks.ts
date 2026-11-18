@@ -4,6 +4,7 @@ import { useConfigStore } from '@/store/configStore'
 import { neutraliseFileMentions } from '@/lib/fileMentions'
 import type { BuildPullRequest, CiRead } from './pullRequests'
 import type { EvidencePiece } from './spec'
+import type { QuarantineExcuse } from './quarantine'
 
 /**
  * One thing the Hub decided to tell the operator at approval rather than refuse (F169):
@@ -241,6 +242,9 @@ export interface TaskCheckResult {
   /** Set when many tests failed at once and every one passed when re-run: information, not a
    *  failure (`a-disturbed-check-run-is-not-a-pile-of-flaky-tests`, FR-2). */
   disturbed?: { failed: number; passed_on_rerun: number; threshold: number }
+  /** Failures quarantine excused (`quarantine.RESULT_KEY`): named here, never counted against the
+   *  check. `first` is present where they were all its failures. */
+  quarantine?: { tests?: QuarantineExcuse[]; first?: unknown; changed_file?: unknown }
   /** The first run of a check that failed and then passed when re-run. */
   flaky?: { first?: { output_tail?: string } }
   /** `could_not_run`: the check's command could not start. Neither passed nor failed, and never
@@ -325,6 +329,9 @@ export interface TaskLanding {
    *  went_past`, FR-10): each as it stood then, kept after the entry itself comes off the list.
    *  Absent from a Hub older than the list. */
   went_past?: TaskLandingEntry[]
+  /** The quarantined tests its batch's checks excused, once landed (`quarantine.excused_in`);
+   *  absent from a Hub older than quarantine. */
+  quarantined?: QuarantineExcuse[]
   batch: TaskLandingBatch | null
   /** The checks of the batch that last held this work that could not run; kept when the landing
    *  was queued again with no batch. Absent from a Hub older than that outcome. */

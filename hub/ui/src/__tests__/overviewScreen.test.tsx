@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { fireEvent, render, screen, within } from '@testing-library/react'
 import type { Question } from '@/api/questions'
 import type { Stall } from '@/api/stalls'
+import type { QuarantineBody } from '@/api/quarantine'
 import type { ClearStableResult, DisturbedRun, KnownFailingEntry } from '@/api/knownFailing'
 import { OverviewScreen } from '@/components/overview/OverviewScreen'
 import { useTaskFilterStore } from '@/store/taskFilterStore'
@@ -114,6 +115,14 @@ vi.mock('@/api/knownFailing', () => ({
   useDisturbedRuns: () => ({ data: disturbedRuns }),
   useClearStableFixTasks: () => ({ mutate: clearMutate, isPending: false, data: clearResult, error: null }),
 }))
+let quarantineBody: QuarantineBody | null = null
+const setMarkMutate = vi.fn()
+const removeMarkMutate = vi.fn()
+vi.mock('@/api/quarantine', () => ({
+  useQuarantine: () => ({ data: quarantineBody, error: null, refetch: () => {} }),
+  useSetNeverQuarantine: () => ({ mutate: setMarkMutate, isPending: false, error: null }),
+  useRemoveNeverQuarantine: () => ({ mutate: removeMarkMutate, isPending: false, error: null }),
+}))
 vi.mock('@/api/checkNotices', () => ({ useCheckNotices: () => ({ data: [], error: null, refetch: () => {} }) }))
 vi.mock('@/api/accounting', () => ({ useAccounting: () => ({ data: accountingData }) }))
 vi.mock('@/components/overview/AgentPostureChips', () => ({ AgentPostureChips: () => null }))
@@ -143,6 +152,9 @@ beforeEach(() => {
   queueStatuses = []
   openStalls = []
   knownFailing = null
+  quarantineBody = null
+  setMarkMutate.mockClear()
+  removeMarkMutate.mockClear()
   knownFailingError = null
   knownFailingRefetch.mockClear()
   answerMutate.mockClear()
@@ -168,6 +180,35 @@ describe('the wired Overview', () => {
     const [first, last] = Array.from(row.querySelectorAll('time'))
     expect(first).toHaveTextContent(/^first seen just now$/)
     expect(last).toHaveTextContent(/^last seen just now$/)
+  })
+
+  it('lists the quarantine beside the known-failing list, and sets and removes never-quarantine marks (FR-11, ac-shown-project)', () => {
+    quarantineBody = {
+      threshold: 0.05,
+      exit_passes: 20,
+      quarantined: [
+        {
+          id: 'qt-1', check: 'hub-tests', test: 'tests/test_a.py::test_flaky', flake_rate: 0.1, flips: 2,
+          entered_at: '2026-10-20T06:00:00+00:00', passes: 3, passes_to_exit: 20, fix_task_id: 'task-fix-q',
+          fix_task: { id: 'task-fix-q', display_id: 'FIX-9', title: 'Fix the flake', status: 'pending', assignee: null },
+        },
+      ],
+      marks: [{ id: 'nqm-1', check: 'hub-tests', test: 'tests/test_g.py::test_guard', marked_at: '2026-10-20T07:00:00+00:00' }],
+    }
+    render(<OverviewScreen onNavigate={vi.fn()} />)
+    const list = screen.getByTestId('quarantine-list')
+    const row = within(list).getByTestId('quarantined-qt-1')
+    expect(row).toHaveTextContent('tests/test_a.py::test_flaky')
+    expect(row.querySelector('[data-slot="q-check"]')).toHaveTextContent('hub-tests')
+    expect(row.querySelector('[data-slot="q-rate"]')).toHaveTextContent('0.10')
+    expect(row.querySelector('[data-slot="q-passes"]')).toHaveTextContent('3 of 20')
+    expect(row.querySelector('[data-slot="q-fix-task"]')).toHaveTextContent('FIX-9')
+    fireEvent.click(within(screen.getByTestId('never-quarantine-nqm-1')).getByText('Remove mark'))
+    expect(removeMarkMutate).toHaveBeenCalledWith({ check: 'hub-tests', test: 'tests/test_g.py::test_guard' })
+    fireEvent.change(screen.getByLabelText('Check name'), { target: { value: 'lint' } })
+    fireEvent.change(screen.getByLabelText('Test id'), { target: { value: 'tests/test_z.py::test_z' } })
+    fireEvent.click(screen.getByText('Never quarantine a test'))
+    expect(setMarkMutate).toHaveBeenCalledWith({ check: 'lint', test: 'tests/test_z.py::test_z' })
   })
 
   it('shows the known-failing list, each entry with check, test, kind, first and last seen, and a link to its fix task', () => {

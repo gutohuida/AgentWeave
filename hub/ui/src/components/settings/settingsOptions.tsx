@@ -16,6 +16,8 @@ export const PROJECT_DEFAULTS: Pick<
   | 'checkpoint_mode'
   | 'checkpoint_auto_continue'
   | 'checks_give_way'
+  | 'quarantine_threshold'
+  | 'quarantine_exit_passes'
   | 'pr_landing'
   | 'pr_single_commit'
   | 'pr_ci_full_check'
@@ -30,6 +32,8 @@ export const PROJECT_DEFAULTS: Pick<
   checkpoint_mode: 'offered',
   checkpoint_auto_continue: false,
   checks_give_way: false,
+  quarantine_threshold: 0.05,
+  quarantine_exit_passes: 20,
   pr_landing: false,
   pr_single_commit: false,
   pr_ci_full_check: false,

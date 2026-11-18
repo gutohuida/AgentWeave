@@ -7,6 +7,7 @@ import {
   type TaskLanding as Landing,
   type TaskLandingEntry as LandingEntry,
 } from '@/api/tasks'
+import type { QuarantineExcuse } from '@/api/quarantine'
 import { CiState } from '@/components/spec/PullRequestLine'
 import { couldNotRunSentence } from './couldNotRun'
 import { Button } from '@/components/ui/button'
@@ -69,6 +70,26 @@ function WentPast({ taskId, entries }: { taskId: string; entries: LandingEntry[]
         {entries.map((entry) => (
           <li key={entry.id}>
             <code>{entry.test ?? `the whole ${entry.check} check`}</code> ({entry.check}, {entry.kind}
+            {entry.fix_task_id ? `; fix task ${entry.fix_task_id}` : ''})
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
+}
+
+/** The quarantined tests a landed batch excused (FR-11): flaky tests whose failures counted against
+ *  nothing. Their own list, never mixed with the known-failing entries or the failures. */
+function Quarantined({ taskId, entries }: { taskId: string; entries: QuarantineExcuse[] }) {
+  return (
+    <div data-testid={`task-landing-quarantined-${taskId}`} style={{ color: 'var(--text-2)' }}>
+      <p>
+        {entries.length} quarantined {entries.length === 1 ? 'test was' : 'tests were'} excused:
+      </p>
+      <ul className="list-disc pl-4">
+        {entries.map((entry) => (
+          <li key={`${entry.check}:${entry.test}`}>
+            <code>{entry.test}</code> ({entry.check ? `${entry.check}, ` : ''}quarantined
             {entry.fix_task_id ? `; fix task ${entry.fix_task_id}` : ''})
           </li>
         ))}
@@ -163,6 +184,7 @@ export function TaskLanding({ taskId }: { taskId: string }) {
         </pre>
       )}
       {landing.state === 'landed' && landing.went_past?.length ? <WentPast taskId={taskId} entries={landing.went_past} /> : null}
+      {landing.state === 'landed' && landing.quarantined?.length ? <Quarantined taskId={taskId} entries={landing.quarantined} /> : null}
       {landing.state === 'landed' && (landing.override_reason || landing.batch?.override_reason) && (
         <p style={{ color: 'var(--text-2)' }}>
           {/* The Hub lands a batch past a failure only where it reproduced on no task's prefix
