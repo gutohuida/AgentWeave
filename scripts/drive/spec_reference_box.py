@@ -486,6 +486,76 @@ def check_edit_moves_to_top(browser, hub):
         context.close()
 
 
+def check_timeline_boxes(browser, hub):
+    """timeline-box-opens and rename-and-missing, through the real app: a message with a box for a
+    real document and one for an id the project does not list is sent, the box is clicked, the
+    document is retitled through the Hub's content route, and the missing box is clicked."""
+    root = hub.scratch / "timeline-project"
+    root.mkdir()
+    (root / "README.md").write_text("A scratch project for the timeline boxes.", encoding="utf-8")
+    project = hub.need("POST", "/projects/open", {"path": str(root), "name": "spec-reference-timeline"})
+    base = f"/projects/{project['id']}"
+    runner = hub.need("POST", f"{base}/runners", {"name": "Haiku", "cli": "claude", "model": HAIKU})
+    hub.need("POST", f"{base}/agents", {"name": "Alpha", "runner_id": runner["id"]})
+    old, new, gone = "Timeline Subject Alpha", "Timeline Subject Renamed", "Vanished Spec"
+    created = hub.need("POST", f"{base}/project/documents", {"title": old, "kind": "change-spec"})
+    path = created.get("path") or (created.get("document") or {}).get("path")
+    context = browser.new_context(viewport={"width": 1440, "height": 1000})
+    context.add_init_script(
+        "try { sessionStorage.setItem('agentweave-session', JSON.stringify({apiKey: %s, hubUrl: %s})) } catch (e) {}"
+        % (json.dumps(hub.key), json.dumps(hub.url)))
+    page = context.new_page()
+    boxes = "[data-testid=timeline-spec-box]"
+
+    def shown():
+        return page.evaluate(
+            "(sel) => [...document.querySelectorAll(sel)].map((e) => ({id: e.dataset.id, state: e.dataset.state, "
+            "text: e.textContent.trim(), title: e.getAttribute('title'), tag: e.tagName}))", boxes)
+
+    def panel_tabs():
+        return page.locator("[data-testid^=panel-tab-close-]").count()
+
+    try:
+        page.goto(f"{hub.url}/?project={project['id']}&agent=Alpha", wait_until="domcontentloaded")
+        field(page).wait_for(timeout=30000)
+        field(page).click()
+        page.keyboard.type("See ")
+        insert_reference(page, "Timeline")
+        page.keyboard.type(f"and [spec: {gone}](spdoc-ffffffffffff) now")
+        page.keyboard.press("Enter")
+        page.wait_for_url(re.compile(r"conversation=conv-"), timeout=30000)
+        found = settle(page, shown, lambda b: len(b) == 2, ms=15000)
+        d = next((b for b in found if b["text"].startswith(old)), None)
+        if len(found) != 2 or d is None:
+            bubbles = page.evaluate("() => [...document.querySelectorAll('.timeline-bubble')].map((e) => e.innerHTML.slice(0, 400))")
+            return False, f"timeline boxes {found!r}; wanted two, one reading {old!r}; bubbles {bubbles!r}"
+        before_tabs = panel_tabs()
+        page.locator(boxes).filter(has_text=old).first.click()
+        opened = settle(page, panel_tabs, lambda n: n > before_tabs, ms=8000)
+        opens_ok = opened > before_tabs
+        timeline_detail = f"boxes {found!r}; clicking {old!r} took panel tabs {before_tabs} -> {opened}"
+        code, out = hub.api("PUT", f"{base}/project/documents/{path}/content", {"document": document_body(new)})
+        if code != 200:
+            raise RuntimeError(f"retitling was refused: {code} {out}")
+        page.reload(wait_until="domcontentloaded")
+        after = settle(page, shown, lambda b: any(x["text"].startswith(new) for x in b), ms=15000)
+        renamed = next((b for b in after if b["text"].startswith(new)), None)
+        missing = next((b for b in after if gone in b["text"]), None)
+        rename_ok = bool(renamed) and renamed["title"] == old
+        missing_ok = bool(missing) and "no longer available" in missing["text"] and missing["state"] == "missing"
+        tabs_before = panel_tabs()
+        if missing:
+            page.locator(boxes).filter(has_text=gone).first.click(force=True)
+            page.wait_for_timeout(600)
+        inert = missing is not None and panel_tabs() == tabs_before
+        return (opens_ok, rename_ok, missing_ok, inert) == (True,) * 4, (
+            f"{timeline_detail}; after the retitle {after!r}; clicking the missing box left panel tabs "
+            f"{tabs_before} -> {panel_tabs()}; opens={opens_ok} renamed={rename_ok} missing={missing_ok} inert={inert}"
+        )
+    finally:
+        context.close()
+
+
 def report(key, fn, *args):
     try:
         ok, detail = fn(*args)
@@ -530,11 +600,17 @@ def main():
             except RuntimeError as exc:
                 failed += 1
                 print(f"check edit-moves-to-top: reached=no failed_at_assertion=no -- {exc}")
+            try:
+                with Hub() as hub:
+                    failed += not report("timeline-boxes", check_timeline_boxes, browser, hub)
+            except RuntimeError as exc:
+                failed += 1
+                print(f"check timeline-boxes: reached=no failed_at_assertion=no -- {exc}")
             browser.close()
     finally:
         if proc is not None:
             stop(proc)
-    total = len(CHECKS) + 1
+    total = len(CHECKS) + 2
     print(f"{total - failed}/{total} checks passed")
     return 1 if failed else 0
 
