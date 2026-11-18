@@ -582,6 +582,24 @@ def check_panel_insert_not_open(browser, hub):
     def boxes():
         return read(page).count("[[")
 
+    def active():
+        return page.evaluate(
+            "() => { const a = document.activeElement; return a ? (a.dataset.testid || a.tagName) + '|' + (a.className || '') : '' }")
+
+    def composer_focused():
+        return page.evaluate(
+            "() => document.activeElement && document.activeElement.matches('[data-testid=composer-input], textarea.composer-textarea')")
+
+    def focus_settled(quiet_ms=500, limit_ms=8000):
+        """Wait until document.activeElement has not changed for quiet_ms (menus hand focus back late)."""
+        last, since, waited = active(), 0, 0
+        while since < quiet_ms and waited < limit_ms:
+            page.wait_for_timeout(100)
+            waited += 100
+            now = active()
+            since = since + 100 if now == last else 0
+            last = now
+
     try:
         page.goto(f"{hub.url}/?project={project['id']}&agent=Alpha", wait_until="domcontentloaded")
         field(page).wait_for(timeout=30000)
@@ -601,11 +619,13 @@ def check_panel_insert_not_open(browser, hub):
         insert = page.locator("[data-testid=spec-insert-row][aria-label*='%s']" % first)
         if insert.count() == 0:
             return False, f"the spec list shows {row.count()} row(s) for {first!r} and no insert action on any of them"
+        focus_settled()
         insert.click(timeout=5000)
         after_row = settle(page, lambda: read(page), lambda t: t.count("[[") == 1, ms=5000)
         row_ok = boxes() == 1 and f"[[{first}]]" in after_row
         tabs_before = panel_tabs()
-        focused = page.evaluate("() => document.activeElement && document.activeElement.matches('[data-testid=composer-input], textarea.composer-textarea')")
+        page.wait_for_timeout(600)
+        focused = composer_focused()
         page.locator("[data-slot=spec-row]").filter(has_text=second).first.click()
         opened = settle(page, panel_tabs, lambda n: n > tabs_before, ms=8000)
         open_ok = opened > tabs_before and boxes() == 1
@@ -617,9 +637,12 @@ def check_panel_insert_not_open(browser, hub):
         header_insert.first.click(timeout=15000)
         after_header = settle(page, lambda: read(page), lambda t: t.count("[[") == 2, ms=5000)
         header_ok = f"[[{second}]]" in after_header
-        return (row_ok, bool(focused), open_ok, header_ok) == (True,) * 4, (
+        page.wait_for_timeout(600)
+        header_focused = composer_focused()
+        return (row_ok, bool(focused), open_ok, header_ok, bool(header_focused)) == (True,) * 5, (
             f"row insert -> {after_row!r}; composer focused after it={focused}; clicking {second!r} took panel tabs "
-            f"{tabs_before} -> {opened} with {boxes() - (1 if header_ok else 0)} boxes; header insert -> {after_header!r}"
+            f"{tabs_before} -> {opened} with {boxes() - (1 if header_ok else 0)} boxes; header insert -> {after_header!r}; "
+            f"composer focused after it={header_focused}"
         )
     finally:
         context.close()
