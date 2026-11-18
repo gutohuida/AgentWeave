@@ -14,6 +14,8 @@ const mod = (name) => path.join(ui, 'node_modules', name)
 export default {
   root: here,
   configFile: false,
+  // Vite's prebundle cache goes under hub/ui/node_modules (ignored), never into this tracked tree.
+  cacheDir: path.join(ui, 'node_modules', '.vite-spec-reference-box'),
   plugins: [react()],
   resolve: {
     alias: [
