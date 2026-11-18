@@ -609,6 +609,15 @@ class Conversation(Base):
     started_from_checkpoint_id: Mapped[Optional[str]] = mapped_column(
         String(64), nullable=True, index=True
     )
+    # Whether this conversation works in a git worktree of its own, on `thread/<agent>/<lineage>`
+    # (`one-profile-runs-many-turns-at-once-on-different-tasks`, FR-13): decided once, when the
+    # operator opens the chat while the project's "profiles run in parallel" switch is on, and kept
+    # whatever the switch does later. False for every other conversation (job firings, peer
+    # messages, chats opened while the switch was off or before the change), which share the
+    # agent's `.agentweave/worktrees/<agent>`. A cutover successor inherits it with the lineage.
+    own_worktree: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="0", nullable=False
+    )
     created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
         UTCDateTime(), default=_now, onupdate=_now, nullable=False

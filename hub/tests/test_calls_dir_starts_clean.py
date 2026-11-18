@@ -141,3 +141,50 @@ async def test_the_trigger_empties_an_agents_own_worktree_and_not_the_project_di
 
     assert await _turn(app, auth_headers, "reader") == repo
     assert (_calls(repo) / "1.json").read_text(encoding="utf-8") == '{"title": "in flight"}'
+
+
+def test_a_run_in_a_shared_directory_gets_its_own_empty_calls_folder(tmp_path):
+    """FR-8: the shared calls directory keeps its files; the run's own folder inside it starts
+    empty, and is removed, as itself, when the run ends."""
+    work, outside = tmp_path / "work", tmp_path / "outside"
+    _stock(work, outside)
+    (_calls(work) / "run-1").mkdir()
+    (_calls(work) / "run-1" / "stale.json").write_text("{}", encoding="utf-8")
+
+    agent_trigger.prepare_calls_dir(str(work), empty=False, run_id="run-1")
+
+    assert sorted(p.name for p in _calls(work).iterdir()) == ["1.json", "linked", "old", "run-1"]
+    assert list((_calls(work) / "run-1").iterdir()) == []
+    assert agent_trigger.run_calls_dir(str(work), "run-1") == _calls(work) / "run-1"
+    agent_trigger.remove_run_calls_dir(str(work), "run-1")
+    assert not (_calls(work) / "run-1").exists()
+    assert (_calls(work) / "1.json").is_file()
+
+
+def test_a_link_where_the_runs_folder_goes_is_replaced_and_its_target_kept(tmp_path):
+    work, outside = tmp_path / "work", tmp_path / "outside"
+    _stock(work, outside)
+    _link_dir(_calls(work) / "run-2", outside)
+
+    agent_trigger.prepare_calls_dir(str(work), empty=False, run_id="run-2")
+    assert (_calls(work) / "run-2").is_dir()
+    assert list((_calls(work) / "run-2").iterdir()) == []
+    assert (outside / "keep.json").is_file()
+
+    _link_dir(_calls(work) / "run-3", outside)
+    agent_trigger.remove_run_calls_dir(str(work), "run-3")
+    assert not os.path.lexists(_calls(work) / "run-3")
+    assert (outside / "keep.json").is_file()
+
+
+@pytest.mark.parametrize("bad", ["", ".", "..", "a/b", r"a\b"])
+def test_a_run_id_that_is_not_one_folder_name_is_refused(tmp_path, bad):
+    if bad == r"a\b" and os.name != "nt":
+        pytest.skip("a backslash is a name character off Windows")
+    with pytest.raises(ValueError):
+        agent_trigger.prepare_calls_dir(str(tmp_path), empty=False, run_id=bad)
+
+
+def test_a_run_with_its_own_folder_is_told_where_it_is():
+    notice = agent_trigger.run_calls_dir_notice("run-9")
+    assert ".agentweave/calls/run-9/" in notice
