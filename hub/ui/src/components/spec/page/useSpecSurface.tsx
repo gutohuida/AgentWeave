@@ -14,6 +14,7 @@ import {
   useSpecDocuments,
   useSpecList,
   useStopBuild,
+  type SpecDocumentRecord,
   type SpecListResponse,
 } from '@/api/spec'
 import { useDocumentTasks } from '@/api/tasks'
@@ -159,7 +160,9 @@ export function useSpecSurface(path: string, host: SpecSurfaceHost): SpecSurface
   if (readFailed && !specDoc) {
     return { status: 'unreadable', message: readableApiError(readError, 'The Hub could not read this document.'), plain: null }
   }
-  if (!specDoc || !records) return { status: 'loading' }
+  // The spec list's entry carries the phase, so the page draws without waiting for the documents
+  // read, which answers last behind the first-load burst.
+  if (!specDoc || (!records && !listed)) return { status: 'loading' }
   if (!payload) {
     return {
       status: 'unreadable',
@@ -174,7 +177,7 @@ export function useSpecSurface(path: string, host: SpecSurfaceHost): SpecSurface
     path,
     title: entry?.title ?? path,
     kind: entry?.kind ?? 'baseline',
-    phase: 'current' as const,
+    phase: (listed?.phase ?? 'current') as SpecDocumentRecord['phase'],
     rigor: 'sketch' as const,
     content_digest: null,
     explore_closed: false,
