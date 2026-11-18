@@ -163,6 +163,15 @@ async def record(
             check_run_id,
             exc_info=True,
         )
+        return
+    # Each outcome read into quarantine once it is history, so a flip's rate counts it
+    # (`the-slow-checks-run-once-per-landing-not-once-per-task-and-flaky-tests-are-quarantined`,
+    # FR-1, FR-7). Never raises.
+    from . import quarantine
+
+    await quarantine.after_recorded(
+        project_id=project_id, check_name=check_name, check_run_id=check_run_id, rows=rows
+    )
 
 
 async def flake_rates(

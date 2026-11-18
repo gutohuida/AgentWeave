@@ -98,8 +98,18 @@ QUARANTINE_ROUTE = "/checks/quarantine"
 QUARANTINE_LIST = "quarantined"
 #: An entry's fields, as `known_failing.entry_view` names its own.
 ENTRY_CHECK, ENTRY_TEST, ENTRY_AT, ENTRY_FIX = "check", "test", "entered_at", "fix_task"
-#: On a check's result: the failing tests quarantine excused (FR-2).
-EXCUSED_FIELD = "quarantined_tests"
+#: On a check's result: the failing tests quarantine excused (FR-2). SCROP-4: the build names them
+#: under `quarantine.tests`, each a quarantine snapshot with a `test` (`quarantine.RESULT_KEY`), not
+#: as a flat `quarantined_tests` list of ids as SCROP-1 assumed.
+EXCUSED_FIELD = "quarantine"
+
+
+def excused_tests(result: dict) -> list[str]:
+    """The test ids a check's result names as excused by quarantine."""
+    record = result.get(EXCUSED_FIELD) if isinstance(result.get(EXCUSED_FIELD), dict) else {}
+    return [str(t.get("test")) for t in record.get("tests") or [] if isinstance(t, dict)]
+
+
 #: The project settings (FR-9): consecutive passes to leave.
 EXIT_SETTING = "quarantine_exit_passes"
 EXIT_PASSES = 3
@@ -639,7 +649,7 @@ def quarantine_steps(project: Project, r: Runner, exit_set: object) -> None:
     )
     check(
         f"excused: R21's {CHECK} result names Q in {EXCUSED_FIELD}",
-        Q in (res.get(EXCUSED_FIELD) or []),
+        Q in excused_tests(res),
         json.dumps({k: res.get(k) for k in (EXCUSED_FIELD, "failed_tests", "flaky_tests")}),
         "ac-excused-passes",
     )

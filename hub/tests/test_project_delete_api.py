@@ -46,10 +46,12 @@ from hub.db.models import (
     MainNotice,
     ManagerJob,
     Message,
+    NeverQuarantineMark,
     PermissionRequest,
     Project,
     ProjectInstructions,
     ProjectSession,
+    QuarantinedTest,
     Question,
     RequirementDrift,
     RequirementEvidence,
@@ -163,6 +165,10 @@ PROJECT_SCOPED_TABLE_NAMES = [
     "dashboard_versions",
     # Every test's outcome in every check run (`landing-time-and-test-flakiness-are-measured`).
     "test_history",
+    # Quarantine (`the-slow-checks-run-once-per-landing-not-once-per-task-and-flaky-tests-are-
+    # quarantined`).
+    "quarantined_tests",
+    "never_quarantine_marks",
 ]
 
 
@@ -594,6 +600,23 @@ async def _seed_full_project(session, project_id: str, tag: str) -> None:
             outcome="flipped",
             check_run_id=f"mchk-{tag}",
             phase="main",
+        )
+    )
+    session.add(
+        QuarantinedTest(
+            id=f"qt-{tag}",
+            project_id=project_id,
+            check_name="pytest",
+            test_id="t::x",
+            flake_rate=0.1,
+        )
+    )
+    session.add(
+        NeverQuarantineMark(
+            id=f"nqm-{tag}",
+            project_id=project_id,
+            check_name="pytest",
+            test_id="t::z",
         )
     )
     session.add(

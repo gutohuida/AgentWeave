@@ -175,6 +175,16 @@ class Project(Base):
     checks_give_way: Mapped[bool] = mapped_column(
         Boolean, default=False, server_default="0", nullable=False
     )
+    # Quarantine (`the-slow-checks-run-once-per-landing-not-once-per-task-and-flaky-tests-are-
+    # quarantined`, FR-9, migration 0182): a test whose flake rate, counting a flip just recorded,
+    # is above `quarantine_threshold` is quarantined; it leaves after `quarantine_exit_passes`
+    # consecutive passes. Read at each decision (`quarantine`), so a change needs no restart.
+    quarantine_threshold: Mapped[float] = mapped_column(
+        Float, default=0.05, server_default="0.05", nullable=False
+    )
+    quarantine_exit_passes: Mapped[int] = mapped_column(
+        Integer, default=20, server_default="20", nullable=False
+    )
 
     # --- Reach (reach-1019, `hub/hub/reach.py`) ---
     # The posture every agent's run gets when neither its conversation nor the agent states one;
@@ -3712,6 +3722,54 @@ class UnlistedTestFailure(Base):
 
     __table_args__ = (
         Index("uq_unlisted_test_failures_test", "project_id", "check_name", "test", unique=True),
+    )
+
+
+class QuarantinedTest(Base):
+    """A test quarantined for its check (`the-slow-checks-run-once-per-landing-not-once-per-task-
+    and-flaky-tests-are-quarantined`, FR-1, FR-7, migration 0182): its failure counts against no
+    gate and is not re-run to confirm (`quarantine`).
+
+    `flake_rate` and `flips` are its rate and the flips in its rate's window when it entered;
+    `entered_at` when; `entered_by_run` the check run whose flip admitted it. `passes` counts the
+    consecutive runs that ran it and passed it since it entered, a failure setting it to 0; reaching
+    the project's `quarantine_exit_passes` releases it, and the row is deleted. `fix_task_id` is its
+    fix task, which stays open when it leaves (FR-10).
+    """
+
+    __tablename__ = "quarantined_tests"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    project_id: Mapped[str] = mapped_column(String(64), ForeignKey("projects.id"), nullable=False)
+    check_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    test_id: Mapped[str] = mapped_column(String(1024), nullable=False)
+    flake_rate: Mapped[float] = mapped_column(Float, nullable=False)
+    flips: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    entered_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, nullable=False)
+    entered_by_run: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    passes: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    # Not a ForeignKey, for the SQLite column-drop reason `Task.spec_document_id` gives.
+    fix_task_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
+
+    __table_args__ = (
+        Index("uq_quarantined_tests_test", "project_id", "check_name", "test_id", unique=True),
+    )
+
+
+class NeverQuarantineMark(Base):
+    """The operator's mark that a check's test is never to be quarantined (FR-8, migration 0182):
+    it does not enter quarantine, and setting the mark takes it out at once."""
+
+    __tablename__ = "never_quarantine_marks"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    project_id: Mapped[str] = mapped_column(String(64), ForeignKey("projects.id"), nullable=False)
+    check_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    test_id: Mapped[str] = mapped_column(String(1024), nullable=False)
+    marked_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, nullable=False)
+
+    __table_args__ = (
+        Index("uq_never_quarantine_marks_test", "project_id", "check_name", "test_id", unique=True),
     )
 
 
