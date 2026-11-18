@@ -24,6 +24,11 @@ describe('searching settings', () => {
     expect(labels('checkpoint mode').filter((l) => l.startsWith('agent/'))).toEqual(['agent/checkpoints/Checkpoints'])
   })
 
+  it('finds the Profiles run in parallel switch by its label and by what it does (FR-15)', () => {
+    expect(labels('Profiles run in parallel')).toContain('project/collaboration/Profiles run in parallel')
+    expect(labels('concurrency')).toEqual(['project/collaboration/Profiles run in parallel'])
+  })
+
   it('lists App before Project before agent settings within a group', () => {
     const order = ['app', 'project', 'agent']
     const scopes = searchSettings('permissions').filter((m) => m.inLabel).map((m) => order.indexOf(m.entry.scope))

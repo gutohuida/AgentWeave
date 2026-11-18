@@ -135,6 +135,10 @@ export interface ProjectSettings {
    *  work on the machine comes first (`checks-know-their-phase-and-give-way-to-the-user`). Off by
    *  default; absent from a Hub older than that change. */
   checks_give_way?: boolean
+  /** Whether one profile may run several turns at once on different work
+   *  (`one-profile-runs-many-turns-at-once-on-different-tasks`, FR-15). Off by default; absent
+   *  from a Hub older than that change. */
+  profiles_run_in_parallel?: boolean
   /** A test whose flake rate, counting a flip just recorded, is above this is quarantined; 0.05 by
    *  default (`the-slow-checks-run-once-per-landing-not-once-per-task-and-flaky-tests-are-
    *  quarantined`, FR-9). Absent from a Hub older than quarantine. */

@@ -62,6 +62,7 @@ function makeSettings(): {
   main_branch: string | null
   checks: Array<{ name: string; command: string; timeout_seconds: number; paths?: string[]; fast?: boolean; phase?: 'review' | 'landing' | 'both'; report_path?: string | null; rerun_command?: string | null; disturbed_threshold?: number | null; change_command?: string | null }> | null
   checks_give_way?: boolean
+  profiles_run_in_parallel?: boolean
 } {
   return {
     name: 'Website',
@@ -194,6 +195,23 @@ describe('Project settings → General, applied on change', () => {
     render(<GeneralSection />)
     expect(screen.getByRole('switch', { name: 'Agents may start jobs, flows and loops' })).toHaveAttribute('aria-checked', 'false')
     expect(screen.getByText(/asking to start a job, flow or loop is refused/)).toBeInTheDocument()
+  })
+
+  it('shows profiles running in parallel off, turns it on and back off (FR-15, ac-switch-default)', async () => {
+    // `one-profile-runs-many-turns-at-once-on-different-tasks`: absent from an older Hub reads off.
+    const user = userEvent.setup()
+    const { unmount } = render(<GeneralSection />)
+    const toggle = screen.getByRole('switch', { name: 'Profiles run in parallel' })
+    expect(toggle).toHaveAttribute('aria-checked', 'false')
+    await user.click(toggle)
+    expect(lastPatch()).toEqual({ profiles_run_in_parallel: true })
+    unmount()
+    settings = { ...makeSettings(), profiles_run_in_parallel: true }
+    render(<GeneralSection />)
+    const on = screen.getByRole('switch', { name: 'Profiles run in parallel' })
+    expect(on).toHaveAttribute('aria-checked', 'true')
+    await user.click(on)
+    expect(lastPatch()).toEqual({ profiles_run_in_parallel: false })
   })
 
   it('offers the branch approval merges into, where the integration note sends you', () => {
