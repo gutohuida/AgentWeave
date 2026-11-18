@@ -94,6 +94,7 @@ vi.mock('@/api/agents', async (importOriginal) => ({
 vi.mock('@/api/spec', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/api/spec')>()),
   useSpecDocuments: () => ({ data: { documents: [] } }),
+  useSpecEvents: () => undefined,
 }))
 vi.mock('@/api/workspace', () => ({ useWorkspacePaths: () => ({ data: [] }) }))
 vi.mock('@/api/modelCatalog', async (importOriginal) => {

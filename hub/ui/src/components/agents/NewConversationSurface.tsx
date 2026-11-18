@@ -3,7 +3,7 @@ import { postureAtRest, useAgents } from '@/api/agents'
 import { useRunners } from '@/api/runners'
 import { overridesForRunner, runnerSetsModel } from '@/lib/runnerProvider'
 import { useWorkspacePaths } from '@/api/workspace'
-import { useSpecDocuments } from '@/api/spec'
+import { useSpecDocuments, useSpecEvents } from '@/api/spec'
 import {
   permissionModeValues,
   providerForRunner,
@@ -82,8 +82,11 @@ export function NewConversationSurface({
   const { data: roster = [] } = useAgents()
   const { data: runners = [] } = useRunners()
   const { data: workspacePaths = [] } = useWorkspacePaths()
-  // The project's documents: the composer's `@` menu lists them as specs.
+  // The project's documents: the composer's `@` menu lists them as specs, most recently updated
+  // first. This surface is mounted outside ConversationView, so it subscribes to `spec_updated`
+  // itself; without it an edited document never moved up the menu here.
   const { data: specDocumentList, isError: specDocumentsFailed } = useSpecDocuments()
+  useSpecEvents()
   const [pendingOverrides, setPendingOverrides] = useState<Record<string, string>>({})
   const [error, setError] = useState<string | null>(null)
   /** Bumped when a starter writes the draft, so the composer remounts and reads it. Not keyed by

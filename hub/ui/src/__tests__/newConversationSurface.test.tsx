@@ -25,9 +25,11 @@ vi.mock('@/api/runners', () => ({
 let hasNoWork: boolean | null = false
 vi.mock('@/api/firstRun', () => ({ useProjectHasNoWork: () => hasNoWork }))
 // The composer's @ menu lists the project's documents (reference-a-spec-in-a-sentence-from-the-composer).
+const specEvents = vi.hoisted(() => vi.fn())
 vi.mock('@/api/spec', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/api/spec')>()),
   useSpecDocuments: () => ({ data: { documents: [] } }),
+  useSpecEvents: specEvents,
 }))
 vi.mock('@/api/workspace', () => ({ useWorkspacePaths: () => ({ data: [] }) }))
 vi.mock('@/api/modelCatalog', async (importOriginal) => {
@@ -95,6 +97,14 @@ describe('starting a conversation', () => {
       isConfigured: true,
       bootstrapState: 'ready',
     })
+  })
+
+  it('follows document edits, so the @ menu keeps the most recently updated spec first', () => {
+    // Mounted outside ConversationView, so nothing else here refetches the documents on
+    // `spec_updated` (found by scripts/drive/spec_reference_box.py, edit-moves-to-top).
+    specEvents.mockClear()
+    renderSurface('claude')
+    expect(specEvents).toHaveBeenCalled()
   })
 
   it('leads with the composer, not an empty transcript', () => {

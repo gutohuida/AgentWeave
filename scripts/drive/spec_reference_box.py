@@ -10,15 +10,29 @@ order the documents route returns them (insertion order, not update time).
 The composer's content is read as text with each box written `[[<title>]]` and the caret as `|`.
 On the pre-build textarea Composer there is no Specs group and no box, so each check reaches the
 composer and fails at its own assertion.
+
+Every reading taken after a key press or an edit waits, up to a few seconds, for the state the
+check wants, and the check judges the last state it saw: React renders after the event, not during
+it, so a reading taken at once is a race.
+
+The last check, `edit-moves-to-top`, leaves the harness: it starts a throwaway Hub from this
+checkout (its own database and scratch project; never :8000 or :8010), opens the app's conversation
+view (AgentOutputPanel, whose composer reads its specs from the documents route through
+useSpecDocuments), and edits one document through the Hub's own route. The `spec_updated` event
+that write broadcasts is what moves the document to the top of the open menu.
 """
 
 import json
+import os
 import pathlib
 import re
+import secrets
 import socket
 import subprocess
 import sys
+import tempfile
 import time
+import urllib.error
 import urllib.request
 
 from playwright.sync_api import sync_playwright
@@ -31,6 +45,7 @@ DRAFT_KEY = "proj-harness::alpha::conv-harness"
 REF_C, REF_A, REF_B = "Ref C: newest reference", "Ref A: reference boxes", "Ref B: older reference"
 REF_B_ID = "spdoc-000000000003"
 HEADER = "The spec header, redesigned"
+HAIKU = "claude-haiku-5-5"
 
 # Text with each box as [[title]] and the caret as |, for a textarea or a contenteditable field.
 READ = """(el) => {
@@ -119,58 +134,95 @@ def active(entries):
     return next((e for e in entries or [] if e[0] == "option" and e[3]), None)
 
 
+def specs(page):
+    return groups(menu(page)).get("Specs", [])
+
+
+def settle(page, get, want, ms=4000):
+    """`get()` once it gives `want` (a value, or a predicate on the value), or its last reading when
+    `ms` runs out; the check judges that reading itself, so a timeout fails at its assertion."""
+    test = want if callable(want) else (lambda got: got == want)
+    end = time.time() + ms / 1000
+    while True:
+        got = get()
+        if test(got) or time.time() > end:
+            return got
+        page.wait_for_timeout(50)
+
+
 def clear(page):
     field(page).click()
     page.keyboard.press("Control+a")
     page.keyboard.press("Delete")
     page.keyboard.press("Escape")
+    settle(page, lambda: (read(page), menu(page)), ("|", None))
 
 
-def stored_draft(page):
-    page.wait_for_timeout(450)  # the draft is written 300 ms after the last change
-    drafts = page.evaluate("() => localStorage.getItem('aw.composer.drafts.v1')")
-    return json.loads(drafts or "{}").get(DRAFT_KEY, "")
+def stored_draft(page, want=lambda draft: True):
+    """The stored draft once it satisfies `want`; the draft is written 300 ms after the last change."""
+
+    def get():
+        drafts = page.evaluate("() => localStorage.getItem('aw.composer.drafts.v1')")
+        return json.loads(drafts or "{}").get(DRAFT_KEY, "")
+
+    page.wait_for_timeout(450)
+    return settle(page, get, want)
+
+
+def sent_after(page, count):
+    """What the composer submitted, once `window.__sent` holds more than `count` messages."""
+    settle(page, lambda: page.evaluate("() => window.__sent.length"), lambda n: n > count)
+    return page.evaluate("() => window.__sent.at(-1) || ''")
+
+
+def submit(page):
+    count = page.evaluate("() => window.__sent.length")
+    page.keyboard.press("Enter")
+    return sent_after(page, count)
 
 
 def insert_reference(page, query):
     """Put a reference at the caret by the composer's own route: type @query and pick the spec it
     finds first. Picking leaves a space after the box."""
     page.keyboard.type("@" + query)
+    settle(page, lambda: specs(page), lambda found: bool(found))
     page.keyboard.press("Enter")
+    settle(page, lambda: menu(page), None)
 
 
 def check_menu_has_both_groups(page):
     clear(page)
     page.keyboard.type("@head")
-    entries = menu(page)
+    entries = settle(
+        page, lambda: menu(page), lambda e: HEADER in groups(e).get("Specs", []) and bool(groups(e).get("Files"))
+    )
     found = groups(entries)
-    specs, files = found.get("Specs", []), found.get("Files", [])
+    specs_found, files = found.get("Specs", []), found.get("Files", [])
     detail = f"menu {found!r}"
-    if HEADER not in specs or not files or not all("head" in f.lower() for f in files):
+    if HEADER not in specs_found or not files or not all("head" in f.lower() for f in files):
         return False, detail + f" (want Specs holding {HEADER!r} and a Files group of matching paths)"
-    for _ in range(len(specs)):
+    for _ in range(len(specs_found)):
         page.keyboard.press("ArrowDown")
-    landed = active(menu(page))
+    landed = settle(page, lambda: active(menu(page)), lambda a: a is not None and a[1] == files[0])
     page.keyboard.press("Escape")
-    after = read(page)
-    closed = menu(page) is None
+    closed = settle(page, lambda: menu(page), None) is None
+    after = settle(page, lambda: read(page), "@head|")
     ok = landed is not None and landed[1] == files[0] and closed and after == "@head|"
     return ok, detail + f"; ArrowDown from the last spec landed on {landed!r} (want {files[0]!r}); Escape: menu closed={closed}, text {after!r}"
 
 
 def check_specs_by_recency(page):
     clear(page)
-    page.keyboard.type("@")
-    alone = groups(menu(page)).get("Specs", [])
-    page.keyboard.type("ref")
-    filtered = groups(menu(page)).get("Specs", [])
     want_alone = ["SPEC-1", REF_C, REF_A, HEADER, REF_B, "Thread chapters", "Model record",
                   "Brand identity", "Flow distribution", "Dashboards"]
-    # An edit to B makes it the most recently updated, so it moves to the top.
+    page.keyboard.type("@")
+    alone = settle(page, lambda: specs(page), want_alone)
+    page.keyboard.type("ref")
+    filtered = settle(page, lambda: specs(page), [REF_C, REF_A, REF_B])
+    # An edit to B makes it the most recently updated, so it moves to the top of the menu already
+    # open, with no key pressed. `edit-moves-to-top` makes that edit through a real Hub.
     page.evaluate(f"() => window.__touch && window.__touch('{REF_B_ID}')")
-    page.keyboard.press("Backspace")
-    page.keyboard.type("f")
-    touched = groups(menu(page)).get("Specs", [])
+    touched = settle(page, lambda: specs(page), [REF_B, REF_C, REF_A])
     page.reload()  # put the documents back as the route reported them, for the checks after this
     field(page).wait_for(timeout=30000)
     ok = alone == want_alone and filtered == [REF_C, REF_A, REF_B] and touched == [REF_B, REF_C, REF_A]
@@ -184,39 +236,40 @@ def check_pick_makes_a_box(page):
     clear(page)
     page.keyboard.type("The spec ")
     page.keyboard.type("@ref")
+    settle(page, lambda: specs(page), lambda found: found[:1] == [REF_C])
     page.keyboard.press("Enter")
-    got = read(page)
+    want = f"The spec [[{REF_C}]] |"
+    got = settle(page, lambda: read(page), want)
     # The spec icon is a masked span: present, and drawn (a mask image, a non-zero size).
     icons = field(page).evaluate(
         "el => [...el.querySelectorAll('[data-spec-box]')].map(b => { const i = b.querySelector('.composer-spec-box-icon');"
         " if (!i) return false; const s = getComputedStyle(i);"
         " return (s.maskImage || s.webkitMaskImage || 'none') !== 'none' && i.getBoundingClientRect().width > 0 })"
     )
-    want = f"The spec [[{REF_C}]] |"
     ok = got == want and icons == [True] and "@" not in got
     return ok, f"composer {got!r} (want {want!r}); boxes with an icon: {icons!r}"
 
 
-def check_backspace_removes_whole_box(page):
+def box_then_now(page):
+    """'see ' + a box + ' now', with the caret right after the box."""
     clear(page)
     page.keyboard.type("see ")
     insert_reference(page, "SPEC-1")
     page.keyboard.type("now")
     for _ in range(4):  # 'now' and the space the pick left: the caret is right after the box
         page.keyboard.press("ArrowLeft")
-    before = read(page)
+    return settle(page, lambda: read(page), "see [[SPEC-1]]| now")
+
+
+def check_backspace_removes_whole_box(page):
+    before = box_then_now(page)
     page.keyboard.press("Backspace")
-    after_bs = read(page)
-    clear(page)
-    page.keyboard.type("see ")
-    insert_reference(page, "SPEC-1")
-    page.keyboard.type("now")
-    for _ in range(4):
-        page.keyboard.press("ArrowLeft")
+    after_bs = settle(page, lambda: read(page), "see | now")
+    box_then_now(page)
     page.keyboard.press("ArrowLeft")
-    after_left = read(page)
+    after_left = settle(page, lambda: read(page), "see |[[SPEC-1]] now")
     page.keyboard.press("Delete")
-    after_del = read(page)
+    after_del = settle(page, lambda: read(page), "see | now")
     ok_bs = after_bs == "see | now"
     ok_left = after_left == "see |[[SPEC-1]] now"
     ok_del = after_del == "see | now"
@@ -233,14 +286,16 @@ def check_visible_control_opens_menu(page):
     if control.count() == 0:
         return False, "the composer shows no reference control"
     control.click()
-    opened = groups(menu(page))
+    opened = groups(settle(page, lambda: menu(page), lambda e: "Specs" in groups(e)))
     page.locator("[role=option]", has_text="SPEC-1").first.click()
-    by_control = stored_draft(page)
+    by_control = stored_draft(page, lambda draft: "[spec: SPEC-1](" in draft)
     shown_control = read(page)
     clear(page)
+    stored_draft(page, "")
     page.keyboard.type("@")
+    settle(page, lambda: specs(page), lambda found: "SPEC-1" in found)
     page.locator("[role=option]", has_text="SPEC-1").first.click()
-    by_typing = stored_draft(page)
+    by_typing = stored_draft(page, lambda draft: "[spec: SPEC-1](" in draft)
     ok = "Specs" in opened and by_control == by_typing and "[spec: SPEC-1](" in by_control
     return ok, (
         f"control opened {list(opened)!r}; composer {shown_control!r}; stored by control {by_control!r}, "
@@ -255,22 +310,20 @@ def check_draft_and_copy(page):
     page.keyboard.type("with ")
     insert_reference(page, "older")
     page.keyboard.type("today")
-    before = read(page)
-    stored_draft(page)
+    want = f"Compare [[{REF_A}]] with [[{REF_B}]] today"
+    before = settle(page, lambda: read(page).replace("|", ""), want)
+    stored_draft(page, lambda draft: draft.endswith("today"))
     page.reload()
     field(page).wait_for(timeout=30000)
-    restored = field(page).evaluate(READ).replace("|", "")
+    restored = settle(page, lambda: read(page).replace("|", ""), want)
     field(page).click()
     page.keyboard.press("Control+a")
     # What a copy puts on the clipboard as text/plain, read off the copy event the composer filled.
     page.evaluate("() => document.addEventListener('copy', (e) => { window.__copied = e.clipboardData.getData('text/plain') })")
     page.keyboard.press("Control+c")
-    copied = page.evaluate("() => window.__copied ?? ''")
+    copied = settle(page, lambda: page.evaluate("() => window.__copied ?? ''"), lambda text: bool(text))
     page.keyboard.press("End")
-    page.keyboard.press("Enter")
-    page.wait_for_timeout(200)
-    sent = page.evaluate("() => window.__sent.at(-1) || ''")
-    want = f"Compare [[{REF_A}]] with [[{REF_B}]] today"
+    sent = submit(page)
     readable = REF_A in copied and REF_B in copied and "<" not in copied
     ok = restored == want and readable and sent == copied.strip()
     return ok, f"before reload {before!r}; after reload {restored!r} (want {want!r}); copied {copied!r}; sent {sent!r}"
@@ -283,9 +336,8 @@ def check_delivered_text_from_composer(page):
     page.keyboard.type("The spec ")
     insert_reference(page, "newest")
     page.keyboard.type("has issues")
-    page.keyboard.press("Enter")
-    page.wait_for_timeout(200)
-    sent = page.evaluate("() => window.__sent.at(-1) || ''")
+    settle(page, lambda: read(page), f"The spec [[{REF_C}]] has issues|")
+    sent = submit(page)
     refs = re.findall(r"\[spec: ([^\]]*)\]\((spdoc-[0-9a-f]+)\)", sent)
     ok = refs == [(REF_C, "spdoc-000000000005")] and not re.search(r"(^|\s)@", sent)
     return ok, f"sent {sent!r}; references {refs!r}"
@@ -297,11 +349,12 @@ def check_keeps_composer_behaviour(page):
     insert_reference(page, "SPEC-1")
     page.keyboard.type("and ")
     page.keyboard.type("@README")
+    settle(page, lambda: groups(menu(page)).get("Files", []), lambda files: files[:1] == ["README.md"])
     page.keyboard.press("Enter")
     page.keyboard.press("Shift+Enter")
     page.keyboard.type("next")
-    got = read(page)
     want = "[[SPEC-1]] and @README.md\nnext|"
+    got = settle(page, lambda: read(page), want)
     return got == want, f"composer {got!r} (want {want!r})"
 
 
@@ -315,6 +368,132 @@ CHECKS = [
     ("delivered-text", check_delivered_text_from_composer),
     ("keeps-composer-behaviour", check_keeps_composer_behaviour),
 ]
+
+
+# --------------------------------------------------------------------------- a throwaway Hub
+
+
+class Hub:
+    """A Hub started from this checkout's `hub/` on a fresh database in a scratch folder. It serves
+    this checkout's committed UI bundle (hub/hub/static/ui), so it is the app as it would ship."""
+
+    def __init__(self):
+        self.port = free_port()
+        self.url = f"http://127.0.0.1:{self.port}"
+        self.key = "aw_live_" + secrets.token_hex(16)
+        self.scratch = pathlib.Path(tempfile.mkdtemp(prefix="spec-reference-box-"))
+        self.proc = None
+
+    def __enter__(self):
+        env = {k: v for k, v in os.environ.items() if k != "HUB_URL" and not k.startswith("AW_")}
+        env["DATABASE_URL"] = f"sqlite+aiosqlite:///{(self.scratch / 'hub.db').as_posix()}"
+        env["AW_BOOTSTRAP_API_KEY"] = self.key
+        self.log = open(self.scratch / "hub.log", "w", encoding="utf-8")  # noqa: SIM115 -- the child's stdout
+        self.proc = subprocess.Popen(
+            [sys.executable, "-m", "uvicorn", "hub.main:app", "--port", str(self.port), "--host", "127.0.0.1"],
+            cwd=str(REPO / "hub"), env=env, stdout=self.log, stderr=subprocess.STDOUT,
+        )
+        end = time.time() + 120
+        while self.api("GET", "/projects", timeout=5)[0] != 200:
+            if time.time() > end or self.proc.poll() is not None:
+                self.__exit__()
+                raise RuntimeError(f"the throwaway Hub did not come up; see {self.scratch / 'hub.log'}")
+            time.sleep(1)
+        return self
+
+    def __exit__(self, *exc):
+        if self.proc is not None:
+            stop(self.proc)
+        self.log.close()
+
+    def api(self, method, path, body=None, timeout=60):
+        data = json.dumps(body).encode() if body is not None else None
+        request = urllib.request.Request(
+            self.url + "/api/v1" + path, data,
+            {"Authorization": "Bearer " + self.key, "Content-Type": "application/json"}, method=method)
+        try:
+            with urllib.request.urlopen(request, timeout=timeout) as response:
+                return response.status, json.loads(response.read() or b"null")
+        except urllib.error.HTTPError as exc:
+            return exc.code, exc.read().decode(errors="replace")[:1000]
+        except (urllib.error.URLError, TimeoutError, ConnectionError) as exc:
+            return 0, str(exc)
+
+    def need(self, method, path, body=None):
+        code, out = self.api(method, path, body)
+        if code not in (200, 201):
+            raise RuntimeError(f"{method} {path}: {code} {out}")
+        return out
+
+
+def document_body(title):
+    return {"schema_version": 1, "kind": "change-spec", "title": title, "summary": f"{title}, a drive fixture.",
+            "problem": "The drive needs one.", "scope": {"in_scope": ["the drive"], "non_goals": ["anything else"]}}
+
+
+def check_edit_moves_to_top(browser, hub):
+    """FR-1's 'edit a document and it moves to the top', through the real app: the conversation
+    view's composer, the documents route, and an edit made through the Hub's content route."""
+    root = hub.scratch / "project"
+    root.mkdir()
+    (root / "README.md").write_text("A scratch project for the spec reference drive.\n", encoding="utf-8")
+    project = hub.need("POST", "/projects/open", {"path": str(root), "name": "spec-reference-box"})
+    base = f"/projects/{project['id']}"
+    runner = hub.need("POST", f"{base}/runners", {"name": "Haiku", "cli": "claude", "model": HAIKU})
+    hub.need("POST", f"{base}/agents", {"name": "Alpha", "runner_id": runner["id"]})
+    paths = {}
+    for title in (REF_B, REF_A, REF_C):  # created oldest first: by update time C, A, B
+        created = hub.need("POST", f"{base}/project/documents", {"title": title, "kind": "change-spec"})
+        paths[title] = created.get("path") or (created.get("document") or {}).get("path")
+        time.sleep(1.1)
+    context = browser.new_context(viewport={"width": 1440, "height": 1000})
+    context.add_init_script(
+        "try { sessionStorage.setItem('agentweave-session', JSON.stringify({apiKey: %s, hubUrl: %s})) } catch (e) {}"
+        % (json.dumps(hub.key), json.dumps(hub.url)))
+    page = context.new_page()
+
+    def edit_moves(title, before_want, after_want):
+        """Open @ref, edit `title` through the Hub, and read the open menu before and after."""
+        field(page).wait_for(timeout=30000)
+        field(page).click()
+        page.keyboard.type("@ref")
+        before = settle(page, lambda: specs(page), before_want, ms=10000)
+        code, out = hub.api("PUT", f"{base}/project/documents/{paths[title]}/content", {"document": document_body(title)})
+        if code != 200:
+            raise RuntimeError(f"editing {title!r} was refused: {code} {out}")
+        after = settle(page, lambda: specs(page), after_want, ms=10000)
+        page.keyboard.press("Escape")
+        clear(page)
+        return before == before_want and after == after_want, f"{before!r} -> {after!r} (want {before_want!r} -> {after_want!r})"
+
+    try:
+        # A new conversation: NewConversationSurface, mounted outside ConversationView.
+        page.goto(f"{hub.url}/?project={project['id']}&agent=Alpha", wait_until="domcontentloaded")
+        new_ok, new_detail = edit_moves(REF_B, [REF_C, REF_A, REF_B], [REF_B, REF_C, REF_A])
+        # An existing conversation: ConversationView's AgentOutputPanel. One message (a Haiku turn)
+        # makes the conversation; the menu is read whether or not that turn has ended.
+        page.keyboard.type("Say hello, nothing else.")
+        page.keyboard.press("Enter")
+        page.wait_for_url(re.compile(r"conversation=conv-"), timeout=30000)
+        page.locator("[data-testid=conversation-header]").first.wait_for(timeout=30000)
+        open_ok, open_detail = edit_moves(REF_A, [REF_B, REF_C, REF_A], [REF_A, REF_B, REF_C])
+        listed = [(d.get("title"), d.get("updated_at")) for d in hub.need("GET", f"{base}/project/documents")["documents"]]
+        return new_ok and open_ok, (
+            f"throwaway Hub {hub.url}; editing B in a new conversation: {new_detail}; editing A in the open "
+            f"conversation {page.url.split('conversation=')[-1]}: {open_detail}; the route lists {listed!r}"
+        )
+    finally:
+        context.close()
+
+
+def report(key, fn, *args):
+    try:
+        ok, detail = fn(*args)
+        reached, at_assertion = "yes", "no" if ok else "yes"
+    except Exception as exc:  # noqa: BLE001 - a crash is reported as not reached
+        ok, reached, at_assertion, detail = False, "no", "no", f"{type(exc).__name__}: {exc}"
+    print(f"check {key}: reached={reached} failed_at_assertion={at_assertion} -- {detail}", flush=True)
+    return ok
 
 
 def main():
@@ -339,19 +518,24 @@ def main():
                 raise SystemExit(f"the harness never showed the composer; page errors: {errors[:5]}")
             print("browser:", browser.version, "| field:", field(page).evaluate("e => e.tagName"))
             for key, fn in CHECKS:
-                try:
-                    ok, detail = fn(page)
-                    reached, at_assertion = "yes", "no" if ok else "yes"
-                except Exception as exc:  # noqa: BLE001 - a crash is reported as not reached
-                    ok, reached, at_assertion, detail = False, "no", "no", f"{type(exc).__name__}: {exc}"
-                failed += not ok
-                print(f"check {key}: reached={reached} failed_at_assertion={at_assertion} -- {detail}")
+                failed += not report(key, fn, page)
             if errors:
                 print("page errors:", errors[:3])
+            context.close()
+            stop(proc)
+            proc = None
+            try:
+                with Hub() as hub:
+                    failed += not report("edit-moves-to-top", check_edit_moves_to_top, browser, hub)
+            except RuntimeError as exc:
+                failed += 1
+                print(f"check edit-moves-to-top: reached=no failed_at_assertion=no -- {exc}")
             browser.close()
     finally:
-        stop(proc)
-    print(f"{len(CHECKS) - failed}/{len(CHECKS)} checks passed")
+        if proc is not None:
+            stop(proc)
+    total = len(CHECKS) + 1
+    print(f"{total - failed}/{total} checks passed")
     return 1 if failed else 0
 
 
