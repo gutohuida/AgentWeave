@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { NewConversationSurface } from '@/components/agents/NewConversationSurface'
 import { useConfigStore } from '@/store/configStore'
+import { setComposerText, composerText } from './testUtils/composerField'
 
 vi.mock('@/api/agents', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/api/agents')>()),
@@ -23,6 +24,13 @@ vi.mock('@/api/runners', () => ({
 }))
 let hasNoWork: boolean | null = false
 vi.mock('@/api/firstRun', () => ({ useProjectHasNoWork: () => hasNoWork }))
+// The composer's @ menu lists the project's documents (reference-a-spec-in-a-sentence-from-the-composer).
+const specEvents = vi.hoisted(() => vi.fn())
+vi.mock('@/api/spec', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/api/spec')>()),
+  useSpecDocuments: () => ({ data: { documents: [] } }),
+  useSpecEvents: specEvents,
+}))
 vi.mock('@/api/workspace', () => ({ useWorkspacePaths: () => ({ data: [] }) }))
 vi.mock('@/api/modelCatalog', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/api/modelCatalog')>()
@@ -91,6 +99,14 @@ describe('starting a conversation', () => {
     })
   })
 
+  it('follows document edits, so the @ menu keeps the most recently updated spec first', () => {
+    // Mounted outside ConversationView, so nothing else here refetches the documents on
+    // `spec_updated` (found by scripts/drive/spec_reference_box.py, edit-moves-to-top).
+    specEvents.mockClear()
+    renderSurface('claude')
+    expect(specEvents).toHaveBeenCalled()
+  })
+
   it('leads with the composer, not an empty transcript', () => {
     renderSurface('claude')
     expect(screen.getByTestId('new-conversation-surface')).toBeInTheDocument()
@@ -131,7 +147,7 @@ describe('starting a conversation', () => {
     const { onStarted } = renderSurface('claude')
     expect(screen.queryByTestId('composer-disabled-reason')).not.toBeInTheDocument()
 
-    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'Look at the flaky test' } })
+    setComposerText(screen.getByRole('textbox'), 'Look at the flaky test')
     fireEvent.click(screen.getByRole('button', { name: 'Send message' }))
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1))
@@ -148,7 +164,7 @@ describe('starting a conversation', () => {
       'Choose an agent to start',
     )
 
-    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'Who is listening?' } })
+    setComposerText(screen.getByRole('textbox'), 'Who is listening?')
     expect(screen.getByRole('button', { name: 'Send message' })).toBeDisabled()
     fireEvent.click(screen.getByRole('button', { name: 'Send message' }))
     expect(fetchMock).not.toHaveBeenCalled()
@@ -165,7 +181,7 @@ describe('starting a conversation', () => {
 
   it('creates nothing when the operator leaves without sending', () => {
     const { unmount } = render(<Controlled agent="claude" />)
-    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'On second thoughts…' } })
+    setComposerText(screen.getByRole('textbox'), 'On second thoughts…')
     unmount()
     // A conversation is created by its first message; abandoning the surface leaves no row.
     expect(fetchMock).not.toHaveBeenCalled()
@@ -191,7 +207,7 @@ describe('starting a conversation', () => {
     )
 
     // And the message actually goes where the operator redirected it.
-    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'Take this one instead' } })
+    setComposerText(screen.getByRole('textbox'), 'Take this one instead')
     fireEvent.click(screen.getByRole('button', { name: 'Send message' }))
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1))
     expect(JSON.parse(fetchMock.mock.calls[0][1].body as string).agent).toBe('claude')
@@ -200,14 +216,14 @@ describe('starting a conversation', () => {
 
   it('keeps the typed message when the agent is changed', async () => {
     render(<Controlled agent="codex" />)
-    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'Half-written thought' } })
+    setComposerText(screen.getByRole('textbox'), 'Half-written thought')
 
     fireEvent.click(screen.getByTestId('new-conversation-agent-claude'))
     await waitFor(() =>
       expect(screen.getByTestId('new-conversation-headline')).toHaveTextContent('claude'),
     )
     // Retargeting is a change of recipient, not a fresh start.
-    expect(screen.getByRole('textbox')).toHaveValue('Half-written thought')
+    expect(composerText(screen.getByRole('textbox'))).toBe('Half-written thought')
   })
 })
 
@@ -283,7 +299,7 @@ describe('declaring an exploration before the first message', () => {
     const { onStarted } = renderSurface('claude')
 
     fireEvent.click(screen.getByTestId('composer-start-exploration'))
-    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'I want to build a budget app' } })
+    setComposerText(screen.getByRole('textbox'), 'I want to build a budget app')
     fireEvent.click(screen.getByRole('button', { name: 'Send message' }))
 
     await waitFor(() => expect(onStarted).toHaveBeenCalled())
@@ -326,7 +342,7 @@ describe('declaring an exploration before the first message', () => {
     )
 
     fireEvent.click(screen.getByTestId('composer-start-exploration'))
-    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'Budget app' } })
+    setComposerText(screen.getByRole('textbox'), 'Budget app')
     fireEvent.click(screen.getByRole('button', { name: 'Send message' }))
 
     await waitFor(() => expect(onStarted).toHaveBeenCalled())
@@ -337,7 +353,7 @@ describe('declaring an exploration before the first message', () => {
 
   it('creates no document when exploration was not declared', async () => {
     const { onStarted } = renderSurface('claude')
-    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'Just a question' } })
+    setComposerText(screen.getByRole('textbox'), 'Just a question')
     fireEvent.click(screen.getByRole('button', { name: 'Send message' }))
 
     await waitFor(() => expect(onStarted).toHaveBeenCalled())
@@ -383,7 +399,7 @@ describe('a refused exploring first message leaves no document behind (F330)', (
   async function sendExploring() {
     renderSurface('claude')
     fireEvent.click(screen.getByTestId('composer-start-exploration'))
-    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'An idea' } })
+    setComposerText(screen.getByRole('textbox'), 'An idea')
     fireEvent.click(screen.getByRole('button', { name: 'Send message' }))
   }
 
@@ -408,7 +424,7 @@ describe('a refused exploring first message leaves no document behind (F330)', (
     )
     const { onStarted } = renderSurface('claude')
     fireEvent.click(screen.getByTestId('composer-start-exploration'))
-    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'An idea' } })
+    setComposerText(screen.getByRole('textbox'), 'An idea')
     fireEvent.click(screen.getByRole('button', { name: 'Send message' }))
 
     await waitFor(() => expect(onStarted).toHaveBeenCalled())
@@ -442,7 +458,7 @@ describe('a refused first message (F108)', () => {
     )
     renderSurface('claude')
 
-    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'Review it please' } })
+    setComposerText(screen.getByRole('textbox'), 'Review it please')
     fireEvent.click(screen.getByRole('button', { name: 'Send message' }))
 
     await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent(refusal))
@@ -452,7 +468,7 @@ describe('a refused first message (F108)', () => {
     fetchMock.mockResolvedValue(new Response('', { status: 502 }))
     renderSurface('claude')
 
-    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'Anything' } })
+    setComposerText(screen.getByRole('textbox'), 'Anything')
     fireEvent.click(screen.getByRole('button', { name: 'Send message' }))
 
     await waitFor(() =>

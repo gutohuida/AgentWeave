@@ -3,6 +3,8 @@
 // ("Composer trigger detection") — not a port of that file, per its own instruction
 // ("Adopt the behaviour and the boundary rules; write our own implementation").
 
+import { findSpecReferences } from './specReference'
+
 export type ComposerTriggerKind = 'path' | 'skill' | 'slash-command'
 
 export interface ComposerTriggerMatch {
@@ -29,6 +31,20 @@ const MENTION_PREFIX: Record<'path' | 'skill', string> = {
  * only at its start.
  */
 export function detectComposerTrigger(text: string, cursor: number): ComposerTriggerMatch | null {
+  // A spec reference (a box in the composer) is one unit: a trigger never reaches into one, and
+  // one ends a token the way whitespace does, so `@` typed straight after a box still opens.
+  const references = findSpecReferences(text)
+  const boundary = references.reduce((at, ref) => (ref.end <= cursor ? Math.max(at, ref.end) : at), 0)
+  if (references.some((ref) => ref.start < cursor && cursor < ref.end)) return null
+  const match = detectInPlainText(text, cursor)
+  if (match?.kind === 'slash-command') return match.rangeStart >= boundary ? match : null
+  if (boundary === 0) return match
+  const local = detectInPlainText(text.slice(boundary), cursor - boundary)
+  if (!local || local.kind === 'slash-command') return null
+  return { ...local, rangeStart: local.rangeStart + boundary, rangeEnd: local.rangeEnd + boundary }
+}
+
+function detectInPlainText(text: string, cursor: number): ComposerTriggerMatch | null {
   const lineStart = text.lastIndexOf('\n', cursor - 1) + 1
   const linePrefix = text.slice(lineStart, cursor)
 
@@ -93,7 +109,10 @@ export function acceptTriggerResult(
   trigger: ComposerTriggerMatch,
   value: string,
 ): { text: string; cursor: number } {
-  const insertion =
-    trigger.kind === 'slash-command' ? '/' + quoteMentionValue(value) : formatMention(trigger.kind, value)
-  return replaceTextRange(text, trigger.rangeStart, trigger.rangeEnd, insertion)
+  return replaceTextRange(text, trigger.rangeStart, trigger.rangeEnd, triggerInsertion(trigger, value))
+}
+
+/** The text accepting `value` for `trigger` puts in place of the trigger's range. */
+export function triggerInsertion(trigger: ComposerTriggerMatch, value: string): string {
+  return trigger.kind === 'slash-command' ? '/' + quoteMentionValue(value) : formatMention(trigger.kind, value)
 }

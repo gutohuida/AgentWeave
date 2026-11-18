@@ -1,6 +1,7 @@
 // The harness page for scripts/drive/spec_reference_box.py: mounts the app's real Composer
 // (hub/ui/src/components/agents/Composer.tsx) alone, with no Hub. Run from hub/ui so the
 // plugin and React resolve from its node_modules; never touches hub/hub/static/ui.
+import { realpathSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import path from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
@@ -17,6 +18,8 @@ export default {
   // Vite's prebundle cache goes under hub/ui/node_modules (ignored), never into this tracked tree.
   cacheDir: path.join(ui, 'node_modules', '.vite-spec-reference-box'),
   plugins: [react()],
+  // The app's stylesheet goes through the app's own PostCSS (Tailwind) config.
+  css: { postcss: ui },
   resolve: {
     alias: [
       { find: '@', replacement: path.join(ui, 'src') },
@@ -28,6 +31,7 @@ export default {
     ],
     dedupe: ['react', 'react-dom'],
   },
-  server: { fs: { allow: [path.resolve(here, '../../..')] } },
+  // node_modules may be a junction to another checkout's; its real path serves the app's fonts.
+  server: { fs: { allow: [path.resolve(here, '../../..'), realpathSync(path.join(ui, 'node_modules'))] } },
   logLevel: 'warn',
 }

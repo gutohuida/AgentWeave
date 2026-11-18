@@ -5,13 +5,20 @@ import { LoadingThread } from '@/components/common/LoadingThread'
 import { Button } from '@/components/ui/button'
 import { clearComposerDraft, getComposerDraft, setComposerDraft } from '@/lib/composerDrafts'
 import {
-  acceptTriggerResult,
-  detectComposerTrigger,
-  formatMention,
-  replaceTextRange,
-  type ComposerTriggerMatch,
-} from '@/lib/composerTrigger'
-import { MODEL_COMMAND, resolveTriggerResults } from '@/lib/composerTriggerSources'
+  deleteSelection,
+  editorHtml,
+  enclosingSpecBox,
+  insertAtSelection,
+  readEditor,
+  readSelection,
+  renderEditor,
+  selectOffsets,
+  setCaret,
+  specBoxHtml,
+} from '@/lib/composerEditor'
+import { detectComposerTrigger, formatMention, triggerInsertion, type ComposerTriggerMatch } from '@/lib/composerTrigger'
+import { MODEL_COMMAND, resolveTriggerResults, type SpecReferenceTarget } from '@/lib/composerTriggerSources'
+import { findSpecReferences, formatSpecReference } from '@/lib/specReference'
 import { ComposerTriggerMenu, type ComposerTriggerMenuItem } from './ComposerTriggerMenu'
 import { ComposerModelControls } from './ComposerModelControls'
 import { ComposerSpecControl } from './ComposerSpecControl'
@@ -21,7 +28,10 @@ export const COMPOSER_MIN_ROWS = 3
 const COMPOSER_MAX_ROWS = 10
 const COMPOSER_ROW_HEIGHT_PX = 20
 export const COMPOSER_MAX_HEIGHT_PX = COMPOSER_ROW_HEIGHT_PX * COMPOSER_MAX_ROWS
+// Three rows plus the field's vertical padding (py-2): the height the old textarea rested at.
+export const COMPOSER_MIN_HEIGHT_PX = COMPOSER_ROW_HEIGHT_PX * COMPOSER_MIN_ROWS + 16
 export const COMPOSER_DRAFT_DEBOUNCE_MS = 300
+const EMPTY_SPECS: SpecReferenceTarget[] = []
 
 export interface ComposerProps {
   agent: string
@@ -82,6 +92,12 @@ export interface ComposerProps {
   insertPathRequest?: { path: string; requestId: number } | null
   /** The terminal tab's "Send to agent": text to append to the draft, unsent. Keyed like `insertPathRequest`. */
   insertTextRequest?: { text: string; requestId: number } | null
+  /** The project's specification documents, as its document list reports them: the `@` menu's
+   *  Specs group (`reference-a-spec-in-a-sentence-from-the-composer`, FR-1). */
+  specDocuments?: SpecReferenceTarget[]
+  /** Set while the document list is not known: the `@` menu says the specs are loading or could
+   *  not be read, rather than showing no Specs as if the project had none. */
+  specDocumentsStatus?: 'loading' | 'error'
 }
 
 /**
@@ -115,6 +131,8 @@ export function Composer({
   specDocumentLabel = null,
   insertPathRequest = null,
   insertTextRequest = null,
+  specDocuments = EMPTY_SPECS,
+  specDocumentsStatus,
 }: ComposerProps) {
   const [text, setText] = useState(() => getComposerDraft(projectId, agent, conversationId))
   const [submitting, setSubmitting] = useState(false)
@@ -123,45 +141,148 @@ export function Composer({
   const [modelPickerRequest, setModelPickerRequest] = useState(0)
   const textRef = useRef(text)
   textRef.current = text
-  const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const editorRef = useRef<HTMLDivElement>(null)
+  // The value the field's DOM shows. The field's children are not React's: the operator's edits
+  // change the DOM and are read back from it, and a change made to `text` by any other route (a
+  // restored draft, a send, an insert request) is drawn into the DOM only when it differs from this.
+  const domTextRef = useRef('')
   const pendingCursorRef = useRef<number | null>(null)
+  // Where the caret last was in the field, for the reference control when the field is not focused.
+  const lastCaretRef = useRef<number | null>(null)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const lastInsertedRequestId = useRef<number | null>(null)
   const lastInsertedTextId = useRef<number | null>(null)
 
-  const menuItems: ComposerTriggerMenuItem[] = trigger ? resolveTriggerResults(trigger, workspacePaths) : []
+  const specsNotice =
+    trigger?.kind === 'path' && specDocumentsStatus
+      ? specDocumentsStatus === 'error'
+        ? 'Specs could not be loaded'
+        : 'Loading specs…'
+      : undefined
+  const menuItems: ComposerTriggerMenuItem[] = trigger
+    ? resolveTriggerResults(trigger, workspacePaths, specDocuments).map((item) =>
+        // Under a Specs heading saying why it is empty, the files sit under their own heading.
+        specsNotice && !item.group ? { ...item, group: 'Files' as const } : item,
+      )
+    : []
 
   useEffect(() => {
     setActiveIndex(0)
   }, [trigger])
 
-  useEffect(() => {
-    if (pendingCursorRef.current === null) return
-    const position = pendingCursorRef.current
-    pendingCursorRef.current = null
-    textareaRef.current?.setSelectionRange(position, position)
-  }, [text])
-
-  const refreshTrigger = (value: string, cursor: number) => {
-    setTrigger(detectComposerTrigger(value, cursor))
+  const updateTrigger = (next: ComposerTriggerMatch | null) => {
+    // An unchanged trigger keeps its object, so re-reading the caret does not reset the menu.
+    setTrigger((prev) =>
+      prev && next && prev.kind === next.kind && prev.query === next.query && prev.rangeStart === next.rangeStart
+        ? prev
+        : next,
+    )
   }
 
-  const acceptActiveResult = () => {
-    if (!trigger || menuItems.length === 0) return
-    const item = menuItems[Math.min(activeIndex, menuItems.length - 1)]
+  /** Read the field back into `text`; with `detect`, open or close the trigger menu at the caret. */
+  const syncFromDom = (detect: boolean) => {
+    const root = editorRef.current
+    if (!root) return
+    const value = readEditor(root).text
+    domTextRef.current = value
+    if (value !== textRef.current) {
+      textRef.current = value
+      setText(value)
+      onTextChange?.(value)
+    }
+    const selection = readSelection(root)
+    if (selection) lastCaretRef.current = selection.end
+    if (detect) {
+      updateTrigger(
+        selection && selection.start === selection.end ? detectComposerTrigger(value, selection.end) : null,
+      )
+    }
+  }
+
+  // Draw `text` into the field whenever it changed by a route other than the field itself.
+  useLayoutEffect(() => {
+    const root = editorRef.current
+    const pending = pendingCursorRef.current
+    pendingCursorRef.current = null
+    if (!root || text === domTextRef.current) return
+    renderEditor(root, text)
+    domTextRef.current = text
+    if (pending !== null || document.activeElement === root) setCaret(root, pending ?? text.length)
+  }, [text])
+
+  // A caret can still land inside a box: cancelling an IME composition next to one leaves it there,
+  // and the next key typed is then lost (spike RSSC-1). Move it to just after the box.
+  useEffect(() => {
+    const onSelectionChange = () => {
+      const root = editorRef.current
+      const selection = window.getSelection()
+      if (!root || !selection || selection.rangeCount === 0 || !root.contains(selection.anchorNode)) return
+      if (selection.isCollapsed) {
+        const box = enclosingSpecBox(root, selection.anchorNode)
+        if (box) {
+          const range = document.createRange()
+          range.setStartAfter(box)
+          range.collapse(true)
+          selection.removeAllRanges()
+          selection.addRange(range)
+          return
+        }
+      }
+      const current = readSelection(root)
+      if (current) lastCaretRef.current = current.end
+    }
+    document.addEventListener('selectionchange', onSelectionChange)
+    return () => document.removeEventListener('selectionchange', onSelectionChange)
+  }, [])
+
+  const acceptItem = (item: ComposerTriggerMenuItem) => {
+    const root = editorRef.current
+    if (!root || !trigger) return
+    root.focus()
+    selectOffsets(root, trigger.rangeStart, trigger.rangeEnd)
     // `/model` is an action, not text: it opens the model picker and leaves nothing in the box.
     if (trigger.kind === 'slash-command' && item.value === MODEL_COMMAND) {
-      const result = replaceTextRange(text, trigger.rangeStart, trigger.rangeEnd, '')
-      pendingCursorRef.current = result.cursor
-      setText(result.text)
+      deleteSelection(root)
+      syncFromDom(false)
       setTrigger(null)
       setModelPickerRequest((n) => n + 1)
       return
     }
-    const result = acceptTriggerResult(text, trigger, item.value)
-    pendingCursorRef.current = result.cursor
-    setText(result.text)
+    if (item.spec) {
+      // A spec becomes a box in place of the typed `@query`, then a space, with the caret after (FR-2).
+      // One insertion: Chromium refuses `insertText` with the caret straight after a box it has
+      // just inserted, and a second command would be a second undo step anyway.
+      insertAtSelection(root, { html: specBoxHtml(item.spec) + ' ' })
+    } else {
+      insertAtSelection(root, { text: triggerInsertion(trigger, item.value) })
+    }
+    // The caret goes after what was inserted, whatever the browser's command left it.
+    const inserted = item.spec ? formatSpecReference(item.spec) + ' ' : triggerInsertion(trigger, item.value)
+    setCaret(root, trigger.rangeStart + inserted.length)
+    syncFromDom(false)
     setTrigger(null)
+  }
+
+  const acceptActiveResult = () => {
+    if (!trigger || menuItems.length === 0) return
+    acceptItem(menuItems[Math.min(activeIndex, menuItems.length - 1)])
+  }
+
+  // The visible reference control (FR-5) types `@` at the caret, so the same menu opens and picking
+  // from it inserts exactly what typing `@` and picking would.
+  const openReferenceMenu = () => {
+    const root = editorRef.current
+    if (!root || submitting) return
+    if (document.activeElement !== root || !readSelection(root)) {
+      root.focus()
+      setCaret(root, Math.min(lastCaretRef.current ?? textRef.current.length, textRef.current.length))
+    }
+    const value = readEditor(root).text
+    const before = value.slice(0, readSelection(root)?.start ?? value.length)
+    const afterBox = findSpecReferences(before).some((reference) => reference.end === before.length)
+    const needsSpace = before.length > 0 && !/\s$/.test(before) && !afterBox
+    insertAtSelection(root, { text: needsSpace ? ' @' : '@' })
+    syncFromDom(true)
   }
 
   useEffect(() => {
@@ -201,7 +322,7 @@ export function Composer({
       const needsLeadingSpace = prev.length > 0 && !/\s$/.test(prev)
       return prev + (needsLeadingSpace ? ' ' : '') + mention + ' '
     })
-    textareaRef.current?.focus()
+    editorRef.current?.focus()
   }, [insertPathRequest])
 
   useEffect(() => {
@@ -209,24 +330,8 @@ export function Composer({
     lastInsertedTextId.current = insertTextRequest.requestId
     const addition = insertTextRequest.text
     setText((prev) => prev + (prev.length > 0 && !prev.endsWith(String.fromCharCode(10)) ? String.fromCharCode(10) : '') + addition)
-    textareaRef.current?.focus()
+    editorRef.current?.focus()
   }, [insertTextRequest])
-
-  // The composer's height follows its text, and it has to be an effect rather than an
-  // `onInput` handler. `onInput` fires only for input the operator types, so every
-  // programmatic change to `text` left the inline height at whatever the last keystroke
-  // produced: sending a long message cleared the box but kept it tall until the operator
-  // switched conversation and React remounted the element. Inserting a mention and
-  // restoring a saved draft had the same gap, in the other direction — text arrived and
-  // the box stayed short. Keying off `text` covers all four.
-  useLayoutEffect(() => {
-    const textarea = textareaRef.current
-    if (!textarea) return
-    // 'auto' first so the measurement shrinks as well as grows: scrollHeight never reports
-    // less than the height already set, so without the reset the box could only get taller.
-    textarea.style.height = 'auto'
-    textarea.style.height = `${Math.min(textarea.scrollHeight, COMPOSER_MAX_HEIGHT_PX)}px`
-  }, [text])
 
   const handleSend = async () => {
     const trimmed = text.trim()
@@ -240,6 +345,7 @@ export function Composer({
     }
     setSubmitting(true)
     setText('')
+    setTrigger(null)
     try {
       await onSubmit(trimmed)
       onTextChange?.('')
@@ -251,7 +357,9 @@ export function Composer({
     }
   }
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    // Keys that end or steer an IME composition belong to it, not to the menu or to sending.
+    if (e.nativeEvent.isComposing) return
     if (trigger) {
       if (e.key === 'ArrowDown') {
         e.preventDefault()
@@ -282,16 +390,35 @@ export function Composer({
     }
   }
 
-  const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    setText(e.target.value)
-    onTextChange?.(e.target.value)
-    refreshTrigger(e.target.value, e.target.selectionStart)
+  // Paste is plain text, except that references (the text a copied box carries) come back as boxes.
+  const handlePaste = (e: React.ClipboardEvent<HTMLDivElement>) => {
+    const root = editorRef.current
+    if (!root) return
+    e.preventDefault()
+    const pasted = e.clipboardData.getData('text/plain')
+    if (!pasted) return
+    if (findSpecReferences(pasted).length > 0) insertAtSelection(root, { html: editorHtml(pasted) })
+    else insertAtSelection(root, { text: pasted })
+    syncFromDom(true)
   }
 
-  const handleCursorMove = (e: React.SyntheticEvent<HTMLTextAreaElement>) => {
-    const target = e.target as HTMLTextAreaElement
-    refreshTrigger(target.value, target.selectionStart)
+  // Copying writes the selection's text form, so a copied box reads as plain text anywhere else.
+  const handleCopy = (e: React.ClipboardEvent<HTMLDivElement>, cut: boolean) => {
+    const root = editorRef.current
+    const selection = root ? readSelection(root) : null
+    if (!root || !selection || selection.start === selection.end) return
+    e.preventDefault()
+    e.clipboardData.setData('text/plain', readEditor(root).text.slice(selection.start, selection.end))
+    if (cut) {
+      deleteSelection(root)
+      syncFromDom(true)
+    }
   }
+
+  // The resting placeholder teaches the triggers, which were otherwise found by accident.
+  const restingPlaceholder =
+    placeholder ??
+    (isRunning ? `${agent} is responding…` : `Message ${agent} — @ to mention a spec or file, / for commands`)
 
   return (
     <div
@@ -306,38 +433,57 @@ export function Composer({
         {trigger && (
           <ComposerTriggerMenu
             items={menuItems}
+            specsNotice={specsNotice}
             activeIndex={activeIndex}
             onHover={setActiveIndex}
-            onSelect={(item) => {
-              const result = acceptTriggerResult(text, trigger, item.value)
-              pendingCursorRef.current = result.cursor
-              setText(result.text)
-              setTrigger(null)
-              textareaRef.current?.focus()
-            }}
+            onSelect={acceptItem}
           />
         )}
-        <textarea
-          ref={textareaRef}
-          value={text}
-          onChange={handleChange}
+        {text === '' && (
+          <div
+            aria-hidden="true"
+            data-slot="composer-placeholder"
+            className="pointer-events-none absolute left-0 top-0 px-2 py-2 text-[13.5px] leading-5"
+            style={{ color: 'var(--text-3)' }}
+          >
+            {restingPlaceholder}
+          </div>
+        )}
+        {/* A contenteditable field, not a textarea, so a spec reference can be a box that acts as
+            one character (design D5). Its children are never React's: see `domTextRef`. Growth is
+            CSS: three rows at rest, up to the maximum, then it scrolls. */}
+        <div
+          ref={editorRef}
+          role="textbox"
+          aria-multiline="true"
+          aria-label={`Message ${agent}`}
+          aria-placeholder={restingPlaceholder}
+          aria-disabled={submitting || undefined}
+          contentEditable={!submitting}
+          suppressContentEditableWarning
+          data-testid="composer-input"
+          onInput={() => syncFromDom(true)}
           onKeyDown={handleKeyDown}
           onKeyUp={(e) => {
             if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) return
-            handleCursorMove(e)
+            syncFromDom(true)
           }}
-          onClick={handleCursorMove}
-          // The resting placeholder teaches the two triggers, which were otherwise found by accident.
-          placeholder={placeholder ?? (isRunning ? `${agent} is responding…` : `Message ${agent} — @ to mention a file, / for commands`)}
-          rows={COMPOSER_MIN_ROWS}
-          disabled={submitting}
-          className="composer-textarea w-full resize-none border-0 bg-transparent px-2 py-2 text-[13.5px] leading-5 disabled:opacity-50"
+          onMouseUp={() => syncFromDom(true)}
+          onCompositionEnd={() => syncFromDom(true)}
+          onPaste={handlePaste}
+          onCopy={(e) => handleCopy(e, false)}
+          onCut={(e) => handleCopy(e, true)}
+          className="composer-textarea w-full border-0 bg-transparent px-2 py-2 text-[13.5px] leading-5"
           style={{
             background: 'transparent',
             color: 'var(--text)',
+            minHeight: `${COMPOSER_MIN_HEIGHT_PX}px`,
             maxHeight: `${COMPOSER_MAX_HEIGHT_PX}px`,
             overflowY: 'auto',
             outline: 'none',
+            whiteSpace: 'pre-wrap',
+            overflowWrap: 'anywhere',
+            opacity: submitting ? 0.5 : undefined,
           }}
         />
       </div>
@@ -356,6 +502,20 @@ export function Composer({
           find (design.md Decision 5). */}
       <div className="flex flex-wrap items-center justify-between gap-2" data-slot="composer-control-row">
         <div className="flex min-w-0 flex-wrap items-center gap-2" data-slot="composer-control-row-leading">
+          {/* The reference menu without typing (FR-5): the operator did not know `@` existed.
+              `onMouseDown` keeps the field's caret where it was. */}
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            aria-label="Insert a reference"
+            title="Insert a reference to a spec or file (@)"
+            data-testid="composer-reference-control"
+            disabled={submitting}
+            onMouseDown={(event) => event.preventDefault()}
+            onClick={openReferenceMenu}
+          >
+            <Icon name="mention" size={16} />
+          </Button>
           <ComposerModelControls
             runner={runner}
             effectiveModel={modelIsRunners ? effectiveModel : (pendingOverrides.model ?? effectiveModel)}

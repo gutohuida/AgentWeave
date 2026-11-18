@@ -1296,6 +1296,37 @@
   .composer-form[data-submitting="true"] .composer-textarea {
     cursor: progress;
   }
+  /* A spec reference in the composer: one unit (contenteditable=false), drawn as a box with the
+     spec icon and the document's title (`reference-a-spec-in-a-sentence-from-the-composer`). */
+  .composer-spec-box {
+    display: inline-block;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin: 0 1px;
+    padding: 0 6px;
+    border: 1px solid var(--border-hi);
+    border-radius: 4px;
+    background: var(--surface-3);
+    color: var(--text);
+    line-height: 18px;
+    white-space: nowrap;
+    vertical-align: baseline;
+    user-select: all;
+    cursor: default;
+  }
+  /* lucide's FileText (the Icon component's `description`) as a mask in the text colour: the box
+     is built outside React, and Chromium's insertHTML mishandles an inline <svg>. */
+  .composer-spec-box-icon {
+    display: inline-block;
+    width: 12px;
+    height: 12px;
+    margin-right: 4px;
+    vertical-align: -1px;
+    background-color: currentColor;
+    -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z'/%3E%3Cpath d='M14 2v4a2 2 0 0 0 2 2h4'/%3E%3Cpath d='M10 9H8'/%3E%3Cpath d='M16 13H8'/%3E%3Cpath d='M16 17H8'/%3E%3C/svg%3E") center / contain no-repeat;
+    mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z'/%3E%3Cpath d='M14 2v4a2 2 0 0 0 2 2h4'/%3E%3Cpath d='M10 9H8'/%3E%3Cpath d='M16 13H8'/%3E%3Cpath d='M16 17H8'/%3E%3C/svg%3E") center / contain no-repeat;
+  }
 
   /* The compact header reading opens into detail instead of making every number compete at
      rest. Hover and keyboard focus share the same disclosure; the native title remains a

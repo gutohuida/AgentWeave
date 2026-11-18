@@ -3,6 +3,7 @@ import { siGithubcopilot } from 'simple-icons'
 import { BRAND_MARKS, BRAND_PREFIX } from './brandMarks'
 import {
   Activity,
+  AtSign,
   CircleMinus,
   Gauge,
   CircleAlert,
@@ -151,6 +152,7 @@ import {
  */
 const ICONS: Record<string, LucideIcon> = {
   add: Plus,
+  mention: AtSign,
   all_inclusive: InfinityIcon,
   // --- file-type glyphs (see fileIcons.ts for the extension -> name mapping) ---
   file_braces: Braces,
