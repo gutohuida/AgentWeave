@@ -5080,6 +5080,30 @@ async def build_figures_of(
     )
 
 
+@router.get("/builds/{build_id}/tasks")
+async def build_tasks_of(
+    build_id: str,
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    """The build view's one read: the build, its tasks in the document's declared order (then the
+    ones added later) each with its runs, send-backs and evidence, and the build's own runs. The run
+    set is the figures route's (`work_tally`), so the two agree for the same build and moment."""
+    from ... import build_read
+    from ...db.models import SpecDocument
+
+    project_id, _ = project
+    build = await _project_build(session, project_id, build_id)
+    document = await session.get(SpecDocument, build.document_id)
+    payload = None
+    if document is not None:
+        try:
+            payload = _read_payload(await _workspace(session, project_id), document.path)
+        except Exception:  # an unreadable file loses the declared order, not the read
+            payload = None
+    return await build_read.build_read(session, project_id, build, document, payload)
+
+
 @router.post("/builds/{build_id}/stop")
 async def stop_build(
     build_id: str,
