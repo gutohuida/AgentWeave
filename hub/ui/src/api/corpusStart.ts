@@ -5,7 +5,7 @@ import { useConfigStore } from '@/store/configStore'
 /** A start offered to a project with no specs (`hub/hub/corpus_start.py`). */
 export type CorpusStartKind = 'existing-code' | 'greenfield'
 
-/** Whether the project's corpus is empty and who would start it (`GET .../project/corpus`, { background: true }). */
+/** Whether the project's corpus is empty and who would start it (`GET .../project/corpus`). */
 export interface CorpusState {
   /** No document in any phase (archived included) and no spec file waiting to be adopted. */
   empty: boolean
@@ -43,7 +43,7 @@ export function useCorpusState() {
   const { isConfigured, selectedProjectId: projectId } = useConfigStore()
   return useQuery<CorpusState>({
     queryKey: ['project', projectId, 'corpus'],
-    queryFn: () => getJson<CorpusState>(`/api/v1/projects/${projectId}/project/corpus`),
+    queryFn: () => getJson<CorpusState>(`/api/v1/projects/${projectId}/project/corpus`, { background: true }),
     enabled: isConfigured && !!projectId,
   })
 }
