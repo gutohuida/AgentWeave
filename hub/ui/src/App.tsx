@@ -57,6 +57,7 @@ import {
   AgentSettingsPage,
   AppSettingsScreen,
   ArchivedAgentNotice,
+  BuildViewContainer,
   ConversationView,
   EvidenceBrowser,
   JobsScreen,
@@ -545,6 +546,18 @@ export default function App() {
             identifier={destination.focus}
             onOpenDocument={(path) => navigateTo(projectDestination(destination.projectId, 'spec', path))}
             onOpenTask={openTask}
+          />
+        ) : destination.view === 'build' && destination.focus ? (
+          <BuildViewContainer
+            key={destination.focus}
+            projectId={destination.projectId}
+            buildId={destination.focus}
+            address={{
+              task: destination.buildTask ?? null,
+              run: destination.buildRun ?? null,
+              filter: destination.buildFilter ?? 'all',
+            }}
+            onNavigate={navigateTo}
           />
         ) : destination.view === 'evidence' ? (
           <EvidenceBrowser

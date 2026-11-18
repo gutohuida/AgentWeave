@@ -266,7 +266,7 @@
 .aw-bv-drawer-sub { font-weight: 400; color: var(--text-2); }
 
 /* Loading: the view's own shape. */
-.aw-bv-skeleton .aw-bv-header { margin-bottom: 52px; }
+.aw-bv-placeholder .aw-bv-header { margin-bottom: 52px; }
 .aw-bv-skel-line { border-radius: var(--radius-sm); background: var(--surface-3); }
 .aw-bv-skel-row { border-bottom: 1px solid var(--border); }
 
