@@ -18,7 +18,7 @@ import {
 } from '@/lib/composerEditor'
 import { detectComposerTrigger, formatMention, triggerInsertion, type ComposerTriggerMatch } from '@/lib/composerTrigger'
 import { MODEL_COMMAND, resolveTriggerResults, type SpecReferenceTarget } from '@/lib/composerTriggerSources'
-import { findSpecReferences, formatSpecReference } from '@/lib/specReference'
+import { findSpecReferences, formatSpecReference, type SpecReference } from '@/lib/specReference'
 import { ComposerTriggerMenu, type ComposerTriggerMenuItem } from './ComposerTriggerMenu'
 import { ComposerModelControls } from './ComposerModelControls'
 import { ComposerSpecControl } from './ComposerSpecControl'
@@ -32,6 +32,12 @@ export const COMPOSER_MAX_HEIGHT_PX = COMPOSER_ROW_HEIGHT_PX * COMPOSER_MAX_ROWS
 export const COMPOSER_MIN_HEIGHT_PX = COMPOSER_ROW_HEIGHT_PX * COMPOSER_MIN_ROWS + 16
 export const COMPOSER_DRAFT_DEBOUNCE_MS = 300
 const EMPTY_SPECS: SpecReferenceTarget[] = []
+
+export type ComposerInsertRequest = { requestId: number } & (
+  | { kind: 'path'; path: string }
+  | { kind: 'text'; text: string }
+  | { kind: 'spec'; spec: SpecReference }
+)
 
 export interface ComposerProps {
   agent: string
@@ -85,13 +91,12 @@ export interface ComposerProps {
   specBusy?: boolean
   /** The open document's display name, for the Spec pill. `null` means none is open. */
   specDocumentLabel?: string | null
-  /** The files tab's "Insert into composer" (task 5.4, `2026-08-18-one-shell-three-panels`): a
-   *  `@path` mention to append, keyed by `requestId` so a repeat press of the same file inserts
-   *  again rather than being swallowed as an unchanged prop (the same `revealRequestId` shape
-   *  `panelTabsStore` already uses for "open this again"). `null` means nothing pending. */
-  insertPathRequest?: { path: string; requestId: number } | null
-  /** The terminal tab's "Send to agent": text to append to the draft, unsent. Keyed like `insertPathRequest`. */
-  insertTextRequest?: { text: string; requestId: number } | null
+  /** The one way in for what the side panel puts into the composer (design D8): the files tab's
+   *  "Insert into composer" (a `@path` mention, appended), the terminal tab's "Send to agent" (text,
+   *  appended, unsent) and a spec's insert action (a box at the caret). Keyed by `requestId` so a
+   *  repeat press of the same thing inserts again rather than being swallowed as an unchanged prop
+   *  (the same `revealRequestId` shape `panelTabsStore` already uses). `null` means nothing pending. */
+  insertRequest?: ComposerInsertRequest | null
   /** The project's specification documents, as its document list reports them: the `@` menu's
    *  Specs group (`reference-a-spec-in-a-sentence-from-the-composer`, FR-1). */
   specDocuments?: SpecReferenceTarget[]
@@ -129,8 +134,7 @@ export function Composer({
   specArmed = false,
   specBusy = false,
   specDocumentLabel = null,
-  insertPathRequest = null,
-  insertTextRequest = null,
+  insertRequest = null,
   specDocuments = EMPTY_SPECS,
   specDocumentsStatus,
 }: ComposerProps) {
@@ -151,7 +155,6 @@ export function Composer({
   const lastCaretRef = useRef<number | null>(null)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const lastInsertedRequestId = useRef<number | null>(null)
-  const lastInsertedTextId = useRef<number | null>(null)
 
   const specsNotice =
     trigger?.kind === 'path' && specDocumentsStatus
@@ -308,30 +311,37 @@ export function Composer({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // The files tab's "Insert into composer" (task 5.4) — a new `requestId` appends the mention to
-  // whatever is already typed rather than replacing it, since unlike the `@`/`$` trigger there is
-  // no open range to replace. A trailing space so a second insertion, or continued typing, never
-  // runs straight into the mention it follows.
+  // Whatever the side panel sends into the composer (design D8). A new `requestId` adds to what is
+  // already typed rather than replacing it, since unlike the `@`/`$` trigger there is no open range.
   useEffect(() => {
-    if (!insertPathRequest || insertPathRequest.requestId === lastInsertedRequestId.current) return
-    lastInsertedRequestId.current = insertPathRequest.requestId
-    // F409 D10: an unsafe path would type a live second mention.
-    if (!isSafeMentionValue(insertPathRequest.path)) return
-    const mention = formatMention('path', insertPathRequest.path)
-    setText((prev) => {
-      const needsLeadingSpace = prev.length > 0 && !/\s$/.test(prev)
-      return prev + (needsLeadingSpace ? ' ' : '') + mention + ' '
-    })
-    editorRef.current?.focus()
-  }, [insertPathRequest])
-
-  useEffect(() => {
-    if (!insertTextRequest || insertTextRequest.requestId === lastInsertedTextId.current) return
-    lastInsertedTextId.current = insertTextRequest.requestId
-    const addition = insertTextRequest.text
-    setText((prev) => prev + (prev.length > 0 && !prev.endsWith(String.fromCharCode(10)) ? String.fromCharCode(10) : '') + addition)
-    editorRef.current?.focus()
-  }, [insertTextRequest])
+    if (!insertRequest || insertRequest.requestId === lastInsertedRequestId.current) return
+    lastInsertedRequestId.current = insertRequest.requestId
+    const root = editorRef.current
+    if (insertRequest.kind === 'path') {
+      // F409 D10: an unsafe path would type a live second mention.
+      if (!isSafeMentionValue(insertRequest.path)) return
+      const mention = formatMention('path', insertRequest.path)
+      // A trailing space so a second insertion, or continued typing, never runs into the mention.
+      setText((prev) => {
+        const needsLeadingSpace = prev.length > 0 && !/\s$/.test(prev)
+        return prev + (needsLeadingSpace ? ' ' : '') + mention + ' '
+      })
+    } else if (insertRequest.kind === 'text') {
+      const addition = insertRequest.text
+      setText((prev) => prev + (prev.length > 0 && !prev.endsWith(String.fromCharCode(10)) ? String.fromCharCode(10) : '') + addition)
+    } else if (root) {
+      // A spec goes where the caret last was, or at the end when the field was never focused.
+      root.focus()
+      setCaret(root, Math.min(lastCaretRef.current ?? textRef.current.length, textRef.current.length))
+      const before = readEditor(root).text.slice(0, readSelection(root)?.start ?? textRef.current.length)
+      const afterBox = findSpecReferences(before).some((reference) => reference.end === before.length)
+      const needsSpace = before.length > 0 && !/\s$/.test(before) && !afterBox
+      insertAtSelection(root, { html: (needsSpace ? ' ' : '') + specBoxHtml(insertRequest.spec) + ' ' })
+      syncFromDom(false)
+    }
+    root?.focus()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [insertRequest])
 
   const handleSend = async () => {
     const trimmed = text.trim()
