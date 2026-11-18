@@ -21,6 +21,7 @@ import contextlib
 import hashlib
 import json
 import os
+import tempfile
 import threading
 from collections import OrderedDict
 from dataclasses import dataclass, field
@@ -243,11 +244,19 @@ def serialize(stored: Dict[str, Any], hub: Dict[str, Any]) -> str:
 
 
 def write_payload(
-    workspace: ProjectWorkspace, path: str, stored: Dict[str, Any], hub: Dict[str, Any]
+    workspace: ProjectWorkspace,
+    path: str,
+    stored: Dict[str, Any],
+    hub: Dict[str, Any],
+    *,
+    expected_version: Optional[str] = None,
 ) -> str:
-    """Store a document as its payload plus the Hub block, returning the text written."""
+    """Store a document as its payload plus the Hub block, returning the text written.
+
+    `expected_version` is `write_document`'s: the write is refused when the file changed since.
+    """
     content = serialize(stored, hub)
-    write_document(workspace, path, content)
+    write_document(workspace, path, content, expected_version=expected_version)
     return content
 
 
@@ -339,15 +348,67 @@ def document_exists(workspace: ProjectWorkspace, path: str) -> bool:
         return False
 
 
-def write_document(workspace: ProjectWorkspace, path: str, content: str) -> Path:
-    """Write a document's stored text, creating its parent directories."""
+class DocumentChangedError(RuntimeError):  # noqa: N818 - the outcome, not a fault
+    """A write refused because the document's content changed after the version it was based on
+    (`one-profile-runs-many-turns-at-once-on-different-tasks` FR-16)."""
+
+    def __init__(self, path: str) -> None:
+        super().__init__(
+            f"{path} changed since it was read: another write stored new content after the "
+            "version this one was based on. Read it again and apply the change to what it holds now"
+        )
+        self.path = path
+
+
+# Held across a write's version check and its replace, so two writes cannot both pass the check
+# and the later land over the earlier (FR-16, "two land at once"). Writes are short and local.
+_WRITE_LOCK = threading.Lock()
+
+
+def write_document(
+    workspace: ProjectWorkspace,
+    path: str,
+    content: str,
+    *,
+    expected_version: Optional[str] = None,
+) -> Path:
+    """Write a document's stored text, creating its parent directories.
+
+    Atomic (FR-16): written to a temporary file beside it, unique to this write so two writes never
+    share one, then moved over it, so a write that fails partway leaves the previous content whole
+    and a reader never sees a partial file. The temporary file is removed and the error re-raised.
+
+    `expected_version` is the `content_version` of what the writer read and changed. When given,
+    the write is refused with `DocumentChangedError`, changing nothing, if the file's payload is no
+    longer that version: a write never replaces content another write stored after its read.
+    """
     validate_spec_path(path)
     resolved = workspace.resolve_relative(path)
     resolved.parent.mkdir(parents=True, exist_ok=True)
-    # `newline`: text mode writes CRLF on Windows, a whole-file change in a project (F524).
-    resolved.write_text(content, encoding="utf-8", newline="\n")
+    with _WRITE_LOCK:
+        if expected_version is not None:
+            current = resolved.read_text(encoding="utf-8") if resolved.is_file() else None
+            if content_version(current) != expected_version:
+                raise DocumentChangedError(path)
+        _replace_atomically(resolved, content)
     hub_writes.record(workspace.root, path, content.encode("utf-8"))
     return resolved
+
+
+def _replace_atomically(resolved: Path, content: str) -> None:
+    descriptor, temporary_name = tempfile.mkstemp(
+        prefix=f".{resolved.name}.", suffix=".tmp", dir=resolved.parent
+    )
+    temporary = Path(temporary_name)
+    try:
+        # `newline`: text mode writes CRLF on Windows, a whole-file change in a project (F524).
+        with os.fdopen(descriptor, "w", encoding="utf-8", newline="\n") as handle:
+            handle.write(content)
+        os.replace(temporary, resolved)
+    except BaseException:
+        with contextlib.suppress(OSError):
+            temporary.unlink()
+        raise
 
 
 def move_document(workspace: ProjectWorkspace, old_path: str, new_path: str) -> Path:

@@ -537,7 +537,8 @@ async def _edit_capability(
             code="capability_retired",
         )
 
-    payload = spec_documents.read_payload(workspace, capability.path)
+    content = spec_documents.read_document(workspace, capability.path)
+    payload = spec_documents.parse_stored(content)
     if payload is None:
         raise TidyRefusedError(
             f"{capability.path} has no readable content", code="document_unreadable"
@@ -564,8 +565,16 @@ async def _edit_capability(
         found["statement"] = after
         payload["requirements"] = requirements
     try:
+        # Based on the copy read above, so a save stored since is never replaced (FR-16).
         await spec_service.merge_document(
-            session, workspace, capability, [], payload, actor=actor, note=reason
+            session,
+            workspace,
+            capability,
+            [],
+            payload,
+            actor=actor,
+            note=reason,
+            based_on=spec_documents.content_version(content),
         )
     except spec_service.SaveRefusedError as exc:
         raise TidyRefusedError(str(exc), code=exc.code, status=422) from exc
