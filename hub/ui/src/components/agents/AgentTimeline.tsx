@@ -1325,7 +1325,7 @@ const MessageEntry = memo(function MessageEntry({
             color: 'var(--text)',
           }}
         >
-          <MarkdownMessage content={entry.content} />
+          <MarkdownMessage content={entry.content} specReferences />
         </div>
       </div>
     )
