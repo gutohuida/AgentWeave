@@ -1,0 +1,58 @@
+== mode=native (151.0.7922.34)
+  PASS  backspace after box removes it: got 'see |now'
+  PASS  second backspace then eats text: got 'see|now'
+  PASS  delete before box removes it: got 'see |now'
+  PASS  arrowleft crosses box in one press: got 'see |[[SPEC-1]]now'
+  PASS  arrowright crosses box in one press: got 'see [[SPEC-1]]|now'
+  PASS  spec criterion: backspace, reinsert, arrowleft: got 'see |[[SPEC-1]]now'
+  PASS  click on box never leaves caret inside: got 'see [[SPEC-1]]now'
+  PASS  trailing box: arrowright then type: got 'see [[SPEC-1]]x|'
+  PASS  leading box: arrowleft from after: got '|[[SPEC-1]] go'
+  PASS  two boxes: two arrowlefts: got 'a |[[SPEC-1]][[SPEC-1]]'
+  PASS  typing after box lands after it: got 'see [[SPEC-1]] ok |now'
+  PASS  @ trigger next to box (after a space): got "see [[SPEC-1]] @sp|now  menu='trigger:@sp'"
+  PASS  @ trigger directly after box: got "see [[SPEC-1]]@sp|  menu='trigger:@sp'"
+  FAIL  paste plain text after box: got 'see [[SPEC-1]]pasted |now' want 'see [[SPEC-1]]<b>pasted</b> |now'
+  PASS  shift-select across box then backspace: got 'see|ow'
+  PASS  undo after box backspace restores box: got 'see [[SPEC-1]]|now'
+  PASS  undo after box delete restores box: got 'see |[[SPEC-1]]now'
+  PASS  undo after paste: got 'see [[SPEC-1]]|now'
+== mode=guarded (151.0.7922.34)
+  PASS  backspace after box removes it: got 'see |now'
+  PASS  second backspace then eats text: got 'see|now'
+  PASS  delete before box removes it: got 'see |now'
+  PASS  arrowleft crosses box in one press: got 'see |[[SPEC-1]]now'
+  PASS  arrowright crosses box in one press: got 'see [[SPEC-1]]|now'
+  PASS  spec criterion: backspace, reinsert, arrowleft: got 'see |[[SPEC-1]]now'
+  PASS  click on box never leaves caret inside: got 'see [[SPEC-1]]now'
+  PASS  trailing box: arrowright then type: got 'see [[SPEC-1]]x|'
+  PASS  leading box: arrowleft from after: got '|[[SPEC-1]] go'
+  PASS  two boxes: two arrowlefts: got 'a |[[SPEC-1]][[SPEC-1]]'
+  PASS  typing after box lands after it: got 'see [[SPEC-1]] ok |now'
+  PASS  @ trigger next to box (after a space): got "see [[SPEC-1]] @sp|now  menu='trigger:@sp'"
+  PASS  @ trigger directly after box: got "see [[SPEC-1]]@sp|  menu='trigger:@sp'"
+  PASS  paste plain text after box: got 'see [[SPEC-1]]<b>pasted</b> |now'
+  PASS  shift-select across box then backspace: got 'see|ow'
+  FAIL  undo after box backspace restores box: got 'see [[SPEC-1]]now' want 'see [[SPEC-1]]|now'
+  FAIL  undo after box delete restores box: got 'see [[SPEC-1]]now' want 'see |[[SPEC-1]]now'
+  PASS  undo after paste: got 'see [[SPEC-1]]|now'
+== mode=hybrid (151.0.7922.34)
+  PASS  backspace after box removes it: got 'see |now'
+  PASS  second backspace then eats text: got 'see|now'
+  PASS  delete before box removes it: got 'see |now'
+  PASS  arrowleft crosses box in one press: got 'see |[[SPEC-1]]now'
+  PASS  arrowright crosses box in one press: got 'see [[SPEC-1]]|now'
+  PASS  spec criterion: backspace, reinsert, arrowleft: got 'see |[[SPEC-1]]now'
+  PASS  click on box never leaves caret inside: got 'see [[SPEC-1]]now'
+  PASS  trailing box: arrowright then type: got 'see [[SPEC-1]]x|'
+  PASS  leading box: arrowleft from after: got '|[[SPEC-1]] go'
+  PASS  two boxes: two arrowlefts: got 'a |[[SPEC-1]][[SPEC-1]]'
+  PASS  typing after box lands after it: got 'see [[SPEC-1]] ok |now'
+  PASS  @ trigger next to box (after a space): got "see [[SPEC-1]] @sp|now  menu='trigger:@sp'"
+  PASS  @ trigger directly after box: got "see [[SPEC-1]]@sp|  menu='trigger:@sp'"
+  PASS  paste plain text after box: got 'see [[SPEC-1]]<b>pasted</b> |now'
+  PASS  shift-select across box then backspace: got 'see|ow'
+  PASS  undo after box backspace restores box: got 'see [[SPEC-1]]|now'
+  PASS  undo after box delete restores box: got 'see |[[SPEC-1]]now'
+  PASS  undo after paste: got 'see [[SPEC-1]]|now'
+hybrid failures: 0
