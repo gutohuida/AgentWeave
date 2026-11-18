@@ -64,7 +64,7 @@ export function useSupersededDocuments() {
   const { enabled, projectId, base } = usePrefix()
   return useQuery<{ documents: TidyDocument[] }>({
     queryKey: ['project', projectId, 'supersededDocuments'],
-    queryFn: () => getJson<{ documents: TidyDocument[] }>(`${base}/documents?superseded=true`),
+    queryFn: () => getJson<{ documents: TidyDocument[] }>(`${base}/documents?superseded=true`, { background: true }),
     enabled,
   })
 }
@@ -119,7 +119,7 @@ export function useTidyActs() {
   const { enabled, projectId, base } = usePrefix()
   return useQuery<TidyAct[]>({
     queryKey: ['project', projectId, 'tidyActs'],
-    queryFn: () => getJson<TidyAct[]>(`${base}/tidy-acts?reviewed=false`),
+    queryFn: () => getJson<TidyAct[]>(`${base}/tidy-acts?reviewed=false`, { background: true }),
     enabled,
   })
 }

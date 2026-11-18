@@ -537,7 +537,7 @@ export function useSpecList() {
   const { isConfigured, selectedProjectId: projectId } = useConfigStore()
   return useQuery<SpecListResponse>({
     queryKey: ['project', projectId, 'specs'],
-    queryFn: () => getJson<SpecListResponse>(`/api/v1/projects/${projectId}/project/specs`),
+    queryFn: () => getJson<SpecListResponse>(`/api/v1/projects/${projectId}/project/specs`, { first: true }),
     enabled: isConfigured && !!projectId,
   })
 }

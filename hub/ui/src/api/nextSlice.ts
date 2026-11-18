@@ -29,7 +29,7 @@ export function useNextSliceOffers() {
   return useQuery<NextSliceOffer[]>({
     queryKey: ['project', projectId, 'nextSliceOffers'],
     queryFn: async () =>
-      (await getJson<{ offers: NextSliceOffer[] }>(`/api/v1/projects/${projectId}/project/next-slice-offers`))
+      (await getJson<{ offers: NextSliceOffer[] }>(`/api/v1/projects/${projectId}/project/next-slice-offers`, { background: true }))
         .offers,
     enabled: isConfigured && !!projectId,
   })
