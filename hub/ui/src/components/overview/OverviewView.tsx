@@ -117,6 +117,7 @@ export function OverviewView({
   setup,
   firstRun,
   knownFailing,
+  quarantine,
   loading,
   onAddAgent,
   now,
@@ -154,6 +155,8 @@ export function OverviewView({
   firstRun?: React.ReactNode
   /** The project's known-failing list (`KnownFailingList`), below what is running. */
   knownFailing?: React.ReactNode
+  /** The project's quarantined tests (`QuarantineList`), beside the known-failing list. */
+  quarantine?: React.ReactNode
   loading?: boolean
   /** Opens the Add-agent dialog (F808: agents are added in the app, not with a CLI command). */
   onAddAgent?: () => void
@@ -330,6 +333,8 @@ export function OverviewView({
       </section>
 
       {knownFailing}
+
+      {quarantine}
 
       <div className="aw-ov-columns">
         <section className="aw-ov-section" aria-labelledby="ov-finished">

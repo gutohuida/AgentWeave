@@ -598,3 +598,16 @@ async def test_a_whole_check_rerun_failing_only_quarantined_tests_confirms_nothi
     project_checks.confirm_failure(check, cwd, result, None, [])
     assert not project_checks.failed(result), result
     assert result.get("flaky"), result
+
+
+def test_excused_in_names_each_excused_test_once_for_the_landing_record():
+    """FR-11: a landing names the quarantined tests its batch excused, once each, from the
+    results' own record; results with none contribute nothing."""
+    entry = {"id": "qt-1", "check": "tests", "test": "suite::flaky", "flake_rate": 0.1}
+    results = [
+        {"name": "lint", "exit_code": 0},
+        {"name": "tests", "exit_code": 0, "quarantine": {"tests": [entry], "first": {}}},
+        {"name": "tests", "exit_code": 0, "quarantine": {"tests": [dict(entry)]}},
+    ]
+    assert quarantine.excused_in(results) == [entry]
+    assert quarantine.excused_in(None) == []

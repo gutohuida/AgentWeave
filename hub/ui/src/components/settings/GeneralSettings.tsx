@@ -444,6 +444,48 @@ function ChecksRows({
             />
           }
         />
+        <SettingsRow
+          label="Quarantine threshold"
+          htmlFor="s-quarantine-threshold"
+          description="A test whose flake rate, counting a flip just recorded, is above this is quarantined: it still runs, but its failures count against no gate. A number above 0 and at most 1. A change applies to the next decision and releases or admits no test by itself."
+          changed={(settings.quarantine_threshold ?? PROJECT_DEFAULTS.quarantine_threshold) !== PROJECT_DEFAULTS.quarantine_threshold}
+          origin={{ kind: 'changed', other: String(PROJECT_DEFAULTS.quarantine_threshold) }}
+          onReset={() => onChange({ quarantine_threshold: PROJECT_DEFAULTS.quarantine_threshold }, 'Quarantine threshold reset to 0.05')}
+          control={
+            <CommittedInput
+              id="s-quarantine-threshold"
+              ariaLabel="Quarantine threshold"
+              numeric
+              width={72}
+              value={String(settings.quarantine_threshold ?? PROJECT_DEFAULTS.quarantine_threshold)}
+              validate={(d) => {
+                const n = Number(d.trim())
+                return d.trim() !== '' && Number.isFinite(n) && n > 0 && n <= 1 ? null : 'A rate above 0 and at most 1.'
+              }}
+              onCommit={(v) => onChange({ quarantine_threshold: Number(v) }, `Quarantine threshold set to ${v}`)}
+            />
+          }
+        />
+        <SettingsRow
+          label="Passes to leave quarantine"
+          htmlFor="s-quarantine-exit"
+          description="How many consecutive passes release a quarantined test; a failure starts the count again. Whole number, 1 to 1000."
+          changed={(settings.quarantine_exit_passes ?? PROJECT_DEFAULTS.quarantine_exit_passes) !== PROJECT_DEFAULTS.quarantine_exit_passes}
+          origin={{ kind: 'changed', other: String(PROJECT_DEFAULTS.quarantine_exit_passes) }}
+          onReset={() => onChange({ quarantine_exit_passes: PROJECT_DEFAULTS.quarantine_exit_passes }, 'Passes to leave quarantine reset to 20')}
+          control={
+            <CommittedInput
+              id="s-quarantine-exit"
+              ariaLabel="Passes to leave quarantine"
+              numeric
+              width={72}
+              suffix="passes"
+              value={String(settings.quarantine_exit_passes ?? PROJECT_DEFAULTS.quarantine_exit_passes)}
+              validate={wholeNumber(1, 1000, 'passes')}
+              onCommit={(v) => onChange({ quarantine_exit_passes: Number(v) }, `Passes to leave quarantine set to ${v}`)}
+            />
+          }
+        />
     </>
   )
 }
