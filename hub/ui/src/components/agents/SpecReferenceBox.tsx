@@ -12,9 +12,10 @@ import { SPEC_BOX_CLASS } from '@/lib/composerEditor'
 export function SpecReferenceBox({ id, sentTitle }: { id: string; sentTitle: string }) {
   const projectId = useConfigStore((state) => state.selectedProjectId)
   const openTab = usePanelTabsStore((state) => state.openTab)
-  const { data } = useSpecDocuments()
-  // Until the list has loaded nothing is known to be missing, so the box stays live.
-  const loaded = data !== undefined
+  const { data, isError: listFailed } = useSpecDocuments()
+  // Until the list has loaded, or when reading it failed, nothing is known to be missing, so the
+  // box stays live rather than claiming the document is gone.
+  const loaded = data !== undefined && !listFailed
   const document = data?.documents?.find((candidate) => candidate.id === id)
   const missing = loaded && !document
   const title = document?.title || sentTitle
