@@ -100,6 +100,7 @@ export const SETTINGS_INDEX: ReadonlyArray<SettingEntry> = [
   project('general', 'Name', 'How this project is named everywhere in AgentWeave. Rename the project.'),
   project('general', 'Folder', 'The project folder on this machine. Move it, relocate it, or delete the project.'),
   project('collaboration', 'Agents may start jobs, flows and loops', 'Off: an agent asking to start a job, flow or loop is refused, and you are asked instead.'),
+  project('collaboration', 'Profiles run in parallel', 'On: one agent profile may run several turns at once, each on different work. Off: one turn at a time per profile. Parallel runs, concurrency.'),
   project('collaboration', 'Hop budget', 'How many agent-to-agent hops a chain may take before it pauses for you.'),
   project('collaboration', 'Deliveries per turn', 'The most queued messages one agent turn takes in.'),
   project('permissions', 'Default permissions', 'For every run whose conversation and agent have not chosen. Full access allows everything, Copilot and specification turns included.'),
