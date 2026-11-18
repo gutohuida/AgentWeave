@@ -76,11 +76,13 @@ from ...conversations import (
     foreign_session_cli,
     get_conversation_by_id,
     get_open_conversation,
+    give_own_worktree_if_parallel,
     model_withheld_sentence,
     name_conversation,
     new_conversation,
     session_not_carried_sentence,
     set_provider_session,
+    thread_of,
 )
 from ...db.engine import async_session_factory, get_session
 from ...db.models import Agent, Conversation, PermissionRequest, Project, Run, Runner, Task
@@ -205,6 +207,32 @@ async def _latest_mcp_test_or_none(
         return None
 
 
+def run_context_file(work_dir: str, agent: str, run_id: str, *, shared: bool) -> Path:
+    """Where a run's canonical context is written (FR-8: no two running runs share one).
+
+    In a checkout only this run stands in -- a task's, a thread's, a review run's, or the agent's
+    own, whose turns take turns -- it is `<agent>.md`, as it always was. In a directory several runs
+    of one agent may stand in at once (the project directory a read-only agent shares, while the
+    project's parallel switch is on), it is named by the run.
+    """
+    folder = Path(work_dir) / ".agentweave" / "context"
+    return folder / (f"{agent}.{run_id}.md" if shared else f"{agent}.md")
+
+
+def context_file_for(work_dir: str, agent: str, run_id: str) -> Path:
+    """The context file *run_id* was given in *work_dir*: its own when it has one."""
+    own = run_context_file(work_dir, agent, run_id, shared=True)
+    return own if own.exists() else run_context_file(work_dir, agent, run_id, shared=False)
+
+
+def remove_run_context_file(work_dir: Optional[str], agent: str, run_id: str) -> None:
+    """Remove a run's own context file once it has ended. Best effort; `<agent>.md` stays."""
+    if not work_dir:
+        return
+    with contextlib.suppress(OSError):
+        run_context_file(work_dir, agent, run_id, shared=True).unlink(missing_ok=True)
+
+
 def make_render_surface(
     *,
     run_id: str,
@@ -238,7 +266,7 @@ def make_render_surface(
             logger.warning("recording run %s's surface failed", run_id, exc_info=True)
         if chosen.get("context") and work_dir:
             try:
-                context_file = Path(work_dir) / ".agentweave" / "context" / f"{agent}.md"
+                context_file = context_file_for(work_dir, agent, run_id)
                 context_file.write_text(chosen["context"], encoding="utf-8")
             except OSError:
                 logger.warning(
@@ -1039,6 +1067,8 @@ class _ReviewCheckoutClaim:
     def __init__(self) -> None:
         self.repo_root: Optional[Path] = None
         self.reviewer: Optional[str] = None
+        #: The checkout provisioned: the reviewer's shared one, or this run's own (FR-8).
+        self.workspace: Optional[Path] = None
         self.handed_off = False
         #: Held until the call ends; entered at the D8 check (F668).
         self.locks = contextlib.AsyncExitStack()
@@ -1064,9 +1094,16 @@ async def trigger_agent_directly(**kwargs: Any) -> TriggerAgentResponse:
     except BaseException:
         if claim.repo_root is not None and claim.reviewer is not None and not claim.handed_off:
             try:
-                await asyncio.to_thread(
-                    worktrees.release_review_checkout, claim.repo_root, claim.reviewer
-                )
+                if claim.workspace is not None and worktrees.is_review_run_checkout(
+                    claim.repo_root, claim.workspace
+                ):
+                    await asyncio.to_thread(
+                        worktrees.release_review_run_checkout, claim.repo_root, claim.workspace
+                    )
+                else:
+                    await asyncio.to_thread(
+                        worktrees.release_review_checkout, claim.repo_root, claim.reviewer
+                    )
             except Exception:  # noqa: BLE001 — the refusal is what the caller needs to see
                 logger.exception("Could not release %s's refused review checkout", claim.reviewer)
         raise
@@ -1460,6 +1497,13 @@ async def _trigger_agent_directly(
                 reviewer=agent,
                 task_id=review_task_id,
                 repo_root=repo_root,
+                # FR-8: while the parallel switch is on, two reviews by one agent may run at once,
+                # so each run checks the work out in its own detached worktree.
+                run_id=(
+                    run_id
+                    if project_row is not None and project_row.profiles_run_in_parallel
+                    else None
+                ),
             )
         except review_turn.ReviewTurnRefused as exc:
             # Task 3.4. The reason comes from the resolver unchanged, so the operator reads why
@@ -1468,6 +1512,7 @@ async def _trigger_agent_directly(
         # Provisioned now; from here until a run takes it over, a refusal releases it (F326).
         review_claim.repo_root = repo_root
         review_claim.reviewer = agent
+        review_claim.workspace = review_context.workspace
 
     if work_dir and worktrees.is_writing_agent(config) and project_is_repo:
         raise TriggerAgentError(
@@ -1573,6 +1618,9 @@ async def _trigger_agent_directly(
             if not takes_task and worktrees.is_writing_agent(config) and project_is_repo
             else None
         )
+        # FR-13: a chat the operator opened while the parallel switch was on works in its own
+        # worktree on `thread/<agent>/<thread>`; every other untasked turn keeps the agent's own.
+        thread = None if takes_task else thread_of(conversation)
         # A task worktree about to be created asks GitHub, in the background, about the
         # project's open PRs (`a-build-lands-as-one-pull-request`, FR-9): the turn never waits.
         creating = takes_task and not await blocking.run(
@@ -1607,6 +1655,7 @@ async def _trigger_agent_directly(
                     names=turn_workspace.names,
                     catch_up_to=catch_up_to,
                     clear_stale_lock=clear_stale_lock,
+                    thread=thread,
                 )
         except (worktrees.GitCommandError, worktrees.IsolationUnavailableError) as exc:
             if isinstance(exc, worktrees.CheckoutLockedError):
@@ -1631,7 +1680,11 @@ async def _trigger_agent_directly(
                 ) from exc
             raise TriggerAgentError(
                 status.HTTP_409_CONFLICT,
-                f"Could not prepare {agent}'s own workspace: {exc}",
+                (
+                    f"Could not prepare this chat's own workspace for {agent}: {exc}"
+                    if thread is not None and worktrees.is_writing_agent(config) and project_is_repo
+                    else f"Could not prepare {agent}'s own workspace: {exc}"
+                ),
                 # Not `agent_wide`, and not `transient` — see the flag's own paragraph. It says
                 # what failed; `turn_scheduler` decides whether anything was starving behind it.
                 agent_workspace_unavailable=True,
@@ -1648,7 +1701,12 @@ async def _trigger_agent_directly(
         # inputs `resolve_turn_workspace` was just given, so the sentence the agent reads cannot
         # disagree with the branch its process is standing on.
         workspace_branch = await blocking.run(
-            worktrees.turn_branch_name, repo_root, agent, config, task_id=turn_workspace.task_id
+            worktrees.turn_branch_name,
+            repo_root,
+            agent,
+            config,
+            task_id=turn_workspace.task_id,
+            thread=thread,
         )
 
     # F737: the workspace's runner configuration is compared with what it held at its last
@@ -1784,7 +1842,16 @@ async def _trigger_agent_directly(
                 "tool_surface": rendered.get("tool_surface") or "",
                 "context": rendered["context"],
             }
-    context_file = Path(effective_work_dir) / ".agentweave" / "context" / f"{agent}.md"
+    # FR-8: named by the run only where several runs of this agent may stand in one directory at
+    # once -- the project directory, while the parallel switch is on. Off, it is what it was.
+    context_file = run_context_file(
+        effective_work_dir,
+        agent,
+        run_id,
+        shared=isolated_workspace is None
+        and project_row is not None
+        and project_row.profiles_run_in_parallel,
+    )
 
     def _write_context() -> None:
         context_file.parent.mkdir(parents=True, exist_ok=True)
@@ -2423,6 +2490,7 @@ async def trigger_agent(
             )
             # Typed by the operator: which CLI made it is not known.
             set_provider_session(conversation, body.session_id, None)
+            await give_own_worktree_if_parallel(session, conversation)
             session.add(conversation)
     else:
         if body.task_id:
@@ -2457,6 +2525,9 @@ async def trigger_agent(
             conversation = new_conversation(
                 project_id=project_id, agent=body.agent, origin="operator"
             )
+            # FR-13: a chat the operator opens while the parallel switch is on gets its own
+            # worktree and branch, provisioned at its first writing turn.
+            await give_own_worktree_if_parallel(session, conversation)
             session.add(conversation)
 
     if body.task_id:
@@ -3385,6 +3456,25 @@ async def _snapshot_turn(
     return None
 
 
+async def _release_review_run_checkout(work_dir: Optional[str]) -> None:
+    """Remove a review run's own checkout once the run has ended (FR-8), and nothing else.
+
+    Only a `worktrees.review_run_path` is touched: the repository is the one that checkout belongs
+    to (`<repo>/.agentweave/reviews/<agent>.<run>`). Best effort -- a checkout left behind is
+    removed by the next cleanup pass, never at the cost of the run's own ending.
+    """
+    if not work_dir:
+        return
+    worktree = Path(work_dir)
+    repo_root = worktree.parent.parent.parent
+    if not worktrees.is_review_run_checkout(repo_root, worktree):
+        return
+    try:
+        await blocking.run_serialized(worktrees.release_review_run_checkout, repo_root, worktree)
+    except Exception:  # noqa: BLE001 -- the run has ended either way
+        logger.warning("Could not remove the review checkout %s", worktree, exc_info=True)
+
+
 async def _execute_run(
     *,
     project_id: str,
@@ -3830,6 +3920,8 @@ async def _execute_run(
                     else accounting_sample.merged(from_messages)
                 )
 
+        remove_run_context_file(work_dir, agent, run_id)
+        await _release_review_run_checkout(work_dir)
         snapshot_sha: Optional[str] = None
         if worktree is not None:
             # Task 5.3 needs real commits to compare branches with `git merge-tree` —
@@ -4940,6 +5032,8 @@ async def _execute_rpc_run(
             await redrain_queued_agents(project_id)
             return
 
+        remove_run_context_file(work_dir, agent, run_id)
+        await _release_review_run_checkout(work_dir)
         snapshot_sha: Optional[str] = None
         if worktree is not None:
             # Same best-effort snapshot as `_execute_run` — a git failure here must not turn

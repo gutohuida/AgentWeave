@@ -20,7 +20,11 @@ from typing import List, Optional, Tuple
 from sqlalchemy import select
 
 from .checkpoint_cutover import delivery_content
-from .conversations import CONVERSATION_TITLE_MAX_LENGTH, new_conversation
+from .conversations import (
+    CONVERSATION_TITLE_MAX_LENGTH,
+    give_own_worktree_if_parallel,
+    new_conversation,
+)
 from .db.models import Agent, Checkpoint, Conversation
 from .inbound_queue import new_entry
 
@@ -116,6 +120,7 @@ async def start_from_checkpoint(
     conversation.title = started_title(checkpoint)
     conversation.title_set_by_operator = True
     conversation.started_from_checkpoint_id = checkpoint.id
+    await give_own_worktree_if_parallel(db, conversation)
     db.add(conversation)
 
     entry = new_entry(

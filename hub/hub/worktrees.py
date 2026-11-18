@@ -249,8 +249,70 @@ def task_branch_name(task_id: str) -> str:
     return f"{TASK_BRANCH_PREFIX}{task_id}"
 
 
+#: A chat's own branch (`one-profile-runs-many-turns-at-once-on-different-tasks`, FR-13, D6).
+#: Top-level, like `mend/`: git refuses `agentweave/<agent>/<thread>` while `agentweave/<agent>`
+#: exists, and an agent named `task` would collide with `agentweave/task/<id>`.
+THREAD_BRANCH_PREFIX = "thread/"
+_THREAD_ID_RE = re.compile(r"^conv-[0-9a-f]{1,64}$")
+
+
+def validate_thread_id(thread: str) -> None:
+    """Reject a thread name that cannot safely be both a path component and a ref segment.
+
+    A thread is named by its conversation's lineage, which the Hub mints as `conv-` and hex
+    (`conversations.new_conversation`); lowercase only, for `validate_task_id`'s reason.
+    """
+    if not _THREAD_ID_RE.fullmatch(thread):
+        raise ValueError(
+            "invalid thread; expected 'conv-' followed by 1-64 lowercase hexadecimal digits"
+        )
+
+
+def thread_root(repo_root: Path) -> Path:
+    return repo_root / ".agentweave" / "threads"
+
+
+def thread_worktree_path(repo_root: Path, agent: str, thread: str) -> Path:
+    """Where *agent*'s chat *thread* works when it has a worktree of its own. Pure.
+
+    One level, `.agentweave/threads/<thread>`, like the task and review roots, so everything that
+    walks a checkout root's children (`project_lifecycle._repair_checkout_registrations`) finds it.
+    A thread belongs to one agent, whose name its branch carries.
+    """
+    validate_agent_name(agent)
+    validate_thread_id(thread)
+    return thread_root(repo_root) / thread
+
+
+def thread_branch_name(agent: str, thread: str) -> str:
+    """`thread/<agent>/<thread>`, the branch a chat with its own worktree commits to. Pure."""
+    validate_agent_name(agent)
+    validate_thread_id(thread)
+    return f"{THREAD_BRANCH_PREFIX}{agent}/{thread}"
+
+
 def review_root(repo_root: Path) -> Path:
     return repo_root / ".agentweave" / "reviews"
+
+
+def review_run_path(repo_root: Path, agent: str, run_id: str) -> Path:
+    """Where one review *run* of *agent* checks the work out, while the project's parallel switch
+    is on (FR-8): two concurrent reviews by one agent cannot share `review_path`, which each would
+    re-point under the other. `<agent>.<run>`: `.` is in neither an agent name nor a run id, so it
+    can never be another agent's `review_path`. Pure; released when the run ends.
+    """
+    validate_agent_name(agent)
+    if not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", run_id):
+        raise ValueError("invalid run id for a review checkout")
+    return review_root(repo_root) / f"{agent}.{run_id}"
+
+
+def is_review_run_checkout(repo_root: Path, path: Path) -> bool:
+    """Whether *path* is a per-run review checkout (`review_run_path`). Pure."""
+    try:
+        return path.resolve().parent == review_root(repo_root).resolve() and "." in path.name
+    except OSError:
+        return False
 
 
 def review_path(repo_root: Path, agent: str) -> Path:
@@ -1482,6 +1544,11 @@ def existing_review_checkout(repo_root: Path, agent: str) -> Optional[Path]:
         path = review_path(repo_root, agent)
     except ValueError:
         return None
+    return _existing_detached(repo_root, path)
+
+
+def _existing_detached(repo_root: Path, path: Path) -> Optional[Path]:
+    """*path* if git really tracks a detached worktree there, else `None`."""
     if not path.is_dir() or path.is_symlink():
         return None
     try:
@@ -1594,7 +1661,9 @@ def _repoint_review_checkout(path: Path, commit: str) -> None:
     )
 
 
-def ensure_review_checkout(repo_root: Path, agent: str, sha: str) -> Path:
+def ensure_review_checkout(
+    repo_root: Path, agent: str, sha: str, *, run_id: Optional[str] = None
+) -> Path:
     """Provision *agent*'s review checkout, detached at *sha*. Idempotent (task 1.2).
 
     Created on the first review and **re-pointed** on every one after it, so the number of these
@@ -1609,13 +1678,17 @@ def ensure_review_checkout(repo_root: Path, agent: str, sha: str) -> Path:
     `checkout --force`, because a review checkout is disposable and the reviewer is not its author:
     a tracked file it modified must not be able to block the next review. Untracked files are left
     alone — `--force` does not remove them — so a scratch note costs nothing.
+
+    *run_id* (FR-8): the review run's own checkout, `review_run_path`, for a project whose parallel
+    switch is on, where two reviews by one agent may run at once. Released when the run ends
+    (`release_review_run_checkout`), so the set stays bounded by the runs in flight.
     """
     commit = resolve_review_commit(repo_root, sha)
-    path = review_path(repo_root, agent)
+    path = review_run_path(repo_root, agent, run_id) if run_id else review_path(repo_root, agent)
 
     _clear_empty_leftover(repo_root, path)
     if path.exists():
-        if existing_review_checkout(repo_root, agent) is None:
+        if _existing_detached(repo_root, path) is None:
             raise IsolationUnavailableError(
                 f"refusing existing path {path}: it is not a detached git worktree registered for "
                 f"{agent}'s reviews"
@@ -1635,7 +1708,18 @@ def ensure_review_checkout(repo_root: Path, agent: str, sha: str) -> Path:
     return path
 
 
-def release_review_checkout(repo_root: Path, agent: str) -> bool:
+def release_review_run_checkout(repo_root: Path, path: Path) -> bool:
+    """Remove one review run's own checkout (`review_run_path`) once its run has ended. Returns
+    whether one was removed. Anything else at *path* is left alone: only a detached worktree under
+    `.agentweave/reviews/` named `<agent>.<run>` is ever this function's to remove."""
+    if not is_review_run_checkout(repo_root, path) or _existing_detached(repo_root, path) is None:
+        return False
+    remove_worktree(repo_root, path, check=False, fallback=True)
+    _run_git(repo_root, "worktree", "prune", check=False)
+    return True
+
+
+def release_review_checkout(repo_root: Path, agent: str, *, run_id: Optional[str] = None) -> bool:
     """Remove *agent*'s review checkout. Returns whether there was one (task 1.4).
 
     Nothing is preserved and nothing needs to be. A working worktree is released carefully because
@@ -1643,7 +1727,9 @@ def release_review_checkout(repo_root: Path, agent: str) -> bool:
     it is detached, and anything committed onto it was already orphaned.
     """
     try:
-        path = review_path(repo_root, agent)
+        path = (
+            review_run_path(repo_root, agent, run_id) if run_id else review_path(repo_root, agent)
+        )
     except ValueError:
         return False
     if not path.exists():
@@ -1651,6 +1737,107 @@ def release_review_checkout(repo_root: Path, agent: str) -> bool:
     remove_worktree(repo_root, path, check=False, fallback=True)
     _run_git(repo_root, "worktree", "prune", check=False)
     return True
+
+
+def existing_thread_worktree(repo_root: Path, agent: str, thread: str) -> Optional[Path]:
+    """*thread*'s worktree if git really tracks one there on its own branch, else `None`.
+    Provisions nothing, for `existing_worktree`'s reasons."""
+    try:
+        path = thread_worktree_path(repo_root, agent, thread)
+        expected = f"refs/heads/{thread_branch_name(agent, thread)}"
+    except ValueError:
+        return None
+    if not path.is_dir() or path.is_symlink():
+        return None
+    try:
+        registered = _registered_worktree_branch(repo_root, path)
+    except (GitCommandError, OSError, subprocess.SubprocessError):
+        return None
+    return path if registered == expected else None
+
+
+def ensure_thread_worktree(repo_root: Path, agent: str, thread: str, base: str) -> Path:
+    """Provision the worktree of a chat with one of its own (FR-13, D6). Idempotent.
+
+    Created on the thread's first writing turn on `thread/<agent>/<thread>`, cut from *base* (the
+    project's main branch, resolved in the project checkout), and reused by every later turn. A
+    branch that already exists (its worktree removed, or lost) is checked out as it is, never reset:
+    it carries the thread's work. An existing path that is anything but this branch's registered
+    worktree is refused, naming it, rather than switched: a thread's folder is not shared with any
+    other branch, so whatever is there is somebody's.
+    """
+    path = thread_worktree_path(repo_root, agent, thread)
+    branch = thread_branch_name(agent, thread)
+    _clear_empty_leftover(repo_root, path)
+    if path.exists():
+        if existing_thread_worktree(repo_root, agent, thread) is None:
+            raise IsolationUnavailableError(
+                f"refusing existing path {path}: it is not the registered git worktree for "
+                f"refs/heads/{branch}. Move or delete that directory once you have salvaged "
+                "anything in it; the next turn provisions the thread's checkout itself."
+            )
+        return path
+    _run_git(repo_root, "worktree", "prune", check=False)
+    exists = _resolves(repo_root, f"refs/heads/{branch}")
+    _refuse_a_ref_that_names_no_commit(repo_root, branch if exists else base)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if exists:
+        _run_git(repo_root, "worktree", "add", str(path), branch)
+    else:
+        _run_git(repo_root, "worktree", "add", "-b", branch, str(path), f"{base}^{{commit}}")
+    _symlink_shared_dependencies(repo_root, path)
+    return path
+
+
+@dataclass
+class ThreadRelease:
+    """What `release_thread_worktree` did: whether the worktree went, and why not when it stayed."""
+
+    removed: bool
+    branch: str
+    kept_reason: Optional[str] = None
+
+
+def release_thread_worktree(
+    repo_root: Path, agent: str, thread: str, main_branch: Optional[str]
+) -> ThreadRelease:
+    """Remove an archived thread's worktree when nothing in it is unmerged (FR-14).
+
+    The worktree goes only when its tree is clean, no merge is under way in it, and its branch has
+    no commit that is not on *main_branch*. The branch itself always stays (D6: removing a worktree
+    never removes its branch), so nothing here can delete work. Anything unmerged keeps the
+    worktree, with the reason. With no resolvable main branch nothing can be called merged, so
+    nothing is removed.
+    """
+    branch = thread_branch_name(agent, thread)
+    path = thread_worktree_path(repo_root, agent, thread)
+    if not main_branch or not _resolves(repo_root, main_branch):
+        return ThreadRelease(False, branch, "the project has no main branch to compare with")
+    checkout = existing_thread_worktree(repo_root, agent, thread)
+    if checkout is not None:
+        if _is_mid_merge(checkout):
+            return ThreadRelease(False, branch, "a merge is unfinished in it")
+        if _has_uncommitted_changes(checkout):
+            return ThreadRelease(False, branch, "it has uncommitted changes")
+    if _resolves(repo_root, f"refs/heads/{branch}"):
+        ahead = _run_git(repo_root, "rev-list", f"{main_branch}..{branch}", check=False)
+        if ahead.returncode != 0:
+            return ThreadRelease(
+                False, branch, f"{branch} could not be compared with {main_branch}"
+            )
+        unmerged = [line for line in ahead.stdout.splitlines() if line.strip()]
+        if unmerged:
+            return ThreadRelease(
+                False, branch, f"{len(unmerged)} commit(s) on {branch} are not on {main_branch}"
+            )
+    if checkout is None:
+        if path.exists():
+            # A directory that is not the registered worktree is not ours to delete.
+            return ThreadRelease(False, branch, f"{path} is not the thread's registered worktree")
+        return ThreadRelease(False, branch)
+    remove_worktree(repo_root, checkout, check=False, fallback=True)
+    _run_git(repo_root, "worktree", "prune", check=False)
+    return ThreadRelease(True, branch)
 
 
 def resolve_agent_workspace(repo_root: Path, agent: str, config: Dict[str, Any]) -> Path:
@@ -1709,6 +1896,7 @@ def resolve_turn_workspace(
     catch_up_to: Optional[str] = None,
     names: Optional[Mapping[str, str]] = None,
     clear_stale_lock: bool = False,
+    thread: Optional[str] = None,
 ) -> ResolvedWorkspace:
     """Return the directory a spawned process should use as its cwd, for *this turn* (design D3),
     with the notes its prompt carries about that checkout (`ResolvedWorkspace`, F695).
@@ -1748,6 +1936,22 @@ def resolve_turn_workspace(
     is precisely the option D1 rejected.
     """
     if not takes_task_workspace(repo_root, config, task_id):
+        if takes_thread_workspace(repo_root, config, thread):
+            # FR-13: a chat with a worktree of its own works there, on its own branch, cut from
+            # the main branch at its first writing turn and caught up by the agent arm's rule.
+            assert thread is not None  # narrowed by `takes_thread_workspace`
+            if not catch_up_to:
+                raise ValueError(f"a thread workspace for {thread} needs a base to be cut from")
+            seed_repo_excludes(repo_root)
+            if clear_stale_lock:
+                clear_stale_index_lock(thread_worktree_path(repo_root, agent, thread))
+            path = ensure_thread_worktree(repo_root, agent, thread, catch_up_to)
+            left_behind = catch_up_agent_worktree(repo_root, path, catch_up_to)
+            if left_behind is not None:
+                logger.info(
+                    "%s's thread %s was not brought up to date: %s", agent, thread, left_behind
+                )
+            return ResolvedWorkspace(path)
         if clear_stale_lock and is_writing_agent(config):
             clear_stale_index_lock(worktree_path(repo_root, agent))
         workspace = resolve_agent_workspace(repo_root, agent, config)
@@ -1781,8 +1985,22 @@ def resolve_turn_workspace(
     return ResolvedWorkspace(path, tuple(notes))
 
 
+def takes_thread_workspace(repo_root: Path, config: Dict[str, Any], thread: Optional[str]) -> bool:
+    """Whether an untasked turn of a chat with its own worktree works in that worktree (FR-13).
+
+    The same guards as `takes_task_workspace`: a read-only agent shares the project checkout and a
+    project that is not a repository has nothing to cut a worktree from, thread or no thread.
+    """
+    return thread is not None and is_writing_agent(config) and is_git_repo(repo_root)
+
+
 def turn_branch_name(
-    repo_root: Path, agent: str, config: Dict[str, Any], *, task_id: Optional[str] = None
+    repo_root: Path,
+    agent: str,
+    config: Dict[str, Any],
+    *,
+    task_id: Optional[str] = None,
+    thread: Optional[str] = None,
 ) -> str:
     """The branch `resolve_turn_workspace` would put this turn on. Pure — provisions nothing.
 
@@ -1797,6 +2015,9 @@ def turn_branch_name(
     those turns are on.
     """
     if not takes_task_workspace(repo_root, config, task_id):
+        if takes_thread_workspace(repo_root, config, thread):
+            assert thread is not None  # narrowed by `takes_thread_workspace`
+            return thread_branch_name(agent, thread)
         return branch_name(agent)
     assert task_id is not None  # narrowed by `takes_task_workspace`
     return task_branch_name(task_id)
@@ -2269,10 +2490,13 @@ class WorkspaceBranch:
     name: str
     branch: str
     path: Path
+    #: The agent a `"thread"` checkout belongs to (its `name` is the thread); None for the others,
+    #: whose `name` already says whose they are.
+    agent: Optional[str] = None
 
 
 def list_workspace_branches(repo_root: Path) -> List[WorkspaceBranch]:
-    """Every Hub-owned checkout git currently has registered, agent and task alike.
+    """Every Hub-owned checkout git currently has registered: agent, task and thread alike.
 
     Two filters used to drop task checkouts here, not one, and relaxing either alone would have
     left them invisible (task 6.1): the `_AGENT_NAME_RE` match on what follows
@@ -2291,6 +2515,25 @@ def list_workspace_branches(repo_root: Path) -> List[WorkspaceBranch]:
 
     def append_record() -> None:
         ref = record.get("branch", "")
+        thread_prefix = f"refs/heads/{THREAD_BRANCH_PREFIX}"
+        if ref.startswith(thread_prefix):
+            # FR-17: a chat's own worktree, at the path its own pure function predicts.
+            agent, _, thread = ref[len(thread_prefix) :].partition("/")
+            try:
+                expected = thread_worktree_path(repo_root, agent, thread).resolve()
+            except ValueError:
+                return
+            if Path(record.get("worktree", "")).resolve() == expected:
+                found.append(
+                    WorkspaceBranch(
+                        kind="thread",
+                        name=thread,
+                        branch=ref[len("refs/heads/") :],
+                        path=expected,
+                        agent=agent,
+                    )
+                )
+            return
         prefix = f"refs/heads/{BRANCH_PREFIX}"
         if not ref.startswith(prefix):
             return

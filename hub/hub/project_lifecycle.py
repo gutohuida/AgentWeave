@@ -666,9 +666,9 @@ def _project_scoped_tables() -> list[Table]:
     ]
 
 
-#: Where an agent, task, or review checkout lives inside a project. Relative on purpose — the whole
-#: point is that these move with the project and their *registrations* do not.
-_CHECKOUT_ROOTS = (("worktrees",), ("tasks",), ("reviews",))
+#: Where an agent, task, thread, or review checkout lives inside a project. Relative on purpose —
+#: the whole point is that these move with the project and their *registrations* do not.
+_CHECKOUT_ROOTS = (("worktrees",), ("tasks",), ("threads",), ("reviews",))
 
 
 def _repair_checkout_registrations(root: Path) -> None:

@@ -15,7 +15,7 @@ from __future__ import annotations
 import asyncio
 from typing import List, Optional, Tuple
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -23,8 +23,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ... import project_workspace, worktrees
 from ...agent_roster import require_known_agent
 from ...auth import get_project
+from ...conversations import get_conversation_by_id, thread_of
 from ...db.engine import get_session
-from ...db.models import Project, Task
+from ...db.models import Conversation, Project, Task
 from ...launchability import get_agent_config
 from ...task_transition_service import TERMINAL_STATUSES
 from ...task_workspace import TASK_SCHEME
@@ -47,6 +48,8 @@ class WorkspaceInfo(BaseModel):
     #: A task checkout whose task no longer exists: deleting a task keeps a checkout that held
     #: work (F828), and nothing will release it when the task is approved or rejected (F836).
     task_deleted: bool = False
+    #: Whose chat a `"thread"` checkout is (FR-17); None for the other kinds.
+    agent: Optional[str] = None
 
 
 class TaskCheckoutInfo(BaseModel):
@@ -67,8 +70,24 @@ class TaskCheckoutInfo(BaseModel):
     grandfathered: bool
 
 
+class ThreadCheckoutInfo(BaseModel):
+    """One of an agent's chats with a worktree of its own, and where it works (FR-17)."""
+
+    conversation_id: str
+    thread: str
+    title: Optional[str] = None
+    lifecycle: str
+    branch: str
+    path: str
+    provisioned: bool
+
+
 class AgentWorkspaceInfo(BaseModel):
-    """Where one agent works on disk, without provisioning anything to find out."""
+    """Where one agent works on disk, without provisioning anything to find out.
+
+    Asked with `conversation_id`, `working_dir` and `branch` are that conversation's: a chat with
+    a worktree of its own works there on `thread/<agent>/<thread>`, not in the agent's own (FR-17).
+    """
 
     agent: str
     repo_root: str
@@ -80,6 +99,8 @@ class AgentWorkspaceInfo(BaseModel):
     # An agent working three tasks has three checkouts and this endpoint used to name one of
     # them, so the operator was shown a place two thirds of the work is not (task 6.4).
     task_checkouts: List[TaskCheckoutInfo] = []
+    #: The agent's chats with a worktree of their own (FR-17).
+    thread_checkouts: List[ThreadCheckoutInfo] = []
 
 
 class ConflictWorkspaceInfo(BaseModel):
@@ -88,6 +109,8 @@ class ConflictWorkspaceInfo(BaseModel):
     kind: str
     name: str
     branch: str
+    #: Whose chat a `"thread"` side is (FR-17); None for the other kinds.
+    agent: Optional[str] = None
 
 
 class ConflictInfo(BaseModel):
@@ -180,6 +203,7 @@ async def list_worktrees(
                 branch=workspace.branch,
                 path=str(workspace.path),
                 task_deleted=workspace.kind == "task" and workspace.name not in existing,
+                agent=workspace.agent,
             )
             for workspace in checkouts
         ],
@@ -238,7 +262,61 @@ async def get_worktree_conflicts(
 
 
 def _conflict_workspace(workspace: worktrees.WorkspaceBranch) -> ConflictWorkspaceInfo:
-    return ConflictWorkspaceInfo(kind=workspace.kind, name=workspace.name, branch=workspace.branch)
+    return ConflictWorkspaceInfo(
+        kind=workspace.kind, name=workspace.name, branch=workspace.branch, agent=workspace.agent
+    )
+
+
+async def _thread_checkouts(
+    session: AsyncSession, project_id: str, agent: str, repo_root
+) -> List[ThreadCheckoutInfo]:
+    """*agent*'s chats with a worktree of their own: open ones, and archived ones whose worktree
+    is still on disk (FR-14 keeps one with unmerged work).
+
+    Pure path functions, as `_task_checkouts`: nothing is provisioned. One row per thread -- its
+    newest conversation, when a cutover carried the line of work on under a new id.
+    """
+    rows = (
+        (
+            await session.execute(
+                select(Conversation)
+                .where(
+                    Conversation.project_id == project_id,
+                    Conversation.agent == agent,
+                    Conversation.own_worktree.is_(True),
+                )
+                .order_by(Conversation.sequence.desc())
+            )
+        )
+        .scalars()
+        .all()
+    )
+    checkouts: List[ThreadCheckoutInfo] = []
+    seen = set()
+    for conversation in rows:
+        thread = thread_of(conversation)
+        if thread is None or thread in seen:
+            continue
+        seen.add(thread)
+        try:
+            path = worktrees.thread_worktree_path(repo_root, agent, thread)
+            branch = worktrees.thread_branch_name(agent, thread)
+        except ValueError:
+            continue
+        if conversation.lifecycle != "open" and not path.exists():
+            continue
+        checkouts.append(
+            ThreadCheckoutInfo(
+                conversation_id=conversation.id,
+                thread=thread,
+                title=conversation.title,
+                lifecycle=conversation.lifecycle,
+                branch=branch,
+                path=str(path),
+                provisioned=path.exists(),
+            )
+        )
+    return checkouts
 
 
 async def _task_checkouts(
@@ -304,6 +382,7 @@ async def _task_checkouts(
 @router.get("/{agent}", response_model=AgentWorkspaceInfo)
 async def get_agent_workspace(
     agent: str,
+    conversation_id: Optional[str] = Query(None, max_length=64),
     project: Tuple[str, str] = Depends(get_project),
     session: AsyncSession = Depends(get_session),
 ) -> AgentWorkspaceInfo:
@@ -358,6 +437,23 @@ async def get_agent_workspace(
         )
 
     path = worktrees.worktree_path(repo_root, agent)
+    branch = worktrees.branch_name(agent)
+    if conversation_id is not None:
+        # FR-17: the conversation's own worktree and branch, when it is a chat with one.
+        conversation = await get_conversation_by_id(session, conversation_id)
+        if (
+            conversation is None
+            or conversation.project_id != project_id
+            or conversation.agent != agent
+        ):
+            raise HTTPException(
+                status_code=404,
+                detail=f"{conversation_id} is not a conversation of {agent} in this project",
+            )
+        thread = thread_of(conversation)
+        if thread is not None:
+            path = worktrees.thread_worktree_path(repo_root, agent, thread)
+            branch = worktrees.thread_branch_name(agent, thread)
     # Task checkouts are listed only here, and that mirrors `takes_task_workspace` rather than
     # restating it: the two returns above are exactly the cases where no turn gets a task
     # workspace — a read-only agent, and a project that is not a repository — so listing task
@@ -367,7 +463,8 @@ async def get_agent_workspace(
         repo_root=str(repo_root),
         working_dir=str(path),
         isolated=True,
-        branch=worktrees.branch_name(agent),
+        branch=branch,
         provisioned=path.exists(),
         task_checkouts=await _task_checkouts(session, project_id, agent, repo_root),
+        thread_checkouts=await _thread_checkouts(session, project_id, agent, repo_root),
     )

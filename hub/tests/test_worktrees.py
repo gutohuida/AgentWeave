@@ -373,8 +373,8 @@ async def test_worktree_endpoints_list_active_agents_and_their_conflicts(
     assert conflicts.json()["conflicts"] == [
         {
             "workspaces": [
-                {"kind": "agent", "name": "taylor", "branch": "agentweave/taylor"},
-                {"kind": "agent", "name": "uma", "branch": "agentweave/uma"},
+                {"kind": "agent", "name": "taylor", "branch": "agentweave/taylor", "agent": None},
+                {"kind": "agent", "name": "uma", "branch": "agentweave/uma", "agent": None},
             ],
             "paths": ["f.txt"],
         }
@@ -403,8 +403,8 @@ async def test_the_conflicts_route_checks_against_the_projects_main_branch(
     assert conflicts.json()["conflicts"] == [
         {
             "workspaces": [
-                {"kind": "main", "name": "main", "branch": "main"},
-                {"kind": "agent", "name": "yara", "branch": "agentweave/yara"},
+                {"kind": "main", "name": "main", "branch": "main", "agent": None},
+                {"kind": "agent", "name": "yara", "branch": "agentweave/yara", "agent": None},
             ],
             "paths": ["f.txt"],
         }
