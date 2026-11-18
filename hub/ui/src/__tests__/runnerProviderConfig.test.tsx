@@ -90,6 +90,12 @@ vi.mock('@/api/agents', async (importOriginal) => ({
     ],
   }),
 }))
+// The composer's @ menu lists the project's documents (reference-a-spec-in-a-sentence-from-the-composer).
+vi.mock('@/api/spec', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/api/spec')>()),
+  useSpecDocuments: () => ({ data: { documents: [] } }),
+  useSpecEvents: () => undefined,
+}))
 vi.mock('@/api/workspace', () => ({ useWorkspacePaths: () => ({ data: [] }) }))
 vi.mock('@/api/modelCatalog', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/api/modelCatalog')>()

@@ -4,9 +4,11 @@ import {
   Composer,
   COMPOSER_DRAFT_DEBOUNCE_MS,
   COMPOSER_MAX_HEIGHT_PX,
+  COMPOSER_MIN_HEIGHT_PX,
   type ComposerProps,
 } from '@/components/agents/Composer'
 import { getComposerDraft } from '@/lib/composerDrafts'
+import { setComposerText, composerText } from './testUtils/composerField'
 
 vi.mock('@/api/modelCatalog', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/api/modelCatalog')>()
@@ -32,13 +34,15 @@ describe('Composer considered interaction state', () => {
     let finish!: () => void
     const onSubmit = vi.fn(() => new Promise<void>((resolve) => { finish = resolve }))
     const { view } = renderComposer({ onSubmit })
-    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'Ship this carefully' } })
+    setComposerText(screen.getByRole('textbox'), 'Ship this carefully')
     fireEvent.click(screen.getByRole('button', { name: 'Send message' }))
 
     const composer = view.container.querySelector('[data-slot="composer"]')
     await waitFor(() => expect(composer).toHaveAttribute('aria-busy', 'true'))
     expect(composer).toHaveAttribute('data-submitting', 'true')
-    expect(screen.getByRole('textbox')).toBeDisabled()
+    // The field is contenteditable: while sending it stops being editable and says it is disabled.
+    expect(screen.getByRole('textbox')).toHaveAttribute('aria-disabled', 'true')
+    expect(screen.getByRole('textbox')).toHaveAttribute('contenteditable', 'false')
     expect(screen.getByRole('button', { name: 'Send message' })).toHaveAttribute('data-state', 'busy')
 
     finish()
@@ -46,66 +50,45 @@ describe('Composer considered interaction state', () => {
   })
 })
 
+// The field is contenteditable, so it grows with its content by layout: no height is computed in
+// script, so there is none to go stale after a programmatic change (the defect the textarea's
+// effect fixed). What remains to hold is the bounds: three rows at rest, the maximum, then scroll.
 describe('Composer — bounded autosizing', () => {
   it('rests at a minimum of 3 text rows', () => {
     renderComposer()
-    const textarea = screen.getByRole('textbox') as HTMLTextAreaElement
-    expect(textarea.rows).toBeGreaterThanOrEqual(3)
+    const field = screen.getByRole('textbox')
+    expect(COMPOSER_MIN_HEIGHT_PX).toBeGreaterThanOrEqual(3 * 20)
+    expect(field.style.minHeight).toBe(`${COMPOSER_MIN_HEIGHT_PX}px`)
   })
 
   it('stops growing at the maximum height and scrolls the overflow', () => {
     renderComposer()
-    const textarea = screen.getByRole('textbox') as HTMLTextAreaElement
-    Object.defineProperty(textarea, 'scrollHeight', { configurable: true, value: 900 })
+    const field = screen.getByRole('textbox')
+    setComposerText(field, 'line\n'.repeat(40))
 
-    fireEvent.input(textarea, { target: { value: 'line\n'.repeat(40) } })
-
-    expect(textarea.style.height).toBe(`${COMPOSER_MAX_HEIGHT_PX}px`)
-    expect(textarea.style.overflowY).toBe('auto')
+    expect(field.style.maxHeight).toBe(`${COMPOSER_MAX_HEIGHT_PX}px`)
+    expect(field.style.overflowY).toBe('auto')
   })
 
-  it('collapses back to its resting height once a long message is sent', async () => {
-    // The reported defect: the box grew as a long prompt was typed and then stayed that
-    // tall after sending, until the operator switched conversation and React remounted it.
-    // Sizing used to happen in `onInput`, which never fires for a programmatic clear.
+  it('empties the field once a long message is sent', async () => {
     const { onSubmit } = renderComposer()
-    const textarea = screen.getByRole('textbox') as HTMLTextAreaElement
-
-    Object.defineProperty(textarea, 'scrollHeight', { configurable: true, value: 900 })
-    fireEvent.change(textarea, { target: { value: 'line\n'.repeat(40) } })
-    await waitFor(() => expect(textarea.style.height).toBe(`${COMPOSER_MAX_HEIGHT_PX}px`))
-
-    // An emptied textarea reports its `rows`-derived height, well under the maximum.
-    Object.defineProperty(textarea, 'scrollHeight', { configurable: true, value: 60 })
-    fireEvent.keyDown(textarea, { key: 'Enter' })
+    const field = screen.getByRole('textbox')
+    setComposerText(field, 'line\n'.repeat(40))
+    fireEvent.keyDown(field, { key: 'Enter' })
 
     await waitFor(() => expect(onSubmit).toHaveBeenCalled())
-    await waitFor(() => expect(textarea.style.height).toBe('60px'))
+    expect(field.textContent).toBe('')
   })
 
-  it('grows to fit text it did not receive as keystrokes', async () => {
-    // The same gap in the other direction: a restored draft arrives as state, not as
-    // input, so the box used to stay short around text that overflowed it.
-    const textarea = renderComposerWithDraft()
-    await waitFor(() => expect(textarea.style.height).toBe(`${COMPOSER_MAX_HEIGHT_PX}px`))
+  it('draws a restored draft it did not receive as keystrokes', () => {
+    localStorage.clear()
+    const first = renderComposer({ projectId: 'proj-draft', conversationId: 'conv-draft' })
+    setComposerText(screen.getByRole('textbox'), 'a restored draft\n'.repeat(3))
+    first.view.unmount()
+    renderComposer({ projectId: 'proj-draft', conversationId: 'conv-draft' })
+    expect(composerText(screen.getByRole('textbox'))).toBe('a restored draft\n'.repeat(3))
   })
 })
-
-function renderComposerWithDraft(): HTMLTextAreaElement {
-  const view = render(
-    <Composer
-      agent="claude"
-      projectId="proj-draft"
-      conversationId="conv-draft"
-      isRunning={false}
-      onSubmit={vi.fn().mockResolvedValue(undefined)}
-    />
-  )
-  const textarea = view.container.querySelector('textarea') as HTMLTextAreaElement
-  Object.defineProperty(textarea, 'scrollHeight', { configurable: true, value: 240 })
-  fireEvent.change(textarea, { target: { value: 'a restored draft\n'.repeat(20) } })
-  return textarea
-}
 
 describe('Composer — column layout (2026-08-04-hub-charcoal-visual-refresh)', () => {
   it('renders the text area with no control preceding it, and the control row beneath it', () => {
@@ -150,49 +133,49 @@ describe('Composer — project- and conversation-scoped drafts', () => {
 
   it('survives leaving the conversation and returning to it', () => {
     const { view } = renderComposer({ conversationId: 'conv-1' })
-    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'draft for conv-1' } })
+    setComposerText(screen.getByRole('textbox'), 'draft for conv-1')
     view.unmount()
 
     render(<Composer agent="claude" projectId="proj-1" conversationId="conv-1" isRunning={false} onSubmit={vi.fn()} />)
-    expect(screen.getByRole('textbox')).toHaveValue('draft for conv-1')
+    expect(composerText(screen.getByRole('textbox'))).toBe('draft for conv-1')
   })
 
   it('survives a reload, modelled as a fresh mount reading the same storage', () => {
     const { view } = renderComposer({ conversationId: 'conv-1' })
-    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'reload me' } })
+    setComposerText(screen.getByRole('textbox'), 'reload me')
     view.unmount()
 
     render(<Composer agent="claude" projectId="proj-1" conversationId="conv-1" isRunning={false} onSubmit={vi.fn()} />)
-    expect(screen.getByRole('textbox')).toHaveValue('reload me')
+    expect(composerText(screen.getByRole('textbox'))).toBe('reload me')
   })
 
   it('does not leak between two conversations of one agent', () => {
     const first = renderComposer({ conversationId: 'conv-a' })
-    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'text for A' } })
+    setComposerText(screen.getByRole('textbox'), 'text for A')
     first.view.unmount()
 
     const second = renderComposer({ conversationId: 'conv-b' })
-    expect(screen.getByRole('textbox')).toHaveValue('')
-    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'text for B' } })
+    expect(composerText(screen.getByRole('textbox'))).toBe('')
+    setComposerText(screen.getByRole('textbox'), 'text for B')
     second.view.unmount()
 
     render(<Composer agent="claude" projectId="proj-1" conversationId="conv-a" isRunning={false} onSubmit={vi.fn()} />)
-    expect(screen.getByRole('textbox')).toHaveValue('text for A')
+    expect(composerText(screen.getByRole('textbox'))).toBe('text for A')
   })
 
   it('does not leak between two projects for the same agent and not-yet-created conversation', () => {
     const first = renderComposer({ projectId: 'proj-1', conversationId: null })
-    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'proj-1 draft' } })
+    setComposerText(screen.getByRole('textbox'), 'proj-1 draft')
     first.view.unmount()
 
     render(<Composer agent="claude" projectId="proj-2" conversationId={null} isRunning={false} onSubmit={vi.fn()} />)
-    expect(screen.getByRole('textbox')).toHaveValue('')
+    expect(composerText(screen.getByRole('textbox'))).toBe('')
   })
 
   it('clears the draft on successful submission with no delayed write restoring it', async () => {
     const onSubmit = vi.fn().mockResolvedValue(undefined)
     renderComposer({ conversationId: 'conv-1', onSubmit })
-    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'send me' } })
+    setComposerText(screen.getByRole('textbox'), 'send me')
     fireEvent.click(screen.getByRole('button', { name: 'Send message' }))
 
     await waitFor(() => expect(onSubmit).toHaveBeenCalledWith('send me'))
@@ -204,11 +187,11 @@ describe('Composer — project- and conversation-scoped drafts', () => {
   it('restores the composer text when submission fails', async () => {
     const onSubmit = vi.fn().mockRejectedValue(new Error('failed'))
     renderComposer({ conversationId: 'conv-1', onSubmit })
-    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'keep me' } })
+    setComposerText(screen.getByRole('textbox'), 'keep me')
     fireEvent.click(screen.getByRole('button', { name: 'Send message' }))
 
-    expect(screen.getByRole('textbox')).toHaveValue('')
-    await waitFor(() => expect(screen.getByRole('textbox')).toHaveValue('keep me'))
+    expect(composerText(screen.getByRole('textbox'))).toBe('')
+    await waitFor(() => expect(composerText(screen.getByRole('textbox'))).toBe('keep me'))
   })
 
   it('stays fully functional when storage is unavailable', () => {
@@ -221,8 +204,8 @@ describe('Composer — project- and conversation-scoped drafts', () => {
 
     expect(() => renderComposer()).not.toThrow()
     const textarea = screen.getByRole('textbox')
-    expect(() => fireEvent.change(textarea, { target: { value: 'no storage available' } })).not.toThrow()
-    expect(textarea).toHaveValue('no storage available')
+    expect(() => setComposerText(textarea, 'no storage available')).not.toThrow()
+    expect(composerText(textarea)).toBe('no storage available')
 
     getItem.mockRestore()
     setItem.mockRestore()
@@ -235,23 +218,23 @@ describe('Composer — insertPathRequest (task 5.4, 2026-08-18-one-shell-three-p
       insertPathRequest: { path: 'src/a.ts', requestId: 1 },
     })
 
-    expect(screen.getByRole('textbox')).toHaveValue('@src/a.ts ')
+    expect(composerText(screen.getByRole('textbox'))).toBe('@src/a.ts ')
     view.unmount()
   })
 
   it('quote-escapes a path containing whitespace, same as the @path trigger', () => {
     renderComposer({ insertPathRequest: { path: 'docs/release notes.md', requestId: 1 } })
 
-    expect(screen.getByRole('textbox')).toHaveValue('@"docs/release notes.md" ')
+    expect(composerText(screen.getByRole('textbox'))).toBe('@"docs/release notes.md" ')
   })
 
   it('appends to existing text rather than replacing it, adding a separating space', () => {
     const { view, props } = renderComposer({ insertPathRequest: null })
-    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'see' } })
+    setComposerText(screen.getByRole('textbox'), 'see')
 
     view.rerender(<Composer {...props} insertPathRequest={{ path: 'src/a.ts', requestId: 1 }} />)
 
-    expect(screen.getByRole('textbox')).toHaveValue('see @src/a.ts ')
+    expect(composerText(screen.getByRole('textbox'))).toBe('see @src/a.ts ')
   })
 
   it('a repeated requestId for the same path does not insert a second time', () => {
@@ -259,7 +242,7 @@ describe('Composer — insertPathRequest (task 5.4, 2026-08-18-one-shell-three-p
 
     view.rerender(<Composer {...props} insertPathRequest={{ path: 'src/a.ts', requestId: 1 }} />)
 
-    expect(screen.getByRole('textbox')).toHaveValue('@src/a.ts ')
+    expect(composerText(screen.getByRole('textbox'))).toBe('@src/a.ts ')
   })
 
   it('ignores an unsafe path (F409 D10) and inserts a safe one as today', () => {
@@ -267,10 +250,10 @@ describe('Composer — insertPathRequest (task 5.4, 2026-08-18-one-shell-three-p
     view.rerender(
       <Composer {...props} insertPathRequest={{ path: 'x @/home/u/.ssh/id_rsa', requestId: 1 }} />,
     )
-    expect(screen.getByRole('textbox')).toHaveValue('')
+    expect(composerText(screen.getByRole('textbox'))).toBe('')
 
     view.rerender(<Composer {...props} insertPathRequest={{ path: 'src/app.py', requestId: 2 }} />)
-    expect(screen.getByRole('textbox')).toHaveValue('@src/app.py ')
+    expect(composerText(screen.getByRole('textbox'))).toBe('@src/app.py ')
   })
 
   it('a new requestId for the same path inserts again', () => {
@@ -278,19 +261,19 @@ describe('Composer — insertPathRequest (task 5.4, 2026-08-18-one-shell-three-p
 
     view.rerender(<Composer {...props} insertPathRequest={{ path: 'src/a.ts', requestId: 2 }} />)
 
-    expect(screen.getByRole('textbox')).toHaveValue('@src/a.ts @src/a.ts ')
+    expect(composerText(screen.getByRole('textbox'))).toBe('@src/a.ts @src/a.ts ')
   })
 })
 
 describe('Composer — insertTextRequest (the terminal tab\'s Send to agent)', () => {
   it('appends the text to the draft, on its own line, and does not send it', () => {
     const { view, props } = renderComposer({ insertTextRequest: null })
-    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'look at this' } })
+    setComposerText(screen.getByRole('textbox'), 'look at this')
 
     view.rerender(<Composer {...props} insertTextRequest={{ text: 'Terminal output:\nok', requestId: 1 }} />)
-    expect(screen.getByRole('textbox')).toHaveValue('look at this\nTerminal output:\nok')
+    expect(composerText(screen.getByRole('textbox'))).toBe('look at this\nTerminal output:\nok')
 
     view.rerender(<Composer {...props} insertTextRequest={{ text: 'Terminal output:\nok', requestId: 1 }} />)
-    expect(screen.getByRole('textbox')).toHaveValue('look at this\nTerminal output:\nok')
+    expect(composerText(screen.getByRole('textbox'))).toBe('look at this\nTerminal output:\nok')
   })
 })

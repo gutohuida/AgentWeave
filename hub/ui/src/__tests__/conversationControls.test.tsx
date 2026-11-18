@@ -5,6 +5,7 @@ import type { AgentOutputLine, AgentSummary } from '@/api/agents'
 import type { AgentConversation, ChatHistoryResponse, TimelineEntry } from '@/api/agentChat'
 import { useConfigStore } from '@/store/configStore'
 import { AgentOutputPanel } from '@/components/agents/AgentOutputPanel'
+import { setComposerText } from './testUtils/composerField'
 
 let outputLines: AgentOutputLine[] = []
 let conversations: AgentConversation[] = []
@@ -93,6 +94,11 @@ vi.mock('@/api/charters', () => ({
   useBindAgentCharter: () => ({ mutate: vi.fn(), isPending: false, isError: false }),
 }))
 
+// The composer's @ menu lists the project's documents (reference-a-spec-in-a-sentence-from-the-composer).
+vi.mock('@/api/spec', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/api/spec')>()),
+  useSpecDocuments: () => ({ data: { documents: [] } }),
+}))
 vi.mock('@/api/workspace', () => ({
   useWorkspacePaths: () => ({ data: [] }),
 }))
@@ -430,7 +436,7 @@ describe('conversation controls — banner stack', () => {
     const { rerender } = render(<AgentOutputPanel agent={idleAgent} conversationId="conv-old" />)
     await waitFor(() => expect(screen.getByTestId('session-continuity')).toHaveTextContent('A conversation'))
 
-    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'hello' } })
+    setComposerText(screen.getByRole('textbox'), 'hello')
     fireEvent.click(screen.getByRole('button', { name: 'Send message' }))
 
     await waitFor(() => expect(screen.getAllByRole('alert')).toHaveLength(2))

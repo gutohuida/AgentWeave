@@ -4,6 +4,7 @@ import type { AgentSummary } from '@/api/agents'
 import { NewConversationSurface } from '@/components/agents/NewConversationSurface'
 import { useConfigStore } from '@/store/configStore'
 import { MODEL_CATALOG_FIXTURE } from './support/modelCatalogFixture'
+import { setComposerText } from './testUtils/composerField'
 vi.mock('@/api/firstRun', () => ({ useProjectHasNoWork: () => false }))
 
 /**
@@ -20,6 +21,12 @@ vi.mock('@/api/agents', async (importOriginal) => {
 })
 vi.mock('@/api/runners', () => ({
   useRunners: () => ({ data: [{ id: 'runner-claude', cli: 'claude', model: 'claude-sonnet-5' }] }),
+}))
+// The composer's @ menu lists the project's documents (reference-a-spec-in-a-sentence-from-the-composer).
+vi.mock('@/api/spec', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/api/spec')>()),
+  useSpecDocuments: () => ({ data: { documents: [] } }),
+  useSpecEvents: () => undefined,
 }))
 vi.mock('@/api/workspace', () => ({ useWorkspacePaths: () => ({ data: [] }) }))
 vi.mock('@/api/modelCatalog', async (importOriginal) => {
@@ -86,7 +93,7 @@ describe('the new-conversation pill shows the posture the first run gets', () =>
       }),
     )
     renderFor(row({ default_permission_mode: 'manual' }))
-    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'go' } })
+    setComposerText(screen.getByRole('textbox'), 'go')
     fireEvent.click(screen.getByRole('button', { name: 'Send message' }))
     await waitFor(() => expect(fetchMock).toHaveBeenCalled())
     const body = JSON.parse(fetchMock.mock.calls[0][1].body as string)

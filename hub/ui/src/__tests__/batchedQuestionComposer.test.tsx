@@ -5,6 +5,7 @@ import type { AgentConversation, ChatHistoryResponse } from '@/api/agentChat'
 import type { Question } from '@/api/questions'
 import { useConfigStore } from '@/store/configStore'
 import { AgentOutputPanel } from '@/components/agents/AgentOutputPanel'
+import { setComposerText, getComposerByPlaceholder } from './testUtils/composerField'
 
 /** The batch the panel is holding, newest state per test. */
 let openQuestions: Question[] = []
@@ -72,6 +73,11 @@ vi.mock('@/api/queue', () => ({
 }))
 
 vi.mock('@/api/workspace', () => ({ useWorkspacePaths: () => ({ data: [] }) }))
+// The composer's @ menu lists the project's documents (reference-a-spec-in-a-sentence-from-the-composer).
+vi.mock('@/api/spec', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/api/spec')>()),
+  useSpecDocuments: () => ({ data: { documents: [] } }),
+}))
 vi.mock('@/api/runners', () => ({ useRunners: () => ({ data: [] }) }))
 vi.mock('@/api/accounting', () => ({
   useAccounting: () => ({ data: undefined }),
@@ -178,8 +184,8 @@ describe('answering a batch through the composer', () => {
     openQuestions = [batched(0, 2, true), batched(1, 2)]
     render(<AgentOutputPanel agent={agent} />)
 
-    const composer = screen.getByPlaceholderText('Answer codex-1, or pick an option above…')
-    fireEvent.change(composer, { target: { value: 'neither, use C' } })
+    const composer = getComposerByPlaceholder('Answer codex-1, or pick an option above…')
+    setComposerText(composer, 'neither, use C')
     fireEvent.keyDown(composer, { key: 'Enter' })
 
     await waitFor(() => expect(answerMutation).toHaveBeenCalled())
