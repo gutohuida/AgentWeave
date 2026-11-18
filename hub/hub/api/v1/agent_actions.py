@@ -2264,6 +2264,14 @@ async def read_spec_document(
             detail=f"the document at {resolved} is registered but its file is missing.",
         )
 
+    # FR-16: this conversation now holds this version, and its next save is based on it.
+    from ... import spec_basis
+
+    spec_basis.note(
+        document.id,
+        await spec_basis.holder(session, actor.run_id),
+        spec_documents.content_version(content),
+    )
     payload = spec_documents.parse_stored(content)
     rows = (
         (
@@ -2479,7 +2487,7 @@ async def create_spec_document(
         "kind": document.kind,
         "title": body.title or UNTITLED,
     }
-    await spec_service.save_document(
+    created = await spec_service.save_document(
         session,
         workspace,
         document,
@@ -2487,6 +2495,10 @@ async def create_spec_document(
         actor=spec_lifecycle.Actor(kind="agent", name=actor.agent, run_id=actor.run_id),
     )
     await session.commit()
+    # FR-16: the creating conversation holds the scaffold it wrote.
+    from ... import spec_basis
+
+    spec_basis.note(document.id, await spec_basis.holder(session, actor.run_id), created.version)
     await sse_manager.broadcast(
         actor.project_id, "spec_updated", {"path": document.path, "phase": document.phase}
     )
@@ -2520,6 +2532,13 @@ async def rename_spec_document(
             detail=f"no specification document at {path}.",
         )
 
+    # FR-16: a rename rewrites the file's title, and is this conversation's own write, so a copy
+    # it held of the document before the rename is still the one its next save is based on.
+    from ... import spec_basis, spec_documents
+
+    holder = await spec_basis.holder(session, actor.run_id)
+    held = spec_basis.based_on(document.id, holder)
+    before = spec_documents.content_version(spec_documents.read_document(workspace, document.path))
     try:
         result = await spec_service.rename_document(
             session,
@@ -2535,6 +2554,12 @@ async def rename_spec_document(
         ) from exc
 
     await session.commit()
+    if held == before:
+        spec_basis.note(
+            document.id,
+            holder,
+            spec_documents.content_version(spec_documents.read_document(workspace, result.path)),
+        )
     await sse_manager.broadcast(
         actor.project_id,
         "spec_updated",
@@ -3051,6 +3076,11 @@ async def submit_spec_document(
             ),
         )
 
+    # FR-16: the save is based on the version this conversation last read or saved, and is
+    # refused when somebody else saved the document since.
+    from ... import spec_basis
+
+    holder = await spec_basis.holder(session, actor.run_id)
     try:
         result = await spec_service.save_document(
             session,
@@ -3059,14 +3089,18 @@ async def submit_spec_document(
             body.document,
             # Identity is the run's, never the request body's.
             actor=spec_lifecycle.Actor(kind="agent", name=actor.agent, run_id=actor.run_id),
+            based_on=spec_basis.based_on(document.id, holder),
         )
     except spec_service.SaveRefusedError as exc:
         raise HTTPException(
-            status_code=422,
+            status_code=(
+                status.HTTP_409_CONFLICT if exc.code == spec_service.DOCUMENT_CHANGED else 422
+            ),
             detail={"message": str(exc), "code": exc.code, "field": exc.field_path},
         ) from exc
 
     await session.commit()
+    spec_basis.note(document.id, holder, result.version)
     await sse_manager.broadcast(
         actor.project_id, "spec_updated", {"path": result.path, "phase": result.phase}
     )

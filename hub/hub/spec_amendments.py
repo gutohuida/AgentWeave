@@ -90,6 +90,20 @@ class AmendmentRefused(RuntimeError):  # noqa: N818 - "refused" is the outcome, 
         super().__init__(message)
 
 
+async def _apply_and_write(*args: Any, **kwargs: Any) -> Any:
+    """`spec_service._apply_and_write`, refusing as an amendment a write that would replace a save
+    stored after the amendment read the document (FR-16): nothing is written, and the amendment
+    can be made again against what the document holds now."""
+    from . import spec_service
+
+    try:
+        return await spec_service._apply_and_write(*args, **kwargs)
+    except spec_service.SaveRefusedError as exc:
+        if exc.code != spec_service.DOCUMENT_CHANGED:
+            raise
+        raise AmendmentRefused(str(exc), code=exc.code, status=409) from exc
+
+
 @dataclass(frozen=True)
 class Amendment:
     id: str
@@ -494,7 +508,7 @@ async def amend(
     Returns the amendment's view, plus `task_created` (the board task's id) for an applied
     `add_task`, or `state: proposed` for a proposal.
     """
-    from . import spec_documents, spec_identity, spec_lifecycle, spec_service, spec_tasks
+    from . import spec_documents, spec_identity, spec_lifecycle, spec_tasks
     from .spec_payload import PayloadError, validate_payload
 
     if document.phase != spec_lifecycle.APPROVED:
@@ -576,7 +590,7 @@ async def amend(
         raise AmendmentRefused(str(exc), code="payload_invalid", field=exc.field) from exc
 
     amendment_id = f"amd-{short_id()}"
-    result = await spec_service._apply_and_write(
+    result = await _apply_and_write(
         session,
         workspace,
         document,
@@ -642,7 +656,7 @@ async def _add_slice(
     """An agent adds one slice to an approved roadmap (RTRR-3, FR-8): applied at once, recorded
     with the agent and the run, and listed not reviewed. Only an agent the operator opened a slice
     conversation with, or the roadmap's author, may; the operator never adds one by hand."""
-    from . import roadmap_edits, spec_lifecycle, spec_service
+    from . import roadmap_edits, spec_lifecycle
 
     if document.kind != "roadmap":
         raise AmendmentRefused(
@@ -666,7 +680,7 @@ async def _add_slice(
     )
     payload = _validated(new_payload)
     amendment_id = f"amd-{short_id()}"
-    await spec_service._apply_and_write(
+    await _apply_and_write(
         session,
         workspace,
         document,
@@ -868,7 +882,7 @@ async def accept_proposal(
     running build or waits for the next. When the operation no longer applies the proposal is
     recorded stale with why, and the returned decision says so (`state: stale`). The caller
     commits, then queues `note` to the proposer."""
-    from . import spec_documents, spec_lifecycle, spec_service, spec_tasks
+    from . import spec_documents, spec_lifecycle, spec_tasks
 
     if actor.kind != "operator":
         raise AmendmentRefused(
@@ -923,7 +937,7 @@ async def accept_proposal(
     except AmendmentRefused as exc:
         return await stale(str(exc))
 
-    result = await spec_service._apply_and_write(
+    result = await _apply_and_write(
         session,
         workspace,
         document,
@@ -1328,7 +1342,7 @@ async def respond_to_report(
     Every answer marks the report reviewed with the response, and is sent to the reporter as input
     (the returned `note`, queued by `queue_note_to_reporter` once committed).
     """
-    from . import spec_documents, spec_identity, spec_lifecycle, spec_service, spec_tasks
+    from . import spec_documents, spec_identity, spec_lifecycle, spec_tasks
     from .spec_payload import PayloadError, validate_payload
 
     if actor.kind != "operator":
@@ -1393,7 +1407,7 @@ async def respond_to_report(
         except PayloadError as exc:
             raise AmendmentRefused(str(exc), code="payload_invalid", field=exc.field) from exc
         produced = f"amd-{short_id()}"
-        result = await spec_service._apply_and_write(
+        result = await _apply_and_write(
             session,
             workspace,
             document,

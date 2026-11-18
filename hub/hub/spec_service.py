@@ -73,12 +73,18 @@ class SaveResult:
     standing_warnings: List[Dict[str, Any]] = field(default_factory=list)
     # Set by a fold only: True when the capability is not one the change names (FR-7).
     fold_target_not_named: Optional[bool] = None
+    # The `content_version` of what this save stored: the copy its author now holds (FR-16).
+    version: str = ""
 
 
 @dataclass
 class RenameResult:
     path: str
     previous_path: str
+
+
+#: The code a write based on a stale copy is refused with (FR-16).
+DOCUMENT_CHANGED = "document_changed"
 
 
 class SaveRefusedError(RuntimeError):  # noqa: N818 - "refused" is the outcome, not a fault
@@ -151,8 +157,15 @@ async def save_document(
     *,
     actor: spec_lifecycle.Actor,
     via: str = "write",
+    based_on: Optional[str] = None,
 ) -> Any:
     """Store a submission against an existing document.
+
+    `based_on` is the `content_version` of the copy the submission was made from, when the caller
+    knows it (`one-profile-runs-many-turns-at-once-on-different-tasks` FR-16): a document whose
+    content is no longer that version was saved by somebody else since, and the save is refused
+    (`document_changed`), naming the document and changing nothing. `None` checks nothing here;
+    the write itself still never lands over content stored after this function read the file.
 
     `via` names the path a capability write came by: `"merge"` (`merge_document`) or `"create"`
     (the creation scaffold). A capability's content changes only through a merge, so a direct
@@ -242,6 +255,8 @@ async def save_document(
     # divergence below is reported rather than swallowed.
     existing_content = spec_documents.read_document(workspace, document.path)
     stored_before = spec_documents.parse_stored(existing_content)
+    if based_on is not None and spec_documents.content_version(existing_content) != based_on:
+        raise _changed(document.path)
 
     # Every save before approval applies, whatever rigor the row still carries: document rigor
     # retired (`amendments-main-watch-and-the-next-slice`, D3), and with it the edit proposals an
@@ -345,9 +360,18 @@ async def _apply_and_write(
         document.step = reached
 
     # Stored as the payload plus the row's hub block (FR-1); the page is rendered when it is read.
-    content = spec_documents.write_payload(
-        workspace, document.path, stored, hub_block(document, existing_content)
-    )
+    # Refused if the file changed after `existing_content` was read (FR-16): every caller awaits
+    # between its read and this write, and another write landing there must not be replaced.
+    try:
+        content = spec_documents.write_payload(
+            workspace,
+            document.path,
+            stored,
+            hub_block(document, existing_content),
+            expected_version=spec_documents.content_version(existing_content),
+        )
+    except spec_documents.DocumentChangedError as exc:
+        raise _changed(exc.path) from exc
 
     await spec_lifecycle.record_content(
         session,
@@ -393,6 +417,17 @@ async def _apply_and_write(
         ready_to_approve=report.ready,
         notes=report.notes,
         acknowledged=report.acknowledged,
+        version=spec_documents.content_version(content),
+    )
+
+
+def _changed(path: str) -> SaveRefusedError:
+    """The refusal of a write based on a copy older than the document (FR-16)."""
+    return SaveRefusedError(
+        f"{path} changed since it was read: somebody else saved it after the copy this change "
+        "was based on, and nothing was written. Read it again (read_spec_document) and make the "
+        "change to what it holds now",
+        code=DOCUMENT_CHANGED,
     )
 
 
@@ -540,8 +575,11 @@ async def merge_document(
     actor: spec_lifecycle.Actor,
     note: str = "",
     detail: Optional[Dict[str, Any]] = None,
+    based_on: Optional[str] = None,
 ) -> SaveResult:
     """Fold a finished change's content into a capability document, by explicit authored merge.
+
+    `based_on` is `save_document`'s: the version of the capability `raw_payload` was built from.
 
     Resolving the path arguments to documents and refusing an unfinished or mistargeted merge
     (design D5 steps 1-4) is the API handler's job, matching this file's existing split between
@@ -560,7 +598,13 @@ async def merge_document(
     every other route in `spec.py` — this function only prepares the session.
     """
     result = await save_document(
-        session, workspace, capability_document, raw_payload, actor=actor, via="merge"
+        session,
+        workspace,
+        capability_document,
+        raw_payload,
+        actor=actor,
+        via="merge",
+        based_on=based_on,
     )
     if not source_documents:
         # A merge naming no change is the operator editing the capability: recorded as one, so
@@ -1028,6 +1072,11 @@ async def _fold(
             "folded once its work is decided",
             code="fold_tasks_open",
         )
+    # The capability as the draft reads it, so a save landing before the merge writes is not
+    # replaced by a payload built from the copy before it (FR-16).
+    based_on = spec_documents.content_version(
+        spec_documents.read_document(workspace, capability.path)
+    )
     draft = fold_draft(
         workspace,
         change,
@@ -1060,6 +1109,7 @@ async def _fold(
         actor=actor,
         note=note,
         detail={spec_capability_links.FOLD_TARGET_NOT_NAMED: off_link},
+        based_on=based_on,
     )
     if isinstance(result, SaveResult):
         result.fold_target_not_named = off_link

@@ -981,7 +981,15 @@ async def test_a_document_that_cannot_be_rewritten_is_skipped_not_fatal(
             return {row.path: row.content_digest for row in rows}
 
     before = await digests()
-    _failing_write_text(monkeypatch, lambda p: p.name == "area.json")
+    # A document's write goes through its atomic replace (FR-16), not `Path.write_text`.
+    real_replace = spec_documents._replace_atomically
+
+    def replace(resolved, content):
+        if resolved.name == "area.json":
+            raise OSError(28, "No space left on device")
+        return real_replace(resolved, content)
+
+    monkeypatch.setattr(spec_documents, "_replace_atomically", replace)
     response = await app.post(f"{BASE}/spec/reindex", headers=auth_headers)
 
     assert response.status_code == 200, response.text

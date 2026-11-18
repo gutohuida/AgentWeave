@@ -5521,6 +5521,12 @@ def submit_spec_document(
     saving an incomplete one is not an error. The response lists what still blocks its approval,
     exactly as the operator's Check shows it; the operator may check while you keep writing.
 
+    **A save is based on the copy your conversation last read or saved.** If somebody else saved
+    the document since (another thread, another agent, the operator), the save is refused with
+    `document_changed`, naming the document, and nothing is written: call `read_spec_document`
+    again, make your change to what it holds now, and submit that. A document read back and
+    submitted as it is stays accepted.
+
     You cannot approve a document, build it, or set its phase. There is no argument here that
     does so. Approval is the operator's decision and is taken elsewhere.
 
