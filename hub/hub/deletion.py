@@ -66,6 +66,8 @@ TASK_REFERENCES: List[Reference] = [
     # A known failure outlives its fix task: the entry stays listed with no owner (FR-1, FR-5);
     # the last task an unlisted failure was held against goes with that task (FR-13).
     ("known_failing_tests", "fix_task_id", CLEAR),
+    # A quarantined test outlives its fix task the same way: it stays quarantined, unowned.
+    ("quarantined_tests", "fix_task_id", CLEAR),
     ("unlisted_test_failures", "task_id", DELETE),
     # Its landings go with it (`approved-work-merges-in-batches`); a batch keeps its record.
     ("task_landings", "task_id", DELETE),
