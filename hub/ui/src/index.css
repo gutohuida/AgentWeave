@@ -1315,6 +1315,23 @@
     user-select: all;
     cursor: default;
   }
+  /* The same box in a sent message: a button that opens the spec, or, when the document is gone,
+     a muted span that opens nothing. */
+  .composer-spec-box.spec-box-link {
+    cursor: pointer;
+    font: inherit;
+    text-align: left;
+    user-select: auto;
+  }
+  .composer-spec-box.spec-box-link:hover {
+    border-color: var(--blue);
+  }
+  .composer-spec-box.spec-box-missing {
+    color: var(--text-3);
+    background: transparent;
+    border-style: dashed;
+    user-select: auto;
+  }
   /* lucide's FileText (the Icon component's `description`) as a mask in the text colour: the box
      is built outside React, and Chromium's insertHTML mishandles an inline <svg>. */
   .composer-spec-box-icon {
