@@ -1021,6 +1021,7 @@ export function useSpecDocuments() {
     queryFn: () =>
       getJson<{ documents: SpecDocumentRecord[] }>(
         `/api/v1/projects/${projectId}/project/documents`,
+        { first: true },
       ),
     enabled: isConfigured && !!projectId,
   })
