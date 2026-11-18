@@ -13,6 +13,7 @@ export const PROJECT_DEFAULTS: Pick<
   | 'turn_delivery_cap'
   | 'agent_budget'
   | 'allow_agent_jobs'
+  | 'profiles_run_in_parallel'
   | 'checkpoint_mode'
   | 'checkpoint_auto_continue'
   | 'checks_give_way'
@@ -29,6 +30,7 @@ export const PROJECT_DEFAULTS: Pick<
   turn_delivery_cap: 10,
   agent_budget: 8,
   allow_agent_jobs: false, // the Hub's column default; a new project starts with agent jobs off
+  profiles_run_in_parallel: false,
   checkpoint_mode: 'offered',
   checkpoint_auto_continue: false,
   checks_give_way: false,

@@ -185,6 +185,12 @@ class Project(Base):
     quarantine_exit_passes: Mapped[int] = mapped_column(
         Integer, default=20, server_default="20", nullable=False
     )
+    # Whether one profile may run several turns at once on different work (`one-profile-runs-many-
+    # turns-at-once-on-different-tasks`, FR-15, migration 0183). Off for new and existing projects:
+    # off, each profile runs one turn at a time as before. Read at each start, so no restart.
+    profiles_run_in_parallel: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="0", nullable=False
+    )
 
     # --- Reach (reach-1019, `hub/hub/reach.py`) ---
     # The posture every agent's run gets when neither its conversation nor the agent states one;

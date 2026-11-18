@@ -378,6 +378,9 @@ async def test_project_settings_update_is_validated_and_atomic(app, auth_headers
         # Quarantine's defaults (FR-9 of `the-slow-checks-run-once-per-landing-...-quarantined`).
         "quarantine_threshold": 0.05,
         "quarantine_exit_passes": 20,
+        # Off: one turn per profile at a time, as before
+        # (`one-profile-runs-many-turns-at-once-on-different-tasks`, FR-15).
+        "profiles_run_in_parallel": False,
         # Null: no generated paths until the operator sets them, so every conflict sends back as ever.
         "generated_files": None,
         # Off until the operator turns it on: pushing publishes the work

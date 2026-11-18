@@ -193,6 +193,23 @@ function CollaborationRows({ settings, onChange }: RowsProps) {
           }
         />
         <SettingsRow
+          label="Profiles run in parallel"
+          description="On: one agent profile may run several turns at once, each on different work. Off: each profile runs one turn at a time, and anything else waits for it. A change applies to the next turn that starts."
+          changed={(settings.profiles_run_in_parallel ?? false) !== PROJECT_DEFAULTS.profiles_run_in_parallel}
+          origin={{ kind: 'changed', other: 'Off' }}
+          onReset={() => onChange({ profiles_run_in_parallel: false }, 'Profiles run one turn at a time again')}
+          control={
+            <Switch
+              aria-label="Profiles run in parallel"
+              data-testid="project-profiles-run-in-parallel"
+              checked={settings.profiles_run_in_parallel ?? false}
+              onCheckedChange={(v) =>
+                onChange({ profiles_run_in_parallel: v }, v ? 'Profiles may run several turns at once' : 'Profiles run one turn at a time')
+              }
+            />
+          }
+        />
+        <SettingsRow
           label="Hop budget"
           htmlFor="s-hops"
           description="How many agent-to-agent hops a chain may take before it pauses for you."
