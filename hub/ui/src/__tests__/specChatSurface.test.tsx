@@ -119,6 +119,7 @@ vi.mock('@/api/modelCatalog', async (importOriginal) => {
 
 import { ConversationView } from '@/components/agents/ConversationView'
 import { usePanelTabsStore } from '@/store/panelTabsStore'
+import { setComposerText } from './testUtils/composerField'
 
 const PROJECT_ID = 'proj-chat-surface-test'
 
@@ -191,7 +192,7 @@ function triggerBody(call = 0): Record<string, unknown> {
 
 async function send(text: string) {
   const textarea = screen.getByRole('textbox')
-  fireEvent.change(textarea, { target: { value: text } })
+  setComposerText(textarea, text)
   fireEvent.keyDown(textarea, { key: 'Enter', shiftKey: false })
   await waitFor(() => expect(fetchMock).toHaveBeenCalled())
 }

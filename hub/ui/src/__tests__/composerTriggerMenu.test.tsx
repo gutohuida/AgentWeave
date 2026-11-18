@@ -2,6 +2,7 @@ import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { Composer, type ComposerProps } from '@/components/agents/Composer'
+import { composerText } from './testUtils/composerField'
 
 vi.mock('@/api/modelCatalog', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/api/modelCatalog')>()
@@ -27,7 +28,7 @@ function renderComposer(overrides: Partial<ComposerProps> = {}) {
     ...overrides,
   }
   render(<Composer {...props} />)
-  return { onSubmit, textarea: screen.getByRole('textbox') as HTMLTextAreaElement }
+  return { onSubmit, textarea: screen.getByRole('textbox') }
 }
 
 beforeEach(() => {
@@ -74,7 +75,7 @@ describe('Composer — trigger menu', () => {
 
     await userEvent.keyboard('{ArrowDown}')
 
-    expect(textarea.value).toBe('@src')
+    expect(composerText(textarea)).toBe('@src')
     const options = screen.getAllByRole('option')
     expect(options[0].getAttribute('aria-selected')).toBe('false')
     expect(options[1].getAttribute('aria-selected')).toBe('true')
@@ -87,7 +88,7 @@ describe('Composer — trigger menu', () => {
 
     await userEvent.keyboard('{Enter}')
 
-    expect(textarea.value).toBe('@src/components/agents/Composer.tsx')
+    expect(composerText(textarea)).toBe('@src/components/agents/Composer.tsx')
     expect(screen.queryByRole('listbox')).toBeNull()
   })
 
@@ -97,7 +98,7 @@ describe('Composer — trigger menu', () => {
 
     await userEvent.keyboard('{Tab}')
 
-    expect(textarea.value).toBe('@src/index.ts')
+    expect(composerText(textarea)).toBe('@src/index.ts')
     expect(screen.queryByRole('listbox')).toBeNull()
     expect(document.activeElement).toBe(textarea)
   })
@@ -109,7 +110,7 @@ describe('Composer — trigger menu', () => {
     await userEvent.keyboard('{Escape}')
 
     expect(screen.queryByRole('listbox')).toBeNull()
-    expect(textarea.value).toBe('@src')
+    expect(composerText(textarea)).toBe('@src')
     expect(document.activeElement).toBe(textarea)
   })
 

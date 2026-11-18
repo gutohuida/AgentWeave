@@ -4,6 +4,37 @@ import { isSafeMentionValue } from './fileMentions'
 
 const SKILLS_DIR_PREFIX = '.claude/skills/'
 const MAX_RESULTS = 50
+/** At most this many specs head the `@` menu, so a large project's specs never push the files
+ *  out of it (`reference-a-spec-in-a-sentence-from-the-composer`, design D7). */
+export const MAX_SPEC_RESULTS = 10
+
+/** A specification document as the `@` menu needs it: the project's document list's own fields. */
+export interface SpecReferenceTarget {
+  id: string
+  title: string
+  path: string
+  updated_at?: string | null
+}
+
+/**
+ * The specs an `@query` offers: those whose title or path contains the query (case-insensitive),
+ * most recently updated first, capped at `MAX_SPEC_RESULTS`. Filtering keeps the recency order
+ * rather than ranking by match (D7). A document with no `updated_at` sorts last; ties keep the
+ * list's own order.
+ */
+export function resolveSpecResults(query: string, specs: SpecReferenceTarget[]): SpecReferenceTarget[] {
+  const needle = query.toLowerCase()
+  const time = (spec: SpecReferenceTarget) => {
+    const parsed = spec.updated_at ? Date.parse(spec.updated_at) : NaN
+    return Number.isNaN(parsed) ? -Infinity : parsed
+  }
+  return specs
+    .filter((spec) => spec.title.toLowerCase().includes(needle) || spec.path.toLowerCase().includes(needle))
+    .map((spec, index) => ({ spec, index, at: time(spec) }))
+    .sort((a, b) => (b.at === a.at ? a.index - b.index : b.at > a.at ? 1 : -1))
+    .slice(0, MAX_SPEC_RESULTS)
+    .map(({ spec }) => spec)
+}
 
 function skillNameFromPath(path: string): string {
   const relative = path.slice(SKILLS_DIR_PREFIX.length)
@@ -32,6 +63,7 @@ export const COMPOSER_BUILT_IN_COMMANDS: ComposerTriggerMenuItem[] = [{ value: M
 export function resolveTriggerResults(
   trigger: ComposerTriggerMatch,
   workspacePaths: string[],
+  specs: SpecReferenceTarget[] = [],
 ): ComposerTriggerMenuItem[] {
   const query = trigger.query.toLowerCase()
 
@@ -49,8 +81,17 @@ export function resolveTriggerResults(
       .map((name) => ({ value: name, label: name }))
   }
 
-  return workspacePaths
+  // `@` lists the project's specs under Specs, above the workspace files under Files (FR-1).
+  const specItems: ComposerTriggerMenuItem[] = resolveSpecResults(trigger.query, specs).map((spec) => ({
+    value: `spec:${spec.id}`,
+    label: spec.title,
+    detail: spec.path,
+    group: 'Specs',
+    spec: { id: spec.id, title: spec.title },
+  }))
+  const fileItems: ComposerTriggerMenuItem[] = workspacePaths
     .filter((path) => isSafeMentionValue(path) && path.toLowerCase().includes(query))
-    .slice(0, MAX_RESULTS)
-    .map((path) => ({ value: path, label: path }))
+    .slice(0, MAX_RESULTS - specItems.length)
+    .map((path) => (specItems.length > 0 ? { value: path, label: path, group: 'Files' } : { value: path, label: path }))
+  return [...specItems, ...fileItems]
 }

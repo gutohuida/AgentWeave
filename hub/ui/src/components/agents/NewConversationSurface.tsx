@@ -3,6 +3,7 @@ import { postureAtRest, useAgents } from '@/api/agents'
 import { useRunners } from '@/api/runners'
 import { overridesForRunner, runnerSetsModel } from '@/lib/runnerProvider'
 import { useWorkspacePaths } from '@/api/workspace'
+import { useSpecDocuments } from '@/api/spec'
 import {
   permissionModeValues,
   providerForRunner,
@@ -81,6 +82,8 @@ export function NewConversationSurface({
   const { data: roster = [] } = useAgents()
   const { data: runners = [] } = useRunners()
   const { data: workspacePaths = [] } = useWorkspacePaths()
+  // The project's documents: the composer's `@` menu lists them as specs.
+  const { data: specDocumentList, isError: specDocumentsFailed } = useSpecDocuments()
   const [pendingOverrides, setPendingOverrides] = useState<Record<string, string>>({})
   const [error, setError] = useState<string | null>(null)
   /** Bumped when a starter writes the draft, so the composer remounts and reads it. Not keyed by
@@ -275,6 +278,8 @@ export function NewConversationSurface({
           placeholder: agent ? undefined : 'Choose an agent, then write your first message…',
           disabledReason: agent ? undefined : 'Choose an agent to start',
           workspacePaths,
+          specDocuments: specDocumentList?.documents,
+          specDocumentsStatus: specDocumentList ? undefined : specDocumentsFailed ? 'error' : 'loading',
           runner: runnerRow?.cli ?? null,
           effectiveModel: runnerRow?.model ?? null,
           modelIsRunners: runnerSetsModel(runnerRow),

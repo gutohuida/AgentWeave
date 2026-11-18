@@ -25,6 +25,7 @@ import { useQueueStatus, useQueuedEntries, releaseQueueEntry, withdrawQueueEntry
 import { useRunners } from '@/api/runners'
 import { overridesForRunner, runnerSetsModel } from '@/lib/runnerProvider'
 import { useWorkspacePaths } from '@/api/workspace'
+import { useSpecDocuments } from '@/api/spec'
 import {
   continueConversation,
   cutOver,
@@ -471,6 +472,8 @@ export function AgentOutputPanel({
     (entry) => entry.conversation_id === currentConversationId,
   )
   const { data: workspacePaths = [] } = useWorkspacePaths()
+  // The project's documents: the composer's `@` menu lists them as specs.
+  const { data: specDocumentList, isError: specDocumentsFailed } = useSpecDocuments()
   const conversationChat = useAgentChatHistory(agent.name, currentConversationId ?? null)
   const recentChat = useAgentRecentChat(agent.name)
   const chat = currentConversationId ? conversationChat : recentChat
@@ -1438,6 +1441,8 @@ export function AgentOutputPanel({
             : undefined,
           onSubmit: handleComposerSubmit,
           workspacePaths,
+          specDocuments: specDocumentList?.documents,
+          specDocumentsStatus: specDocumentList ? undefined : specDocumentsFailed ? 'error' : 'loading',
           runner: targetRunnerRow?.cli ?? null,
           effectiveModel: targetRunnerRow?.model ?? null,
           modelIsRunners: runnerSetsModel(targetRunnerRow),

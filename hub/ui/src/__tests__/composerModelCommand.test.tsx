@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { Composer } from '@/components/agents/Composer'
 import type { ModelCatalogResponse } from '@/api/modelCatalog'
+import { composerText } from './testUtils/composerField'
 
 const CATALOG: ModelCatalogResponse = {
   providers: [
@@ -42,7 +43,7 @@ describe('Composer — the /model command', () => {
         onPendingOverridesChange={onPendingOverridesChange}
       />,
     )
-    return { textarea: screen.getByRole('textbox') as HTMLTextAreaElement, onPendingOverridesChange }
+    return { textarea: screen.getByRole('textbox'), onPendingOverridesChange }
   }
 
   it('Enter on /model opens the model picker and leaves no command text behind', async () => {
@@ -53,7 +54,7 @@ describe('Composer — the /model command', () => {
     await userEvent.keyboard('{Enter}')
 
     expect(screen.getByRole('listbox', { name: 'Model' })).toBeInTheDocument()
-    expect(textarea.value).toBe('')
+    expect(composerText(textarea)).toBe('')
   })
 
   it('picking a model from the opened picker sets the pending model override', async () => {
@@ -72,6 +73,6 @@ describe('Composer — the /model command', () => {
     await userEvent.keyboard('{Enter}')
     await userEvent.type(textarea, 'hello')
 
-    expect(textarea.value).toBe('hello')
+    expect(composerText(textarea)).toBe('hello')
   })
 })
