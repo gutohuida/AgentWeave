@@ -94,6 +94,7 @@ TURN_WAIT = 10 * 60
 HUB = ""
 KEY = ""
 DB = pathlib.Path()
+OPEN_CONTEXTS = []
 checks: dict[str, tuple[bool, bool, str]] = {}
 
 
@@ -598,11 +599,23 @@ def pick(pid, want, limit=40, smallest=False):
 
 def new_page(browser, pid, width=1440, height=940):
     context = browser.new_context(viewport={"width": width, "height": height})
+    OPEN_CONTEXTS.append(context)
     context.add_init_script(
         "try { sessionStorage.setItem('agentweave-session', JSON.stringify({apiKey: %s, hubUrl: %s}));"
         "localStorage.setItem('agentweave-selected-project', %s); } catch (e) {}"
         % (json.dumps(KEY), json.dumps(HUB), json.dumps(pid)))
     return context.new_page()
+
+
+def close_contexts():
+    """Close every page a check opened. A page left open keeps reading (its 3 s roadmap progress
+    reads, its refetches on every event), so the pages of earlier checks piled load onto the Hub
+    until a later check's own reads were never answered."""
+    while OPEN_CONTEXTS:
+        try:
+            OPEN_CONTEXTS.pop().close()
+        except Exception:  # noqa: BLE001 -- already closed by its check
+            pass
 
 
 def shot(page, name):
@@ -1599,7 +1612,10 @@ def main():
             browser = pw.chromium.launch()
             try:
                 for key in wanted:
-                    guarded(key, steps[key], browser, state)
+                    try:
+                        guarded(key, steps[key], browser, state)
+                    finally:
+                        close_contexts()
             finally:
                 tidy_live(state)
                 browser.close()
