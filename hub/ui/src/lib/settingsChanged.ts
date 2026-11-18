@@ -30,7 +30,13 @@ export function projectChangedSections(settings: ProjectSettings | undefined, tr
     if (settings.allow_agent_jobs !== d.allow_agent_jobs || settings.hop_budget !== d.hop_budget || settings.turn_delivery_cap !== d.turn_delivery_cap) out.add('collaboration')
     if (settings.agent_budget !== d.agent_budget) out.add('budgets')
     if (Boolean(settings.default_permission_mode) || Boolean(reach && (reach.roots.length || reach.hosts.length))) out.add('permissions')
-    if ((settings.checks_give_way ?? false) !== d.checks_give_way || Boolean(settings.generated_files)) out.add('checks')
+    if (
+      (settings.checks_give_way ?? false) !== d.checks_give_way ||
+      (settings.quarantine_threshold ?? d.quarantine_threshold) !== d.quarantine_threshold ||
+      (settings.quarantine_exit_passes ?? d.quarantine_exit_passes) !== d.quarantine_exit_passes ||
+      Boolean(settings.generated_files)
+    )
+      out.add('checks')
     if (
       (settings.pr_landing ?? false) !== d.pr_landing ||
       (settings.pr_single_commit ?? false) !== d.pr_single_commit ||

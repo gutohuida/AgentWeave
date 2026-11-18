@@ -2844,6 +2844,8 @@ async def view(session: AsyncSession, task_id: str) -> Optional[Dict[str, Any]]:
         # The known-failing entries its batch's checks went past (FR-10): what main still fails, or
         # what flaked, that did not hold this work.
         "went_past": [],
+        # The quarantined tests its batch's checks excused (FR-11), as recorded then.
+        "quarantined": [],
         "batch": None,
         # Checks of the batch that last held this work that could not run. A landing whose batch
         # could not run is queued again with no batch, so this is where the record still says why.
@@ -2932,9 +2934,10 @@ async def view(session: AsyncSession, task_id: str) -> Optional[Dict[str, Any]]:
             }
             out["could_not_run"] = out["batch"]["could_not_run"]
             if landing.state == LANDED:
-                from . import known_failing
+                from . import known_failing, quarantine
 
                 out["went_past"] = known_failing.went_past(batch.results)
+                out["quarantined"] = quarantine.excused_in(batch.results)
     return out
 
 

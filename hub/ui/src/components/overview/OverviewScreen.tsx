@@ -25,6 +25,8 @@ import { useConfigStore } from '@/store/configStore'
 import { useTaskFilterStore } from '@/store/taskFilterStore'
 import { AgentPostureChips } from './AgentPostureChips'
 import { KnownFailingList } from './KnownFailingList'
+import { QuarantineList } from './QuarantineList'
+import { useQuarantine, useRemoveNeverQuarantine, useSetNeverQuarantine } from '@/api/quarantine'
 import { ReopeningWarnings } from './ReopeningWarnings'
 import { ProjectSetupList } from './ProjectSetupList'
 import { ProjectFirstRun } from './ProjectFirstRun'
@@ -77,6 +79,9 @@ export function OverviewScreen({
   const { data: knownFailing, error: knownFailingError, refetch: refetchKnownFailing } = useKnownFailing()
   const { data: disturbedRuns = [] } = useDisturbedRuns()
   const clearStable = useClearStableFixTasks()
+  const { data: quarantine, error: quarantineError, refetch: refetchQuarantine } = useQuarantine()
+  const setMark = useSetNeverQuarantine()
+  const removeMark = useRemoveNeverQuarantine()
   const { data: mainNotices = [], error: mainNoticesError, refetch: refetchMainNotices } = useOpenMainNotices()
   const markSeen = useMarkMainNoticeSeen()
   const { data: checkNotices = [], error: checkNoticesError, refetch: refetchCheckNotices } = useCheckNotices()
@@ -94,6 +99,7 @@ export function OverviewScreen({
     ['the questions', questionsError, refetchQuestions],
     ['the stalls', stallsError, refetchStalls],
     ['the known-failing list', knownFailingError, refetchKnownFailing],
+    ['the quarantine', quarantineError, refetchQuarantine],
     ['the tasks', tasksError, refetchTasks],
     ['the conversations', conversationsError, refetchConversations],
     ['the ledger', ledgerError, refetchLedger],
@@ -449,6 +455,27 @@ export function OverviewScreen({
             clearing={clearStable.isPending}
             cleared={clearStable.data ?? null}
             clearError={clearStable.error ? readableApiError(clearStable.error, 'The fix tasks could not be closed.') : null}
+            onOpenTask={openTask}
+            now={now}
+          />
+        ) : null
+      }
+      quarantine={
+        // A Hub older than the route answers null: it has no quarantine to show.
+        quarantine ? (
+          <QuarantineList
+            quarantined={quarantine.quarantined}
+            marks={quarantine.marks}
+            onSetMark={(check, test) => setMark.mutate({ check, test })}
+            onRemoveMark={(check, test) => removeMark.mutate({ check, test })}
+            busy={setMark.isPending || removeMark.isPending}
+            error={
+              setMark.error
+                ? readableApiError(setMark.error, 'The mark could not be set.')
+                : removeMark.error
+                  ? readableApiError(removeMark.error, 'The mark could not be removed.')
+                  : null
+            }
             onOpenTask={openTask}
             now={now}
           />

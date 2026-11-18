@@ -25,6 +25,9 @@ const COLOR: Record<TaskCheckRun['state'], string> = {
   superseded: 'var(--text-3)',
 }
 
+/** The tests quarantine excused on a result: its failures counted against nothing (FR-11). */
+const excused = (result: TaskCheckResult) => result.quarantine?.tests ?? []
+
 const ON_MAIN_TOO = 'fails on main too, not this task’s work'
 const SKIPPED = 'skipped (no matching changes)'
 const AT_LANDING = 'runs at landing'
@@ -69,6 +72,7 @@ function EarlierRun({ run }: { run: TaskCheckRun }) {
             {result.name} · {result.skipped ? SKIPPED : isCouldNotRun(result) ? 'could not run' : result.timed_out ? 'timed out' : `exit ${result.exit_code}`}
             {!result.skipped && result.duration_seconds != null ? ` · ${result.duration_seconds}s` : ''}
             {result.preexisting ? ` · ${ON_MAIN_TOO}` : ''}
+            {excused(result).length ? ` · ${excused(result).length} quarantined` : ''}
             {sizedNote(result)}
           </span>
         ))}
@@ -100,6 +104,7 @@ export function TaskChecksRow({ taskId }: { taskId: string }) {
   const skipped = (latest?.results ?? []).filter((result) => result.skipped)
   const sized = (latest?.results ?? []).filter((result) => result.sized_to_change)
   const disturbed = (latest?.results ?? []).filter((result) => result.disturbed)
+  const quarantined = (latest?.results ?? []).filter((result) => excused(result).length > 0)
   const atLanding = data.at_landing ?? []
   // Every check is landing-only: nothing runs before review, so nothing is waited for here.
   const idleLabel = data.before_review === false ? 'Checks run at landing' : 'Checks have not run'
@@ -156,6 +161,20 @@ export function TaskChecksRow({ taskId }: { taskId: string }) {
               {result.name}{sizedNote(result)}
             </li>
           ))}
+        </ul>
+      )}
+      {/* A failure quarantine excused is said by name, as quarantined: not a pass, not on the
+          known-failing list, and not a failure (FR-11). */}
+      {quarantined.length > 0 && (
+        <ul data-testid={`task-checks-quarantined-${taskId}`} className="text-[11px]" style={{ color: 'var(--text-2)' }}>
+          {quarantined.flatMap((result) =>
+            excused(result).map((test) => (
+              <li key={`${result.name}:${test.test}`} data-slot="quarantined-test" title="Flaky: it still runs, but its failure counts against no check.">
+                <Icon name="block" size={11} /> {result.name} · <code>{test.test}</code> · quarantined, excused
+                {test.fix_task_id ? ` (fix task ${test.fix_task_id})` : ''}
+              </li>
+            )),
+          )}
         </ul>
       )}
       {/* A disturbed run is said with what the first run printed: information, not a failure. */}

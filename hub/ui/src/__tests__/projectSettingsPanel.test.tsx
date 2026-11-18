@@ -550,6 +550,23 @@ describe('Project settings → General, applied on change', () => {
     expect(lastPatch()).toEqual({ checks_give_way: true })
   })
 
+  it('shows the quarantine threshold and exit settings at their defaults, and saves a change of each (FR-9)', async () => {
+    const user = userEvent.setup()
+    render(<GeneralSection />)
+    const threshold = screen.getByRole('textbox', { name: 'Quarantine threshold' })
+    const exit = screen.getByRole('textbox', { name: 'Passes to leave quarantine' })
+    expect(threshold).toHaveValue('0.05')
+    expect(exit).toHaveValue('20')
+    await user.clear(threshold)
+    await user.type(threshold, '0.2')
+    await user.tab()
+    expect(lastPatch()).toEqual({ quarantine_threshold: 0.2 })
+    await user.clear(exit)
+    await user.type(exit, '5')
+    await user.tab()
+    expect(lastPatch()).toEqual({ quarantine_exit_passes: 5 })
+  })
+
   it('says checks marked fast keep normal priority when checks give way', () => {
     render(<GeneralSection />)
     expect(screen.getByText(/Checks marked fast keep normal priority/)).toBeInTheDocument()

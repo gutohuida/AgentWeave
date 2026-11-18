@@ -179,15 +179,27 @@ function CheckRow({ result }: { result: TaskCheckResult }) {
   const cannot = isCouldNotRun(result)
   const tone = result.skipped ? 'idle' : cannot ? 'needs-you' : failed ? (result.preexisting ? 'needs-you' : 'failed') : 'done'
   const word = result.skipped ? 'skipped' : cannot ? couldNotRunSentence(result) : result.timed_out ? 'timed out' : failed ? (result.preexisting ? 'fails on main too' : 'failed') : 'passed'
+  // Tests quarantine excused: said by name as quarantined, never as a plain pass (FR-11).
+  const excused = result.quarantine?.tests ?? []
   return (
-    <li className="aw-tview-check" data-tone={tone}>
+    <li className="aw-tview-check" data-tone={tone} data-quarantined={excused.length > 0 ? 'true' : undefined}>
       <button type="button" data-slot="check-row" className="aw-tview-check-head" aria-expanded={failed ? open : undefined} disabled={!failed} onClick={() => setOpen((o) => !o)}>
-        <Icon name={result.skipped ? 'circle_dashed' : cannot ? 'circle_dashed' : failed ? 'x' : 'check'} size={13} />
+        <Icon name={result.skipped ? 'circle_dashed' : cannot ? 'circle_dashed' : failed ? 'x' : excused.length ? 'block' : 'check'} size={13} />
         <span className="aw-tview-check-name">{result.name}</span>
-        <span className="aw-tview-check-word">{word}</span>
+        <span className="aw-tview-check-word">{excused.length && !failed ? `passed, ${excused.length} quarantined` : word}</span>
         <span className="aw-tview-check-time">{Math.round(result.duration_seconds)}s</span>
         {failed ? <Icon name={open ? 'expand_less' : 'expand_more'} size={12} /> : null}
       </button>
+      {excused.length ? (
+        <ul className="aw-tview-quarantined" data-slot="quarantined-tests">
+          {excused.map((test) => (
+            <li key={test.test} data-slot="quarantined-test" title="Flaky: it still runs, but its failure counts against no check.">
+              <code>{test.test}</code> · quarantined, excused
+              {test.fix_task_id ? ` (fix task ${test.fix_task_id})` : ''}
+            </li>
+          ))}
+        </ul>
+      ) : null}
       {open ? <pre className="aw-tview-output">{result.output_tail}</pre> : null}
     </li>
   )

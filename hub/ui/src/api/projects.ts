@@ -135,6 +135,12 @@ export interface ProjectSettings {
    *  work on the machine comes first (`checks-know-their-phase-and-give-way-to-the-user`). Off by
    *  default; absent from a Hub older than that change. */
   checks_give_way?: boolean
+  /** A test whose flake rate, counting a flip just recorded, is above this is quarantined; 0.05 by
+   *  default (`the-slow-checks-run-once-per-landing-not-once-per-task-and-flaky-tests-are-
+   *  quarantined`, FR-9). Absent from a Hub older than quarantine. */
+  quarantine_threshold?: number
+  /** Consecutive passes that release a quarantined test; 20 by default. */
+  quarantine_exit_passes?: number
   /** The files a command rebuilds from other files, which landing rebuilds instead of sending a
    *  conflict back (`generated-files-are-rebuilt-when-work-lands-instead-of-sending-it-back`).
    *  Null means none. Only the operator sets this; absent from a Hub older than that change. */
