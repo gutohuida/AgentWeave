@@ -383,7 +383,15 @@ def observe(result: Dict[str, Any]) -> Observed:
     seen.passed = {str(t) for t in result.get("watched_passed") or []} - set(seen.failing)
     seen.passed -= set(result.get("failed_tests") or [])
     # A run of named tests alone (`narrowed`) passing says nothing of the rest of the check.
-    seen.whole_check_passed = not _failed(result) and flaky is None and not result.get("narrowed")
+    # Nor does a pass quarantine made: the check failed (`quarantine.excused_by_quarantine`).
+    from .quarantine import excused_by_quarantine
+
+    seen.whole_check_passed = (
+        not _failed(result)
+        and flaky is None
+        and not result.get("narrowed")
+        and not excused_by_quarantine(result)
+    )
     return seen
 
 
@@ -901,6 +909,16 @@ async def run_on_main(project_id: str, sha: str) -> Optional[str]:
                         project_checks.run_one, check_history.recording(check), path, owner
                     )
                     outcomes = check_history.take(result)
+                    if (
+                        project_checks.failed(result)
+                        and not project_checks.unjudged_timeout(result)
+                        and not project_checks.could_not_run(result)
+                    ):
+                        # A quarantined failure is not listed as failing on main (`quarantine`,
+                        # FR-5) and is not re-run (FR-3).
+                        from . import quarantine
+
+                        await quarantine.excuse(project_id, check, result, [])
                     if (
                         project_checks.failed(result)
                         and not project_checks.unjudged_timeout(result)
