@@ -131,9 +131,38 @@ def new_conversation(*, project_id: str, agent: str, origin: str) -> Conversatio
         # Its own lineage until a checkpoint cutover says otherwise
         # (`checkpoint_cutover.py`, conversations-continue phase 2).
         lineage_id=conversation_id,
+        # Decided where the operator opens a chat (`give_own_worktree_if_parallel`); no other.
+        own_worktree=False,
         created_at=now,
         updated_at=now,
     )
+
+
+async def give_own_worktree_if_parallel(session: AsyncSession, conversation: Conversation) -> None:
+    """Give a chat the operator is opening a worktree of its own when the project's "profiles run
+    in parallel" switch is on (`one-profile-runs-many-turns-at-once-on-different-tasks`, FR-13).
+
+    Called only where the operator opens a chat; every other conversation keeps the agent's shared
+    worktree. Decided here, once: the conversation keeps what it was given whatever the switch does
+    later. Nothing is provisioned until the chat's first writing turn.
+    """
+    from .db.models import Project
+
+    if conversation.origin != "operator":
+        return
+    project = await session.get(Project, conversation.project_id)
+    conversation.own_worktree = bool(project is not None and project.profiles_run_in_parallel)
+
+
+def thread_of(conversation: Conversation) -> Optional[str]:
+    """The thread name a conversation with its own worktree works under, or None for one without.
+
+    The lineage, not the id: a checkpoint cutover replaces the id and keeps the line of work, and
+    the successor carries on in the same worktree on the same branch.
+    """
+    if not conversation.own_worktree:
+        return None
+    return conversation.lineage_id or conversation.id
 
 
 def set_provider_session(

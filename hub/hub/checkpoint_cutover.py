@@ -189,6 +189,9 @@ async def cut_over(
     # Same line of work under a new id -- sending FROM the successor must still reach a
     # thread bound to any conversation in this lineage, not just to the predecessor's id.
     successor.lineage_id = predecessor.lineage_id
+    # A chat with its own worktree keeps it across the cutover: the worktree and branch are named
+    # by the lineage (`conversations.thread_of`), so the successor carries on in the same one.
+    successor.own_worktree = predecessor.own_worktree
     db.add(successor)
 
     entry = new_entry(

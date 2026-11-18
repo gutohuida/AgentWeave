@@ -22,7 +22,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ... import changes_view, project_workspace, worktrees
 from ...auth import get_project
-from ...conversations import get_conversation_by_id
+from ...conversations import get_conversation_by_id, thread_of
 from ...db.engine import get_session
 from ...db.models import Project, Run, Task
 from ...launchability import get_agent_config
@@ -141,6 +141,10 @@ async def _resolve_target(
             f"{conversation.agent} has no checkout of its own: it is read-only and works in the project directory.",
         )
     try:
+        # FR-17: a chat with a worktree of its own commits to its thread's branch, not the agent's.
+        thread = thread_of(conversation)
+        if thread is not None:
+            return worktrees.thread_branch_name(conversation.agent, thread), None, None, None
         return worktrees.branch_name(conversation.agent), None, None, None
     except ValueError:
         return None, None, "unreadable", f"{conversation.agent}'s branch cannot be read."
