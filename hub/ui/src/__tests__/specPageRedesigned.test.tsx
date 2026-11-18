@@ -290,6 +290,14 @@ describe('rendered-natively (FR-3)', () => {
     expect(container.querySelector('iframe')).toBeNull()
     expect(within(anchor('FR-1')!).getByText('Requirement number 1 holds.')).toBeInTheDocument()
     expect(within(anchor('FR-1')!).getByText(/given 1/)).toBeInTheDocument()
+    // Let the page's own loads finish (a slow machine lands them late) before counting.
+    let settled = -1
+    await waitFor(() => {
+      const n = vi.mocked(fetch).mock.calls.length
+      const stable = n === settled
+      settled = n
+      expect(stable).toBe(true)
+    }, { interval: 150 })
     const frames = vi.mocked(fetch).mock.calls.length
 
     // FR-5: only the requirements awaiting evidence review show.
