@@ -306,6 +306,11 @@ export function OverviewScreen({
     })),
   ]
 
+  // A running turn on a task that belongs to a build offers that build's view at the task.
+  const buildOf = (taskId: string | null | undefined): Pick<RunningItem, 'build'> => {
+    const task = taskId ? tasks.find((t) => t.id === taskId) : undefined
+    return task?.build_id && projectId ? { build: { projectId, buildId: task.build_id, task: task.readable_id ?? task.id } } : {}
+  }
   const running: RunningItem[] = conversations
     .filter((c) => c.attention === 'running')
     .map((c) => ({
@@ -317,6 +322,7 @@ export function OverviewScreen({
       startedAt: c.updated_at,
       tokens: c.context_usage?.context_tokens ?? null,
       onOpen: () => openConversation(c.agent, c.id),
+      ...buildOf(c.task_id),
     }))
 
   const usdByTask = new Map((ledger?.spend.by_task ?? []).map((t) => [t.task_id, t.usd]))

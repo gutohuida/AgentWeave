@@ -57,6 +57,7 @@ export const ProjectSettingsScreen = screen(() => import('@/components/settings/
 export const VaultScreen = screen(() => import('@/components/vault/VaultScreen'), 'VaultScreen')
 export const SpecPage = screen(() => import('@/components/spec/SpecPage'), 'SpecPage')
 export const EvidenceBrowser = screen(() => import('@/components/evidence/EvidenceBrowser'), 'EvidenceBrowser')
+export const BuildViewContainer = screen(() => import('@/components/builds/BuildViewContainer'), 'BuildViewContainer')
 export const RequirementStory = screen(() => import('@/components/spec/RequirementStory'), 'RequirementStory')
 export const TasksScreen = screen(() => import('@/components/tasks/TasksScreen'), 'TasksScreen')
 export const AgentSettingsPage = screen(() => import('@/components/agents/AgentSettingsPage'), 'AgentSettingsPage')

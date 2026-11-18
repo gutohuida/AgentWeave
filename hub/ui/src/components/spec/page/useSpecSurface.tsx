@@ -5,6 +5,8 @@ import * as React from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { MenuItem } from '@/components/ui/menu'
 import { useBuildFigures } from '@/api/buildFigures'
+import { useBuildReads } from '@/api/buildRead'
+import { summaryOf } from '@/components/builds/buildViewModel'
 import { readableApiError } from '@/api/client'
 import {
   useSpec,
@@ -16,7 +18,7 @@ import {
 } from '@/api/spec'
 import { useDocumentTasks } from '@/api/tasks'
 import { useVaultChecked } from '@/api/vault'
-import { serializeDestination, projectDestination } from '@/lib/navigation'
+import { buildDestination, buildHref, goTo, serializeDestination, projectDestination } from '@/lib/navigation'
 import { toast } from '@/lib/toast'
 import { useConfigStore } from '@/store/configStore'
 import { openTraces } from '@/store/tracesRequestStore'
@@ -126,6 +128,7 @@ export function useSpecSurface(path: string, host: SpecSurfaceHost): SpecSurface
   const { data: tasks, error: tasksError } = useDocumentTasks(record?.id ?? null)
   const builds = React.useMemo(() => specDoc?.builds ?? [], [specDoc?.builds])
   const figures = useBuildFigures(builds)
+  const reads = useBuildReads(builds.map((b) => ({ id: b.id, running: b.state === 'running' })))
   const stop = useStopBuild()
   const queryClient = useQueryClient()
   const now = useNow()
@@ -196,7 +199,19 @@ export function useSpecSurface(path: string, host: SpecSurfaceHost): SpecSurface
         }
       : { status: 'idle' }
 
-  const buildList = buildViews(builds, tasks ?? [], figures)
+  const buildList = buildViews(builds, tasks ?? [], figures).map((view) => {
+    const read = reads[view.id]
+    return read
+      ? {
+          ...view,
+          summary: {
+            model: summaryOf(read, now),
+            hrefFor: (task?: string) => buildHref(projectId, view.id, task),
+            onOpen: (task?: string) => goTo(buildDestination(projectId, view.id, { task })),
+          },
+        }
+      : view
+  })
   const linkTo = (anchor: string | null) =>
     `${window.location.origin}${window.location.pathname}${serializeDestination(projectDestination(projectId, 'spec', path, anchor))}`
 
