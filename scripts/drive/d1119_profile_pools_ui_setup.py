@@ -89,7 +89,8 @@ def main():
                   task("t-plain")],
         "delivery": {"mode": "flow", "agent": "Builder", "checker": "Checker",
                      "stop_when_queue_empties": True, "cron": "0 0 1 1 *",
-                     "reasons": {"mode": "x", "agent": "x"}},
+                     "reasons": {"mode": "A flow runs independent tasks in parallel.",
+                                "agent": "The seeded builder is the default for this build."}},
     }
     code, out = d.api("PUT", f"{base}/project/documents/{DOC}/content", {"document": doc})
     print("doc save", code, str(out)[:300])
