@@ -13,6 +13,7 @@ from sqlalchemy import select
 from hub.db.engine import async_session_factory
 from hub.db.models import Conversation
 from hub.model_catalog import validate_overrides
+from tests._pool import add_pool_entry
 from tests.test_agent_trigger import _await_background_run, _fake_pty
 
 RETIRED = "claude-retired-9"  # a model id the claude catalog does not declare
@@ -60,6 +61,8 @@ async def test_a_conversation_stored_on_a_dropped_model_keeps_working_and_is_fla
     )
     assert sync.status_code == 200
     await bind_runner("stored", cli="claude")
+    # The chat's first choice is an entry of its pool (FR-9 of the profile-pools change).
+    await add_pool_entry(app, auth_headers, "stored", effort="high")
     first = await _trigger(app, auth_headers, {"effort": "high"})
     assert first.status_code == 200, first.text
     conversation_id = first.json()["conversation_id"]

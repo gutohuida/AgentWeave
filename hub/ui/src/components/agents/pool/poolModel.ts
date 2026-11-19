@@ -33,6 +33,12 @@ export function entryLabel(catalog: ModelCatalogResponse | undefined, entry: Pic
   return [modelLabel(catalog, entry.cli, entry.model), effort].filter(Boolean).join(' · ')
 }
 
+/** Whether a catalog control is part of a pool entry, and so chosen with the entry rather than on
+ *  its own pill: the effort (FR-1). */
+export function isEntryControl(controlId: string): boolean {
+  return controlId === 'effort'
+}
+
 /** The efforts the catalog offers for a runner's CLI; empty when it offers none. */
 export function effortsFor(catalog: ModelCatalogResponse | undefined, cli: string): Array<{ id: string; label: string }> {
   return catalog?.providers.find((p) => p.provider === cli)?.controls.find((c) => c.id === 'effort')?.values ?? []
@@ -73,6 +79,42 @@ export function addRefusal(
 /** Why removing this entry would be refused (FR-3), or null. */
 export function removeRefusal(pool: AgentPoolEntry[], entry: AgentPoolEntry): string | null {
   return entry.default && pool.length > 1 ? 'Make another model the default first.' : null
+}
+
+/** The conversation override naming the runner of the entry a chat chose (FR-9). The Hub stores an
+ *  entry on the default's runner without it, so the chat follows the default. */
+export const CHAT_RUNNER_KEY = 'runner_id'
+
+/**
+ * The entry a chat's next turn runs on, read from its overrides (FR-9): the runner it chose, else
+ * the default's, with the effort it chose. A choice the pool no longer holds reads as the default,
+ * which is what the Hub launches.
+ */
+export function chatEntry(pool: AgentPoolEntry[], overrides: Record<string, string>): AgentPoolEntry | undefined {
+  const fallback = defaultEntry(pool)
+  const runnerId = overrides[CHAT_RUNNER_KEY] ?? fallback?.runner_id
+  if (!runnerId) return fallback
+  return findEntry(pool, { runner_id: runnerId, effort: overrides.effort ?? null }) ?? fallback
+}
+
+/** The overrides that choose *entry* in a chat: its runner and its effort replace whatever model,
+ *  runner and effort were chosen before; every other control stays. */
+export function chatChoiceOverrides(overrides: Record<string, string>, entry: AgentPoolEntry): Record<string, string> {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { model, effort, [CHAT_RUNNER_KEY]: runner, ...rest } = overrides
+  return { ...rest, [CHAT_RUNNER_KEY]: entry.runner_id, ...(entry.effort ? { effort: entry.effort } : {}) }
+}
+
+/** The CLI a conversation started on, for the picker's greyed-out entries: the one its latest run
+ *  recorded, else the default's when it has a session (a run that predates the record ran on the
+ *  agent's runner); null before its first turn. */
+export function chatStartedOn(
+  pool: AgentPoolEntry[],
+  conversation: { started_cli?: string | null; provider_session_id?: string | null } | undefined,
+): string | null {
+  if (!conversation) return null
+  if (conversation.started_cli) return conversation.started_cli
+  return conversation.provider_session_id ? (defaultEntry(pool)?.cli ?? null) : null
 }
 
 export type ResolvedSource = 'chosen' | 'recommended' | 'default'
