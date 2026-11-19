@@ -559,9 +559,11 @@ async def test_shared_and_retired_models_applied(drive, stored):
 
 
 @pytest.mark.asyncio
-async def test_inherited_haiku_withheld_in_a_job(drive):
-    """A message opening a new thread copies the agent's latest stored overrides into it, with no
-    rebind in sight at the conversation: the launch still withholds what Copilot does not offer."""
+async def test_a_new_thread_does_not_inherit_the_chats_model(drive):
+    """A message opening a new thread used to copy the chat's stored model into it, and the launch
+    then had to withhold what Copilot does not offer. A chat's model no longer travels at all
+    (`a-profile-runs-each-task-on-a-runner-and-model-chosen-from-its-pool`, FR-10): the new thread
+    stores none and runs its runner's own model, so there is nothing to withhold."""
     await drive.agent("a1")
     claude_runner = await drive.runner("a1-claude", "claude", model="haiku")
     copilot_runner = await drive.runner("a1-copilot", "copilot", model="claude-haiku-4.5")
@@ -585,8 +587,8 @@ async def test_inherited_haiku_withheld_in_a_job(drive):
             .scalars()
             .one()
         )
-    assert inherited.runtime_overrides == {"model": "haiku"}
-    assert len(await _diagnostics(inherited.id, WITHHELD)) == 1
+    assert not (inherited.runtime_overrides or {}).get("model")
+    assert await _diagnostics(inherited.id, WITHHELD) == []
 
 
 @pytest.mark.asyncio

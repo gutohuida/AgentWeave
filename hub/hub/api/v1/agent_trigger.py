@@ -45,6 +45,7 @@ from ... import (
     claude_signin,
     flow_advance,
     instance_identity,
+    launch_entry,
     mcp_announce,
     project_checks,
     project_workspace,
@@ -924,6 +925,44 @@ async def _review_task_from_entries(
     return review_task_id
 
 
+async def _launch_subject(
+    session: AsyncSession,
+    *,
+    project_id: str,
+    conversation: Conversation,
+    queue_entry_ids: Optional[List[str]],
+    task_id: Optional[str],
+    review_task_id: Optional[str],
+) -> "tuple[Optional[Task], bool]":
+    """The task whose entry this run launches with, and whether it is a review of it (FR-7).
+
+    Reads only, and refuses nothing: the same questions are asked again further down, where their
+    refusals belong, so a turn that is going to be refused is refused by the same words in the
+    same order as before. A question that would refuse here answers "no task", which launches on
+    the default for the one run that never starts.
+    """
+    try:
+        review_id = review_task_id or await _review_task_from_entries(session, queue_entry_ids)
+    except TriggerAgentError:
+        return None, False
+    if review_id:
+        task = await session.get(Task, review_id)
+        if task is None or task.project_id != project_id:
+            return None, False
+        return task, True
+    try:
+        binding = await resolve_bound_task(
+            session,
+            project_id=project_id,
+            conversation=conversation,
+            queue_entry_ids=queue_entry_ids,
+            task_id=task_id,
+        )
+    except TaskBindingError:
+        return None, False
+    return binding.task, False
+
+
 async def _review_cause_from_entries(
     session: AsyncSession, queue_entry_ids: Optional[List[str]], review_task_id: str
 ) -> "tuple[str, Optional[str]]":
@@ -1306,8 +1345,31 @@ async def _trigger_agent_directly(
             _archived_to_trigger(agent),
             request_level=True,
         )
-    runner_row = await session.get(Runner, agent_row.runner_id)
-    if runner_row is None:
+    # Which entry of the agent's pool this run launches with (`a-profile-runs-each-task-on-a-
+    # runner-and-model-chosen-from-its-pool`, FR-7, FR-8, FR-13): a task's builder or review run
+    # its task's entry, every other run the pool's default. Decided before anything reads the
+    # runner, because the runner is what the probe, the adapter and the command are built from. A
+    # first run of a task's role fixes its entry on the task, staged with this dispatch, so a
+    # refusal below rolls it back with everything else.
+    launch_task, launch_review = await _launch_subject(
+        session,
+        project_id=project_id,
+        conversation=conversation,
+        queue_entry_ids=queue_entry_ids,
+        task_id=task_id,
+        review_task_id=review_task_id,
+    )
+    entry = await launch_entry.resolve(
+        session,
+        agent_row,
+        task=launch_task,
+        review=launch_review,
+        conversation_id=conversation.id,
+    )
+    runner_row = await session.get(
+        Runner, entry.runner_id if entry is not None else agent_row.runner_id
+    )
+    if runner_row is None or entry is None:
         raise TriggerAgentError(
             status.HTTP_409_CONFLICT,
             f"{agent}'s bound runner no longer exists.",
@@ -1388,7 +1450,11 @@ async def _trigger_agent_directly(
     # defaults -> catalog control defaults. Overrides were already validated against the
     # catalog when the operator set them (`trigger_agent`'s /trigger handler), so they are
     # trusted here rather than re-validated per turn.
-    conversation_overrides = dict(conversation.runtime_overrides or {})
+    # FR-10: a chat's own model and effort are the operator's choice in that chat, and travel no
+    # further: a task's run, a review, a job firing and a peer message launch with their entry's.
+    conversation_overrides = launch_entry.entry_overrides(
+        dict(conversation.runtime_overrides or {}), entry, chat=initiator == "operator"
+    )
     if has_provider(runner_row.provider_config):
         # A provider runner's model is the runner's, whatever the conversation stores: one stored
         # before the runner gained a provider, or before the agent was rebound to it, is a `copilot`
@@ -2346,6 +2412,11 @@ async def _trigger_agent_directly(
         # What this run was told it reaches the Hub with (`a-run-reaches-the-hub-without-mcp` D1),
         # the same value its notice and tool section were rendered from above.
         plane_surface=None if tests_first else described_path,
+        # What it launched with (FR-12): the same runner, model and effort the command was built
+        # from, so the record and the process cannot disagree.
+        runner_id=runner_row.id,
+        model=model,
+        effort=(control_overrides or {}).get("effort"),
     )
 
     # The binding, and the automatic move it causes, are staged here — before delivery, which is
@@ -2381,6 +2452,10 @@ async def _trigger_agent_directly(
             runner=runner,
             model=model,
             task_id=bound_task.id if bound_task is not None else None,
+            runner_name=runner_row.name,
+            launch_source=entry.source,
+            launch_role=entry.role,
+            events=entry.events,
         )
     except Exception:  # noqa: BLE001 -- a defect in the bookkeeping never refuses the turn
         logger.warning("starting the trace of run %s failed", run_id, exc_info=True)
