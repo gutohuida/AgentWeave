@@ -2,8 +2,15 @@
 
 import pytest
 
-from .test_spec_documents_api import _create, _document, _submit
+from ._spec_confirmations import submit_confirmed
+from .test_spec_documents_api import PATH, _create, _document
+from .test_spec_documents_api import _submit as _submit_once
 from .test_spec_documents_api import run_headers as run_headers  # noqa: F401  (the fixture)
+
+
+async def _submit(app, run_headers, document):  # noqa: F811
+    """Saved with its criteria confirmed, so the save lists only what this file is about."""
+    return await submit_confirmed(_submit_once, app, run_headers, document, PATH)
 
 
 @pytest.mark.asyncio

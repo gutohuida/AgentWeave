@@ -209,6 +209,8 @@ async def test_drive_unattended_approval_is_safe(
     checked = (await _check(app, auth_headers)).json()
     assert "criteria_unconfirmed" not in {b["code"] for b in checked["blocking"]}
 
-    approved = await _approve(app, auth_headers)
+    # approve_anyway passes the test document's unrelated `steps_skipped` gap, and nothing more:
+    # the same flag was refused above while the criteria were unconfirmed
+    approved = await _approve(app, auth_headers, approve_anyway=True)
     assert approved.status_code == 200, approved.text
     assert approved.json()["guards"] == [{"criterion": "already-holds", "requirement": "FR-1"}]

@@ -14,6 +14,7 @@ from hub import project_workspace, spec_documents, spec_lifecycle
 from hub.db.engine import async_session_factory
 from hub.db.models import SpecDocument, Task
 
+from ._spec_confirmations import confirm_criteria
 from ._spec_versions import content_version
 from .test_spec_documents_api import (
     BASE,
@@ -85,6 +86,7 @@ async def test_1_2_an_edit_after_a_check_is_checked_again_at_approval(
 ):
     await _create(app, auth_headers)
     await _submit(app, run_headers, _document())
+    await confirm_criteria(PATH)
     await _close(app, auth_headers)
     checked = await app.post(f"{BASE}/documents/check", params={"path": PATH}, headers=auth_headers)
     assert checked.json()["blocking"] == []
@@ -107,6 +109,7 @@ async def test_1_3_check_lists_every_gap_and_no_longer_an_open_exploration(
 ):
     await _create(app, auth_headers)
     await _submit(app, run_headers, _document(tasks=[], scope={"in_scope": [], "non_goals": []}))
+    await confirm_criteria(PATH)
 
     response = await app.post(
         f"{BASE}/documents/check", params={"path": PATH}, headers=auth_headers
@@ -128,6 +131,7 @@ async def test_1_6_a_complete_document_goes_check_then_approve(
 ):
     await _create(app, auth_headers)
     await _submit(app, run_headers, _document())
+    await confirm_criteria(PATH)
     await _close(app, auth_headers)
     await app.post(f"{BASE}/documents/check", params={"path": PATH}, headers=auth_headers)
 

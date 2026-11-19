@@ -40,6 +40,7 @@ from hub.spec_payload import (
     validate_payload,
 )
 
+from ._spec_confirmations import confirm_criteria
 from ._spec_versions import content_version
 from .test_spec_documents_api import PATH as DOC_PATH
 from .test_spec_documents_api import _create, _document
@@ -255,6 +256,7 @@ async def test_a_none_delivery_checks_clean(app, auth_headers, run_headers):
     await _create(app, auth_headers)
     await _place_at_the_end()
     await _submit_document(app, run_headers, _document(delivery={"mode": "none"}))
+    await confirm_criteria(DOC_PATH)
 
     response = await _check(app, auth_headers)
 
@@ -350,6 +352,7 @@ async def _approve(app, auth_headers, path=DOC_PATH, **body):
     (`exploring-ends-at-an-approved-plan` FR-7); the build's report is `build_outcome`."""
     body.setdefault("approve_anyway", True)
     body.setdefault("content_version", await content_version(app, auth_headers, path))
+    await confirm_criteria(path)
     response = await app.post(
         f"{BASE}/documents/approve-and-build",
         params={"path": path},

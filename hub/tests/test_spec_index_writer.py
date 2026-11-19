@@ -22,6 +22,7 @@ from hub.db.models import Run
 from hub.spec_manifest import load_manifest
 from hub.spec_payload import SCHEMA_VERSION
 
+from ._spec_confirmations import confirm_criteria
 from ._spec_versions import content_version
 
 BASE = "/api/v1/projects/proj-test/project"
@@ -567,6 +568,7 @@ class TestReindexCorpusRerender:
             f"{BASE}/documents/close-exploration", params={"path": child_path}, headers=auth_headers
         )
         await app.post(f"{BASE}/documents/check", params={"path": child_path}, headers=auth_headers)
+        await confirm_criteria(child_path)
         approved = await app.post(
             f"{BASE}/documents/phase",
             params={"path": child_path, "to": "approved"},

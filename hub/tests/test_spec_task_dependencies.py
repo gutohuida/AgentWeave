@@ -24,6 +24,7 @@ from hub.db.models import (
 from hub.spec_lifecycle import Actor
 from hub.spec_payload import SCHEMA_VERSION
 
+from ._spec_confirmations import confirm_criteria
 from ._spec_versions import content_version
 
 BASE = "/api/v1/projects/proj-test/project"
@@ -85,6 +86,7 @@ async def make_document(app, auth_headers, run_headers, *, path, tasks, title="D
     )
     assert created.status_code == 201, created.text
     await submit(app, run_headers, path=path, tasks=tasks, title=title)
+    await confirm_criteria(path)
 
 
 async def approve(app, auth_headers, *, path):
@@ -92,6 +94,7 @@ async def approve(app, auth_headers, *, path):
         f"{BASE}/documents/close-exploration", params={"path": path}, headers=auth_headers
     )
     assert closed.status_code in (200, 409), closed.text
+    await confirm_criteria(path)
     moved = await app.post(
         f"{BASE}/documents/phase",
         params={"path": path, "to": "approved"},
@@ -349,6 +352,7 @@ async def test_an_unresolvable_import_is_preserved_and_reported_not_raised(
     # ...then the source document is reopened, invalidating the import before approval.
     await reopen(app, auth_headers, path=PATH_IMPORT_SOURCE)
 
+    await confirm_criteria(PATH_IMPORT_USER)
     approved = await app.post(
         f"{BASE}/documents/phase",
         params={"path": PATH_IMPORT_USER, "to": "approved"},

@@ -15,6 +15,7 @@ from hub.db.models import SpecDocument, SpecDocumentEvent, SpecDocumentMerge, Ta
 from hub.spec_documents import parse_hub
 from hub.spec_payload import KEY_RE, SCHEMA_VERSION
 
+from ._spec_confirmations import confirm_criteria
 from ._spec_versions import content_version
 
 BASE = "/api/v1/projects/proj-test/project"
@@ -108,6 +109,7 @@ async def _approved_change(app, auth_headers, path=CHANGE, payload=None):
         f"{BASE}/documents/close-exploration", params={"path": path}, headers=auth_headers
     )
     await app.post(f"{BASE}/documents/check", params={"path": path}, headers=auth_headers)
+    await confirm_criteria(path)
     approved = await app.post(
         f"{BASE}/documents/phase",
         params={"path": path, "to": "approved"},

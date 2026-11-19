@@ -12,6 +12,7 @@ from hub import spec_service
 from hub.db.engine import async_session_factory
 from hub.db.models import SpecDocument, SpecDocumentEvent
 
+from ._spec_confirmations import confirm_criteria
 from ._spec_versions import content_version
 from .test_project_spec_steps import THREAT, _steps, _write
 from .test_spec_documents_api import (  # noqa: F401  (run_headers is a fixture)
@@ -92,6 +93,10 @@ async def _written_with_a_gap(app, auth_headers, run_headers):  # noqa: F811
     await _place(step="build", size="large")
     saved = await _submit(app, run_headers, _document())
     assert saved.status_code == 200, saved.text
+    # Its criteria are confirmed, and the save that follows answers as a confirmed document does.
+    await confirm_criteria(PATH)
+    saved = await _submit(app, run_headers, _document())
+    assert saved.status_code == 200, saved.text
     return saved.json()
 
 
@@ -164,6 +169,7 @@ async def test_approve_anyway_sent_as_a_query_parameter_is_refused_not_ignored(
     caller got the same 409 back, with a message that never said where the field goes."""
     await _written_with_a_gap(app, auth_headers, run_headers)
 
+    await confirm_criteria(PATH)
     misplaced = await app.post(
         f"{BASE}/documents/phase",
         params={"path": PATH, "to": "approved", "approve_anyway": "true"},
@@ -195,6 +201,7 @@ async def test_a_clean_approval_records_that_it_overrode_nothing_and_a_reopen_fo
 ):
     await _create(app, auth_headers)
     await _submit(app, run_headers, _checked())
+    await confirm_criteria(PATH)
     await _place(step="build", size="large")
     # Notes gate nothing: a change naming no capability draws `capability_unnamed` (FR-3 of
     # `a-change-names-the-capabilities-it-changes`), and approval still overrides nothing.
@@ -218,6 +225,7 @@ async def test_approve_anyway_with_no_gap_still_records_an_empty_list(
 ):
     await _create(app, auth_headers)
     await _submit(app, run_headers, _checked())
+    await confirm_criteria(PATH)
     await _place(step="build", size="large")
 
     approved = await _phase(app, auth_headers, "approved", approve_anyway=True)
@@ -268,6 +276,7 @@ async def test_skipped_journey_steps_are_listed_at_approval(
     await _create(app, auth_headers)
     _write(tmp_path, _steps(THREAT))
     await _submit(app, run_headers, _checked())
+    await confirm_criteria(PATH)
     await _place(step="requirements", size="large")
 
     refused = await _phase(app, auth_headers, "approved")
@@ -310,6 +319,7 @@ async def test_check_and_approve_name_same_file_tasks_with_no_order(
     never saw it, and the two tasks ran in parallel and collided."""
     await _create(app, auth_headers)
     await _submit(app, run_headers, _checked(tasks=_SAME_FILE_TASKS))
+    await confirm_criteria(PATH)
     await _place(step="build", size="large")
 
     checked = (await _check(app, auth_headers)).json()
@@ -338,6 +348,7 @@ async def test_check_and_approve_name_tasks_that_declare_no_files(
     """Tasks with no `files` hide any overlap; the operator saw nothing at approval."""
     await _create(app, auth_headers)
     await _submit(app, run_headers, _checked(tasks=_NO_FILE_TASKS))
+    await confirm_criteria(PATH)
     await _place(step="build", size="large")
 
     def named(findings):

@@ -21,6 +21,7 @@ from hub.db.models import Run, SpecDocumentEvent
 from hub.spec_documents import parse_hub, parse_stored
 from hub.spec_payload import SCHEMA_VERSION
 
+from ._spec_confirmations import confirm_criteria
 from ._spec_versions import content_version
 
 BASE = "/api/v1/projects/proj-test/project"
@@ -222,6 +223,7 @@ class TestNoRuleIsRelaxedForTheOperator:
         """The operator does not get to quietly rewrite what they approved."""
         await _create(app, auth_headers, CHANGE_PATH, "change-spec")
         await _write(app, auth_headers, CHANGE_PATH, _complete_payload("change-spec"))
+        await confirm_criteria(CHANGE_PATH)
 
         # `check` answers 200 with a list of *blocking findings* when the document is incomplete,
         # rather than erroring — so the status code alone proves nothing, and the empty body is
