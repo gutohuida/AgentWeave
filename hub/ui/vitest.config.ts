@@ -20,5 +20,8 @@ export default defineConfig({
     // exceed vitest's 5s default when 95 files share the machine — a different
     // one timed out on each full-suite run. They are slow under load, not hung.
     testTimeout: 20000,
+    // Vitest's fork start timeout is fixed at 60s; with one fork per core the check run's
+    // workers starved each other at startup ("Failed to start forks worker"). Fewer forks start.
+    maxWorkers: 8,
   },
 })
