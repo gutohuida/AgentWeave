@@ -25,6 +25,7 @@ from hub.db.models import Agent, Run, SpecDocument, Task
 from hub.run_task_binding import spec_document_for_task
 from hub.spec_payload import SCHEMA_VERSION
 
+from ._spec_confirmations import confirm_criteria
 from ._spec_versions import content_version
 
 BASE = "/api/v1/projects/proj-test/project"
@@ -162,6 +163,7 @@ async def test_the_declared_task_link_still_holds(app, auth_headers, author):
         f"{BASE}/documents/close-exploration", params={"path": PATH}, headers=auth_headers
     )
     assert closed.status_code in (200, 409), closed.text
+    await confirm_criteria(PATH)
     moved = await app.post(
         f"{BASE}/documents/phase",
         params={"path": PATH, "to": "approved"},

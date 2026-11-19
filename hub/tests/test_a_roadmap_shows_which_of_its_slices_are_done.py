@@ -5,6 +5,7 @@ import re
 
 from hub.spec_payload import SCHEMA_VERSION
 
+from ._spec_confirmations import confirm_criteria
 from ._spec_versions import content_version
 from .test_spec_documents_api import _submit
 from .test_spec_documents_api import run_headers as run_headers  # noqa: F401  (the fixture)
@@ -61,6 +62,7 @@ async def _write(app, auth_headers, path, title, payload, kind="change-spec"):
 
 
 async def _approve(app, auth_headers, path, anyway=True):
+    await confirm_criteria(path)
     return await app.post(
         f"{BASE}/documents/phase",
         params={"path": path, "to": "approved"},

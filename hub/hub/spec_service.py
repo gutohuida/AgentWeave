@@ -23,6 +23,7 @@ from . import (
     spec_acknowledgements,
     spec_capability_links,
     spec_completeness,
+    spec_criterion_confirmations,
     spec_digest,
     spec_documents,
     spec_identity,
@@ -480,6 +481,9 @@ class Readiness:
     gaps: List[Dict[str, Any]]
     notes: List[Dict[str, Any]]
     acknowledged: List[Dict[str, Any]]
+    # Each criterion marked a guard, with its requirement's identifier: what approval shows the
+    # operator the drive will not need to fail (`existing-behaviour-is-caught-before-the-build` D6).
+    guards: List[Dict[str, Any]] = field(default_factory=list)
 
     @property
     def ready(self) -> bool:
@@ -515,6 +519,12 @@ async def readiness(
         if payload.kind == "change-spec" and not payload.tasks and payload.capabilities
         else frozenset()
     )
+    change = payload.kind == "change-spec"
+    confirmations = (
+        await spec_criterion_confirmations.digests(session, document)
+        if change and payload.acceptance_criteria
+        else {}
+    )
     findings = [
         *spec_completeness.check(
             payload,
@@ -522,6 +532,7 @@ async def readiness(
             approved_document_paths=approved_paths,
             roadmaps=roadmaps,
             proposed_capabilities=proposed,
+            confirmations=confirmations,
         ),
         *spec_completeness.approval_gaps(payload),
         # Same-file tasks with no order between them run in parallel and collide (F694).
@@ -562,7 +573,8 @@ async def readiness(
             open_gaps.append(gap.to_dict())
         else:
             acknowledged.append(spec_acknowledgements.entry(gap.to_dict(), row))
-    return Readiness([f.to_dict() for f in refusals], open_gaps, notes, acknowledged)
+    guards = await spec_criterion_confirmations.guards(session, document, payload) if change else []
+    return Readiness([f.to_dict() for f in refusals], open_gaps, notes, acknowledged, guards)
 
 
 async def merge_document(
@@ -1567,6 +1579,7 @@ class PhaseFindings:
     gaps: List[Dict[str, Any]]
     notes: List[Dict[str, Any]] = field(default_factory=list)
     acknowledged: List[Dict[str, Any]] = field(default_factory=list)
+    guards: List[Dict[str, Any]] = field(default_factory=list)
 
 
 def _stored_payload(workspace: ProjectWorkspace, document: SpecDocument) -> SpecPayload:
@@ -1680,7 +1693,9 @@ async def phase_findings(
     if to_phase != spec_lifecycle.APPROVED:
         return PhaseFindings([], [])
     report = await readiness(session, workspace, document, _stored_payload(workspace, document))
-    return PhaseFindings(report.refusals, report.gaps, report.notes, report.acknowledged)
+    return PhaseFindings(
+        report.refusals, report.gaps, report.notes, report.acknowledged, report.guards
+    )
 
 
 async def check(

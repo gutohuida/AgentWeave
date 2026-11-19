@@ -27,6 +27,7 @@ import sys
 from dataclasses import dataclass, field
 from typing import AbstractSet, Dict, List, Mapping, Optional, Tuple
 
+from .spec_digest import digest_of_criterion
 from .spec_payload import SpecPayload, fold_path
 
 # The marker the skills used for an unresolved question, kept because documents
@@ -37,8 +38,11 @@ CLARIFICATION_RE = re.compile(r"\[\s*needs[ _-]?clarification", re.IGNORECASE)
 #: not a gap (approve-lists-what-is-missing-and-can-approve-anyway, FR-2).
 CRITERION_MODALS = ("MUST", "SHALL")
 
-#: The findings that make approval's own work wrong, so approving anyway cannot pass them: the
-#: board cannot be materialised, the writer is broken, or the roadmap link is false (FR-3, D2).
+#: The findings approving anyway cannot pass. Most make approval's own work wrong: the board
+#: cannot be materialised, the writer is broken, or the roadmap link is false (FR-3, D2).
+#: `criteria_unconfirmed` is the exception, a policy refusal by the operator's decision of
+#: 2026-11-18 (`existing-behaviour-is-caught-before-the-build` D5): a warning approved past at
+#: night produces the very stall at the drive baseline that it exists to prevent.
 #: Every other finding describes completeness, and is a gap the operator may approve over.
 REFUSAL_CODES = frozenset(
     {
@@ -48,8 +52,12 @@ REFUSAL_CODES = frozenset(
         "roadmap_not_approved",
         "roadmap_slice_unknown",
         "roadmap_without_slices",
+        "criteria_unconfirmed",
     }
 )
+
+#: The agent tool that records a criterion's confirmation, named in the gap so it can be acted on.
+CONFIRM_TOOL = "confirm_acceptance_criteria"
 
 
 @dataclass(frozen=True)
@@ -151,6 +159,7 @@ def check(
     approved_document_paths: Optional[AbstractSet[str]] = None,
     roadmaps: Optional[Mapping[str, RoadmapState]] = None,
     proposed_capabilities: Optional[AbstractSet[str]] = None,
+    confirmations: Optional[Mapping[str, str]] = None,
 ) -> List[Finding]:
     """Everything wrong with this document, not just the first thing.
 
@@ -175,6 +184,9 @@ def check(
 
     `proposed_capabilities` is every capability title a system map of the project proposes,
     casefolded (`spec_capability_links.proposed_titles`), for `is_capability_draft`.
+
+    `confirmations` maps a criterion key to the digest its confirmation was taken against
+    (`spec_criterion_confirmations.digests`). A key absent from it has no confirmation.
     """
     findings: List[Finding] = []
     # A capability states what the system does; the changes folded into it carry the tasks and the
@@ -373,7 +385,43 @@ def check(
                 )
             )
 
+    if payload.kind == "change-spec":
+        findings.extend(unconfirmed_criteria_findings(payload, confirmations or {}))
+
     return findings
+
+
+def unconfirmed_keys(payload: SpecPayload, confirmations: Mapping[str, str]) -> List[str]:
+    """The keys of the criteria with no current confirmation, in document order: none recorded,
+    or one taken against a different wording or guard flag (D2)."""
+    return [
+        criterion.key
+        for criterion in payload.acceptance_criteria
+        if confirmations.get(criterion.key) != digest_of_criterion(criterion)
+    ]
+
+
+def unconfirmed_criteria_findings(
+    payload: SpecPayload, confirmations: Mapping[str, str]
+) -> List[Finding]:
+    """`criteria_unconfirmed` while any criterion lacks a current confirmation
+    (`existing-behaviour-is-caught-before-the-build` FR-2, FR-4, FR-8). None for a document with no
+    criteria."""
+    keys = unconfirmed_keys(payload, confirmations)
+    if not keys:
+        return []
+    return [
+        Finding(
+            "criteria_unconfirmed",
+            "acceptance_criteria",
+            "no current confirmation for "
+            + ", ".join(repr(key) for key in keys)
+            + ": check each against the current code; one that already holds is marked "
+            "guard: true or rewritten so it fails until the change is built. Then record with "
+            f"{CONFIRM_TOOL} that it is new behaviour or a guard. A criterion reworded or with "
+            "its guard flag changed since its confirmation is confirmed again",
+        )
+    ]
 
 
 def split(findings: List[Finding]) -> Tuple[List[Finding], List[Finding]]:

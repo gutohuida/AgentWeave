@@ -35,6 +35,7 @@ from hub.scheduler import _compose_loop_briefing
 from hub.spec_lifecycle import Actor
 from hub.spec_payload import SCHEMA_VERSION
 
+from ._spec_confirmations import confirm_criteria
 from ._spec_versions import content_version
 
 PROJECT = "proj-test"
@@ -220,6 +221,7 @@ async def test_3_1_a_tasks_criteria_follow_its_requirements(app, auth_headers, a
         f"{BASE}/documents/close-exploration", params={"path": PATH}, headers=auth_headers
     )
     assert closed.status_code in (200, 409), closed.text
+    await confirm_criteria(PATH)
     moved = await app.post(
         f"{BASE}/documents/phase",
         params={"path": PATH, "to": "approved"},

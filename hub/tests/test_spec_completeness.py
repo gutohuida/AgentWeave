@@ -3,6 +3,8 @@
 from hub.spec_completeness import check
 from hub.spec_payload import SCHEMA_VERSION, validate_payload
 
+from ._spec_confirmations import all_confirmed
+
 
 def _payload(**overrides):
     base = {"schema_version": SCHEMA_VERSION, "kind": "change-spec", "title": "A change"}
@@ -29,7 +31,7 @@ def _codes(payload):
 
 
 def test_a_complete_document_has_no_findings():
-    assert check(_complete()) == []
+    assert check(_complete(), confirmations=all_confirmed(_complete())) == []
 
 
 def test_a_requirement_with_no_acceptance_criterion_is_an_orphan():
@@ -137,7 +139,7 @@ def test_a_task_naming_five_requirements_is_proposable():
         acceptance_criteria=_criteria(*keys),
         tasks=[{"key": "t1", "description": "Build it", "requirements": keys}],
     )
-    assert check(payload) == []
+    assert check(payload, confirmations=all_confirmed(payload)) == []
 
 
 def test_a_requirement_served_by_no_task_is_still_refused():
@@ -160,7 +162,7 @@ def test_the_same_document_split_into_two_and_two_proposes_cleanly():
             {"key": "t2", "description": "Build the second half", "requirements": ["c", "d"]},
         ],
     )
-    assert check(payload) == []
+    assert check(payload, confirmations=all_confirmed(payload)) == []
 
 
 # --- task-dependencies section 2: unresolved depends_on, cycles, unapproved imports ---

@@ -28,9 +28,10 @@ reinterpretation of every pin taken before it.
 from __future__ import annotations
 
 import hashlib
+import json
 import re
 import unicodedata
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 from .spec_payload import AcceptanceCriterion, Requirement, SpecPayload
 
@@ -114,3 +115,42 @@ def payload_digests(payload: SpecPayload, identifiers: Dict[str, str]) -> Dict[s
         for requirement in payload.requirements
         if requirement.key in identifiers
     }
+
+
+def criterion_digest(
+    requirement: Optional[str],
+    given: Optional[str],
+    when: Optional[str],
+    then: Optional[str],
+    guard: Any,
+) -> str:
+    """What one acceptance criterion says, for its confirmation
+    (`existing-behaviour-is-caught-before-the-build` D2).
+
+    sha256 of the canonical JSON of {requirement, given, when, then, guard}, each text normalized
+    as `semantic_digest`'s are. A confirmation counts only while this equals the criterion's digest
+    as the document now stands, so rewording it, moving it to another requirement or flipping its
+    guard flag makes it stale. `how_to_check` and `checked_by` are left out: they say how the
+    behaviour is shown, not what it is. Taken over plain values so the payload model and a stored
+    dict give one answer.
+    """
+    canonical = json.dumps(
+        {
+            "requirement": normalize(requirement),
+            "given": normalize(given),
+            "when": normalize(when),
+            "then": normalize(then),
+            "guard": guard is True,
+        },
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+    )
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def digest_of_criterion(criterion: AcceptanceCriterion) -> str:
+    """`criterion_digest` of a payload's criterion."""
+    return criterion_digest(
+        criterion.requirement, criterion.given, criterion.when, criterion.then, criterion.guard
+    )

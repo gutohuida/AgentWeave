@@ -59,6 +59,7 @@ from hub.db.models import (
     RunDivergence,
     Runner,
     SetupDismissal,
+    SpecCriterionConfirmation,
     SpecDocument,
     SpecDocumentEvent,
     SpecDocumentMerge,
@@ -117,6 +118,7 @@ PROJECT_SCOPED_TABLE_NAMES = [
     "spec_requirements",
     "spec_document_events",
     "spec_gap_acknowledgements",
+    "spec_criterion_confirmations",
     "spec_document_merges",
     "runs",
     "run_divergences",
@@ -410,6 +412,17 @@ async def _seed_full_project(session, project_id: str, tag: str) -> None:
             place="FR-1",
             reason="left on purpose",
             actor_kind="operator",
+        )
+    )
+    session.add(
+        SpecCriterionConfirmation(
+            id=f"speccfm-{tag}",
+            document_id=f"specdoc-{tag}",
+            project_id=project_id,
+            criterion_key="c1",
+            kind="new",
+            criterion_digest="0" * 64,
+            actor="claude-1",
         )
     )
     session.add(

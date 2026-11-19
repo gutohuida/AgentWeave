@@ -19,6 +19,7 @@ from hub.spec_payload import (
     validate_payload,
 )
 
+from ._spec_confirmations import confirm_criteria
 from ._spec_versions import content_version
 from .test_spec_documents_api import (
     BASE,
@@ -140,6 +141,7 @@ async def test_a_complete_document_is_approved_without_exploration_being_closed(
     submitted = await _submit(app, run_headers, _document())
     assert submitted.status_code == 200, submitted.text
 
+    await confirm_criteria(PATH)
     approved = await app.post(
         f"{BASE}/documents/phase",
         params={"path": PATH, "to": "approved"},
