@@ -62,13 +62,17 @@ def main():
     before = json.dumps(pool(), sort_keys=True)
     # pool-edit-refusals: an effort the model does not offer; removing the default naming no other.
     code, out = d.api("PATCH", f"{base}/agents/Builder", {"pool": [
-        {"runner_id": r["Haiku"], "effort": "high", "default": True},
+        {"runner_id": r["Haiku"], "effort": "bogus", "default": True},
         {"runner_id": r["Sonnet"], "effort": None, "default": False}]})
-    print("REFUSAL-1 effort Haiku high:", code, str(out)[:300])
+    print("REFUSAL-1 effort 'bogus' on Haiku:", code, str(out)[:300])
+    assert code in (400, 422) and "bogus" in str(out), (code, out)
     code2, out2 = d.api("PATCH", f"{base}/agents/Builder", {"pool": [
         {"runner_id": r["Sonnet"], "effort": None, "default": False}]})
     print("REFUSAL-2 remove default:", code2, str(out2)[:300])
-    print("pool unchanged:", json.dumps(pool(), sort_keys=True) == before)
+    assert code2 in (400, 422), (code2, out2)
+    unchanged = json.dumps(pool(), sort_keys=True) == before
+    print("pool unchanged:", unchanged)
+    assert unchanged
 
     code, out = d.api("POST", f"{base}/project/documents", {"title": "Three", "kind": "change-spec", "path": DOC})
     assert code == 201, (code, out)
