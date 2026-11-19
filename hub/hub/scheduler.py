@@ -80,6 +80,7 @@ from .utils import persist_accepted_event, persist_event, short_id
 
 if TYPE_CHECKING:
     from .requirement_gate import ApprovalHold
+    from .turn_scheduler import ScheduleResult
 
 logger = logging.getLogger(__name__)
 
@@ -1326,6 +1327,12 @@ class FiringFacts:
             ("project", project_id), lambda: self._session.get(Project, project_id)
         )
 
+    async def profiles_run_in_parallel(self, project_id: str) -> bool:
+        """The project's "profiles run in parallel" switch (`turn_scheduler.profiles_run_in_parallel`),
+        from the project row this holder already read."""
+        project = await self.project(project_id)
+        return bool(project is not None and project.profiles_run_in_parallel)
+
     async def loops(self, project_id: str) -> "list[Loop]":
         async def read() -> "list[Loop]":
             from .db.models import Build
@@ -1846,10 +1853,31 @@ async def _agents_a_loop_may_staff(
     if loop.spec_document_id is None:
         return []
     facts = facts or FiringFacts(session)
-    free = await _agents_that_are_free(session, loop.project_id, facts)
+    free = (
+        await _agents_a_flow_may_offer_in_parallel(loop.project_id, facts)
+        if await facts.profiles_run_in_parallel(loop.project_id)
+        else await _agents_that_are_free(session, loop.project_id, facts)
+    )
     withheld = await _agents_withheld_from_fresh_work(session, loop, facts)
     build = await facts.build_of_loop(loop)
     return [name for name in free if _pool_admits(name, withheld, build)]
+
+
+async def _agents_a_flow_may_offer_in_parallel(
+    project_id: str, facts: "FiringFacts"
+) -> "list[str]":
+    """A flow's pool while the project's switch is on (`one-profile-runs-many-turns-at-once-on-
+    different-tasks`, FR-4): every agent with a runner that no provider hold stops, in name order.
+
+    `_agents_that_are_free`'s other two halves, running and holding work, are what one run at a
+    time needed: with the switch on a profile starts a turn per task beside the ones it is running
+    (FR-2), so neither stops an offer. A hold still does, because it stops every new start (D5).
+    """
+    return [
+        record.name
+        for record in await facts.roster(project_id)
+        if record.has_runner and not record.held
+    ]
 
 
 async def _loop_task_an_idle_assignee_could_resume(
@@ -2539,7 +2567,16 @@ async def decide_firing(
         for name in {*free, default_agent}
         if name and await facts.is_read_only(loop.project_id, name)
     }
-    running = await facts.running_agents(loop.project_id)
+    # **While the project's switch is on, a flow's running agent is not a busy one**
+    # (`one-profile-runs-many-turns-at-once-on-different-tasks`, FR-4): it starts a turn per task
+    # beside the ones it runs, so being mid-turn stops no offer, and one firing may give one agent
+    # several tasks -- `taken` defers nobody's work but a review's. What still stops an offer is a
+    # turn on that very task (`held`, `attendance`) and a provider hold (`held_agents`). A
+    # documentless loop is one agent's one queue and keeps one turn at a time.
+    parallel = loop.spec_document_id is not None and await facts.profiles_run_in_parallel(
+        loop.project_id
+    )
+    running = set() if parallel else await facts.running_agents(loop.project_id)
     # The per-task counterpart of `running`, for design D8's refusal. Asked once before the walk
     # for the same two reasons the line above is: a wide firing asks it about several candidates,
     # and asking it per candidate would make this a third place the question is asked.
@@ -2836,7 +2873,7 @@ async def decide_firing(
                     surfaced_rows.add(task.id)
                     unstaffed.append((task.id, _abandoned_work_reason(task, agent, abandonment)))
                     continue
-                if agent in taken:
+                if agent in taken and not parallel:
                     deferred.append(
                         (
                             task.id,
@@ -2892,7 +2929,7 @@ async def decide_firing(
                         )
                     )
                     continue
-                if agent in taken:
+                if agent in taken and not parallel:
                     deferred.append(
                         (
                             task.id,
@@ -2931,6 +2968,12 @@ async def decide_firing(
                     ),
                     None,
                 )
+                if candidate is None and parallel:
+                    # Everybody free already has a selection; with the switch on one of them
+                    # takes another (FR-4), the first in the pool's order.
+                    candidate = next(
+                        (n for n in free if n not in read_only and n != judging_default), None
+                    )
                 if candidate is None:
                     # Width is bounded by available agents (design D5) and this is that bound
                     # being reached, not a fault. **For a documentless loop `free` is always empty**
@@ -4455,6 +4498,35 @@ async def _scheduled_job_runner(job_id: str) -> None:
         await scheduler._fire_job_by_id(job_id)
 
 
+async def _outcome_for_conversation(
+    project_id: str, result: "ScheduleResult", conversation_id: str
+) -> "ScheduleResult":
+    """What became of *conversation_id*'s input in the pass that answered *result*.
+
+    With the project's switch off a pass starts at most one turn and its answer is the firing's.
+    With it on (FR-4) one pass starts every conversation of the agent that can start, so a firing
+    giving one agent two tasks may find its second turn already started by the pass it ran for
+    the first, perhaps already finished, and its own pass then answering "queue is empty". The
+    pass's answer for the conversation stands where it has one; a conversation it does not name
+    whose input became a run began its turn in an earlier pass.
+    """
+    if result.by_conversation is None:
+        return result
+    if conversation_id in result.by_conversation:
+        return result.by_conversation[conversation_id]
+    async with async_session_factory() as session:
+        began = (
+            await session.execute(
+                select(Run.id)
+                .where(Run.project_id == project_id, Run.conversation_id == conversation_id)
+                .limit(1)
+            )
+        ).scalar_one_or_none()
+    if began is not None:
+        return type(result)(waiting_reason=None, terminal_failure=False)
+    return result
+
+
 class JobScheduler:
     """Wraps APScheduler for AI Job execution."""
 
@@ -5220,7 +5292,9 @@ class JobScheduler:
             # Never raises. A transient failure is retried by the Hub and comes back as a
             # non-terminal wait, which leaves the `JobRun` in progress: a firing that has not
             # started yet, not a failed one.
-            schedule_result = await schedule_accepted(project_id, acting_agent)
+            schedule_result = await _outcome_for_conversation(
+                project_id, await schedule_accepted(project_id, acting_agent), conversation_id
+            )
             turn_began = not no_turn_began(schedule_result)
             if not turn_began:
                 # This is the same terminal outcome startup reconciliation would eventually
@@ -5487,9 +5561,14 @@ class JobScheduler:
         from .turn_scheduler import no_turn_began, schedule_accepted
 
         for agent, run_id in staged:
+            async with async_session_factory() as session:
+                run = await session.get(JobRun, run_id)
+                conversation_id = run.conversation_id if run is not None else None
             # Never raises; a transient failure is retried by the Hub and leaves the selection's
             # `JobRun` in progress (F349, design D6).
             result = await schedule_accepted(project_id, agent)
+            if conversation_id is not None:
+                result = await _outcome_for_conversation(project_id, result, conversation_id)
             if no_turn_began(result):
                 async with async_session_factory() as session:
                     run = await session.get(JobRun, run_id)
