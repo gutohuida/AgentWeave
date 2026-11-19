@@ -131,6 +131,7 @@ export function AgentRunningSettings({
   permissionFallback,
   questionFallback,
   notices,
+  pool,
   children,
   onModelChange,
   onChange,
@@ -145,6 +146,8 @@ export function AgentRunningSettings({
   permissionFallback: number
   questionFallback: number
   notices?: React.ReactNode
+  /** The models it may run on (`PoolEditor`): given, it takes the single Model choice's place. */
+  pool?: React.ReactNode
   /** Groups only some providers have (Copilot's review agents and GitHub server). */
   children?: React.ReactNode
   onModelChange: (choice: ModelChoice, said: string) => void
@@ -153,6 +156,7 @@ export function AgentRunningSettings({
   return (
     <SettingsPage icon="terminal" title="Running" description={`What ${agent.name} runs on, and how long it holds a turn open for you.`}>
       {notices}
+      {pool ?? (
       <SettingsGroup title="Model">
         <SettingsRow
           label="Model"
@@ -180,6 +184,7 @@ export function AgentRunningSettings({
           }
         />
       </SettingsGroup>
+      )}
       {children}
       <SettingsGroup title="Waiting for you" description="How long a run holds its turn open before it gives up and carries on.">
         <SettingsRow

@@ -66,3 +66,12 @@
 .mock-build-summaries-frame { flex: 1; min-height: 0; }
 .mock-build-summaries-label { margin: 0; padding: 8px 14px; font-size: 11px; font-weight: 600; letter-spacing: .03em; text-transform: uppercase; color: var(--text-3); }
 .mock-build-summaries-spec .mock-build-summaries-label { padding-left: 28px; }
+
+/* Profile pools (spec a-profile-runs-each-task-on-a-runner-and-model-chosen-from-its-pool). */
+.mock-pool-page { max-width: 760px; margin: 0 auto; padding: 28px 24px; display: flex; flex-direction: column; gap: 18px; align-items: flex-start; }
+.mock-pool-lede { font-size: 13px; color: var(--text-2); }
+.mock-pool-composer { width: 100%; display: flex; flex-direction: column; gap: 6px; }
+.mock-pool-composer-title { font-size: 12px; font-weight: 500; color: var(--text-2); }
+.mock-pool-composer-box { border: 1px solid var(--border-hi); border-radius: 12px; background: var(--surface); padding: 10px 10px 6px; margin-top: 250px; }
+.mock-pool-composer-placeholder { font-size: 13px; color: var(--text-2); padding: 2px 4px 10px; }
+.mock-pool-composer-bar { display: flex; align-items: center; gap: 4px; }

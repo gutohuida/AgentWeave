@@ -28,6 +28,9 @@ export type MockRoute =
   | { kind: 'build'; buildId: string | null }
   /** The build view's two compact summaries in their real containers, side by side. */
   | { kind: 'build-summaries' }
+  /** A profile's pool (spec a-profile-runs-each-task-on-a-runner-and-model-chosen-from-its-pool):
+   *  the Build dialog's per-task model, and the composer's pool picker. */
+  | { kind: 'profile-pools'; view: 'build' | 'chat' }
 
 /** Project settings, one place under one name. Replaces Environment / Configuration / Settings. */
 export type SettingsSection =

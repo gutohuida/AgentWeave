@@ -1,14 +1,41 @@
 import * as React from 'react'
-import { Icon } from '@/components/common/Icon'
+import { Icon, ProviderMark } from '@/components/common/Icon'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { MenuSelect, type SelectOption } from '@/components/ui/menu'
 import { Segmented } from '@/components/ui/segmented'
+import { choiceKey, cliLabel, entryKey, entryLabel, findEntry, resolveEntry, type ResolvedSource } from '@/components/agents/pool/poolModel'
 import { agentColorVars } from '@/lib/agentColors'
 import { describeCron } from '@/lib/cron'
+import type { AgentPoolEntry, PoolEntryChoice } from '@/api/agentPool'
+import type { ModelCatalogResponse } from '@/api/modelCatalog'
+import type { Runner } from '@/api/runners'
 import type { BuildChoices, BuildDriver, BuildLanding, BuildLevel, SpecRecommendedBuild } from '@/api/spec'
 import '@/styles/build-plan.css'
+import '@/styles/profile-pool.css'
+
+/** What the dialog needs to offer each task a model from its agent's pool (`a-profile-runs-each-
+ *  task-on-a-runner-and-model-chosen-from-its-pool`, FR-6). Absent, the dialog names agents only. */
+export interface BuildPlanPools {
+  /** Each open agent's pool, by agent name. */
+  byAgent: Record<string, AgentPoolEntry[]>
+  /** The project's runners, to name a recommended entry that is in no pool. */
+  runners: Runner[]
+  catalog: ModelCatalogResponse | undefined
+}
+
+/** One explicit model pick, kept only while its task still names the agent it was picked for. */
+type EntryPick = { agent: string; key: string }
+
+interface ResolvedEntry {
+  agent: string
+  pool: AgentPoolEntry[]
+  entry: AgentPoolEntry | undefined
+  source: ResolvedSource
+  recommendedMissing: boolean
+  recommendedChoice: PoolEntryChoice | null
+}
 
 /** One agent the build can name: its name, and a muted second line (its model) where known. */
 export interface BuildPlanAgent {
@@ -70,6 +97,7 @@ export function BuildPlanDialog({
   agents,
   now,
   pullRequestLanding = false,
+  pools,
   isPending = false,
   error = null,
   onConfirm,
@@ -86,6 +114,8 @@ export function BuildPlanDialog({
   now: Date
   /** Whether the project has PR landing on: 'A pull request' is offered only then (FR-1). */
   pullRequestLanding?: boolean
+  /** Each agent's pool: given, every task's builder and checker also choose a model (FR-6). */
+  pools?: BuildPlanPools
   isPending?: boolean
   error?: string | null
   onConfirm: (choices: BuildChoices) => void
@@ -111,6 +141,8 @@ export function BuildPlanDialog({
       landing: recommended?.landing === 'pull_request' && !pullRequestLanding ? 'main' : (recommended?.landing ?? 'main'),
       taskBuilders: Object.fromEntries(tasks.map((t) => [t.key, isOpen(recBuilder(t.key)) ? recBuilder(t.key) : ''])),
       taskCheckers: Object.fromEntries(tasks.map((t) => [t.key, isOpen(recChecker(t.key)) ? recChecker(t.key) : ''])),
+      builderPicks: {} as Record<string, EntryPick>,
+      checkerPicks: {} as Record<string, EntryPick>,
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [recommended, tasks, agents, pullRequestLanding],
@@ -134,8 +166,24 @@ export function BuildPlanDialog({
         : ownWork.length
           ? `${ownWork.length === 1 ? 'One task has' : `${ownWork.length} tasks have`} the same agent building and checking.`
           : null
+  /** The entry a task's builder or checker runs on: an explicit pick for the agent it now names,
+   *  else the recommendation when that agent's pool holds it, else the agent's default (FR-6). */
+  const entryOf = (role: 'builder' | 'checker', key: string): ResolvedEntry => {
+    const agent = role === 'builder' ? builderOf(key) : checkerOf(key)
+    const pool = agent ? (pools?.byAgent[agent] ?? []) : []
+    const pick = (role === 'builder' ? plan.builderPicks : plan.checkerPicks)[key]
+    const recommendedChoice = (role === 'builder' ? recommended?.task_builder_entries : recommended?.task_checker_entries)?.[key] ?? null
+    const chosen = pick && pick.agent === agent ? pool.find((e) => entryKey(e) === pick.key) : undefined
+    return { agent, pool, ...resolveEntry(pool, chosen, recommendedChoice), recommendedChoice }
+  }
+  const entryDiffers = (key: string) =>
+    Boolean(pools) &&
+    (['builder', 'checker'] as const).some((role) => {
+      const e = entryOf(role, key)
+      return e.source === 'chosen' && findEntry(e.pool, e.recommendedChoice) !== undefined && choiceKey(e.recommendedChoice) !== (e.entry ? entryKey(e.entry) : '')
+    })
   const changed = tasks.filter(
-    (t) => plan.taskBuilders[t.key] !== initial.taskBuilders[t.key] || plan.taskCheckers[t.key] !== initial.taskCheckers[t.key],
+    (t) => plan.taskBuilders[t.key] !== initial.taskBuilders[t.key] || plan.taskCheckers[t.key] !== initial.taskCheckers[t.key] || entryDiffers(t.key),
   ).length
 
   function confirm() {
@@ -148,6 +196,17 @@ export function BuildPlanDialog({
       landing: plan.landing,
       task_builders: plan.taskBuilders,
       task_checkers: plan.taskCheckers,
+    }
+    if (pools) {
+      const entries = (role: 'builder' | 'checker'): Record<string, PoolEntryChoice> =>
+        Object.fromEntries(
+          tasks.flatMap((t) => {
+            const e = entryOf(role, t.key).entry
+            return e ? [[t.key, { runner_id: e.runner_id, effort: e.effort }]] : []
+          }),
+        )
+      choices.task_builder_entries = entries('builder')
+      if (plan.level !== 'fast') choices.task_checker_entries = entries('checker')
     }
     if (plan.driver === 'lead') choices.lead = plan.lead
     if (capValue !== undefined) choices.budget_cap_usd = capValue
@@ -337,6 +396,22 @@ export function BuildPlanDialog({
                   agentOptions={agentOptions}
                   onBuilder={(name) => set({ taskBuilders: { ...plan.taskBuilders, [task.key]: name } })}
                   onChecker={(name) => set({ taskCheckers: { ...plan.taskCheckers, [task.key]: name } })}
+                  entry={
+                    pools
+                      ? (role) => (
+                          <EntryChoice
+                            label={`${task.title}: ${role}’s model`}
+                            pools={pools}
+                            resolved={entryOf(role, task.key)}
+                            onPick={(key) => {
+                              const agent = role === 'builder' ? builderOf(task.key) : checkerOf(task.key)
+                              if (role === 'builder') set({ builderPicks: { ...plan.builderPicks, [task.key]: { agent, key } } })
+                              else set({ checkerPicks: { ...plan.checkerPicks, [task.key]: { agent, key } } })
+                            }}
+                          />
+                        )
+                      : undefined
+                  }
                 />
               ))}
             </div>
@@ -357,6 +432,59 @@ function Setting({ label, why, children }: { label: string; why?: string; childr
   )
 }
 
+/** Which of the agent's models a task's builder or checker runs on, under its agent (FR-6). */
+function EntryChoice({ label, pools, resolved, onPick }: { label: string; pools: BuildPlanPools; resolved: ResolvedEntry; onPick: (key: string) => void }) {
+  const { agent, pool, entry, recommendedMissing, recommendedChoice } = resolved
+  const { catalog } = pools
+  if (!agent) return <p className="aw-bp-why">Runs on that agent’s default model.</p>
+  if (pool.length === 0) return <p className="aw-bp-warn">{agent} has no models, so it cannot run.</p>
+  const recommendedEntry = findEntry(pool, recommendedChoice)
+  const runner = recommendedChoice ? pools.runners.find((r) => r.id === recommendedChoice.runner_id) : undefined
+  const recommendedLabel = recommendedEntry
+    ? entryLabel(catalog, recommendedEntry)
+    : runner
+      ? entryLabel(catalog, { cli: runner.cli, model: runner.model ?? null, effort: recommendedChoice?.effort ?? null })
+      : 'a model'
+  const differs = Boolean(recommendedEntry && entry && entryKey(entry) !== entryKey(recommendedEntry))
+  return (
+    <div className="aw-bp-entry">
+      {pool.length === 1 && entry ? (
+        <span className="aw-bp-entry-fact" title={`${agent} may run on this model only`}>
+          <ProviderMark provider={entry.cli} label={cliLabel(entry.cli)} />
+          {entryLabel(catalog, entry)}
+        </span>
+      ) : (
+        <MenuSelect<string>
+          label={label}
+          value={entry ? entryKey(entry) : ''}
+          onChange={onPick}
+          maxWidth={220}
+          options={pool.map((e) => ({
+            value: entryKey(e),
+            label: entryLabel(catalog, e),
+            icon: <ProviderMark provider={e.cli} label={cliLabel(e.cli)} />,
+            detail:
+              [e.default ? 'Default' : null, recommendedEntry && entryKey(e) === entryKey(recommendedEntry) ? 'Recommended' : null].filter(Boolean).join(' · ') ||
+              undefined,
+          }))}
+        />
+      )}
+      {recommendedMissing ? (
+        <p className="aw-bp-warn">
+          Recommended {recommendedLabel} is not one of {agent}’s models; it runs on the default.
+        </p>
+      ) : differs ? (
+        <p className="aw-bp-differs">
+          Recommended {recommendedLabel}
+          <button data-slot="link" type="button" className="aw-bp-reset" onClick={() => onPick(entryKey(recommendedEntry!))}>
+            Put back
+          </button>
+        </p>
+      ) : null}
+    </div>
+  )
+}
+
 function TaskRow({
   number,
   task,
@@ -372,6 +500,7 @@ function TaskRow({
   agentOptions,
   onBuilder,
   onChecker,
+  entry,
 }: {
   number: number
   task: BuildPlanTask
@@ -387,6 +516,8 @@ function TaskRow({
   agentOptions: (blank: string, current: string, recommended: string) => SelectOption<string>[]
   onBuilder: (name: string) => void
   onChecker: (name: string) => void
+  /** The model choice under each role's agent, when the build offers pools. */
+  entry?: (role: 'builder' | 'checker') => React.ReactNode
 }) {
   const effectiveBuilder = builder || defaultBuilder
   const same = checks && effectiveBuilder !== '' && effectiveBuilder === (checker || defaultChecker)
@@ -408,6 +539,7 @@ function TaskRow({
           maxWidth={220}
           options={agentOptions(fallback ? `Default (${fallback})` : role === 'builder' ? 'Any free agent' : 'Anyone but the builder', value, rec)}
         />
+        {entry ? entry(role) : null}
         {rec && !isOpen(rec) ? (
           <p className="aw-bp-warn">Recommended {rec} is not an open agent here.</p>
         ) : differs && rec ? (

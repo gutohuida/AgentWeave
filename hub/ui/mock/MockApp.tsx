@@ -36,6 +36,7 @@ function parseHash(): MockRoute {
   if (kind === 'conversation-trace') return { kind: 'conversation-trace', conversationId: a || null }
   if (kind === 'build') return { kind: 'build', buildId: a || null }
   if (kind === 'build-summaries') return { kind: 'build-summaries' }
+  if (kind === 'profile-pools') return { kind: 'profile-pools', view: a === 'chat' ? 'chat' : 'build' }
   return { kind: 'tab', tab: 'overview' }
 }
 
@@ -71,6 +72,8 @@ function toHash(route: MockRoute): string {
       return `build/${route.buildId ?? ''}`
     case 'build-summaries':
       return 'build-summaries'
+    case 'profile-pools':
+      return `profile-pools/${route.view}`
   }
 }
 
