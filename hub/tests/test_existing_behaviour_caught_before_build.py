@@ -176,8 +176,9 @@ async def test_check_approval_succeeds_and_lists_the_guard(
     app, auth_headers, run_headers, tmp_path  # noqa: F811
 ):
     await _written(app, auth_headers, run_headers)
-    confirmed = await _confirm(app, run_headers, ("already-holds", "guard"), ("brand-new", "new"))
-    assert confirmed.status_code == 200, confirmed.text
+    # the confirm route is asserted by the other checks; here it is setup only, so that today's
+    # code reaches the approval and fails at the `guards` assertion below
+    await _confirm(app, run_headers, ("already-holds", "guard"), ("brand-new", "new"))
 
     approved = await _approve(app, auth_headers, approve_anyway=True)
 
