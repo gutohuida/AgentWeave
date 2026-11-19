@@ -1580,6 +1580,22 @@ def _operations(*, can_admin_specs: bool = False) -> List[_Operation]:
             ),
         ),
         _Operation(
+            tool="confirm_acceptance_criteria",
+            args="path, confirmations",
+            method="POST",
+            path="/spec/documents/confirm-criteria",
+            fields=("path", "confirmations"),
+            required=("path", "confirmations"),
+            text=(
+                "record that you checked each acceptance criterion of an exploring change "
+                'document against the current code, as `[{"criterion": <key>, "kind": '
+                '"new" | "guard"}]`: a guard is one whose behaviour already holds and is '
+                "marked `guard: true`. Approval is refused until every criterion has a current "
+                "confirmation, and one goes stale when its criterion is reworded or its guard flag "
+                "changes."
+            ),
+        ),
+        _Operation(
             tool="list_checkpoints",
             args="agent=None",
             method="GET",

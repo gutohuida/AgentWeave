@@ -95,6 +95,7 @@ class PhaseError(RuntimeError):
         warnings: Optional[List[Dict[str, Any]]] = None,
         notes: Optional[List[Dict[str, Any]]] = None,
         acknowledged: Optional[List[Dict[str, Any]]] = None,
+        guards: Optional[List[Dict[str, Any]]] = None,
     ) -> None:
         self.code = code
         # Set only for `document_incomplete`: every reason the move is not yet possible.
@@ -106,6 +107,9 @@ class PhaseError(RuntimeError):
         # acknowledged (`ready-means-the-same-thing-to-the-author-and-the-operator`).
         self.notes: List[Dict[str, Any]] = list(notes or [])
         self.acknowledged: List[Dict[str, Any]] = list(acknowledged or [])
+        # An approval's refusal only: the criteria marked guards, as a successful approval lists
+        # them (`existing-behaviour-is-caught-before-the-build` D6). None for any other refusal.
+        self.guards: Optional[List[Dict[str, Any]]] = None if guards is None else list(guards)
         super().__init__(message)
 
 
@@ -423,6 +427,7 @@ async def transition(
     gaps: List[Dict[str, Any]] = []
     notes: List[Dict[str, Any]] = []
     acknowledged: List[Dict[str, Any]] = []
+    guards: List[Dict[str, Any]] = []
     if to_phase == APPROVED:
         # Required `workspace`: a caller with none cannot move a document at all, rather than
         # moving it unchecked (F207). Imported here because `spec_service` imports this module.
@@ -438,6 +443,7 @@ async def transition(
                 warnings=found.gaps + found.notes,
                 notes=found.notes,
                 acknowledged=found.acknowledged,
+                guards=found.guards,
             )
         if found.gaps and not approve_anyway:
             raise PhaseError(
@@ -449,8 +455,10 @@ async def transition(
                 warnings=found.gaps,
                 notes=found.notes,
                 acknowledged=found.acknowledged,
+                guards=found.guards,
             )
         gaps = found.gaps
+        guards = found.guards
         acknowledged = found.acknowledged
         # Told, never gating (F704): approval passes them without approve_anyway.
         notes = found.notes
@@ -489,6 +497,8 @@ async def transition(
             detail["notes"] = notes
         if acknowledged:
             detail["acknowledged"] = acknowledged
+        # The guards the operator approved, each a check the drive will not need to fail (D6).
+        detail["guards"] = guards
     if previous == CURRENT:
         detail["absorbed_by"] = absorbed_by
     return await record_event(session, document, kind="phase", actor=actor, detail=detail)

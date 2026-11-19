@@ -15,6 +15,7 @@ from hub.db.engine import async_session_factory
 from hub.db.models import Agent, Run
 from hub.spec_payload import SCHEMA_VERSION
 
+from ._spec_confirmations import confirm_criteria
 from ._spec_versions import content_version
 
 BASE = "/api/v1/projects/proj-test/project"
@@ -74,6 +75,7 @@ async def make_document(app, auth_headers, run_headers):
     )
     assert created.status_code == 201, created.text
     await submit(app, run_headers)
+    await confirm_criteria(PATH)
 
 
 async def record(app, auth_headers, **extra):

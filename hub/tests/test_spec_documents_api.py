@@ -19,6 +19,7 @@ from hub.spec_documents import parse_hub, parse_stored
 from hub.spec_payload import SCHEMA_VERSION
 
 from ._routing import iter_api_routes
+from ._spec_confirmations import confirm_criteria
 from ._spec_versions import content_version
 
 BASE = "/api/v1/projects/proj-test/project"
@@ -168,7 +169,8 @@ async def test_an_agent_submission_renders_the_document(app, auth_headers, run_h
     assert response.status_code == 200, response.text
     body = response.json()
     assert body["identifiers"] == {"alpha": "FR-1"}
-    assert body["blocking"] == []
+    # A first save's criteria have no confirmation yet; nothing else blocks.
+    assert [b["code"] for b in body["blocking"]] == ["criteria_unconfirmed"]
     assert "It responds within 200ms" in (tmp_path / PATH).read_text(encoding="utf-8")
 
 
@@ -305,6 +307,7 @@ async def test_an_agent_cannot_approve_a_document(app, auth_headers, run_headers
     assert smuggled.status_code == 422
 
     # And the operator's phase route does not accept a run credential.
+    await confirm_criteria(PATH)
     attempted = await app.post(
         f"{BASE}/documents/phase",
         params={"path": PATH, "to": "approved"},
@@ -392,6 +395,7 @@ async def test_the_full_operator_path_reaches_approved(app, auth_headers, run_he
     await _create(app, auth_headers)
     await _place_at_the_end()
     await _submit(app, run_headers, _document())
+    await confirm_criteria(PATH)
     await app.post(
         f"{BASE}/documents/close-exploration", params={"path": PATH}, headers=auth_headers
     )
@@ -430,6 +434,7 @@ async def test_an_approved_document_refuses_further_submissions(
         f"{BASE}/documents/close-exploration", params={"path": PATH}, headers=auth_headers
     )
     await app.post(f"{BASE}/documents/check", params={"path": PATH}, headers=auth_headers)
+    await confirm_criteria(PATH)
     await app.post(
         f"{BASE}/documents/phase",
         params={"path": PATH, "to": "approved"},
@@ -457,6 +462,7 @@ async def test_a_reopened_approved_document_checks_again_without_closing_explora
         f"{BASE}/documents/close-exploration", params={"path": PATH}, headers=auth_headers
     )
     await app.post(f"{BASE}/documents/check", params={"path": PATH}, headers=auth_headers)
+    await confirm_criteria(PATH)
     await app.post(
         f"{BASE}/documents/phase",
         params={"path": PATH, "to": "approved"},
@@ -495,6 +501,7 @@ async def test_an_illegal_transition_is_refused(app, auth_headers, tmp_path):
         headers=auth_headers,
     )
     assert archived.status_code == 200, archived.text
+    await confirm_criteria(PATH)
     response = await app.post(
         f"{BASE}/documents/phase",
         params={"path": PATH, "to": "approved"},
@@ -624,6 +631,7 @@ async def test_document_events_are_append_only_with_no_route_to_change_or_delete
     assert len(before) >= 3, "create, submit and close-exploration must each leave a row"
     snapshot = {event.id: (event.kind, event.actor, event.origin, event.detail) for event in before}
 
+    await confirm_criteria(PATH)
     await app.post(
         f"{BASE}/documents/phase",
         params={"path": PATH, "to": "approved"},

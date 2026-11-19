@@ -1,1 +1,0 @@
-import{ak as a,de as s,E as o}from"./index-D2vjEO4N.js";let n=0;const r=o(e=>({request:null,ask:t=>e({request:{...t,nonce:++n}}),clear:()=>e({request:null})}));function u(e,t){r.getState().ask(t),a(s(e,"activity"))}export{u as o,r as u};

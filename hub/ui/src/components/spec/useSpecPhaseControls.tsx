@@ -35,6 +35,7 @@ import {
   useAcknowledgeSpecGap,
   useCheckSpecDocument,
   type SpecAcknowledgedGap,
+  type SpecGuard,
   useDeleteSpecDocument,
   useSetSpecJourney,
   useSetSpecPhase,
@@ -70,6 +71,8 @@ interface Refusal {
   overridable: boolean
   /** Gaps already acknowledged, listed beside the refusal. */
   acknowledged?: SpecAcknowledgedGap[]
+  /** The criteria marked guards, listed beside a refusal as Check lists them. */
+  guards?: SpecGuard[]
   /** `document_changed`: the document changed since it was loaded (`approve-what-was-seen`). */
   stale?: boolean
 }
@@ -98,6 +101,7 @@ function readRefusal(error: unknown, fallback: string): Refusal {
           blocking?: SpecBlockingFinding[]
           warnings?: SpecBlockingFinding[]
           acknowledged?: SpecAcknowledgedGap[]
+          guards?: SpecGuard[]
         }
       }
     ).detail
@@ -111,10 +115,10 @@ function readRefusal(error: unknown, fallback: string): Refusal {
     }
     const gaps = detail?.warnings ?? []
     if (detail?.code === 'approval_warnings' && gaps.length) {
-      return { blocking: [], gaps, overridable: true, acknowledged: detail.acknowledged }
+      return { blocking: [], gaps, overridable: true, acknowledged: detail.acknowledged, guards: detail.guards }
     }
     if (detail?.blocking?.length) {
-      return { blocking: detail.blocking, gaps, overridable: false, acknowledged: detail.acknowledged }
+      return { blocking: detail.blocking, gaps, overridable: false, acknowledged: detail.acknowledged, guards: detail.guards }
     }
   } catch {
     // not JSON: fall through to the readable message
@@ -215,6 +219,8 @@ export function useSpecPhaseControls(
   const [acknowledgedAnswer, setAcknowledged] = useState<SpecAcknowledgedGap[] | null>(null)
   // What an approval told and did not gate on (F704: an unclaimed roadmap slice).
   const [approvalNotes, setApprovalNotes] = useState<SpecBlockingFinding[]>([])
+  // The criteria marked guards, as Check, a refusal and an approval answer them (FR-5).
+  const [guards, setGuards] = useState<SpecGuard[]>([])
   const [confirmingArchive, setConfirmingArchive] = useState(false)
   const [archiveRefusal, setArchiveRefusal] = useState<string | null>(null)
   const [startingFlow, setStartingFlow] = useState(false)
@@ -306,6 +312,7 @@ export function useSpecPhaseControls(
     setBlocking(refusal.blocking)
     setGaps(refusal.gaps)
     setAcknowledged(refusal.acknowledged ?? [])
+    setGuards(refusal.guards ?? [])
     setGapsOverridable(refusal.overridable)
     // The page then shows what the document holds now; the operator reads it and approves again.
     if (refusal.stale) void reloadSpec()
@@ -317,6 +324,7 @@ export function useSpecPhaseControls(
     setGapsOverridable(false)
     setAcknowledged(null)
     setApprovalNotes([])
+    setGuards([])
     setCheckedClean(false)
     setCheckedOnce(false)
     setBuildMessages([])
@@ -333,6 +341,7 @@ export function useSpecPhaseControls(
       setBlocking(result.blocking ?? [])
       setGaps(result.warnings ?? [])
       setAcknowledged(result.acknowledged ?? [])
+      setGuards(result.guards ?? [])
       setCheckedClean((result.blocking ?? []).length === 0 && (result.warnings ?? []).length === 0)
     } catch (error) {
       // 422 (no payload / payload invalid) is said, not swallowed.
@@ -368,6 +377,7 @@ export function useSpecPhaseControls(
         onSuccess: (result) => {
           setApprovalNotes(result.approval_notes ?? [])
           setAcknowledged(result.acknowledged ?? [])
+          setGuards(result.guards ?? [])
         },
         // F207: approval runs the completeness checks again. Gaps alone answer `approval_warnings`,
         // which Approve anyway gets past; a refusal answers `document_incomplete`; a document that
@@ -394,6 +404,7 @@ export function useSpecPhaseControls(
           setBuilding(null)
           setApprovalNotes(result.approval_notes ?? [])
           setAcknowledged(result.acknowledged ?? [])
+          setGuards(result.guards ?? [])
           setBuildMessages(buildOutcomeMessages(result.build_outcome))
         },
         // Refused exactly as Approve is (FR-7): the gaps and Approve anyway show in the header.
@@ -835,6 +846,21 @@ export function useSpecPhaseControls(
       </div>
     ) : null
 
+  // Each criterion marked a guard, by key and its requirement: a check the drive need not fail.
+  const guardList =
+    guards.length > 0 ? (
+      <div className="aw-spec-message" data-testid="approval-guards">
+        <span className="aw-spec-message-text">Guards (behaviour the code already has):</span>
+        <ul>
+          {guards.map((guard) => (
+            <li key={guard.criterion} data-testid={`approval-guard-${guard.criterion}`}>
+              <code>{guard.criterion}</code> — {guard.requirement}
+            </li>
+          ))}
+        </ul>
+      </div>
+    ) : null
+
   const notes =
     approvalNotes.length > 0 ? (
       <div className="aw-spec-message" data-testid="approval-notes">
@@ -896,6 +922,7 @@ export function useSpecPhaseControls(
       {gapList}
       {inlineAck}
       {acknowledgedList}
+      {guardList}
       {notes}
       {overridden}
       {blockingList}
@@ -973,6 +1000,9 @@ export function useSpecPhaseControls(
       body: acknowledgedList,
       defaultOpen: true,
     })
+  }
+  if (guardList) {
+    notices.push({ id: 'approval-guards', tone: 'info', summary: `${plural(guards.length, 'guard', 'guards')}`, body: guardList, defaultOpen: true })
   }
   if (notes) {
     notices.push({ id: 'approval-notes', tone: 'info', summary: `Approved. For your information: ${plural(approvalNotes.length, 'note', 'notes')}`, body: notes })

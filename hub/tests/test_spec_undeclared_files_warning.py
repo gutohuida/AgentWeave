@@ -10,6 +10,8 @@ from hub.db.engine import async_session_factory
 from hub.db.models import Conversation, Run
 from hub.spec_payload import SCHEMA_VERSION
 
+from ._spec_confirmations import confirm_criteria
+
 AGENT_DOCS = "/api/v1/agent-actions/spec/documents"
 CODE = "undeclared_task_files"
 
@@ -58,9 +60,12 @@ def _doc(*specs):
 async def _submit(app, headers, payload):
     created = await app.post(f"{AGENT_DOCS}/create", json={}, headers=headers)
     assert created.status_code == 201, created.text
-    response = await app.post(
-        AGENT_DOCS, json={"path": created.json()["path"], "document": payload}, headers=headers
-    )
+    path = created.json()["path"]
+    response = await app.post(AGENT_DOCS, json={"path": path, "document": payload}, headers=headers)
+    assert response.status_code == 200, response.text
+    # Its criteria confirmed and saved again, so `blocking` holds only what the payload causes.
+    await confirm_criteria(path)
+    response = await app.post(AGENT_DOCS, json={"path": path, "document": payload}, headers=headers)
     assert response.status_code == 200, response.text
     return response.json()
 

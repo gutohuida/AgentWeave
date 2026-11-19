@@ -1,4 +1,4 @@
-﻿# ruff: noqa: F811 -- `author_headers` is a fixture imported to be requested by name
+# ruff: noqa: F811 -- `author_headers` is a fixture imported to be requested by name
 """`tickets-have-readable-ids`: a task's `BPS-3` beside its stored `task-<hex>`."""
 
 import asyncio
@@ -52,6 +52,7 @@ from hub.scheduler import (
 
 from . import test_every_task_goes_to_its_people as people
 from ._routing import iter_api_routes
+from ._spec_confirmations import confirm_criteria
 from .test_a_build_has_a_driver_a_level_and_its_people import (
     AGENT_DOCS,
     BASE,
@@ -183,6 +184,7 @@ async def test_ac_mint_a_specs_tasks_take_its_acronym_and_a_loose_task_the_proje
     )
     assert saved.status_code == 200, saved.text
     read = await app.get(f"{BASE}/spec", params={"path": PATH}, headers=auth_headers)
+    await confirm_criteria(PATH)
     approved = await app.post(
         f"{BASE}/documents/phase",
         params={"path": PATH, "to": "approved"},
@@ -314,6 +316,7 @@ async def test_ac_stable_rename_reassign_link_and_archive_change_nothing(
     assert renamed.status_code == 200, renamed.text
     await still_read()
 
+    await confirm_criteria(PATH)
     read = await app.get(f"{BASE}/spec", params={"path": PATH}, headers=auth_headers)
     for phase, body in (
         (
@@ -429,6 +432,7 @@ async def test_ac_edit_takes_effect_until_the_first_task_and_is_refused_after(
     assert saved.status_code == 200, saved.text
     # The operator chose it, so a title change does not re-derive it.
     read = await app.get(f"{BASE}/spec", params={"path": PATH}, headers=auth_headers)
+    await confirm_criteria(PATH)
     approved = await app.post(
         f"{BASE}/documents/phase",
         params={"path": PATH, "to": "approved"},

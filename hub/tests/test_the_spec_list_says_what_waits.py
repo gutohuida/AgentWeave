@@ -12,6 +12,8 @@ from hub.db.engine import async_session_factory
 from hub.db.models import Build, Run, SpecDocument, SpecDocumentEvent
 from hub.spec_payload import SCHEMA_VERSION
 
+from ._spec_confirmations import confirm_criteria
+
 BASE = "/api/v1/projects/proj-test/project"
 AGENT = "/api/v1/agent-actions/spec/documents"
 ROADMAP = "spec/changes/the-roadmap/spec.json"
@@ -97,6 +99,7 @@ async def test_the_list_route_says_each_documents_roadmap_and_what_waits(
         _change("Named", roadmap=named),
     )
     await _make(app, auth_headers, run_headers, "spec/changes/clean/spec.json", _change("Clean"))
+    await confirm_criteria("spec/changes/clean/spec.json")
     # A real approval gap: a requirement no acceptance criterion covers.
     await _make(
         app,

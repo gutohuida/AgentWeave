@@ -14,6 +14,7 @@ from hub.db.engine import async_session_factory
 from hub.db.models import SpecDocument
 from hub.spec_payload import SCHEMA_VERSION
 
+from ._spec_confirmations import confirm_criteria
 from ._spec_versions import content_version
 from .test_spec_tidy import _agent
 
@@ -137,6 +138,7 @@ async def _approve(app, auth_headers, path):
     await app.post(
         f"{BASE}/documents/close-exploration", params={"path": path}, headers=auth_headers
     )
+    await confirm_criteria(path)
     return await app.post(
         f"{BASE}/documents/phase",
         params={"path": path, "to": "approved"},
@@ -261,6 +263,14 @@ async def test_a_draft_a_map_proposes_is_ready_checked_approved_and_folded(
         headers=auth_headers,
     )
     assert stepped.status_code == 200, stepped.text
+    submitted = await app.post(
+        AGENT_DOCS,
+        json={"path": BILLING, "document": _draft(capabilities=_creates("Billing"))},
+        headers=writer,
+    )
+    assert submitted.status_code == 200, submitted.text
+    # Its criteria are confirmed, and saved again as a confirmed document is.
+    await confirm_criteria(BILLING)
     submitted = await app.post(
         AGENT_DOCS,
         json={"path": BILLING, "document": _draft(capabilities=_creates("Billing"))},

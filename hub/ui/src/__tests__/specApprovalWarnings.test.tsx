@@ -305,3 +305,37 @@ describe('Check findings are plain words too (AW-127)', () => {
     expect(found[1].message).toContain('ac-1')
   })
 })
+
+describe('SpecPhaseBar approval guards (existing-behaviour-is-caught-before-the-build, FR-5)', () => {
+  const guards = [{ criterion: 'already-holds', requirement: 'FR-1' }]
+
+  it('Check lists each guard criterion by key with its requirement identifier', async () => {
+    check.mockResolvedValueOnce({ blocking: [], warnings: [], acknowledged: [], guards, ready: true })
+    renderBar()
+    await userEvent.click(screen.getByRole('button', { name: 'Check' }))
+
+    const list = await screen.findByTestId('approval-guards')
+    const line = within(list).getByTestId('approval-guard-already-holds')
+    expect(line).toHaveTextContent('already-holds')
+    expect(line).toHaveTextContent('FR-1')
+  })
+
+  it('an approval lists the guards it approved', async () => {
+    setPhase.mockImplementationOnce((_vars: unknown, options: { onSuccess: (r: unknown) => void }) => {
+      options.onSuccess({ ...doc({ phase: 'approved' }), guards })
+    })
+    renderBar()
+    await userEvent.click(screen.getByRole('button', { name: 'Approve' }))
+
+    const line = await screen.findByTestId('approval-guard-already-holds')
+    expect(line).toHaveTextContent('FR-1')
+  })
+
+  it('lists no guards when the Hub returns none', async () => {
+    check.mockResolvedValueOnce({ blocking: [], warnings: [], ready: true })
+    renderBar()
+    await userEvent.click(screen.getByRole('button', { name: 'Check' }))
+    await screen.findByText(/nothing blocks approval/i)
+    expect(screen.queryByTestId('approval-guards')).not.toBeInTheDocument()
+  })
+})

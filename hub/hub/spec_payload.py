@@ -658,7 +658,8 @@ def _lift_read_view(raw: Dict[str, Any]) -> Dict[str, Any]:
             continue
         del requirement["acceptance_criteria"]
         for criterion in nested:
-            criterion = {**criterion}
+            # A read's confirmation is the Hub's record beside the document, not part of it (D1).
+            criterion = {k: v for k, v in criterion.items() if k != "confirmation"}
             named = criterion.setdefault("requirement", requirement.get("key"))
             if named != requirement.get("key"):
                 raise PayloadError(
