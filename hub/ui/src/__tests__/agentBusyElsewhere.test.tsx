@@ -148,3 +148,52 @@ describe('a conversation whose agent is busy in another conversation (F844)', ()
     expect(await screen.findByRole('button', { name: /^stop/i })).toBeInTheDocument()
   })
 })
+
+describe('a profile with two running runs (FR-10, FR-11)', () => {
+  const agentRunningTwice: AgentSummary = {
+    ...agentRunningElsewhere,
+    // Oldest first, as the route returns them; `running_conversation_id` is the newest's.
+    running_conversation_id: 'conv-busy',
+    running_runs: [
+      { run_id: 'run-own', conversation_id: 'conv-own', task_id: 'task-a', started_at: '2026-08-02T10:00:00Z' },
+      { run_id: 'run-busy', conversation_id: 'conv-busy', task_id: 'task-b', started_at: '2026-08-02T10:01:00Z' },
+    ],
+  }
+
+  beforeEach(() => {
+    recordedEntries = []
+    fetchMock.mockReset()
+    useConfigStore.setState({
+      apiKey: 'aw_live_TESTKEY',
+      hubUrl: 'http://hub.test',
+      selectedProjectId: 'proj-test',
+      isConfigured: true,
+      bootstrapState: 'ready',
+    })
+  })
+
+  it('shows each conversation as running from its own run, the older one too', async () => {
+    render(<AgentOutputPanel agent={agentRunningTwice} conversationId={conversation.id} />)
+
+    expect(await screen.findByRole('button', { name: /^stop/i })).toBeInTheDocument()
+    expect(screen.queryByTestId('conversation-busy-elsewhere')).not.toBeInTheDocument()
+  })
+
+  it('stops the run of the conversation on screen, not the newest', async () => {
+    fetchMock.mockResolvedValue(new Response('{}', { status: 200 }))
+    render(<AgentOutputPanel agent={agentRunningTwice} conversationId={conversation.id} />)
+
+    ;(await screen.findByRole('button', { name: /^stop/i })).click()
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled())
+    const stopCall = fetchMock.mock.calls.find(([url]) => String(url).includes('/stop'))
+    expect(String(stopCall?.[0])).toContain('/agent/claude/stop?run_id=run-own')
+  })
+
+  it('reads a conversation with no run of its own as busy elsewhere', async () => {
+    const third = { ...agentRunningTwice, running_runs: agentRunningTwice.running_runs!.slice(1) }
+    render(<AgentOutputPanel agent={third} conversationId={conversation.id} />)
+
+    await waitFor(() => expect(screen.getByTestId('conversation-busy-elsewhere')).toBeInTheDocument())
+    expect(screen.queryByRole('button', { name: /^stop/i })).not.toBeInTheDocument()
+  })
+})

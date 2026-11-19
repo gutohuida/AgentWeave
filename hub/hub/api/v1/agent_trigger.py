@@ -32,7 +32,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Awaitable, Callable, Dict, List, Optional, Sequence, Tuple
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import select
 from sqlalchemy.exc import OperationalError
@@ -2963,35 +2963,62 @@ class StopAgentResponse(BaseModel):
 @router.post("/{agent}/stop", response_model=StopAgentResponse)
 async def stop_agent_run(
     agent: str,
+    run_id: Optional[str] = Query(default=None, max_length=64),
+    conversation_id: Optional[str] = Query(default=None, max_length=64),
     project: Tuple[str, str] = Depends(get_project),
     session: AsyncSession = Depends(get_session),
 ):
-    """Interrupt the agent's in-progress direct-spawn run, if any.
+    """Interrupt one of the agent's in-progress direct-spawn runs.
 
     Force-terminates the owned PTY process. `_execute_run`'s own read/wait loop observes
     the exit and does the actual status/broadcast bookkeeping (see `_stop_requested` above)
     — this endpoint only signals intent and terminates the process, it does not itself mark
     the Run row, since that must happen only after the process has actually exited.
+
+    `run_id` or `conversation_id` names which run (`one-profile-runs-many-turns-at-once-on-
+    different-tasks`, FR-10): with profiles running in parallel an agent can have several, and
+    stopping "the newest" stopped whichever turn happened to start last, not the one the operator
+    pressed Stop in. With neither named, the agent's only running run is stopped; with more than
+    one, nothing is stopped and the answer says to name one.
     """
     from sqlalchemy import select
 
     project_id, _ = project
 
-    result = await session.execute(
-        select(Run)
-        .where(Run.project_id == project_id, Run.agent == agent, Run.status == "running")
-        .order_by(Run.started_at.desc())
-        .limit(1)
+    query = select(Run).where(
+        Run.project_id == project_id, Run.agent == agent, Run.status == "running"
     )
-    run = result.scalar_one_or_none()
-    if run is None:
+    if run_id is not None:
+        query = query.where(Run.id == run_id)
+    if conversation_id is not None:
+        query = query.where(Run.conversation_id == conversation_id)
+    running = list((await session.execute(query.order_by(Run.started_at.desc()))).scalars().all())
+    if not running:
         # F192: after the run lookup, so a removed agent's still-running turn can be stopped; a
         # name nothing is recorded under is a typo, not an idle agent.
         await require_known_agent(session, project_id, agent)
+        if run_id is not None or conversation_id is not None:
+            named = f"run {run_id}" if run_id is not None else f"conversation {conversation_id}"
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"{agent} has no run in progress in {named}.",
+            )
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"{agent} has no run in progress.",
         )
+    if len(running) > 1:
+        # Only reachable with no target named (a run id names one run, and a conversation has at
+        # most one running turn): guessing would stop a turn the operator did not choose.
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                f"{agent} has {len(running)} runs in progress "
+                f"({', '.join(r.id for r in running)}); name the one to stop with run_id "
+                "or conversation_id."
+            ),
+        )
+    run = running[0]
 
     pty = run_liveness.active_ptys.get(run.id)
     if pty is not None:

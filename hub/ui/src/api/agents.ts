@@ -8,6 +8,14 @@ import { BACKSTOP_MS } from '@/lib/backstopPoll'
 import { PERMISSION_MODE_CONTROL } from './modelCatalog'
 import type { ReachGrants } from './projects'
 
+/** One of an agent's running runs (`AgentSummary.running_runs`). */
+export interface RunningRun {
+  run_id: string
+  conversation_id: string | null
+  task_id: string | null
+  started_at: string | null
+}
+
 export interface AgentSummary {
   name: string
   /** What this agent is for, in the operator's words. Absent when unset — never "". */
@@ -27,6 +35,9 @@ export interface AgentSummary {
    *  conversation's: a screen on another of its conversations reads this to tell the turn is
    *  elsewhere (F844). Null/absent with no run, a run that has no conversation, or an older Hub. */
   running_conversation_id?: string | null
+  /** Every running run of this agent, oldest first, each with its conversation and task (FR-11):
+   *  with profiles running in parallel there can be several. Absent from an older Hub. */
+  running_runs?: RunningRun[]
   runner_options?: Record<string, unknown>  // Runner-specific options (e.g., memory for Codex)
   color_index?: number | null  // Stable palette index, assigned once at registration
   runner_id?: string | null  // Bound Runner record, if any (runner-agent-charter-separation)
