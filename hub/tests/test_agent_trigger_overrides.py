@@ -11,6 +11,7 @@ from sqlalchemy import select
 from hub.db.engine import async_session_factory
 from hub.db.models import Run
 from hub.sse import sse_manager
+from tests._pool import add_pool_entry
 from tests.test_agent_trigger import (
     _await_background_run,
     _bind_codex_exec_runner,
@@ -86,6 +87,10 @@ async def test_a_valid_override_is_applied_to_the_spawned_command(app, auth_head
     )
     assert sync.status_code == 200
     await bind_runner("override-valid", cli="claude", model="claude-sonnet-5")
+    # A chat chooses an entry of its pool (FR-9 of the profile-pools change): Opus high is one.
+    await add_pool_entry(
+        app, auth_headers, "override-valid", cli="claude", model="claude-opus-5", effort="high"
+    )
 
     fake_spawn = _fake_pty(
         ['{"type":"result","subtype":"success","is_error":false,"session_id":"s"}\n']
@@ -121,6 +126,7 @@ async def test_an_override_persists_on_the_conversation_and_survives_reload(
     )
     assert sync.status_code == 200
     await bind_runner("override-persist", cli="claude")
+    await add_pool_entry(app, auth_headers, "override-persist", effort="high")
 
     fake_spawn = _fake_pty(
         ['{"type":"result","subtype":"success","is_error":false,"session_id":"s"}\n']
@@ -146,6 +152,7 @@ async def test_an_override_persists_on_the_conversation_and_survives_reload(
     assert conversations.status_code == 200
     body = conversations.json()
     assert len(body) == 1
+    # An entry on the default's runner is stored as the chat's choice always was (FR-9).
     assert body[0]["runtime_overrides"] == {"effort": "high"}
 
 
@@ -160,6 +167,7 @@ async def test_a_new_conversation_does_not_inherit_a_previous_conversations_over
     )
     assert sync.status_code == 200
     await bind_runner("override-fresh", cli="claude")
+    await add_pool_entry(app, auth_headers, "override-fresh", effort="high")
 
     # Two separate PtySession.spawn mocks — each returns its own session object, so the
     # second call's read loop doesn't hit the first call's already-exhausted side_effect
@@ -277,6 +285,11 @@ async def test_a_conversation_whose_model_changed_attributes_usage_per_turn(
     # Exercised through the `exec` transport (its spawn is what this test mocks), which codex
     # now reaches only by explicit opt-out.
     await _bind_codex_exec_runner(app, auth_headers)("model-switch")
+    # Two entries of the pool on the same CLI: a started chat may move between them (FR-9).
+    for model in ("gpt-5.6-terra", "gpt-5.6-luna"):
+        await add_pool_entry(
+            app, auth_headers, "model-switch", cli="codex", model=model, flags=["--no-app-server"]
+        )
 
     status = await app.get("/api/v1/projects/proj-test/status", headers=auth_headers)
     project_id = status.json()["project_id"]
@@ -383,6 +396,7 @@ async def test_a_config_style_override_reaches_the_app_server_transport(
     )
     assert sync.status_code == 200
     await bind_runner("override-appserver", cli="codex")
+    await add_pool_entry(app, auth_headers, "override-appserver", effort="xhigh")
 
     fake_run_turn = _fake_run_turn()
     with patch("hub.codex_appserver.run_turn", fake_run_turn):  # noqa: SIM117

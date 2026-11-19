@@ -21,6 +21,8 @@ import { MODEL_COMMAND, resolveTriggerResults, type SpecReferenceTarget } from '
 import { findSpecReferences, formatSpecReference, type SpecReference } from '@/lib/specReference'
 import { ComposerTriggerMenu, type ComposerTriggerMenuItem } from './ComposerTriggerMenu'
 import { ComposerModelControls } from './ComposerModelControls'
+import { chatChoiceOverrides, chatEntry } from './pool/poolModel'
+import type { AgentPoolEntry } from '@/api/agentPool'
 import { ComposerSpecControl } from './ComposerSpecControl'
 
 export const COMPOSER_MIN_ROWS = 3
@@ -74,6 +76,11 @@ export interface ComposerProps {
    * message only when non-empty. */
   pendingOverrides?: Record<string, string>
   onPendingOverridesChange?: (overrides: Record<string, string>) => void
+  /** The agent's pool: given and not empty, the composer offers only its entries (FR-9 of
+   *  `a-profile-runs-each-task-on-a-runner-and-model-chosen-from-its-pool`). */
+  pool?: AgentPoolEntry[]
+  /** The CLI this conversation started on; null before its first turn. */
+  poolStartedOn?: string | null
   /** Why this composer cannot send yet. Set on the new-conversation surface started from the
    *  recency view, where the message cannot go anywhere until an agent is chosen. Stated rather
    *  than left to a silently dead button. */
@@ -126,6 +133,8 @@ export function Composer({
   effectiveControls = {},
   pendingOverrides = {},
   onPendingOverridesChange = () => undefined,
+  pool,
+  poolStartedOn = null,
   disabledReason,
   onOpenSpecPicker,
   onStartExploration,
@@ -539,6 +548,11 @@ export function Composer({
             onChangeControl={(controlId, value) =>
               onPendingOverridesChange({ ...pendingOverrides, [controlId]: value })
             }
+            pool={pool}
+            agentName={agent}
+            currentEntry={pool && pool.length > 0 ? chatEntry(pool, pendingOverrides) : undefined}
+            poolStartedOn={poolStartedOn}
+            onChooseEntry={(entry) => onPendingOverridesChange(chatChoiceOverrides(pendingOverrides, entry))}
           />
           {onOpenSpecPicker && onStartExploration && onStopExploring && (
             <ComposerSpecControl

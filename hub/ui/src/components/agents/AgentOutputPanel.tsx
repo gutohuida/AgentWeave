@@ -58,6 +58,7 @@ import { ConversationComposerDock } from '@/components/conversation/Conversation
 import { useDiagnosticsHidden } from '@/lib/diagnosticsPreference'
 import { hubDate } from '@/lib/hubTime'
 import { toast } from '@/lib/toast'
+import { chatStartedOn } from './pool/poolModel'
 
 interface AgentOutputPanelProps {
   agent: AgentSummary
@@ -1466,6 +1467,13 @@ export function AgentOutputPanel({
           effectiveControls: agentDefaultControls,
           pendingOverrides,
           onPendingOverridesChange: setPendingOverrides,
+          pool: targetAgentRow?.pool,
+          poolStartedOn: startingFresh
+            ? null
+            : chatStartedOn(
+                targetAgentRow?.pool ?? [],
+                conversations.find((c) => c.id === currentConversationId),
+              ),
           onOpenSpecPicker,
           onStartExploration,
           onStopExploring,

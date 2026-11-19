@@ -31,7 +31,13 @@ from .inbound_queue import (
     select_operator_turn,
     select_turn,
 )
-from .provider_allowance import hold_sentence, operator_would_probe, provider_hold
+from .provider_allowance import (
+    ProviderHold,
+    cli_readings,
+    hold_on,
+    hold_sentence,
+    operator_would_probe,
+)
 from .run_task_binding import decided_task_refusal
 from .sse import sse_manager
 from .task_workspace import takes_own_checkout
@@ -304,6 +310,66 @@ def _tasks_this_entry_is_about(
         if inherited is not None and inherited not in named:
             named.append(inherited)
     return named
+
+
+async def provider_held_conversations(
+    db: AsyncSession, project_id: str, agent: str, entries: Sequence[InboundQueueEntry]
+) -> Dict[str, ProviderHold]:
+    """The conversations among *entries* whose next turn a provider hold stops, with the hold.
+
+    A hold is the profile's on one CLI (FR-11 of `a-profile-runs-each-task-on-a-runner-and-model-
+    chosen-from-its-pool`), so each conversation's turn is asked which CLI it would launch on -- a
+    task's entry, a review's, a chat's choice, or the default -- and only one on a held CLI waits.
+    Operator input that arrived after the refusal is tried once (`operator_would_probe`, D4),
+    asked of the whole queue as before. Reads only; nothing is asked when nothing is held.
+    """
+    from .api.v1.agent_trigger import turn_launch_cli
+    from .db.models import Agent
+    from .provider_allowance import _utcnow
+
+    now = _utcnow()
+    holds = {
+        cli: (
+            hold
+            if hold is not None
+            and now < hold.hold_until
+            and not operator_would_probe(entries, hold)
+            else None
+        )
+        for cli, hold in (await cli_readings(db, project_id, agent)).items()
+    }
+    if not any(hold is not None for hold in holds.values()):
+        return {}
+    agent_row = (
+        (await db.execute(select(Agent).where(Agent.project_id == project_id, Agent.name == agent)))
+        .scalars()
+        .first()
+    )
+    by_conversation: Dict[str, List[InboundQueueEntry]] = {}
+    for entry in entries:
+        if entry.conversation_id:
+            by_conversation.setdefault(entry.conversation_id, []).append(entry)
+    held: Dict[str, ProviderHold] = {}
+    for conversation_id, own in by_conversation.items():
+        cli: Optional[str] = None
+        conversation = await get_conversation_by_id(db, conversation_id)
+        if agent_row is not None and conversation is not None:
+            cli = await turn_launch_cli(
+                db,
+                project_id=project_id,
+                agent_row=agent_row,
+                conversation=conversation,
+                queue_entry_ids=[entry.id for entry in own],
+                initiator=(
+                    "operator"
+                    if any(entry.origin_type == "operator" for entry in own)
+                    else "autonomous"
+                ),
+            )
+        hold = hold_on(holds, cli)
+        if hold is not None:
+            held[conversation_id] = hold
+    return held
 
 
 @dataclass(frozen=True)
@@ -607,6 +673,28 @@ async def _attempt_turn(
     if not can_start([entry for entry in entries if entry.conversation_id not in held], hop_budget):
         return _Attempt(ScheduleResult(waiting_reason="hop budget exhausted"))
 
+    # The provider refused this agent's last turn on a CLI because its usage allowance is spent,
+    # so every turn started there before the reset would be refused the same way (`a-spent-
+    # allowance-holds-the-queue`, D4). That conversation's input waits, uncounted, for the wake at
+    # the reset. Not a terminal failure: a job firing that meets it leaves its `JobRun` in
+    # progress, because its entry will be delivered. A hold is on one CLI (FR-11), so input whose
+    # turn launches on another still starts; only when every conversation waits does the queue.
+    #
+    # Operator input that arrived after the refusal is tried once: only the operator can change
+    # the allowance, and a hold derived from the provider's last word cannot see that they did.
+    # Keyed on the whole queue, because their message can sit in a conversation behind an
+    # autonomous head. A refused probe renews the reading, whose `observed_at` is then later than
+    # every entry already queued, so the same input cannot probe twice.
+    provider_held = await provider_held_conversations(db, project_id, agent, entries)
+    if provider_held:
+        entries = [entry for entry in entries if entry.conversation_id not in provider_held]
+        if not entries:
+            return _Attempt(
+                ScheduleResult(
+                    waiting_reason=hold_sentence(agent, next(iter(provider_held.values()))),
+                    terminal_failure=False,
+                )
+            )
     controlling, turn = select_turn(entries, hop_budget, cap)
     # A spent token budget holds autonomous input only, so the turn that runs is the operator's even
     # when their message sits in another conversation behind an autonomous head (F814).
@@ -635,21 +723,6 @@ async def _attempt_turn(
         (entry for entry in selected if entry.origin_type == "operator"), None
     )
     initiator = "operator" if controlling_operator is not None else "autonomous"
-    # The provider refused this agent's last turn because its usage allowance is spent, so every
-    # turn started before the reset would be refused the same way (`a-spent-allowance-holds-the-
-    # queue`, D4). Input waits, uncounted, for the wake at the reset. Not a terminal failure: a job
-    # firing that meets it leaves its `JobRun` in progress, because its entry will be delivered.
-    #
-    # Operator input that arrived after the refusal is tried once: only the operator can change
-    # the allowance, and a hold derived from the provider's last word cannot see that they did.
-    # Keyed on the whole queue, not on `selected`, because their message can sit in a conversation
-    # behind an autonomous head. A refused probe renews the reading, whose `observed_at` is then
-    # later than every entry already queued, so the same input cannot probe twice.
-    hold = await provider_hold(db, project_id, agent)
-    if hold is not None and not operator_would_probe(entries, hold):
-        return _Attempt(
-            ScheduleResult(waiting_reason=hold_sentence(agent, hold), terminal_failure=False)
-        )
     if initiator == "autonomous" and budget["exhausted"]:
         # A hold, like the allowance's above: the input is kept, and raising the budget re-drains
         # it. Recorded on the entries so a job's press answers why it waits (F608, F596's shape);

@@ -160,6 +160,10 @@ class ConversationResponse(BaseModel):
     # True when the stored override's model is one the agent's runner's catalog no longer declares:
     # it keeps working (fix-D5 wpc3-b) and the composer names it "unrecognised", as a runner's is.
     model_unrecognised: bool = False
+    # The CLI the conversation's latest run launched on, or null before a run recorded one
+    # (`a-profile-runs-each-task-on-a-runner-and-model-chosen-from-its-pool`, FR-9): a started chat
+    # chooses only among its pool's entries on that CLI, and the composer greys out the rest.
+    started_cli: Optional[str] = None
     # The task this thread is about, if it is about one. Every turn here binds to it and is checked
     # at its end — which is what the composer has to be able to show, and what the operator has to
     # be able to let go of.
@@ -420,6 +424,7 @@ async def _to_response(
         else {}
     )
     runners = await _runners_by_agent(session, conversations)
+    started = await _started_clis(session, conversation_ids)
     responses = []
     for row in conversations:
         response = ConversationResponse.model_validate(row, from_attributes=True)
@@ -427,8 +432,25 @@ async def _to_response(
         response.attention = attention.get(row.id, "idle")  # type: ignore[assignment]
         response.loop = loops.get(row.id)
         response.context_usage = context.get(row.id)
+        response.started_cli = started.get(row.id)
         responses.append(response)
     return responses
+
+
+async def _started_clis(session: AsyncSession, conversation_ids: List[str]) -> Dict[str, str]:
+    """The CLI each conversation's latest run with a recorded runner launched on, in one query."""
+    if not conversation_ids:
+        return {}
+    rows = await session.execute(
+        select(Run.conversation_id, Runner.cli)
+        .join(Runner, Runner.id == Run.runner_id)
+        .where(Run.conversation_id.in_(conversation_ids))
+        .order_by(Run.started_at.desc())
+    )
+    started: Dict[str, str] = {}
+    for conversation_id, cli in rows.all():
+        started.setdefault(conversation_id, cli)
+    return started
 
 
 async def _runners_by_agent(

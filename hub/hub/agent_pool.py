@@ -48,6 +48,11 @@ def _key(entry: AgentPoolEntry) -> EntryKey:
     return (entry.runner_id, entry.effort)
 
 
+def cli_label(cli: str) -> str:
+    """ "Claude Code", as the app names a CLI."""
+    return _CLI_LABEL.get(cli, cli)
+
+
 def model_label(runner: Runner) -> str:
     """The runner's model as the catalog names it ("Opus 5.5"), for refusals."""
     provider = get_provider(runner.cli)
