@@ -16,6 +16,7 @@ from hub.db.models import SpecDocument
 from hub.spec_completeness import approval_gaps, check, split
 from hub.spec_payload import SCHEMA_VERSION, validate_payload
 
+from ._spec_confirmations import all_confirmed
 from .test_project_spec_steps import THREAT, _steps, _write
 from .test_spec_documents_api import PATH, _create
 from .test_spec_journey_briefing import _place
@@ -56,7 +57,7 @@ def _task(key, depends_on=()):
 
 
 def _gaps(payload):
-    return [*check(payload), *approval_gaps(payload)]
+    return [*check(payload, confirmations=all_confirmed(payload)), *approval_gaps(payload)]
 
 
 def test_a_complete_document_has_no_gap():
@@ -164,7 +165,7 @@ def test_what_makes_approval_wrong_is_a_refusal_and_completeness_is_a_gap():
         open_questions=[{"question": "Which port?", "resolved": False}],
         scope={"in_scope": ["x"], "non_goals": []},
     )
-    refusals, gaps = split(check(payload))
+    refusals, gaps = split(check(payload, confirmations=all_confirmed(payload)))
     assert {f.code for f in refusals} == {
         "dependency_cycle",
         "depends_on_unresolved",

@@ -18,6 +18,7 @@ from hub.db.engine import async_session_factory
 from hub.db.models import Agent, Run
 from hub.spec_payload import SCHEMA_VERSION
 
+from ._spec_confirmations import confirm_criteria
 from ._spec_versions import content_version
 
 BASE = "/api/v1/projects/proj-test/project"
@@ -103,6 +104,7 @@ async def approve(app, auth_headers):
         f"{BASE}/documents/close-exploration", params={"path": PATH}, headers=auth_headers
     )
     assert closed.status_code in (200, 409), closed.text
+    await confirm_criteria(PATH)
     moved = await app.post(
         f"{BASE}/documents/phase",
         params={"path": PATH, "to": "approved"},
@@ -248,6 +250,7 @@ async def test_a_document_that_declares_no_tasks_creates_none_and_is_not_approve
     await app.post(
         f"{BASE}/documents/close-exploration", params={"path": PATH}, headers=auth_headers
     )
+    await confirm_criteria(PATH)
     refused = await app.post(
         f"{BASE}/documents/phase",
         params={"path": PATH, "to": "approved"},

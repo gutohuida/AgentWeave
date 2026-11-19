@@ -3747,6 +3747,9 @@ async def check_document(
         "acknowledged": report.acknowledged,
         # The one verdict (FR-2): true exactly when Approve would not stop.
         "ready": report.ready,
+        # The criteria marked guards, as approval will list them
+        # (`existing-behaviour-is-caught-before-the-build` D6).
+        "guards": report.guards,
         "content_version": version,
     }
 
@@ -3905,6 +3908,8 @@ class _Moved:
     created_count: int = 0
     notes: List[Dict[str, Any]] = dataclasses.field(default_factory=list)
     acknowledged: List[Dict[str, Any]] = dataclasses.field(default_factory=list)
+    # Set by an approval only: the criteria it approved as guards (D6).
+    guards: Optional[List[Dict[str, Any]]] = None
 
 
 def _already_built_offer(
@@ -3977,12 +3982,16 @@ async def _move_phase(
             detail["notes"] = exc.notes
         if exc.acknowledged:
             detail["acknowledged"] = exc.acknowledged
+        if exc.guards is not None:
+            detail["guards"] = exc.guards
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=detail) from exc
 
     moved = _Moved(
         notes=list((phase_event.detail or {}).get("notes") or []),
         acknowledged=list((phase_event.detail or {}).get("acknowledged") or []),
     )
+    if to == spec_lifecycle.APPROVED:
+        moved.guards = list((phase_event.detail or {}).get("guards") or [])
     if document.phase != "approved":
         return moved
     payload = _read_payload(workspace, document.path)
@@ -4057,6 +4066,9 @@ async def _phase_response(
     # What the operator approved over by acknowledgement: shown, and never a stop (FR-5, FR-6).
     if moved.acknowledged:
         response["acknowledged"] = moved.acknowledged
+    # Every criterion approved as a guard, by key with its requirement's identifier (D6).
+    if moved.guards is not None:
+        response["guards"] = moved.guards
     return response
 
 

@@ -218,6 +218,7 @@ HUB_MCP_TOOLS = frozenset(
         "approve_tool_call",
         "archive_job",
         "ask_user",
+        "confirm_acceptance_criteria",
         "create_flow",
         "create_job",
         "create_loop",

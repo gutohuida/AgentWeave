@@ -13,6 +13,7 @@ from sqlalchemy import select, update
 from hub.db.engine import async_session_factory
 from hub.db.models import Project, SpecDocument, SpecDocumentEvent, SpecRequirement
 
+from ._spec_confirmations import confirm_criteria
 from .test_a_finished_change_is_folded_into_its_capability import (
     _approved_change,
     _change,
@@ -182,6 +183,7 @@ async def test_a_change_naming_nothing_warns_on_save_and_approval_and_is_approve
     )
     from ._spec_versions import content_version
 
+    await confirm_criteria(C_BUILT)
     approved = await app.post(
         f"{BASE}/documents/phase",
         params={"path": C_BUILT, "to": "approved"},

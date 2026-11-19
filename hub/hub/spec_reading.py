@@ -24,7 +24,7 @@ from __future__ import annotations
 import json
 import os
 import textwrap
-from typing import Any, Dict, Iterable, List, Optional, Tuple
+from typing import Any, Dict, Iterable, List, Mapping, Optional, Tuple
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -129,7 +129,7 @@ def criteria_by_requirement_key(
         }
         # Only when set, so a read of a document without them is unchanged, and a resubmitted read
         # keeps them (F452's shape).
-        for key in ("how_to_check", "checked_by"):
+        for key in ("how_to_check", "checked_by", "guard"):
             if entry.get(key) is not None:
                 criterion[key] = entry[key]
         grouped.setdefault(owner, []).append(criterion)
@@ -137,9 +137,15 @@ def criteria_by_requirement_key(
 
 
 def requirement_view(
-    payload: Optional[Dict[str, Any]], rows: List[SpecRequirement]
+    payload: Optional[Dict[str, Any]],
+    rows: List[SpecRequirement],
+    confirmations: Optional[Mapping[str, Any]] = None,
 ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
     """`(requirements, diagnostics)` — the document's requirements with their minted identifiers.
+
+    With `confirmations` (`{criterion key: SpecCriterionConfirmation}`), each criterion carries
+    `confirmation`: `{kind, by, at, current}`, or None when it has none
+    (`existing-behaviour-is-caught-before-the-build` D6).
 
     Driven by the **rows**, because they are what tasks, evidence and gates point at. A requirement
     the document declares but the index has never seen is still returned, with a diagnostic and a
@@ -152,6 +158,14 @@ def requirement_view(
 
     wording = statements_by_key(payload)
     criteria = criteria_by_requirement_key(payload)
+    if confirmations is not None:
+        from . import spec_criterion_confirmations
+
+        for owner, listed in criteria.items():
+            for criterion in listed:
+                criterion["confirmation"] = spec_criterion_confirmations.view(
+                    confirmations.get(criterion["key"]), {**criterion, "requirement": owner}
+                )
     seen_keys = set()
 
     requirements: List[Dict[str, Any]] = []
@@ -475,6 +489,16 @@ def render_read(view: Dict[str, Any]) -> str:
                 if criterion.get("how_to_check"):
                     who = f" ({criterion['checked_by']})" if criterion.get("checked_by") else ""
                     lines.extend(_wrapped(f"Check{who}: {criterion['how_to_check']}", "    "))
+                if criterion.get("guard"):
+                    lines.append("    Guard: behaviour the code already has")
+                if "confirmation" in criterion:
+                    confirmed = criterion["confirmation"]
+                    lines.append(
+                        "    Confirmation: none"
+                        if confirmed is None
+                        else f"    Confirmation: {confirmed['kind']} by {confirmed['by']}"
+                        + ("" if confirmed["current"] else " (stale: the criterion changed since)")
+                    )
     for name in OPTIONAL_SECTIONS:
         value = view.get(name)
         if value in (None, "", [], {}):

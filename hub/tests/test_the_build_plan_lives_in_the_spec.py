@@ -24,6 +24,7 @@ from hub.spec_payload import SCHEMA_VERSION
 from hub.task_transition_service import apply_transition
 from hub.task_transitions import run_actor
 
+from ._spec_confirmations import confirm_criteria
 from .test_review_turn import _roster
 
 P = "proj-test"
@@ -119,6 +120,7 @@ async def _approved(app, auth_headers, author_headers, document):
     saved = await _save(app, auth_headers, author_headers, document)
     assert saved.status_code == 200, saved.text
     version = (await _read(app, auth_headers))["content_version"]
+    await confirm_criteria(PATH)
     approved = await app.post(
         f"{BASE}/documents/phase",
         params={"path": PATH, "to": "approved"},

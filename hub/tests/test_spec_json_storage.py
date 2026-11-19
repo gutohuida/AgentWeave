@@ -16,6 +16,7 @@ from hub.project_workspace import ProjectWorkspace
 from hub.spec_documents import parse_hub, parse_stored, serialize, write_payload
 from hub.spec_payload import PayloadError, validate_payload
 
+from ._spec_confirmations import confirm_criteria
 from ._spec_versions import content_version
 from .test_spec_documents_api import (
     AGENT,
@@ -218,6 +219,7 @@ async def test_a_phase_move_rewrites_the_hub_block(
 ):
     await _create(app, auth_headers)
     await _submit(app, run_headers, _document())
+    await confirm_criteria(PATH)
     approved = await app.post(
         f"{BASE}/documents/phase",
         params={"path": PATH, "to": "approved"},

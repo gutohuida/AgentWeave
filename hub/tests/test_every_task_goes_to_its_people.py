@@ -33,6 +33,7 @@ from hub.spec_payload import SCHEMA_VERSION
 from hub.task_transition_service import apply_transition
 from hub.task_transitions import run_actor
 
+from ._spec_confirmations import confirm_criteria
 from .test_review_turn import _roster
 
 P = "proj-test"
@@ -117,6 +118,7 @@ async def _approved(app, auth_headers, document):
         (await db.get(Run, "run-people-author")).status = "completed"
         await db.commit()
     read = await app.get(f"{BASE}/spec", params={"path": PATH}, headers=auth_headers)
+    await confirm_criteria(PATH)
     approved = await app.post(
         f"{BASE}/documents/phase",
         params={"path": PATH, "to": "approved"},

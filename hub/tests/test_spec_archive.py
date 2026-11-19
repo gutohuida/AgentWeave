@@ -16,6 +16,7 @@ from hub.db.engine import async_session_factory
 from hub.db.models import Run, SpecDocument, Task
 from hub.spec_payload import SCHEMA_VERSION
 
+from ._spec_confirmations import confirm_criteria
 from ._spec_versions import content_version
 
 BASE = "/api/v1/projects/proj-test/project"
@@ -69,6 +70,7 @@ async def _approved_document(app, auth_headers, run_headers, path=PATH):
         f"{BASE}/documents/close-exploration", params={"path": path}, headers=auth_headers
     )
     await app.post(f"{BASE}/documents/check", params={"path": path}, headers=auth_headers)
+    await confirm_criteria(path)
     await app.post(
         f"{BASE}/documents/phase",
         params={"path": path, "to": "approved"},
@@ -308,6 +310,7 @@ async def test_first_approved_at_is_set_once_and_survives_a_reopen(
         headers=auth_headers,
     )
     await app.post(AGENT, json={"path": path, "document": _document()}, headers=run_headers)
+    await confirm_criteria(path)
     async with async_session_factory() as session:
         document = (
             await session.execute(select(SpecDocument).where(SpecDocument.path == path))
