@@ -407,6 +407,56 @@ def work_dir_in_hub_directory(root: Path, resolved: Path) -> bool:
     return target == hub_directory or target.startswith(hub_directory + os.sep)
 
 
+def conversation_turn_running_sentence(conversation_id: str) -> str:
+    """Why a start waits on its own conversation (FR-6): one turn at a time, whatever the switch."""
+    return (
+        f"conversation {conversation_id} already has a turn running; this input starts when that "
+        "turn ends"
+    )
+
+
+def shared_workspace_in_use_sentence(agent: str, workspace: Path) -> str:
+    """Why a start waits on a workspace another of the agent's runs stands in (FR-8, step 3)."""
+    return (
+        f"another run of {agent} is working in {workspace}; this input starts there when that "
+        "run ends"
+    )
+
+
+def same_directory(first: Optional[str], second: Path) -> bool:
+    """Whether a recorded `Run.workspace_dir` names *second*, compared case- and link-normalised."""
+    if not first:
+        return False
+    try:
+        return os.path.normcase(str(Path(first).resolve(strict=False))) == os.path.normcase(
+            str(second.resolve(strict=False))
+        )
+    except OSError:
+        return False
+
+
+def untasked_workspace(
+    repo_root: Path,
+    agent: str,
+    config: Dict[str, Any],
+    *,
+    thread: Optional[str],
+    project_is_repo: bool,
+) -> Optional[Path]:
+    """The worktree an untasked, non-review turn will work in, predicted before anything is
+    provisioned (start algorithm, step 3): a thread's own, else the agent's shared one -- the same
+    dispatch `worktrees.resolve_turn_workspace` makes for its agent arm.
+
+    `None` where the turn gets no worktree: a read-only agent, or a project that is not a
+    repository. Those runs stand in the project directory, as runs of several agents always have,
+    each with its own context file and calls directory (FR-8)."""
+    if not worktrees.is_writing_agent(config) or not project_is_repo:
+        return None
+    if thread is not None:
+        return worktrees.thread_worktree_path(repo_root, agent, thread)
+    return worktrees.worktree_path(repo_root, agent)
+
+
 def run_calls_dir(work_dir: str, run_id: str) -> Path:
     """A run's own calls directory (FR-8), inside the calls root so the call command and the
     approver accept its files unchanged: given only where several runs of one agent share a
@@ -1296,13 +1346,43 @@ async def _trigger_agent_directly(
             agent_wide=True,
         )
 
-    existing = await session.execute(
+    # The start algorithm (`one-profile-runs-many-turns-at-once-on-different-tasks`). Step 5 first,
+    # so a project with the switch off is answered exactly as before this change: one running run
+    # per agent. The agent's running runs' directories are kept for step 3 further down.
+    gate_project = await session.get(Project, project_id)
+    parallel = bool(gate_project is not None and gate_project.profiles_run_in_parallel)
+    agent_running_dirs: List[Optional[str]] = list(
+        (
+            await session.execute(
+                select(Run.workspace_dir).where(
+                    Run.project_id == project_id, Run.agent == agent, Run.status == "running"
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    if agent_running_dirs and not parallel:
+        raise TriggerAgentError(status.HTTP_409_CONFLICT, f"{agent} already has a run in progress.")
+    # Step 1, whatever the switch: a conversation has one running turn at a time, so two processes
+    # never resume one provider session (FR-6). Asked of every run, not only this agent's: the
+    # conversation is the subject.
+    conversation_running = await session.execute(
         select(Run.id)
-        .where(Run.project_id == project_id, Run.agent == agent, Run.status == "running")
+        .where(
+            Run.project_id == project_id,
+            Run.conversation_id == conversation.id,
+            Run.status == "running",
+        )
         .limit(1)
     )
-    if existing.scalar() is not None:
-        raise TriggerAgentError(status.HTTP_409_CONFLICT, f"{agent} already has a run in progress.")
+    if conversation_running.scalar() is not None:
+        raise TriggerAgentError(
+            status.HTTP_409_CONFLICT,
+            conversation_turn_running_sentence(conversation.id),
+            # It clears when that turn ends, whose run-end re-drain starts this one.
+            transient=True,
+        )
 
     # Resolution order (design.md): conversation.runtime_overrides -> runner.model / runner
     # defaults -> catalog control defaults. Overrides were already validated against the
@@ -1664,7 +1744,9 @@ async def _trigger_agent_directly(
             holder = (await tasks_held_by_a_running_turn(session, project_id)).get(
                 turn_workspace.task_id
             )
-            if holder is not None and holder != agent:
+            # Step 2, whatever the switch (FR-7): by this agent too. While the switch is off a
+            # turn of this agent's was already refused above, so only the switch on reaches it.
+            if holder is not None:
                 raise TriggerAgentError(
                     status.HTTP_409_CONFLICT,
                     checkout_held_sentence(holder, turn_workspace.task_id),
@@ -1684,6 +1766,23 @@ async def _trigger_agent_directly(
         # FR-13: a chat the operator opened while the parallel switch was on works in its own
         # worktree on `thread/<agent>/<thread>`; every other untasked turn keeps the agent's own.
         thread = None if takes_task else thread_of(conversation)
+        # Step 3, whatever the switch (FR-8): a writing turn outside a task's checkout works in a
+        # directory of the agent's -- its shared worktree, a thread's own, or the project directory
+        # where there is no repository -- and waits while another run of the agent stands there.
+        # Before provisioning, which catches that worktree up with the main branch. A thread is
+        # asked too: a checkpoint's successor conversation carries on in its predecessor's tree.
+        if not takes_task:
+            shared = untasked_workspace(
+                repo_root, agent, config, thread=thread, project_is_repo=project_is_repo
+            )
+            if shared is not None and any(
+                same_directory(directory, shared) for directory in agent_running_dirs
+            ):
+                raise TriggerAgentError(
+                    status.HTTP_409_CONFLICT,
+                    shared_workspace_in_use_sentence(agent, shared),
+                    transient=True,
+                )
         # A task worktree about to be created asks GitHub, in the background, about the
         # project's open PRs (`a-build-lands-as-one-pull-request`, FR-9): the turn never waits.
         creating = takes_task and not await blocking.run(
@@ -2760,6 +2859,9 @@ async def trigger_agent(
                 session_id=conversation.provider_session_id,
                 queue_entry_id=entry.id,
             )
+    # While the switch is on one pass can start a turn in several conversations; this request's
+    # answer is about its own.
+    scheduled = scheduled.about(conversation.id)
     # The scheduler picks the conversation of the *oldest* eligible entry across this
     # agent's whole queue, which is not necessarily the conversation this request just
     # appended to (spec `agent-conversation-workspace`: "Different conversations never
