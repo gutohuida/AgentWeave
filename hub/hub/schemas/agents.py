@@ -61,6 +61,17 @@ _RETIRED = ("agent", "warning", "critical")
 LEGACY_CONTEXT_VOCABULARY = frozenset(_USED + _LIMIT + _RATIO + _WHEN + _CARRIED + _RETIRED)
 
 
+class RunningRun(BaseModel):
+    """One of an agent's running runs, with what it is working on (FR-11). A profile running in
+    parallel can have several, and the roster lists every one rather than the newest."""
+
+    run_id: str = Field(max_length=64)
+    # Null for a run that belongs to no conversation, or works no task.
+    conversation_id: Optional[str] = Field(default=None, max_length=64)
+    task_id: Optional[str] = Field(default=None, max_length=64)
+    started_at: Optional[datetime] = None
+
+
 class AgentSummary(BaseModel):
     name: str = Field(max_length=64)
     # What this agent is for, in the operator's words. Absent, not empty, when unset — it is
@@ -92,6 +103,9 @@ class AgentSummary(BaseModel):
     # agent's, not a conversation's; a screen on another conversation reads this to tell the
     # turn is elsewhere (F844). Null with no run, or a run that belongs to no conversation.
     running_conversation_id: Optional[str] = Field(default=None, max_length=64)
+    # Every running run of this agent, oldest first: with profiles running in parallel there can
+    # be several, each in its own conversation (FR-11). `running_conversation_id` is the newest's.
+    running_runs: List[RunningRun] = Field(default_factory=list)
     # The posture this agent's next run gets when nobody chose one, and what clearing its default
     # would give (the same with `yolo` off). Null with no runner bound: there is no run to describe.
     permission_mode_at_rest: Optional[str] = Field(default=None, max_length=32)
