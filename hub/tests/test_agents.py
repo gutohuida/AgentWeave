@@ -173,9 +173,10 @@ async def test_list_agents_avoids_n_plus_one(app, auth_headers):
     data = resp.json()
     assert len(data) == len(agents)
     assert {a["name"] for a in data} == set(agents)
-    # With bulk queries the endpoint should stay well below one query per agent.
+    # With bulk queries the endpoint should stay well below one query per agent. 16 since the
+    # profile pools' one bulk read of every agent's entries (`agent_pool.pools_by_agent`).
     assert (
-        len(statements) <= 15
+        len(statements) <= 16
     ), f"list_agents issued {len(statements)} SQL queries for {len(agents)} agents"
 
 

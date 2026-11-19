@@ -28,6 +28,8 @@ from ...agent_colors import next_color_index
 from ...agent_lifecycle import archivable as agent_archivable
 from ...agent_lifecycle import archive as archive_agent_row
 from ...agent_lifecycle import unarchive as unarchive_agent_row
+from ...agent_pool import PoolRefusalError, bind_default, pool_out, pools_by_agent, replace_pool
+from ...agent_pool import serialize_pool as serialize_agent_pool
 from ...agent_roster import require_agent_row, require_known_agent
 from ...agent_status import effective_heartbeat_status
 from ...auth import get_project
@@ -331,6 +333,8 @@ async def list_agents(
     if not session_agents_meta:
         return []
 
+    pools = await pools_by_agent(session, project_id, [row.id for row in db_agents.values()])
+
     # reach-1019: the project's default posture sits between an agent's own and the runner's.
     project_row = await session.get(Project, project_id)
     project_posture = project_row.default_permission_mode if project_row is not None else None
@@ -561,6 +565,11 @@ async def list_agents(
                 runner_options=agent_meta.get("runner_options"),
                 color_index=agent_row.color_index if agent_row else None,
                 runner_id=agent_row.runner_id if agent_row else None,
+                pool=(
+                    serialize_agent_pool(pools.get(agent_row.id, []), runners_by_id)
+                    if agent_row
+                    else []
+                ),
                 permission_mode_at_rest=permission_mode_at_rest,
                 permission_mode_built_in=permission_mode_built_in,
                 permission_mode_from_project=bool(project_posture and _bound_adapter is not None),
@@ -767,6 +776,7 @@ async def create_operator_agent(
         charter_id=body.charter_id,
     )
     session.add(agent)
+    await bind_default(session, agent, runner.id)
     await session.commit()
     await session.refresh(agent)
 
@@ -3360,6 +3370,7 @@ async def request_agent(
         conversation_id=conversation.id,
     )
     session.add_all([agent_row, conversation, message, entry])
+    await bind_default(session, agent_row, template_row.runner_id)
     await session.commit()
 
     payload = {
@@ -3604,6 +3615,7 @@ _PATCH_AGENT_FIELDS = frozenset(
         "runner_id",
         "provider",  # with "model": the runner for them is found or made
         "model",
+        "pool",  # the whole pool, replaced (a-profile-runs-each-task-on-a-runner-...)
         "charter_id",
         "config",
         "default_permission_mode",
@@ -3653,6 +3665,7 @@ async def patch_agent(
         "runner_id",
         "provider",
         "model",
+        "pool",
         *GRANT_FIELDS,
         "charter_id",
         "description",
@@ -3692,6 +3705,12 @@ async def patch_agent(
     # A symmetric guard on this branch would contradict D3 — see the charter_id branch below,
     # which does guard, because charter binding is exactly what archive() releases.
     runner_newly_bound = False
+    previous_runner_id = agent_row.runner_id
+    if "pool" in body and ({"runner_id", "provider", "model"} & set(body)):
+        raise HTTPException(
+            status_code=400,
+            detail="Give pool, or runner_id, or provider and model, not more than one",
+        )
     if "provider" in body or "model" in body:
         # Choosing a model directly: the Hub finds the project's runner for it, or makes the one.
         if "runner_id" in body:
@@ -3711,7 +3730,19 @@ async def patch_agent(
             if runner_row is None or runner_row.project_id != project_id:
                 raise HTTPException(status_code=404, detail=f"Runner '{runner_id}' not found")
         runner_newly_bound = runner_id is not None and runner_id != agent_row.runner_id
-        agent_row.runner_id = runner_id
+        # The legacy binding makes this runner the pool's default, adding it when it is not there,
+        # and keeps `runner_id` naming the default (FR-4).
+        await bind_default(session, agent_row, runner_id)
+    if "pool" in body:
+        try:
+            await replace_pool(session, agent_row, body["pool"])
+        except PoolRefusalError as exc:
+            raise HTTPException(status_code=exc.status_code, detail=exc.message) from exc
+        runner_newly_bound = (
+            agent_row.runner_id is not None and agent_row.runner_id != previous_runner_id
+        )
+        # Read below exactly as a legacy binding is: the default's runner may have changed.
+        body = {**body, "runner_id": agent_row.runner_id}
 
     if "charter_id" in body:
         charter_id = body["charter_id"]
@@ -3824,6 +3855,7 @@ async def patch_agent(
         "description": agent_row.description,
         "config": agent_row.config,
         "runner_id": agent_row.runner_id,
+        "pool": await pool_out(session, agent_row),
         "charter_id": agent_row.charter_id,
         "permission_timeout_seconds": agent_row.permission_timeout_seconds,
         "question_timeout_seconds": agent_row.question_timeout_seconds,
