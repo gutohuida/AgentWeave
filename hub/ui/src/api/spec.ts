@@ -418,6 +418,12 @@ export function useCloseAlreadyBuilt() {
   })
 }
 
+/** A criterion marked a guard, with its requirement's identifier: a check the drive need not fail. */
+export interface SpecGuard {
+  criterion: string
+  requirement: string
+}
+
 export interface SpecDocument {
   path: string
   content: string
@@ -1137,6 +1143,7 @@ export function useCheckSpecDocument() {
           warnings: SpecBlockingFinding[]
           notes?: SpecBlockingFinding[]
           acknowledged?: SpecAcknowledgedGap[]
+          guards?: SpecGuard[]
           ready: boolean
           content_version: string
         }
@@ -1233,6 +1240,7 @@ export function useApproveAndBuildSpecDocument() {
           build_outcome: SpecBuildOutcome
           approval_notes?: SpecBlockingFinding[]
           acknowledged?: SpecAcknowledgedGap[]
+          guards?: SpecGuard[]
         }
       >(
         `/api/v1/projects/${projectId}/project/documents/approve-and-build?path=${encodeURIComponent(path)}`,
@@ -1491,6 +1499,8 @@ export function useSetSpecPhase() {
           approval_notes?: SpecBlockingFinding[]
           /** The acknowledged gaps approval went over without stopping (FR-6). */
           acknowledged?: SpecAcknowledgedGap[]
+          /** The criteria approved as guards (EBCBB D6). */
+          guards?: SpecGuard[]
         }
       >(
         `/api/v1/projects/${projectId}/project/documents/phase?path=${encodeURIComponent(path)}&to=${encodeURIComponent(to)}`,
