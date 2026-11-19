@@ -22,6 +22,6 @@ export default defineConfig({
     testTimeout: 20000,
     // Vitest's fork start timeout is fixed at 60s; with one fork per core the check run's
     // workers starved each other at startup ("Failed to start forks worker"). Fewer forks start.
-    maxWorkers: 8,
+    maxWorkers: 4,
   },
 })
