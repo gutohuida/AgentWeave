@@ -963,6 +963,43 @@ async def _launch_subject(
     return binding.task, False
 
 
+async def turn_launch_cli(
+    session: AsyncSession,
+    *,
+    project_id: str,
+    agent_row: Agent,
+    conversation: Conversation,
+    queue_entry_ids: List[str],
+    initiator: str,
+) -> Optional[str]:
+    """The CLI a turn of *conversation* from these entries would launch on, staging nothing.
+
+    What the scheduler asks before it lets a provider hold stop the turn (FR-11): the hold is on
+    one CLI, and the turn's entry -- its task's, a review's, a chat's choice or the default -- is
+    what decides which CLI it meets. Answers the default's CLI where the entry cannot be read.
+    """
+    task, review = await _launch_subject(
+        session,
+        project_id=project_id,
+        conversation=conversation,
+        queue_entry_ids=queue_entry_ids,
+        task_id=None,
+        review_task_id=None,
+    )
+    entry = await launch_entry.resolve(
+        session,
+        agent_row,
+        task=task,
+        review=review,
+        conversation_id=conversation.id,
+        chat_runner_id=launch_entry.chat_runner(conversation, initiator=initiator),
+        fix=False,
+    )
+    runner_id = entry.runner_id if entry is not None else agent_row.runner_id
+    runner = await session.get(Runner, runner_id) if runner_id else None
+    return runner.cli if runner is not None else None
+
+
 async def _review_cause_from_entries(
     session: AsyncSession, queue_entry_ids: Optional[List[str]], review_task_id: str
 ) -> "tuple[str, Optional[str]]":
@@ -1365,6 +1402,7 @@ async def _trigger_agent_directly(
         task=launch_task,
         review=launch_review,
         conversation_id=conversation.id,
+        chat_runner_id=launch_entry.chat_runner(conversation, initiator=initiator),
     )
     runner_row = await session.get(
         Runner, entry.runner_id if entry is not None else agent_row.runner_id
@@ -2856,25 +2894,48 @@ async def trigger_agent(
             raise HTTPException(
                 status_code=409, detail=f"{body.agent} has no runner bound; cannot set overrides."
             )
-        runner_row = await session.get(Runner, agent_row.runner_id)
+        stored_overrides = dict(conversation.runtime_overrides or {})
+        bound_runner = await session.get(Runner, agent_row.runner_id)
+        if bound_runner is not None and has_provider(bound_runner.provider_config):
+            # Before the pool and the catalog: on a provider runner the per-run model is refused
+            # outright, whatever the pool holds (design D7).
+            problem = provider_override_problem(body.overrides)
+            if problem is not None:
+                raise HTTPException(status_code=400, detail=problem)
+        # Bounded to the profile's pool (FR-9): a chat chooses one of its entries, and once
+        # it has a turn only one on the CLI it started on. The answer names the entry's runner,
+        # which is the one the rest is judged against.
+        try:
+            requested, runner_row = await launch_entry.bound_chat_overrides(
+                session,
+                agent_row,
+                dict(body.overrides),
+                stored=stored_overrides,
+                conversation_id=conversation.id,
+            )
+        except launch_entry.ChatChoiceRefusalError as refusal:
+            raise HTTPException(status_code=400, detail=refusal.message) from refusal
         if runner_row is None:
             raise HTTPException(
                 status_code=409, detail=f"{body.agent}'s bound runner no longer exists."
             )
+        chosen_runner = requested.pop(launch_entry.CHAT_RUNNER_KEY, None)
         if has_provider(runner_row.provider_config):
             # Before the catalog check: the per-run model is refused outright here, not judged
             # against the `copilot` catalog that would accept one (design D7).
-            problem = provider_override_problem(body.overrides)
+            problem = provider_override_problem(requested)
             if problem is not None:
                 raise HTTPException(status_code=400, detail=problem)
         accepted, rejection = validate_overrides(
             runner_row.cli,
-            body.overrides,
-            stored_model=(conversation.runtime_overrides or {}).get("model"),
-            stored_controls=dict(conversation.runtime_overrides or {}),
+            requested,
+            stored_model=stored_overrides.get("model"),
+            stored_controls=stored_overrides,
         )
         if rejection is not None:
             raise HTTPException(status_code=400, detail=rejection.reason)
+        if chosen_runner is not None:
+            accepted[launch_entry.CHAT_RUNNER_KEY] = chosen_runner
         # Overrides are stored per conversation, not per agent — the runner binding
         # this validated against is unchanged (design.md: "Rejected: overrides on the
         # agent").
@@ -4382,7 +4443,7 @@ async def _execute_run(
             # any status: the hold is derived from the reading, so a `completed` run that ended
             # with a refusal holds the queue too, and without a wake nothing would come back.
             if held is not None:
-                arm_allowance_wake(project_id, agent, held.hold_until)
+                arm_allowance_wake(project_id, agent, held.hold_until, runner)
                 held_payload = {
                     "agent": agent,
                     "run_id": run_id,
@@ -5438,7 +5499,7 @@ async def _execute_rpc_run(
             review_on_completion.after_run(project_id, run_id)
             # The wake, immediately after the commit, for the reason `_execute_run` gives.
             if held is not None:
-                arm_allowance_wake(project_id, agent, held.hold_until)
+                arm_allowance_wake(project_id, agent, held.hold_until, runner)
                 held_payload = {
                     "agent": agent,
                     "run_id": run_id,

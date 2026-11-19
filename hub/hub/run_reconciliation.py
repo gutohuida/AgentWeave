@@ -21,7 +21,7 @@ from .db.engine import async_session_factory
 from .db.models import Agent, InboundQueueEntry, JobRun, Run, Runner
 from .inbound_queue import abandoned_for_run, return_run_entries
 from .permission_requests import expire_pending_for_run
-from .provider_allowance import last_refusal
+from .provider_allowance import last_refusals
 from .pty_runner import pid_alive
 from .sse import sse_manager
 from .usage_accounting import record_turn_usage
@@ -231,7 +231,7 @@ async def _waits_on_a_refusal(db, conversation_id: str) -> bool:
         )
     ).all()
     for project_id, agent in pairs:
-        if await last_refusal(db, project_id, agent) is not None:
+        if await last_refusals(db, project_id, agent):
             return True
     return False
 

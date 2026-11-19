@@ -124,6 +124,11 @@ export interface AgentConversation {
   /** Control id -> value (e.g. {"model": "claude-opus-5", "effort": "high"}). Null/empty
    * means the conversation inherits its agent's runner and the catalog's defaults. */
   runtime_overrides?: Record<string, string> | null
+  /** The CLI the conversation's latest run launched on; null before a run recorded one. A started
+   *  chat chooses only among its pool's entries on that CLI
+   *  (`a-profile-runs-each-task-on-a-runner-and-model-chosen-from-its-pool`, FR-9). Absent from an
+   *  older Hub. */
+  started_cli?: string | null
   /**
    * The task this thread is about, if it is about one.
    *

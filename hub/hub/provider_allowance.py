@@ -11,6 +11,13 @@ with an epoch `resetsAt`, and the refused session was sound and resumable.
 in the transaction that ends the run. A stored `held_until` would be a second copy that can drift
 and would need its own release path. Derived, it survives a restart, and it is released by the
 next outcome that is not a refusal, whoever caused it.
+
+**A hold is the profile's on one CLI** (`a-profile-runs-each-task-on-a-runner-and-model-chosen-from-
+its-pool`, FR-11). A pool may hold entries on several CLIs, and one provider's spent allowance says
+nothing about another's, so every read here is keyed by the agent *and* the CLI a row was written
+for (`TurnUsage.runner`). A row naming no CLI speaks for every CLI, as every row did before pools.
+A caller that names no CLI asks about the agent's default entry's CLI, which is what a job firing,
+a peer message and a chat start on.
 """
 
 from __future__ import annotations
@@ -20,10 +27,10 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Iterable, Optional, Set
 
-from sqlalchemy import func, literal_column, select
+from sqlalchemy import func, literal_column, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from .db.models import TurnUsage
+from .db.models import Agent, Runner, TurnUsage
 
 logger = logging.getLogger(__name__)
 
@@ -126,21 +133,52 @@ def _is_informative(row: Any) -> bool:
     return isinstance(row.allowance, dict) or row.status == "measured"
 
 
-async def _newest_informative(db: AsyncSession, project_id: str, agent: str) -> Optional[TurnUsage]:
+async def default_cli(db: AsyncSession, project_id: str, agent: str) -> Optional[str]:
+    """The CLI of *agent*'s default entry (`Agent.runner_id` names its runner); None unbound."""
+    return (
+        (
+            await db.execute(
+                select(Runner.cli)
+                .select_from(Agent)
+                .join(Runner, Runner.id == Agent.runner_id)
+                .where(Agent.project_id == project_id, Agent.name == agent)
+            )
+        )
+        .scalars()
+        .first()
+    )
+
+
+async def _newest_informative(
+    db: AsyncSession,
+    project_id: str,
+    agent: str,
+    cli: Optional[str] = None,
+    *,
+    unnamed: bool = False,
+) -> Optional[TurnUsage]:
     """The most recently *written* informative row, not the one with the latest `observed_at`.
 
     `observed_at` is the Hub's wall clock, so after a step back (NTP, a VM restore) a newer reading
     carries the earlier stamp and would sort below an older one (F463). `turn_usage` has a `String`
     primary key, so it is a rowid table and the rowid is the insertion order; `observed_at` stays
     the displayed time.
+
+    With *cli*, only rows written for that CLI or for none (FR-11): another CLI's word, a refusal
+    or a served turn, neither holds nor releases this one. With *unnamed*, only rows naming no CLI.
     """
+    where = [TurnUsage.project_id == project_id, TurnUsage.agent == agent]
+    if unnamed:
+        where.append(TurnUsage.runner.is_(None))
+    elif cli is not None:
+        where.append(or_(TurnUsage.runner == cli, TurnUsage.runner.is_(None)))
     offset = 0
     while True:
         rows = (
             (
                 await db.execute(
                     select(TurnUsage)
-                    .where(TurnUsage.project_id == project_id, TurnUsage.agent == agent)
+                    .where(*where)
                     .order_by(literal_column("turn_usage.rowid").desc())
                     .offset(offset)
                     .limit(_PAGE)
@@ -157,25 +195,76 @@ async def _newest_informative(db: AsyncSession, project_id: str, agent: str) -> 
         offset += _PAGE
 
 
-async def last_refusal(db: AsyncSession, project_id: str, agent: str) -> Optional[ProviderHold]:
-    """The hold *agent*'s newest informative row establishes, **whether or not it has ended**.
+async def last_refusal(
+    db: AsyncSession, project_id: str, agent: str, *, cli: Optional[str] = None
+) -> Optional[ProviderHold]:
+    """The hold *agent*'s newest informative row on *cli* establishes, **whether or not it has
+    ended**. Without *cli*, its default entry's CLI; an unbound agent's every row is read.
 
     `provider_hold` answers *is the agent held now*. A Hub start asks the other question (designs
     D5 and D10): was the provider's last word a refusal, so that queued input is still promised a
     delivery, by a wake if the reset is ahead and by a re-drain now if it fell while the Hub was
     down.
     """
-    row = await _newest_informative(db, project_id, agent)
+    if cli is None:
+        cli = await default_cli(db, project_id, agent)
+    row = await _newest_informative(db, project_id, agent, cli)
     if row is None:
         return None
     return hold_for_reading(row.allowance, row.observed_at, row.run_id)
 
 
+async def cli_readings(
+    db: AsyncSession, project_id: str, agent: str
+) -> Dict[Optional[str], Optional[ProviderHold]]:
+    """`last_refusal` on every CLI *agent* has a row for, keyed by CLI, **ended or not**, and None
+    where that CLI's last word was not a refusal. Rows naming no CLI are keyed None, and speak only
+    for a CLI with no row of its own (`hold_on`)."""
+    clis = (
+        (
+            await db.execute(
+                select(TurnUsage.runner)
+                .where(TurnUsage.project_id == project_id, TurnUsage.agent == agent)
+                .distinct()
+            )
+        )
+        .scalars()
+        .all()
+    )
+    out: Dict[Optional[str], Optional[ProviderHold]] = {}
+    for cli in clis:
+        row = await _newest_informative(db, project_id, agent, cli, unnamed=cli is None)
+        out[cli] = (
+            hold_for_reading(row.allowance, row.observed_at, row.run_id)
+            if row is not None
+            else None
+        )
+    return out
+
+
+async def last_refusals(
+    db: AsyncSession, project_id: str, agent: str
+) -> Dict[Optional[str], ProviderHold]:
+    """The CLIs whose last word for *agent* was a refusal, ended or not (FR-11): whether queued
+    input is still promised a delivery on any of them."""
+    return {
+        cli: hold
+        for cli, hold in (await cli_readings(db, project_id, agent)).items()
+        if hold is not None
+    }
+
+
 async def provider_hold(
-    db: AsyncSession, project_id: str, agent: str, *, now: Optional[datetime] = None
+    db: AsyncSession,
+    project_id: str,
+    agent: str,
+    *,
+    cli: Optional[str] = None,
+    now: Optional[datetime] = None,
 ) -> Optional[ProviderHold]:
-    """The hold on *agent*'s queue, read from the provider's most recent word about it (D3)."""
-    hold = await last_refusal(db, project_id, agent)
+    """The hold on *agent*'s runs on *cli*, read from the provider's most recent word about it (D3,
+    FR-11). Without *cli*, its default entry's CLI."""
+    hold = await last_refusal(db, project_id, agent, cli=cli)
     current = now if now is not None else _utcnow()
     if hold is None or current >= hold.hold_until:
         return None
@@ -185,48 +274,103 @@ async def provider_hold(
 async def agents_held(
     db: AsyncSession, project_id: str, *, now: Optional[datetime] = None
 ) -> Set[str]:
-    """Every agent in *project_id* that `provider_hold` holds, read at one `now` (design D6)."""
+    """Every agent in *project_id* held on its default CLI, read at one `now` (design D6)."""
     return set(await agent_holds(db, project_id, now=now))
+
+
+async def agent_cli_holds(
+    db: AsyncSession, project_id: str, *, now: Optional[datetime] = None
+) -> Dict[str, Dict[Optional[str], Optional[ProviderHold]]]:
+    """Every held agent of *project_id*, with each CLI it has a row for and the hold on it there,
+    None where it is not held, read at one `now` (FR-11). An agent held nowhere is left out.
+
+    One statement in the ordinary case (`the-app-stays-responsive-while-agents-run`, FR-6): each
+    agent's newest row per CLI, which is its newest *informative* row almost always. Only a CLI
+    whose newest row says nothing about the provider falls back to the paged walk, so the answer
+    is the one asking `provider_hold` per agent and CLI gives. A row naming no CLI speaks for every
+    CLI, so a CLI's answer is read from the newer of its own row and that one.
+    """
+    current = now if now is not None else _utcnow()
+    rowid = literal_column("turn_usage.rowid")
+    newest = (
+        select(func.max(rowid))
+        .where(TurnUsage.project_id == project_id)
+        .group_by(TurnUsage.agent, TurnUsage.runner)
+    )
+    rows = (
+        await db.execute(
+            select(
+                rowid.label("position"),
+                TurnUsage.agent,
+                TurnUsage.runner,
+                TurnUsage.status,
+                TurnUsage.allowance,
+                TurnUsage.observed_at,
+                TurnUsage.run_id,
+            ).where(rowid.in_(newest))
+        )
+    ).all()
+    by_agent: Dict[str, Dict[Optional[str], Any]] = {}
+    for row in rows:
+        by_agent.setdefault(row.agent, {})[row.runner] = row
+    held: Dict[str, Dict[Optional[str], Optional[ProviderHold]]] = {}
+    for agent, by_cli in by_agent.items():
+        readings: Dict[Optional[str], Optional[ProviderHold]] = {}
+        unnamed = by_cli.get(None)
+        for cli, row in by_cli.items():
+            if cli is not None and unnamed is not None and unnamed.position > row.position:
+                row = unnamed
+            if _is_informative(row):
+                hold = hold_for_reading(row.allowance, row.observed_at, row.run_id)
+            else:
+                walked = await _newest_informative(db, project_id, agent, cli, unnamed=cli is None)
+                hold = (
+                    hold_for_reading(walked.allowance, walked.observed_at, walked.run_id)
+                    if walked is not None
+                    else None
+                )
+            readings[cli] = hold if hold is not None and current < hold.hold_until else None
+        if any(hold is not None for hold in readings.values()):
+            held[agent] = readings
+    return held
+
+
+def hold_on(
+    readings: Dict[Optional[str], Optional[ProviderHold]], cli: Optional[str]
+) -> Optional[ProviderHold]:
+    """The hold among one agent's *readings* (`agent_cli_holds`, `cli_readings`) that stops a run on
+    *cli*: that CLI's own reading where it has one, else the reading of rows naming no CLI. With
+    *cli* unknown, any hold."""
+    if cli is None:
+        return next((hold for hold in readings.values() if hold is not None), None)
+    if cli in readings:
+        return readings[cli]
+    return readings.get(None)
 
 
 async def agent_holds(
     db: AsyncSession, project_id: str, *, now: Optional[datetime] = None
 ) -> Dict[str, ProviderHold]:
-    """`provider_hold` for every agent in *project_id* it holds, read at one `now`.
-
-    One statement in the ordinary case (`the-app-stays-responsive-while-agents-run`, FR-6): each
-    agent's newest row, which is its newest *informative* row almost always. Only an agent whose
-    newest row says nothing about the provider falls back to `provider_hold`'s paged walk, so the
-    answer is the one asking `provider_hold` per agent gives, without reading every agent's history
-    to find it.
-    """
-    current = now if now is not None else _utcnow()
-    newest = (
-        select(func.max(literal_column("turn_usage.rowid")))
-        .where(TurnUsage.project_id == project_id)
-        .group_by(TurnUsage.agent)
+    """`provider_hold` for every agent in *project_id* held on its default entry's CLI, read at one
+    `now`: what a job firing, a documentless loop's briefing or a chat of the agent would meet."""
+    by_agent = await agent_cli_holds(db, project_id, now=now)
+    if not by_agent:
+        return {}
+    defaults: Dict[str, str] = dict(
+        (
+            await db.execute(
+                select(Agent.name, Runner.cli)
+                .select_from(Agent)
+                .join(Runner, Runner.id == Agent.runner_id)
+                .where(Agent.project_id == project_id, Agent.name.in_(list(by_agent)))
+            )
+        ).all()
     )
-    rows = (
-        await db.execute(
-            select(
-                TurnUsage.agent,
-                TurnUsage.status,
-                TurnUsage.allowance,
-                TurnUsage.observed_at,
-                TurnUsage.run_id,
-            ).where(literal_column("turn_usage.rowid").in_(newest))
-        )
-    ).all()
     held: Dict[str, ProviderHold] = {}
-    for row in rows:
-        if _is_informative(row):
-            hold = hold_for_reading(row.allowance, row.observed_at, row.run_id)
-            if hold is not None and current >= hold.hold_until:
-                hold = None
-        else:
-            hold = await provider_hold(db, project_id, row.agent, now=current)
+    for agent, holds in by_agent.items():
+        hold = hold_on(holds, defaults.get(agent))
         if hold is not None:
-            held[row.agent] = hold
+            held[agent] = hold
     return held
 
 
@@ -294,8 +438,9 @@ def hold_coalesce_reason(agent: str, hold: ProviderHold) -> str:
     )
 
 
-def allowance_wake_job_id(project_id: str, agent: str) -> str:
-    return f"allowance-wake:{project_id}:{agent}"
+def allowance_wake_job_id(project_id: str, agent: str, cli: Optional[str] = None) -> str:
+    base = f"allowance-wake:{project_id}:{agent}"
+    return f"{base}:{cli}" if cli else base
 
 
 async def _allowance_wake(project_id: str, agent: str) -> None:
@@ -305,13 +450,16 @@ async def _allowance_wake(project_id: str, agent: str) -> None:
     await schedule_or_defer({(project_id, agent)})
 
 
-def arm_allowance_wake(project_id: str, agent: str, when: datetime) -> None:
-    """Start *agent*'s queue again at *when*, the end of its hold (design D5).
+def arm_allowance_wake(
+    project_id: str, agent: str, when: datetime, cli: Optional[str] = None
+) -> None:
+    """Start *agent*'s queue again at *when*, the end of its hold on *cli* (design D5).
 
     The turn scheduler has no tick, so without this a hold would end and nothing would come back.
     A one-shot date job on the running `JobScheduler`, whose store is in memory by design (F351),
-    so it adds nothing to the database; `arm_held_queues` re-arms at start. One id per agent with
-    `replace_existing`, so a renewed refusal moves the wake rather than adding one.
+    so it adds nothing to the database; `arm_held_queues` re-arms at start. One id per agent and
+    CLI with `replace_existing`, so a renewed refusal moves the wake rather than adding one, and
+    one CLI's later reset never moves another's (FR-11).
 
     Never raises into its caller, which is a run's end. With no running scheduler — most tests, and
     anything before `init_scheduler` — it does nothing; the next start's re-arm covers it.
@@ -331,7 +479,7 @@ def arm_allowance_wake(project_id: str, agent: str, when: datetime) -> None:
         scheduler.scheduler.add_job(
             func=_allowance_wake,
             trigger=DateTrigger(run_date=run_date, timezone="UTC"),
-            id=allowance_wake_job_id(project_id, agent),
+            id=allowance_wake_job_id(project_id, agent, cli),
             args=[project_id, agent],
             replace_existing=True,
         )
@@ -354,7 +502,7 @@ async def arm_held_queues() -> int:
     from .db.models import InboundQueueEntry
     from .run_reconciliation import schedule_or_defer
 
-    to_arm: list[tuple[str, str, datetime]] = []
+    to_arm: list[tuple[str, str, datetime, Optional[str]]] = []
     to_schedule: set[tuple[str, str]] = set()
     async with async_session_factory() as db:
         pairs = (
@@ -366,15 +514,14 @@ async def arm_held_queues() -> int:
         ).all()
         now = _utcnow()
         for project_id, agent in pairs:
-            hold = await last_refusal(db, project_id, agent)
-            if hold is None:
-                continue
-            if now < hold.hold_until:
-                to_arm.append((project_id, agent, hold.hold_until))
-            else:
-                to_schedule.add((project_id, agent))
-    for project_id, agent, when in to_arm:
-        arm_allowance_wake(project_id, agent, when)
+            # Each CLI the agent was refused on has its own reset (FR-11).
+            for cli, hold in (await last_refusals(db, project_id, agent)).items():
+                if now < hold.hold_until:
+                    to_arm.append((project_id, agent, hold.hold_until, cli))
+                else:
+                    to_schedule.add((project_id, agent))
+    for project_id, agent, when, cli in to_arm:
+        arm_allowance_wake(project_id, agent, when, cli)
     if to_schedule:
         await schedule_or_defer(to_schedule)
-    return len(to_arm) + len(to_schedule)
+    return len({(project_id, agent) for project_id, agent, _, _ in to_arm} | to_schedule)
