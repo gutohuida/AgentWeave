@@ -12,6 +12,7 @@ import {
   useUpdateAgentGithubMcp,
   useUpdateAgentGrant,
   useUpdateAgentPermissionDefault,
+  useUpdateAgentPool,
   useUpdateAgentReachGrants,
   useUpdateAgentReviewAgents,
 } from '@/api/agents'
@@ -20,6 +21,9 @@ import { useBindAgentCharter, useCharters } from '@/api/charters'
 import { permissionModeValues, useModelCatalog } from '@/api/modelCatalog'
 import { useProjectSettings } from '@/api/projects'
 import { useBindAgentModel, useProviderLaunchability, useRunners, useUpdateAgentWaiting } from '@/api/runners'
+import type { AgentPoolEntry } from '@/api/agentPool'
+import { PoolEditor } from './pool/PoolEditor'
+import { entryLabel } from './pool/poolModel'
 import { Button } from '@/components/ui/button'
 import { SettingsLoading, SettingsNotice, SettingsPage } from '@/components/ui/settings'
 import { SettingsNavLayout } from '@/components/settings/SettingsNavLayout'
@@ -292,9 +296,58 @@ function RunningSection({ agent }: { agent: AgentSummary }) {
     </>
   )
 
+  const updatePool = useUpdateAgentPool()
+  const [poolError, setPoolError] = React.useState<string | null>(null)
+  const current = agent.pool ?? []
+  const asWrite = (entry: Pick<AgentPoolEntry, 'runner_id' | 'effort' | 'default'>) => ({
+    runner_id: entry.runner_id,
+    effort: entry.effort,
+    default: entry.default,
+  })
+  // The Hub applies the whole list or none of it; its refusal is shown where the change was asked for.
+  const writePool = (next: Array<{ runner_id: string; effort: string | null; default: boolean }>, said: string) => {
+    setPoolError(null)
+    updatePool.mutate(
+      { agent: agent.name, pool: next },
+      {
+        onSuccess: () => toast({ title: said, tone: 'success' }),
+        onError: (error: unknown) => setPoolError(readableApiError(error, 'The Hub did not return a reason.')),
+      },
+    )
+  }
+  const poolLabel = (entry: Pick<AgentPoolEntry, 'cli' | 'model' | 'effort'>) => entryLabel(catalog, entry)
+
   return (
     <AgentRunningSettings
       agent={agent}
+      pool={
+        agent.pool ? (
+          <PoolEditor
+            agentName={agent.name}
+            pool={current}
+            runners={runners}
+            catalog={catalog}
+            error={poolError}
+            pending={updatePool.isPending}
+            onAdd={(choice) => {
+              const runner = runners.find((r) => r.id === choice.runner_id)
+              writePool(
+                [...current.map(asWrite), { runner_id: choice.runner_id, effort: choice.effort, default: current.length === 0 }],
+                runner ? `${agent.name} may run on ${poolLabel({ cli: runner.cli, model: runner.model ?? null, effort: choice.effort })}` : `${agent.name}'s models saved`,
+              )
+            }}
+            onRemove={(entry) =>
+              writePool(current.filter((e) => e.id !== entry.id).map(asWrite), `${agent.name} no longer runs on ${poolLabel(entry)}`)
+            }
+            onMakeDefault={(entry) =>
+              writePool(
+                current.map((e) => ({ ...asWrite(e), default: e.id === entry.id })),
+                `${agent.name} runs on ${poolLabel(entry)} unless a task chooses another`,
+              )
+            }
+          />
+        ) : undefined
+      }
       model={model}
       modelOptions={modelOptions}
       runNotes={notes}
