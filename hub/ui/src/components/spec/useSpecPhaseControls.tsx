@@ -7,7 +7,7 @@ import { DeleteConfirmDialog } from '@/components/common/DeleteConfirmDialog'
 import { FoldIntoCapabilityDialog } from '@/components/spec/FoldIntoCapabilityDialog'
 import { RetireCapabilityDialog } from '@/components/spec/RetireCapabilityDialog'
 import { StartFlowDialog } from '@/components/spec/StartFlowDialog'
-import { BuildPlanDialog } from '@/components/spec/BuildPlanDialog'
+import { BuildPlanDialog, type BuildPlanPools } from '@/components/spec/BuildPlanDialog'
 import { parsePayload } from '@/components/spec/page/adapt'
 import { BuildStatusStrip } from '@/components/spec/BuildStatusStrip'
 import { ReconcileSummary } from '@/components/spec/ReconcileSummary'
@@ -15,6 +15,8 @@ import { CloseAlreadyBuilt } from '@/components/spec/CloseAlreadyBuilt'
 import { useDocumentFlow, type LoopSummary } from '@/api/loops'
 import { readableApiError } from '@/api/client'
 import { useAgents } from '@/api/agents'
+import { useModelCatalog } from '@/api/modelCatalog'
+import { useRunners } from '@/api/runners'
 import { useHoldDocument, useReleaseHold } from '@/api/specTidy'
 import { useProjectSettings } from '@/api/projects'
 import { useConfigStore } from '@/store/configStore'
@@ -199,6 +201,8 @@ export function useSpecPhaseControls(
   // `SpecApprovalReport` already hold — one cache entry, not a second fetch.
   const { data: specDoc, isError: specDocError, refetch: reloadSpec } = useSpec(path)
   const { data: openAgentsData, isError: agentsError } = useAgents()
+  const { data: runnersData, isError: runnersError } = useRunners()
+  const { data: catalogData, isError: catalogError } = useModelCatalog()
   const { data: projectSettings, isError: settingsError } = useProjectSettings(useConfigStore().selectedProjectId)
   const setJourney = useSetSpecJourney()
   const [journeyRefusal, setJourneyRefusal] = useState<string | null>(null)
@@ -257,6 +261,19 @@ export function useSpecPhaseControls(
       })),
     [agentsError, openAgentsData],
   )
+  // Each agent's pool, so every task's builder and checker also choose a model (`a-profile-runs-
+  // each-task-on-a-runner-and-model-chosen-from-its-pool`, FR-6). An older Hub sends no pools, and
+  // the dialog then names agents only.
+  const buildPools = useMemo<BuildPlanPools | undefined>(() => {
+    const open = agentsError ? [] : (openAgentsData ?? [])
+    if (!open.some((agent) => agent.pool !== undefined)) return undefined
+    return {
+      byAgent: Object.fromEntries(open.map((agent) => [agent.name, agent.pool ?? []])),
+      runners: runnersError ? [] : (runnersData ?? []),
+      // A failed catalog read names each entry by its model id rather than its label.
+      catalog: catalogError ? undefined : catalogData,
+    }
+  }, [agentsError, openAgentsData, runnersError, runnersData, catalogError, catalogData])
   // eslint-disable-next-line react-hooks/exhaustive-deps -- the moment the dialog opened
   const buildOpenedAt = useMemo(() => new Date(), [building])
 
@@ -1049,11 +1066,13 @@ export function useSpecPhaseControls(
           agents={buildAgents}
           now={buildOpenedAt}
           pullRequestLanding={!settingsError && Boolean(projectSettings?.pr_landing)}
+          pools={buildPools}
           isPending={build.isPending || approveAndBuild.isPending}
           error={buildRefusal}
           onConfirm={(shown) => {
             // Fast has no checker: the dialog hides them, so none is sent (FR-7).
-            const choices = shown.level === 'fast' ? { ...shown, checker: '', task_checkers: {} } : shown
+            const choices =
+              shown.level === 'fast' ? { ...shown, checker: '', task_checkers: {}, task_checker_entries: undefined } : shown
             return building === 'approve' ? onApproveAndBuild(choices) : onBuild(choices)
           }}
         />

@@ -34,6 +34,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
 
 from . import blocking
+from .agent_pool import bind_default
 from .db.models import (
     STALL_CAUSES,
     Agent,
@@ -538,8 +539,9 @@ async def ensure_mender(db: AsyncSession, project_id: str) -> "tuple[Optional[Ag
         )
         db.add(agent)
         await db.flush()
+        await bind_default(db, agent, runner.id)
     else:
-        agent.runner_id = runner.id
+        await bind_default(db, agent, runner.id)
         if agent.lifecycle != "open":
             agent.lifecycle = "open"
             agent.archived_at = None

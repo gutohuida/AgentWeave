@@ -520,6 +520,20 @@ def checker_of(build: Optional[Build], task: Task) -> Optional[Tuple[Optional[st
     return _person(build.people.get("checker")), "default"
 
 
+def chosen_entry(build: Optional[Build], task: Task, role: str) -> Optional[Dict[str, Any]]:
+    """The pool entry (`{runner_id, effort}`) the operator chose at Build for *task*'s *role*
+    (`builder` or `checker`), or None where they chose none (`a-profile-runs-each-task-on-a-runner-
+    and-model-chosen-from-its-pool`, FR-6). The first of FR-7's three sources; the launch path
+    falls back to the document's recommendation, then the profile's default."""
+    if build is None or not isinstance(build.people, dict):
+        return None
+    own = (build.people.get("tasks") or {}).get(task.spec_task_key or task.id) or {}
+    entry = own.get(f"{role}_entry")
+    if not isinstance(entry, dict) or not entry.get("runner_id"):
+        return None
+    return {"runner_id": entry["runner_id"], "effort": entry.get("effort") or None}
+
+
 def recorded_checkers(build: Optional[Build], tasks: Iterable[Task]) -> Optional[Set[str]]:
     """Everybody *build* names to check *tasks*, or None where it does not say for one of them or
     there are none, so the document's declaration still stands there (`checker_of`)."""
@@ -736,6 +750,11 @@ class Settings:
     checker: Optional[str] = None
     #: Each task's checker as the operator left it in the dialog, by task key; "" clears it.
     task_checkers: Dict[str, str] = field(default_factory=dict)
+    #: The pool entry (`{runner_id, effort}`) the operator chose for each task's builder and
+    #: checker, by task key (`a-profile-runs-each-task-on-a-runner-and-model-chosen-from-its-
+    #: pool`, FR-6), each already checked against its agent's pool.
+    task_builder_entries: Dict[str, Dict[str, Any]] = field(default_factory=dict)
+    task_checker_entries: Dict[str, Dict[str, Any]] = field(default_factory=dict)
 
 
 def new_build(project_id: str, document_id: str, settings: Settings) -> Build:
@@ -803,6 +822,8 @@ async def cover_tasks(
     default_builder: Optional[str] = None,
     default_checker: Optional[str] = None,
     preferred: Optional[Set[str]] = None,
+    builder_entries: Optional[Dict[str, Dict[str, Any]]] = None,
+    checker_entries: Optional[Dict[str, Dict[str, Any]]] = None,
 ) -> List[Dict[str, str]]:
     """Mark *tasks* as the build's, at its level, and apply each one's builder (FR-2, FR-3).
 
@@ -814,7 +835,9 @@ async def cover_tasks(
 
     Each task's checker is resolved the same way (*declared_checkers*, *chosen_checkers*), and the
     build records the people it was given (`Build.people`, `one-checker`): the defaults, and each
-    task's own builder and checker, empty where the task takes the default.
+    task's own builder and checker, empty where the task takes the default, and the pool entry the
+    operator chose for each (*builder_entries*, *checker_entries*; `builder_entry` and
+    `checker_entry`, absent where none was chosen), which a task's runs launch with (FR-6, FR-7).
     """
     agents = await open_agents(session, build.project_id)
     declared_checkers = declared_checkers or {}
@@ -845,6 +868,9 @@ async def cover_tasks(
             # choice in the dialog is not, so it stays required.
             if preferred and key in preferred and key not in chosen:
                 people[key]["preferred"] = True
+            for role, entries in (("builder", builder_entries), ("checker", checker_entries)):
+                if entries and key in entries:
+                    people[key][f"{role}_entry"] = dict(entries[key])
         task.builder = builder
         if builder is None:
             continue

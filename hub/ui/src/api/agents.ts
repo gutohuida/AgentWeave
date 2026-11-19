@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { deleteJson, getJson, patchJson, postJson } from './client'
 import { useConfigStore } from '@/store/configStore'
+import type { AgentPoolEntry } from './agentPool'
 import { invalidateOncePerEvent, onSseReconnect, useSSE, SSEEvent } from '@/hooks/useSSE'
 import { hubDate } from '@/lib/hubTime'
 import { BACKSTOP_MS } from '@/lib/backstopPoll'
@@ -41,6 +42,10 @@ export interface AgentSummary {
   runner_options?: Record<string, unknown>  // Runner-specific options (e.g., memory for Codex)
   color_index?: number | null  // Stable palette index, assigned once at registration
   runner_id?: string | null  // Bound Runner record, if any (runner-agent-charter-separation)
+  /** The runners and efforts this profile may run on, exactly one the default; `runner_id` names
+   *  the default's runner (`a-profile-runs-each-task-on-a-runner-and-model-chosen-from-its-pool`,
+   *  FR-1). Absent from an older Hub. */
+  pool?: AgentPoolEntry[]
   charter_id?: string | null  // Bound Charter record, if any (runner-agent-charter-separation)
   /** How long this agent waits on the operator. `null` means the built-in default. */
   permission_timeout_seconds?: number | null

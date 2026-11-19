@@ -255,7 +255,7 @@ export interface SpecRecommendedBuild {
   task_checkers?: Record<string, string | null>
   /** Why each task's own builder and checker were recommended, by task key; absent from an older
    *  Hub, and a task giving none is listed with an empty object. */
-  task_reasons?: Record<string, { builder?: string; checker?: string }>
+  task_reasons?: Record<string, { builder?: string; checker?: string; builder_entry?: string; checker_entry?: string }>
   /** The pool entry the document recommends for each task's builder and checker (FR-5); absent
    *  from an older Hub, and a task naming none is absent or null. */
   task_builder_entries?: Record<string, PoolEntryChoice | null>
