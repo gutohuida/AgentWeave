@@ -97,10 +97,21 @@ async def test_full_access_is_not_carried_into_a_run_the_operator_did_not_start(
 
 @pytest.mark.asyncio
 async def test_other_overrides_survive_alongside_a_dropped_posture(app):
+    await _conversation("mixed", {"permission_mode": UNINHERITED_PERMISSION_MODE, "custom": "kept"})
+    assert await _inherit("mixed") == {"custom": "kept"}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("origin", ["peer", SCHEDULED_ORIGIN])
+async def test_the_model_and_effort_never_travel(app, origin):
+    """`a-profile-runs-each-task-on-a-runner-and-model-chosen-from-its-pool`, FR-10: a model or
+    effort tried in a chat is that chat's; the conversation a peer message or a job opens launches
+    on the profile's pool entry. The posture beside them still travels."""
     await _conversation(
-        "mixed", {"permission_mode": UNINHERITED_PERMISSION_MODE, "model": "claude-opus-5"}
+        f"picked-{origin}",
+        {"permission_mode": "workspace", "model": "claude-sonnet-5-5", "effort": "high"},
     )
-    assert await _inherit("mixed") == {"model": "claude-opus-5"}
+    assert await _inherit(f"picked-{origin}", origin=origin) == {"permission_mode": "workspace"}
 
 
 @pytest.mark.asyncio
@@ -142,8 +153,8 @@ async def test_a_firing_still_inherits_a_posture_it_can_act_on(app):
 
 
 @pytest.mark.asyncio
-async def test_a_firing_keeps_the_model_beside_a_withheld_posture(app):
-    """The model the operator chose is not a permission decision and travels either way."""
+async def test_a_firing_drops_the_model_beside_a_withheld_posture(app):
+    """Withholding the posture leaves nothing: the model never travels (FR-10)."""
     await _conversation(
         "tuned",
         {
@@ -151,7 +162,7 @@ async def test_a_firing_keeps_the_model_beside_a_withheld_posture(app):
             "model": "claude-opus-5",
         },
     )
-    assert await _inherit("tuned", origin=SCHEDULED_ORIGIN) == {"model": "claude-opus-5"}
+    assert await _inherit("tuned", origin=SCHEDULED_ORIGIN) is None
 
 
 @pytest.mark.asyncio

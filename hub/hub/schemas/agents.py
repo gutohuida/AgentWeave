@@ -241,8 +241,27 @@ class RunFacts(BaseModel):
     # reason: an invented value would be indistinguishable from a recorded one.
     harness_mcp_status: Optional[str] = Field(default=None, max_length=16)
     plane_surface: Optional[str] = Field(default=None, max_length=8)
+    # What the run launched with (`a-profile-runs-each-task-on-a-runner-and-model-chosen-from-its-
+    # pool`, FR-12), the row's own values: the runner record, the model it was given and the
+    # reasoning effort. None where the CLI chose, or for a run that predates the record.
+    runner_id: Optional[str] = Field(default=None, max_length=64)
+    model: Optional[str] = Field(default=None, max_length=256)
+    effort: Optional[str] = Field(default=None, max_length=32)
 
     model_config = {"from_attributes": True}
+
+
+class RunRead(RunFacts):
+    """One run as `GET /runs/{run_id}` answers it: its facts, and what it belongs to."""
+
+    id: str = Field(max_length=64)
+    agent: str = Field(max_length=64)
+    conversation_id: Optional[str] = Field(default=None, max_length=64)
+    task_id: Optional[str] = Field(default=None, max_length=64)
+    initiator: str = Field(max_length=16)
+    # The runner's CLI and name, read from the runner record now; None where it has been deleted.
+    cli: Optional[str] = Field(default=None, max_length=64)
+    runner_name: Optional[str] = Field(default=None, max_length=256)
 
 
 class AgentTimeline(BaseModel):
@@ -277,7 +296,7 @@ class ContextUsageCreate(RequestModel):
     context_tokens: Optional[int] = Field(default=None, ge=0)
     limit_tokens: Optional[int] = Field(default=None, gt=0)
     percent: Optional[float] = Field(default=None, ge=0, le=100)
-    model: Optional[str] = Field(default=None, max_length=128)
+    model: Optional[str] = Field(default=None, max_length=256)
     session_id: Optional[str] = Field(default=None, max_length=128)
     observed_at: float = Field(ge=0)
     breakdown: Optional[Dict[str, int]] = None

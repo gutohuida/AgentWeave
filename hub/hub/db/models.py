@@ -971,6 +971,12 @@ class Task(Base):
     # it when the next Build takes it in. Who checks a task in a build is the build's people
     # (`builds.checker_of`), which this seeds and does not replace.
     checker: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    # The pool entry this task's builder and checker runs launch with, fixed when the first run of
+    # each starts (`a-profile-runs-each-task-on-a-runner-and-model-chosen-from-its-pool`, FR-7,
+    # migration 0187): `{"agent", "runner_id", "effort"}`, written only by `launch_entry`. Null
+    # until that run starts; a later run by the same agent uses it, including every re-review.
+    builder_entry: Mapped[Optional[Any]] = mapped_column(JSON, nullable=True)
+    checker_entry: Mapped[Optional[Any]] = mapped_column(JSON, nullable=True)
 
     project: Mapped["Project"] = relationship(back_populates="tasks")
 
@@ -1668,6 +1674,14 @@ class Run(Base):
     # The CLI version the run's harness reported (Claude's `system/init` `claude_code_version`),
     # NULL when it reported none. F678: what a Claude result's totals mean changed at 2.1.277.
     runner_version: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    # What this run launched with (`a-profile-runs-each-task-on-a-runner-and-model-chosen-from-its-
+    # pool`, FR-12, migration 0187): the runner record, the model it was given (the runner's own,
+    # or a chat's override; null when the CLI chose), and the reasoning effort (null when left to
+    # the CLI). Written once, at spawn, from the same values the command is built from; null for
+    # runs that predate the columns.
+    runner_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    model: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)
+    effort: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
     # The directory this run *started* in, written at spawn from `effective_work_dir`
     # (`2026-08-27-work-is-isolated-per-task`, design D7).
     #
@@ -1769,7 +1783,7 @@ class TurnUsage(Base):
     agent: Mapped[str] = mapped_column(String(64), nullable=False)
     status: Mapped[str] = mapped_column(String(16), nullable=False)
     runner: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
-    model: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    model: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)
     input_tokens: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     output_tokens: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     total_tokens: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
