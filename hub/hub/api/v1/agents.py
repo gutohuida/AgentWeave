@@ -24,12 +24,12 @@ from ... import (
     worktrees,
 )
 from ...agent_activity import latest_activity_by_agent
-from ...agent_pool import PoolRefusal, bind_default, pool_out, pools_by_agent, replace_pool
-from ...agent_pool import serialize_pool as serialize_agent_pool
 from ...agent_colors import next_color_index
 from ...agent_lifecycle import archivable as agent_archivable
 from ...agent_lifecycle import archive as archive_agent_row
 from ...agent_lifecycle import unarchive as unarchive_agent_row
+from ...agent_pool import PoolRefusalError, bind_default, pool_out, pools_by_agent, replace_pool
+from ...agent_pool import serialize_pool as serialize_agent_pool
 from ...agent_roster import require_agent_row, require_known_agent
 from ...agent_status import effective_heartbeat_status
 from ...auth import get_project
@@ -3736,7 +3736,7 @@ async def patch_agent(
     if "pool" in body:
         try:
             await replace_pool(session, agent_row, body["pool"])
-        except PoolRefusal as exc:
+        except PoolRefusalError as exc:
             raise HTTPException(status_code=exc.status_code, detail=exc.message) from exc
         runner_newly_bound = (
             agent_row.runner_id is not None and agent_row.runner_id != previous_runner_id

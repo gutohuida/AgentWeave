@@ -302,7 +302,11 @@ async def test_legacy_bind_sets_default_provider_and_model_adds_opus_as_default(
     assert opus not in (haiku, sonnet)
     runner = (await app.get(f"{BASE}/runners/{opus}", headers=auth_headers)).json()
     assert runner["cli"] == "claude" and runner["model"] in ("opus", "claude-opus-5-5")
-    assert _shape(agent["pool"]) == [(haiku, None, False), (sonnet, None, False), (opus, None, True)]
+    assert _shape(agent["pool"]) == [
+        (haiku, None, False),
+        (sonnet, None, False),
+        (opus, None, True),
+    ]
 
 
 @pytest.mark.asyncio
@@ -311,19 +315,25 @@ async def test_legacy_runner_id_bind_makes_an_entry_already_there_the_default(
 ):
     haiku, sonnet = haiku_sonnet
 
-    resp = await app.patch(f"{BASE}/agents/builder", json={"runner_id": sonnet}, headers=auth_headers)
+    resp = await app.patch(
+        f"{BASE}/agents/builder", json={"runner_id": sonnet}, headers=auth_headers
+    )
     assert resp.status_code == 200, resp.text
     agent = await _agent(app, auth_headers, "builder")
     assert _shape(agent["pool"]) == [(haiku, None, False), (sonnet, None, True)]
     assert agent["runner_id"] == sonnet
 
     # Re-sending the bound runner changes nothing.
-    again = await app.patch(f"{BASE}/agents/builder", json={"runner_id": sonnet}, headers=auth_headers)
+    again = await app.patch(
+        f"{BASE}/agents/builder", json={"runner_id": sonnet}, headers=auth_headers
+    )
     assert again.status_code == 200
     assert (await _agent(app, auth_headers, "builder"))["pool"] == agent["pool"]
 
     # Unbinding empties the pool: an agent with no runner has none.
-    cleared = await app.patch(f"{BASE}/agents/builder", json={"runner_id": None}, headers=auth_headers)
+    cleared = await app.patch(
+        f"{BASE}/agents/builder", json={"runner_id": None}, headers=auth_headers
+    )
     assert cleared.status_code == 200
     agent = await _agent(app, auth_headers, "builder")
     assert agent["pool"] == [] and agent["runner_id"] is None
@@ -360,9 +370,13 @@ async def test_an_archived_agents_pool_loses_a_deleted_runner_and_keeps_a_defaul
 def _seed_agents(db_file) -> None:
     with sqlite3.connect(db_file) as conn:
         conn.execute("PRAGMA foreign_keys = OFF")
-        conn.execute(
-            "INSERT INTO projects (id, name, created_at) VALUES ('proj-m', 'm', '2026-11-19')"
-        ) if not conn.execute("SELECT 1 FROM projects WHERE id='proj-m'").fetchone() else None
+        (
+            conn.execute(
+                "INSERT INTO projects (id, name, created_at) VALUES ('proj-m', 'm', '2026-11-19')"
+            )
+            if not conn.execute("SELECT 1 FROM projects WHERE id='proj-m'").fetchone()
+            else None
+        )
         conn.execute(
             "INSERT INTO runners (id, project_id, name, cli, model, created_at, updated_at) "
             "VALUES ('runner-h', 'proj-m', 'Haiku', 'claude', 'claude-haiku-5-5', "

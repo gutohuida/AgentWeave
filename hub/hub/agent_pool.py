@@ -34,7 +34,7 @@ EntryKey = Tuple[str, Optional[str]]
 
 
 @dataclass
-class PoolRefusal(Exception):
+class PoolRefusalError(Exception):
     """A pool edit refused, with the sentence that says why. Nothing has been written."""
 
     message: str
@@ -58,7 +58,7 @@ def model_label(runner: Runner) -> str:
 
 
 def entry_label(runner: Optional[Runner], effort: Optional[str]) -> str:
-    """"Opus 5.5 · high", or the runner id when the runner is gone."""
+    """ "Opus 5.5 · high", or the runner id when the runner is gone."""
     base = model_label(runner) if runner is not None else "a deleted runner"
     return f"{base} · {effort}" if effort else base
 
@@ -191,28 +191,28 @@ async def bind_default(session: AsyncSession, agent: Agent, runner_id: Optional[
 
 def _parsed_entries(raw: object) -> List[Tuple[str, Optional[str], bool]]:
     if not isinstance(raw, list):
-        raise PoolRefusal("pool must be a list of entries")
+        raise PoolRefusalError("pool must be a list of entries")
     parsed: List[Tuple[str, Optional[str], bool]] = []
     for index, item in enumerate(raw):
         if not isinstance(item, dict):
-            raise PoolRefusal(f"pool[{index}] must be an object")
+            raise PoolRefusalError(f"pool[{index}] must be an object")
         unknown = sorted(set(item) - _ENTRY_FIELDS)
         if unknown:
-            raise PoolRefusal(
+            raise PoolRefusalError(
                 f"pool[{index}]: unknown field(s) {', '.join(unknown)}. "
                 f"Valid: {', '.join(sorted(_ENTRY_FIELDS))}"
             )
         runner_id = item.get("runner_id")
         if not isinstance(runner_id, str) or not runner_id:
-            raise PoolRefusal(f"pool[{index}] needs a runner_id")
+            raise PoolRefusalError(f"pool[{index}] needs a runner_id")
         effort = item.get("effort")
         if effort == "":
             effort = None
         if effort is not None and not isinstance(effort, str):
-            raise PoolRefusal(f"pool[{index}]: effort must be a string or null")
+            raise PoolRefusalError(f"pool[{index}]: effort must be a string or null")
         is_default = item.get("default", False)
         if not isinstance(is_default, bool):
-            raise PoolRefusal(f"pool[{index}]: default must be true or false")
+            raise PoolRefusalError(f"pool[{index}]: default must be true or false")
         parsed.append((runner_id, effort, is_default))
     return parsed
 
@@ -236,17 +236,17 @@ async def replace_pool(session: AsyncSession, agent: Agent, raw: object) -> None
             continue
         runner = await session.get(Runner, runner_id)
         if runner is None or runner.project_id != agent.project_id:
-            raise PoolRefusal(f"Runner '{runner_id}' not found", status_code=404)
+            raise PoolRefusalError(f"Runner '{runner_id}' not found", status_code=404)
         runners[runner_id] = runner
     for runner_id, effort, _ in parsed:
         refusal = effort_refusal(runners[runner_id], effort)
         if refusal is not None:
-            raise PoolRefusal(refusal)
+            raise PoolRefusalError(refusal)
 
     seen: set[EntryKey] = set()
     for runner_id, effort, _ in parsed:
         if (runner_id, effort) in seen:
-            raise PoolRefusal(
+            raise PoolRefusalError(
                 f"{entry_label(runners[runner_id], effort)} on {runners[runner_id].name} is "
                 "listed twice; a pool holds each runner and effort once."
             )
@@ -254,7 +254,7 @@ async def replace_pool(session: AsyncSession, agent: Agent, raw: object) -> None
 
     named = [(runner_id, effort) for runner_id, effort, is_default in parsed if is_default]
     if len(named) > 1:
-        raise PoolRefusal(
+        raise PoolRefusalError(
             "A pool has exactly one default; "
             + " and ".join(entry_label(runners[r], e) for r, e in named)
             + " are both marked default."
@@ -268,14 +268,14 @@ async def replace_pool(session: AsyncSession, agent: Agent, raw: object) -> None
             current_runner = runners.get(current.runner_id) or await session.get(
                 Runner, current.runner_id
             )
-            raise PoolRefusal(
+            raise PoolRefusalError(
                 f"Removing the default, {entry_label(current_runner, current.effort)}, needs "
                 "another entry named default in the same change."
             )
         elif len(parsed) == 1:
             default_key = (parsed[0][0], parsed[0][1])
         else:
-            raise PoolRefusal("Name one entry as the default.")
+            raise PoolRefusalError("Name one entry as the default.")
 
     by_key = {_key(entry): entry for entry in existing}
     for entry in existing:

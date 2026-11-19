@@ -11,9 +11,9 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ... import binaries
+from ...agent_pool import remove_runner_from_pools
 from ...auth import get_project
 from ...db.engine import get_session
-from ...agent_pool import remove_runner_from_pools
 from ...db.models import Agent, AgentPoolEntry, ManagerJob, Project, Runner
 from ...launchability import probe_agent
 from ...model_catalog import get_provider, undeclared_model_reason
