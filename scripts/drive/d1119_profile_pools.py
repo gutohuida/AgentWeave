@@ -91,8 +91,9 @@ def payload(sonnet_runner_id, with_entry=True):
 
     sonnet = task(T_SONNET, "sonnet")
     if with_entry:
-        sonnet["builder_entry"] = {"runner_id": sonnet_runner_id, "effort": None}
-        sonnet["builder_entry_reason"] = "The drive: this task is built on Sonnet."
+        sonnet["builder_entry"] = {
+            "runner_id": sonnet_runner_id, "effort": None,
+            "reason": "The drive: this task is built on Sonnet."}
     return {
         "schema_version": 1, "kind": "change-spec", "title": "Two models",
         "summary": "Two files.", "problem": "There are no files.",
