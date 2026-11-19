@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import asyncio
 import threading
+import time
 from pathlib import Path
 from typing import Dict, List, Optional
 from unittest.mock import MagicMock, patch
@@ -34,6 +35,13 @@ from .test_turn_workspace import _agent, _init_repo, _real_worktrees
 TASK_A = "task-0a0a0a0a0a0a"
 TASK_B = "task-0b0b0b0b0b0b"
 TASK_C = "task-0c0c0c0c0c0c"
+
+#: How long a wait for a spawn or a run's end lasts: a deadline, not a count of polls. A start in
+#: a task's checkout runs a real `git worktree add` before it spawns, several seconds each on a
+#: loaded Windows machine, and the switch-off test chains a run's end, its re-drain and such a
+#: start behind one wait. A count of 1000 10 ms polls (about 10 s) failed it every time (OPMR-8)
+#: while the third turn did start, a second or so later.
+_WAIT_SECONDS = 60.0
 
 
 async def _set_project(**values) -> None:
@@ -90,7 +98,8 @@ class _Spawns:
             event.set()
 
     async def wait_for(self, count: int) -> None:
-        for _ in range(1000):
+        deadline = time.monotonic() + _WAIT_SECONDS
+        while time.monotonic() < deadline:
             if len(self.cwds) >= count:
                 return
             await asyncio.sleep(0.01)
@@ -136,7 +145,8 @@ async def _queued(agent: str = "writer") -> List[InboundQueueEntry]:
 
 async def _await_ended(count: int) -> None:
     """Until at most *count* runs are still running."""
-    for _ in range(1000):
+    deadline = time.monotonic() + _WAIT_SECONDS
+    while time.monotonic() < deadline:
         if len(await _running()) <= count:
             return
         await asyncio.sleep(0.01)
