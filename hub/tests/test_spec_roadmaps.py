@@ -23,6 +23,7 @@ from hub.spec_payload import (
     validate_payload,
 )
 
+from ._spec_confirmations import all_confirmed, confirm_criteria
 from ._spec_versions import content_version
 
 ROADMAP_PATH = "spec/changes/the-plan/spec.json"
@@ -178,7 +179,9 @@ def test_slices_and_link_round_trip_when_present():
 
 
 def _codes(payload, **kwargs):
-    return {f.code for f in spec_completeness.check(validate_payload(payload), **kwargs)}
+    payload = validate_payload(payload)
+    kwargs.setdefault("confirmations", all_confirmed(payload))
+    return {f.code for f in spec_completeness.check(payload, **kwargs)}
 
 
 def _approved_roadmap(phase="approved", keys=("s1", "s2")):
@@ -283,6 +286,7 @@ async def _agent_submit(app, headers, path, payload):
 
 async def _propose(app, auth_headers, path):
     """The propose route answers 200 either way; a refusal leaves the phase and lists `blocking`."""
+    await confirm_criteria(path)
     closed = await app.post(f"{BASE}/documents/close-exploration?path={path}", headers=auth_headers)
     assert closed.status_code == 200, closed.text
     response = await app.post(f"{BASE}/documents/check?path={path}", headers=auth_headers)
@@ -291,6 +295,7 @@ async def _propose(app, auth_headers, path):
 
 
 async def _approve(app, auth_headers, path, **body):
+    await confirm_criteria(path)
     return await app.post(
         f"{BASE}/documents/phase?path={path}&to=approved",
         json={
@@ -648,6 +653,10 @@ async def test_a_submission_warns_of_unordered_overlap_without_blocking_it(
         }
         for key in ("t1", "t2")
     ]
+    saved = await _agent_submit(app, planner, path, _slice_doc(roadmap=None, tasks=tasks))
+    assert saved.status_code == 200, saved.text
+    # Its criteria confirmed, saved again: the warning is all that is left to tell.
+    await confirm_criteria(path)
     saved = await _agent_submit(app, planner, path, _slice_doc(roadmap=None, tasks=tasks))
     assert saved.status_code == 200, saved.text
     body = saved.json()

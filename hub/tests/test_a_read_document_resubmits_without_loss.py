@@ -17,6 +17,8 @@ from hub.db.models import Agent, Run
 from hub.spec_documents import parse_stored
 from hub.spec_payload import SCHEMA_VERSION
 
+from ._spec_confirmations import confirm_criteria
+
 BASE = "/api/v1/projects/proj-test/project"
 DOCS = "/api/v1/agent-actions/spec/documents"
 PATH = "spec/changes/roundtrip-demo/spec.json"
@@ -79,6 +81,7 @@ async def _make(app, auth_headers, builder, requirements=(ALPHA, BETA), criteria
         headers=builder,
     )
     assert saved.status_code == 200, saved.text
+    await confirm_criteria(PATH)
 
 
 async def _read(app, builder):

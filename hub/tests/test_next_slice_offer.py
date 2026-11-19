@@ -15,6 +15,7 @@ from hub import slice_drafting, spec_lifecycle
 from hub.db.engine import async_session_factory
 from hub.db.models import Agent, Conversation, SpecDocument, Task, TaskLanding
 
+from ._spec_confirmations import confirm_criteria
 from .test_spec_roadmaps import (  # noqa: F401 -- fixtures
     BASE,
     CONVERSATION,
@@ -224,6 +225,7 @@ async def test_approval_refuses_the_request_and_an_old_request_is_an_offer(
     refused = await _approve(app, auth_headers, slice_path, draft_next_slice=True)
     assert refused.status_code == 400, refused.text
     assert "offer" in refused.json()["detail"]["message"]
+    await confirm_criteria(slice_path)
     refused_too = await app.post(
         f"{BASE}/documents/approve-and-build",
         params={"path": slice_path},

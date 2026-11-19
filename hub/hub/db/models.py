@@ -2803,6 +2803,38 @@ class SpecGapAcknowledgement(Base):
     )
 
 
+class SpecCriterionConfirmation(Base):
+    """An agent's word that one acceptance criterion was checked against the current code, and is
+    either new behaviour or a guard (`existing-behaviour-is-caught-before-the-build` D1, D2).
+
+    Beside the document, never in its payload, for the reason `SpecDocument.phase` is in the
+    database: a gate whose value lives where the gated party can write it is not a gate. One row
+    per (document, criterion key), replaced by a later confirmation. `criterion_digest` is the
+    criterion's `spec_digest.criterion_digest` when it was confirmed; the row counts only while it
+    equals the criterion's digest as the document now stands.
+    """
+
+    __tablename__ = "spec_criterion_confirmations"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    project_id: Mapped[str] = mapped_column(String(64), ForeignKey("projects.id"), nullable=False)
+    document_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("spec_documents.id"), nullable=False
+    )
+    criterion_key: Mapped[str] = mapped_column(String(128), nullable=False)
+    kind: Mapped[str] = mapped_column(String(16), nullable=False)  # "new" | "guard"
+    criterion_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    # The agent, from the run credential; never from a request body.
+    actor: Mapped[str] = mapped_column(String(128), nullable=False)
+    run_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint("document_id", "criterion_key", name="uq_spec_criterion_confirmation"),
+        Index("ix_spec_criterion_confirmations_document", "document_id"),
+    )
+
+
 class SpecEditProposal(Base):
     """One pending, individually acceptable edit against a `contract`/`gate`-rigor document.
 

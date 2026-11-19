@@ -104,6 +104,7 @@ DOCUMENT_REFERENCES: List[Reference] = [
     ("spec_document_events", "document_id", DELETE),
     ("spec_edit_proposals", "document_id", DELETE),
     ("spec_gap_acknowledgements", "document_id", DELETE),
+    ("spec_criterion_confirmations", "document_id", DELETE),
     ("spec_rigor_events", "document_id", DELETE),
     ("spec_requirement_revisions", "document_id", DELETE),
     ("spec_requirements", "document_id", DELETE),

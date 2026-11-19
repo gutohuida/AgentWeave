@@ -22,6 +22,7 @@ from hub.spec_documents import parse_stored
 from hub.spec_payload import payload_to_dict, validate_payload
 from hub.worker import WorkerResult
 
+from ._spec_confirmations import confirm_criteria
 from ._spec_versions import content_version
 from .test_spec_documents_api import (  # noqa: F401  (run_headers is a fixture)
     PATH,
@@ -141,6 +142,7 @@ def _payload(*requirements) -> dict:
 async def _saved(app, run_headers, *requirements) -> None:  # noqa: F811
     saved = await _submit(app, run_headers, _payload(*requirements))
     assert saved.status_code == 200, saved.text
+    await confirm_criteria(PATH)
 
 
 async def _warnings(app, auth_headers, path: str = PATH) -> list:

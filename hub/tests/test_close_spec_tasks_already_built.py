@@ -15,6 +15,7 @@ from hub.db.engine import async_session_factory
 from hub.db.models import Agent, Run, SpecDocument, Task
 from hub.spec_payload import SCHEMA_VERSION
 
+from ._spec_confirmations import confirm_criteria
 from ._spec_versions import content_version
 from .test_task_integration import commit_on_branch, commits_on, git, make_repo, set_main_branch
 
@@ -105,6 +106,7 @@ async def _approved_document(app, auth_headers, author_headers):
         f"{BASE}/documents/close-exploration", params={"path": PATH}, headers=auth_headers
     )
     await app.post(f"{BASE}/documents/check", params={"path": PATH}, headers=auth_headers)
+    await confirm_criteria(PATH)
     approved = await app.post(
         f"{BASE}/documents/phase",
         params={"path": PATH, "to": "approved"},
