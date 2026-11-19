@@ -61,6 +61,22 @@ _RETIRED = ("agent", "warning", "critical")
 LEGACY_CONTEXT_VOCABULARY = frozenset(_USED + _LIMIT + _RATIO + _WHEN + _CARRIED + _RETIRED)
 
 
+class AgentPoolEntryOut(BaseModel):
+    """One entry of a profile's pool, shaped as `hub/ui/src/api/agentPool.ts`'s `AgentPoolEntry`
+    (`a-profile-runs-each-task-on-a-runner-and-model-chosen-from-its-pool`, FR-1)."""
+
+    id: str = Field(max_length=64)
+    runner_id: str = Field(max_length=64)
+    # The runner's own name, as Settings -> Runners lists it.
+    runner_name: str = Field(max_length=256)
+    cli: str = Field(max_length=16)
+    # The runner's model; null runs the CLI's own default.
+    model: Optional[str] = Field(default=None, max_length=256)
+    # The catalog's effort value; null leaves it to the CLI.
+    effort: Optional[str] = Field(default=None, max_length=32)
+    default: bool = False
+
+
 class RunningRun(BaseModel):
     """One of an agent's running runs, with what it is working on (FR-11). A profile running in
     parallel can have several, and the roster lists every one rather than the newest."""
@@ -117,6 +133,9 @@ class AgentSummary(BaseModel):
     )
     color_index: Optional[int] = None  # Stable palette index, assigned once at registration
     runner_id: Optional[str] = Field(default=None, max_length=64)  # Bound Runner record, if any
+    # The runners this profile may run on, in the operator's order; exactly one is the default,
+    # and `runner_id` names its runner. Empty for an agent with no runner.
+    pool: List[AgentPoolEntryOut] = Field(default_factory=list)
     charter_id: Optional[str] = Field(default=None, max_length=64)  # Bound Charter record, if any
     # How long this agent waits on the operator. None means the built-in default.
     permission_timeout_seconds: Optional[int] = None

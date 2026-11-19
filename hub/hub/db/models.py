@@ -441,6 +441,37 @@ class Runner(Base):
     )
 
 
+class AgentPoolEntry(Base):
+    """One entry of a profile's pool: a project runner plus an optional reasoning effort
+    (`a-profile-runs-each-task-on-a-runner-and-model-chosen-from-its-pool`, FR-1, migration 0186).
+
+    A pool that is not empty has exactly one `is_default` entry, and `Agent.runner_id` always
+    names that entry's runner (FR-4), so every reader of `runner_id` keeps working. Both are
+    written only through `agent_pool`, which is what keeps them agreeing. `effort` is a value of
+    the runner's CLI's catalog `effort` control; NULL leaves it to the CLI. An entry is identified
+    by its runner and effort: "Opus high" and "Opus medium" are two entries.
+    """
+
+    __tablename__ = "agent_pool_entries"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    project_id: Mapped[str] = mapped_column(String(64), ForeignKey("projects.id"), nullable=False)
+    agent_id: Mapped[str] = mapped_column(String(64), ForeignKey("agents.id"), nullable=False)
+    runner_id: Mapped[str] = mapped_column(String(64), ForeignKey("runners.id"), nullable=False)
+    effort: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    is_default: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="0", nullable=False
+    )
+    # The order the operator listed the entries in; the settings page and Build show it.
+    position: Mapped[int] = mapped_column(Integer, default=0, server_default="0", nullable=False)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, nullable=False)
+
+    __table_args__ = (
+        Index("ix_agent_pool_entries_agent", "agent_id"),
+        Index("ix_agent_pool_entries_runner", "runner_id"),
+    )
+
+
 class Charter(Base):
     """Authored behavior content an agent is bound to.
 

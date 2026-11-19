@@ -13,7 +13,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ... import binaries
 from ...auth import get_project
 from ...db.engine import get_session
-from ...db.models import Agent, ManagerJob, Project, Runner
+from ...agent_pool import remove_runner_from_pools
+from ...db.models import Agent, AgentPoolEntry, ManagerJob, Project, Runner
 from ...launchability import probe_agent
 from ...model_catalog import get_provider, undeclared_model_reason
 from ...project_setup import publish_setup_changed
@@ -261,6 +262,18 @@ async def delete_runner(
     )
     bound_rows = bound.all()
     open_names = [name for name, lifecycle in bound_rows if lifecycle != "archived"]
+    # A runner an open agent's pool holds is bound to it too, default or not: deleting it would
+    # take an entry out of a pool the operator chose, and a task chosen on it would fall back.
+    pooled = await session.execute(
+        select(Agent.name)
+        .join(AgentPoolEntry, AgentPoolEntry.agent_id == Agent.id)
+        .where(
+            AgentPoolEntry.project_id == project_id,
+            AgentPoolEntry.runner_id == runner_id,
+            Agent.lifecycle != "archived",
+        )
+    )
+    open_names = sorted(set(open_names) | set(pooled.scalars().all()))
     # F589/F595: agents are not the only holders. A manager job's runner and the project's checkpoint
     # runner are bare ids with no foreign key, so deleting the runner left them dangling: the job
     # silently did nothing, and every later settings save answered 400 on the stale id.
@@ -298,6 +311,8 @@ async def delete_runner(
     # An archived agent runs nothing, so its binding only kept the runner undeletable (F532). The
     # agent and its history stay; it just no longer names a runner (`agent_lifecycle`: agents are
     # archived, never deleted).
+    # Archived agents' pools lose the entry; a pool that loses its default promotes its next one.
+    await remove_runner_from_pools(session, project_id, runner_id)
     if bound_rows:
         await session.execute(
             update(Agent)
