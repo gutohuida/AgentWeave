@@ -8,6 +8,7 @@ import { hubDate } from '@/lib/hubTime'
 import { BACKSTOP_MS } from '@/lib/backstopPoll'
 import { PERMISSION_MODE_CONTROL } from './modelCatalog'
 import type { ReachGrants } from './projects'
+import type { AgentPoolEntry, PoolEntryChoice } from './agentPool'
 
 /** One of an agent's running runs (`AgentSummary.running_runs`). */
 export interface RunningRun {
@@ -79,6 +80,9 @@ export interface AgentSummary {
   /** The operator's switch for keeping the specification corpus true; off by default, and only the
    *  operator can change it (`an-agent-the-operator-trusts-can-tidy-the-specs`). */
   can_admin_specs?: boolean
+  /** The runners and efforts it may run on, one the default (`a-profile-runs-each-task-on-a-runner-
+   *  and-model-chosen-from-its-pool`, FR-1). Absent from an older Hub. */
+  pool?: AgentPoolEntry[]
   /** Only the keys `ROSTER_CONFIG_KEYS` (hub/hub/api/v1/agents.py) allows back (F244) — a
    *  credential stored under some other key never reaches this listing. */
   config?: {
@@ -316,6 +320,23 @@ export function useUpdateAgentDescription() {
           query.queryKey[0] === 'project' &&
           query.queryKey[1] === projectId &&
           query.queryKey[2] === 'agents',
+      })
+    },
+  })
+}
+
+/** Replaces the agent's whole pool (FR-3); the Hub refuses an entry its model does not offer, or
+ *  a pool that drops the default without naming another, and changes nothing. */
+export function useUpdateAgentPool() {
+  const queryClient = useQueryClient()
+  const { selectedProjectId: projectId } = useConfigStore()
+  return useMutation({
+    mutationFn: ({ agent, pool }: { agent: string; pool: Array<PoolEntryChoice & { default?: boolean }> }) =>
+      patchJson(`/api/v1/projects/${projectId}/agents/${agent}`, { pool }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        predicate: (query) =>
+          query.queryKey[0] === 'project' && query.queryKey[1] === projectId && query.queryKey[2] === 'agents',
       })
     },
   })
