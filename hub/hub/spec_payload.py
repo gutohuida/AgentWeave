@@ -147,6 +147,26 @@ class ImportedFrom(_Part):
     key: str = Field(description="The task's key within that document.")
 
 
+class PoolEntry(_Part):
+    """One entry of a profile's pool, as a task recommends it for its builder or checker
+    (`a-profile-runs-each-task-on-a-runner-and-model-chosen-from-its-pool`, FR-5)."""
+
+    runner_id: str = Field(
+        max_length=64,
+        description="The project runner (CLI, model and flags) to run on, by its id as Settings → Runners and the agents API's `pool` name it.",
+    )
+    effort: Optional[str] = Field(
+        default=None,
+        max_length=32,
+        description="The reasoning effort, as the model catalog names it ('high'); empty leaves it to the CLI. Part of the entry: 'Opus high' and 'Opus medium' are two entries.",
+    )
+    reason: Optional[str] = Field(
+        default=None,
+        max_length=500,
+        description="One sentence on why this model suits this task. The operator reads it when they build.",
+    )
+
+
 class Task(_Part):
     key: str = Field(description="Stable handle for this task, unique within the document.")
     title: str = Field(
@@ -202,6 +222,14 @@ class Task(_Part):
         default=None,
         max_length=500,
         description="One sentence on why `checker` is recommended, in the same terms. With a single open agent `checker` is left empty and this says why.",
+    )
+    builder_entry: Optional[PoolEntry] = Field(
+        default=None,
+        description="The pool entry (runner and optional effort) the builder should run this task on (FR-5). Optional: empty runs on the builder's default. One that is not in the builder's pool is kept and draws a warning, since the pool may be edited before Build; at Build it is offered only when it is in the pool.",
+    )
+    checker_entry: Optional[PoolEntry] = Field(
+        default=None,
+        description="The pool entry the checker should check this task on, as `builder_entry` is for the builder.",
     )
 
 
@@ -912,6 +940,15 @@ def payload_to_dict(payload: SpecPayload) -> Dict[str, Any]:
         for reason in ("builder_reason", "checker_reason"):
             if task.get(reason) is None:
                 task.pop(reason, None)
+        # A task recommending no pool entry (FR-5) stores as it did before the field existed, and
+        # an entry giving no effort or reason stores without them.
+        for name in ("builder_entry", "checker_entry"):
+            if task.get(name) is None:
+                task.pop(name, None)
+            elif isinstance(task.get(name), dict):
+                for part in ("effort", "reason"):
+                    if task[name].get(part) is None:
+                        task[name].pop(part, None)
     # An uncited requirement stores as before, with no facts key.
     for requirement in data.get("requirements") or []:
         if requirement.get("facts") is None:
@@ -1005,7 +1042,31 @@ def declared_reasons(payload: Optional[Dict[str, Any]]) -> Dict[str, Dict[str, s
             text = entry.get(f"{choice}_reason")
             if isinstance(text, str) and text.strip():
                 reasons[choice] = text.strip()
+            # The reason for its recommended pool entry (FR-5), as `builder_entry`/`checker_entry`.
+            recommended = entry.get(f"{choice}_entry")
+            text = recommended.get("reason") if isinstance(recommended, dict) else None
+            if isinstance(text, str) and text.strip():
+                reasons[f"{choice}_entry"] = text.strip()
         out[str(entry["key"])] = reasons
+    return out
+
+
+def declared_entries(
+    payload: Optional[Dict[str, Any]], role: str
+) -> Dict[str, Optional[Dict[str, Any]]]:
+    """Each declared task's recommended pool entry for *role* (`builder` or `checker`) by key, as
+    `{runner_id, effort}`, or None where the task recommends none (FR-5)."""
+    out: Dict[str, Optional[Dict[str, Any]]] = {}
+    for entry in (payload or {}).get("tasks") or []:
+        if not isinstance(entry, dict) or not entry.get("key") or entry.get("from"):
+            continue
+        recommended = entry.get(f"{role}_entry")
+        runner_id = recommended.get("runner_id") if isinstance(recommended, dict) else None
+        out[str(entry["key"])] = (
+            {"runner_id": runner_id, "effort": recommended.get("effort") or None}
+            if isinstance(runner_id, str) and runner_id
+            else None
+        )
     return out
 
 

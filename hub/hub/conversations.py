@@ -63,6 +63,10 @@ UNINHERITED_BY_A_SCHEDULE_PERMISSION_MODE = "manual"
 SCHEDULED_ORIGIN = "job"
 
 
+#: Overrides a pool entry decides, so never copied into another conversation (FR-10).
+UNINHERITED_OVERRIDE_KEYS = frozenset({"model", "effort"})
+
+
 async def inherit_runtime_overrides(session: AsyncSession, conversation: Conversation) -> None:
     """Carry the agent's most recent runtime overrides into a conversation that states none.
 
@@ -78,6 +82,10 @@ async def inherit_runtime_overrides(session: AsyncSession, conversation: Convers
     Two postures are held back, and which two depends on who opened the conversation — see the
     constants above. `bypassPermissions` never travels; `manual` never travels into a firing,
     because a posture that waits for a person is not a posture for a turn that runs at 03:00.
+
+    The model and the effort never travel (`a-profile-runs-each-task-on-a-runner-and-model-chosen-
+    from-its-pool`, FR-10): a model tried in a chat is that chat's, and every conversation opened
+    here — a task's, a review's, a job's, a peer message's — launches on its pool entry instead.
     """
     if conversation.runtime_overrides:
         return
@@ -106,7 +114,8 @@ async def inherit_runtime_overrides(session: AsyncSession, conversation: Convers
     inherited = {
         key: value
         for key, value in previous.items()
-        if not (key == "permission_mode" and value in withheld)
+        if key not in UNINHERITED_OVERRIDE_KEYS
+        and not (key == "permission_mode" and value in withheld)
     }
     conversation.runtime_overrides = inherited or None
 

@@ -183,8 +183,17 @@ def start_run(
     runner: Optional[str],
     model: Optional[str],
     task_id: Optional[str] = None,
+    runner_name: Optional[str] = None,
+    launch_source: Optional[str] = None,
+    launch_role: Optional[str] = None,
+    events: Optional[List[Dict[str, Any]]] = None,
 ) -> None:
-    """Stage the root span of *run*'s trace in *session*, which commits it with the run."""
+    """Stage the root span of *run*'s trace in *session*, which commits it with the run.
+
+    The root names what the run launched with (`a-profile-runs-each-task-on-a-runner-and-model-
+    chosen-from-its-pool`, FR-12): the runner record (`aw.runner.id`, `aw.runner.name`), the model
+    and the effort, and which pool entry that was (`aw.launch.source`, `aw.launch.role`). *events*
+    are lines the start has to say, such as a chosen entry that left the pool (FR-8)."""
     if run.started_at is None:
         # Set here, not left to the column default, so the root and the run start together.
         run.started_at = _now()
@@ -199,6 +208,11 @@ def start_run(
         "aw.run.id": run.id,
         "aw.project.id": run.project_id,
         "aw.runner.cli": runner,
+        "aw.runner.id": getattr(run, "runner_id", None),
+        "aw.runner.name": runner_name,
+        "aw.request.effort": getattr(run, "effort", None),
+        "aw.launch.source": launch_source,
+        "aw.launch.role": launch_role,
         "aw.run.initiator": run.initiator,
         "aw.task.id": task_id or run.task_id,
         "aw.run.retry_of": run.divergence_source_run_id,
@@ -217,7 +231,16 @@ def start_run(
             start_time=started,
             trace_started_at=started,
             attributes={k: v for k, v in attributes.items() if v is not None},
-            events=[],
+            events=[
+                {
+                    "name": event["name"],
+                    "time": started.isoformat(),
+                    "attributes": {
+                        k: v for k, v in (event.get("attributes") or {}).items() if v is not None
+                    },
+                }
+                for event in events or []
+            ],
         )
     )
     _cursors[run.id] = _Cursor(trace_started_at=started, boundary=started, fresh=True)
