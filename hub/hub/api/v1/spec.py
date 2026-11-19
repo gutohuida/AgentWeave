@@ -30,6 +30,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ... import (
+    agent_pool,
     already_built,
     blocking,
     builds,
@@ -78,6 +79,7 @@ from ...db.models import (
     Project,
     RequirementDrift,
     RequirementEvidence,
+    Runner,
     SpecDocument,
     SpecDocumentEvent,
     SpecDocumentMerge,
@@ -561,6 +563,9 @@ def _recommended_build(document, payload: Optional[Dict[str, Any]]) -> Optional[
         "reasons": dict(delivery.reasons),
         # Why each task's own pick was recommended (`every-task-recommended`), by task key.
         "task_reasons": spec_payload_module.declared_reasons(payload),
+        # The pool entry each task recommends for its builder and checker, by key (FR-5).
+        "task_builder_entries": spec_payload_module.declared_entries(payload, "builder"),
+        "task_checker_entries": spec_payload_module.declared_entries(payload, "checker"),
     }
 
 
@@ -617,6 +622,13 @@ class PhaseRequest(RequestModel):
 _AgentName = Annotated[str, StringConstraints(min_length=1, max_length=32)]
 
 
+class _PoolEntryChoice(RequestModel):
+    """One pool entry as Build chooses it for a task's builder or checker (FR-6)."""
+
+    runner_id: str = Field(min_length=1, max_length=64)
+    effort: Optional[str] = Field(default=None, max_length=32)
+
+
 class _BuildChoices(RequestModel):
     """What the operator chooses when they press Build (`a-build-has-a-driver-a-level-and-its-
     people`, FR-1). Each field left out takes the recommended build's value (`recommended_build`),
@@ -644,6 +656,16 @@ class _BuildChoices(RequestModel):
     checker: Optional[str] = Field(default=None, max_length=32)
     # Each task's checker as the operator left it in the dialog, by task key; "" clears it.
     task_checkers: Optional[Dict[str, Annotated[str, StringConstraints(max_length=32)]]] = None
+    # The pool entry each task's builder and checker run on, by task key (`a-profile-runs-each-
+    # task-on-a-runner-and-model-chosen-from-its-pool`, FR-6): each must be in the pool of the
+    # agent the task's builder or checker resolves to. Left out, the task's entry resolves when
+    # its run starts (the recommendation when the pool holds it, else the default).
+    task_builder_entries: Optional[Dict[str, _PoolEntryChoice]] = Field(
+        default=None, max_length=500
+    )
+    task_checker_entries: Optional[Dict[str, _PoolEntryChoice]] = Field(
+        default=None, max_length=500
+    )
 
 
 class BuildRequest(_BuildChoices):
@@ -4137,6 +4159,25 @@ async def _build_settings(
         )
     if landing == builds.LANDING_PULL_REQUEST:
         await _refuse_pull_request_landing(session, project_id)
+    builder = (
+        body.builder.strip() or None
+        if body.builder is not None
+        else spec_payload_module.default_builder(payload)
+    )
+    checker = (
+        body.checker.strip() or None
+        if body.checker is not None
+        else spec_payload_module.default_checker(payload)[0]
+    )
+    builder_entries, checker_entries = await _chosen_entries(
+        session,
+        project_id,
+        payload,
+        body,
+        builder=builder,
+        checker=checker,
+        checks=level != builds.FAST,
+    )
     return builds.Settings(
         driver=driver,
         level=level,
@@ -4148,18 +4189,89 @@ async def _build_settings(
         window_end=end,
         landing=landing,
         task_builders=dict(body.task_builders or {}),
-        builder=(
-            body.builder.strip() or None
-            if body.builder is not None
-            else spec_payload_module.default_builder(payload)
-        ),
-        checker=(
-            body.checker.strip() or None
-            if body.checker is not None
-            else spec_payload_module.default_checker(payload)[0]
-        ),
+        builder=builder,
+        checker=checker,
         task_checkers=dict(body.task_checkers or {}),
+        task_builder_entries=builder_entries,
+        task_checker_entries=checker_entries,
     )
+
+
+async def _chosen_entries(
+    session: AsyncSession,
+    project_id: str,
+    payload: Optional[Dict[str, Any]],
+    body: _BuildChoices,
+    *,
+    builder: Optional[str],
+    checker: Optional[str],
+    checks: bool,
+) -> Tuple[Dict[str, Dict[str, Any]], Dict[str, Dict[str, Any]]]:
+    """The pool entries the operator chose for each task's builder and checker (FR-6), refused
+    (422 `entry_outside_pool`) before anything moves when one is not in the pool of the agent that
+    task's builder or checker resolves to, naming the task and the entry. An entry for a task the
+    document does not declare, or for a role no open agent fills, is refused the same way: there
+    is no pool it could be in. At Fast there is no checker, so checker entries are dropped."""
+    chosen_builders = body.task_builder_entries or {}
+    chosen_checkers = (body.task_checker_entries or {}) if checks else {}
+    if not chosen_builders and not chosen_checkers:
+        return {}, {}
+    people = spec_payload_module.declared_people(payload)
+    agents = {
+        agent.name: agent
+        for agent in (
+            await session.execute(
+                select(Agent).where(Agent.project_id == project_id, Agent.lifecycle != "archived")
+            )
+        )
+        .scalars()
+        .all()
+    }
+    pools = await agent_pool.pools_by_agent(session, project_id, [a.id for a in agents.values()])
+    own_people = {"builder": body.task_builders or {}, "checker": body.task_checkers or {}}
+    defaults = {"builder": builder, "checker": checker}
+
+    def profile(role: str, key: str) -> Optional[str]:
+        own = own_people[role]
+        named = own[key] if key in own else people[key][role]
+        return (named or "").strip() or defaults[role]
+
+    out: Dict[str, Dict[str, Dict[str, Any]]] = {"builder": {}, "checker": {}}
+    for role, chosen in (("builder", chosen_builders), ("checker", chosen_checkers)):
+        for key, choice in chosen.items():
+            effort = (choice.effort or "").strip() or None
+            runner = await session.get(Runner, choice.runner_id)
+            if runner is not None and runner.project_id != project_id:
+                runner = None
+            label = (
+                f"{agent_pool.entry_label(runner, effort)} on runner {runner.name}"
+                if runner is not None
+                else f"runner {choice.runner_id!r}"
+            )
+            if key not in people:
+                raise _unprocessable(
+                    "entry_outside_pool",
+                    f"task {key!r} is not a task this document declares, so {label} cannot be "
+                    f"chosen for its {role}",
+                )
+            name = profile(role, key)
+            agent = agents.get(name or "")
+            if agent is None:
+                why = f"{name} is not an open agent" if name else f"it names no {role}"
+                raise _unprocessable(
+                    "entry_outside_pool",
+                    f"task {key!r}: {label} was chosen for its {role}, but {why}, so there is "
+                    "no pool it could be in",
+                )
+            held = {(e.runner_id, e.effort) for e in pools.get(agent.id, [])}
+            if (choice.runner_id, effort) not in held:
+                raise _unprocessable(
+                    "entry_outside_pool",
+                    f"task {key!r}: {label} is not in {agent.name}'s pool, so its {role} cannot "
+                    f"run on it; choose one of {agent.name}'s models, or add it to the pool first",
+                )
+            out[role][key] = {"runner_id": choice.runner_id, "effort": effort}
+    return out["builder"], out["checker"]
 
 
 async def _refuse_pull_request_landing(session: AsyncSession, project_id: str) -> None:
@@ -4310,6 +4422,8 @@ async def _build(
         default_builder=settings.builder,
         default_checker=settings.checker,
         preferred=spec_payload_module.preferred_builders(payload),
+        builder_entries=settings.task_builder_entries,
+        checker_entries=settings.task_checker_entries,
     )
     if settings.driver == builds.DRIVER_HAND or document.kind != "change-spec":
         flow = (
@@ -4366,6 +4480,8 @@ _CHOICE_FIELDS = (
     "builder",
     "checker",
     "task_checkers",
+    "task_builder_entries",
+    "task_checker_entries",
 )
 
 
