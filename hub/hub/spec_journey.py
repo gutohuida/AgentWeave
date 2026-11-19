@@ -560,7 +560,10 @@ _ACCEPTANCE = (
     "- Name the **acceptance drive**: the one end-to-end check that fails while the behaviour cannot "
     "fire for real, and passes only when it can. Record it as a criterion.\n"
     "- Check that each criterion's `given` can actually be reached under this document's own "
-    "requirements."
+    "requirements.\n"
+    "- Check **each criterion against the current code**. For one that already holds, either mark "
+    "it a guard (`guard: true`) or rewrite it so that it fails until the change is built. Record "
+    "the confirmation of every criterion with `confirm_acceptance_criteria`; approval waits for it."
 )
 
 STEP_DUTIES: Dict[str, str] = {

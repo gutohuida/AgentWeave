@@ -272,3 +272,14 @@ async def test_a_step_named_with_the_size_wins(app, auth_headers, tmp_path):
 
     assert both.status_code == 200, both.text
     assert both.json()["step"] == "intake"
+
+
+@pytest.mark.parametrize(
+    "step", [spec_journey.ACCEPTANCE, spec_journey.REQUIREMENTS_AND_ACCEPTANCE]
+)
+def test_acceptance_step_text_names_existing_behaviour(step):
+    text = spec_journey.STEP_DUTIES[step]
+    assert "against the current code" in text
+    assert "guard: true" in text
+    assert "fails until the change is built" in text
+    assert "confirm_acceptance_criteria" in text
