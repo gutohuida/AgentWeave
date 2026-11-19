@@ -9,6 +9,8 @@ handed, the `Run` row, `GET /runs/{id}` and the run's trace root -- never the re
 from __future__ import annotations
 
 import asyncio
+import re
+import sys
 from contextlib import ExitStack
 from pathlib import Path
 from types import SimpleNamespace
@@ -58,6 +60,9 @@ class _Drive:
         self.codex = _Codex()
         self.runners: Dict[str, str] = {}
         self.names: List[str] = []
+        #: What `codex app-server`'s turns were started with, and each Copilot ACP spawn's argv.
+        self.codex_rpc: List[Dict[str, Any]] = []
+        self.copilot_argvs: List[List[str]] = []
 
     def _stubs(self) -> ExitStack:
         stack = ExitStack()
@@ -71,7 +76,22 @@ class _Drive:
         )
         # The route's early answer reads the task's branch; there is no repository here.
         stack.enter_context(patch("hub.task_integration.review_target", self._target))
+        stack.enter_context(patch("hub.codex_appserver.run_turn", self._codex_rpc))
+        stack.enter_context(patch("hub.copilot_acp.ACPProcess.spawn", self._copilot_spawn))
         return stack
+
+    async def _codex_rpc(self, **kwargs):
+        from hub.codex_appserver import TurnOutcome
+
+        self.codex_rpc.append(kwargs)
+        return TurnOutcome(thread_id=f"thread-rpc-{len(self.codex_rpc)}", status="completed")
+
+    async def _copilot_spawn(self, cmd, **kwargs):
+        from hub.copilot_acp import CopilotACPError
+
+        # The argv is the launch; the turn itself is not what these tests are about.
+        self.copilot_argvs.append(list(cmd))
+        raise CopilotACPError("stub: no Copilot here")
 
     @staticmethod
     async def _review(session, *, project_id, reviewer, task_id, repo_root, run_id=None):
@@ -564,64 +584,165 @@ def _argv(context: str) -> List[str]:
     ]
 
 
-#: The argv each start was handed for `_single_entry_argvs`' setup on the code before this change,
-#: captured at ad3e8c3 (this file's helper run against `git archive ad3e8c3 hub`) and put through
-#: `_normalised`: the tool server's path and the prompt are this machine's and this turn's, so
-#: they are compared by position only.
-BASELINE: Dict[str, List[str]] = {
-    "chat": _argv("solo"),
-    "task": _argv("solo"),
-    "review": _argv("solo-checker"),
-    "job": _argv("solo"),
-}
-
-
-def _normalised(argv: List[str], tmp: str) -> List[str]:
+def _normalised(argv: Any, tmp: str) -> Any:
+    """*argv* with what is this machine's or this turn's masked: the prompt, Claude's whole
+    `--mcp-config` (as captured first), and in every other value the test's directory, the
+    Python running the tool server and the tool server's own path."""
+    if isinstance(argv, dict):
+        return {key: _normalised(value, tmp) for key, value in argv.items()}
+    if not isinstance(argv, list):
+        return argv
     out: List[str] = []
     for index, value in enumerate(argv):
         previous = argv[index - 1] if index else None
         if previous == "--mcp-config":
             value = "<mcp-config>"
-        elif previous == "-p":
+        elif previous == "-p" or (argv[1:2] == ["exec"] and index == len(argv) - 1):
             value = "<prompt>"
         else:
-            value = value.replace(tmp, "<tmp>").replace("\\", "/")
+            value = _paths(value, tmp)
         out.append(value)
     return out
 
 
-async def _single_entry_argvs(drive: _Drive, tmp_path) -> Dict[str, List[str]]:
-    runner = await drive.runner("Claude Haiku", HAIKU)
+def _paths(value: str, tmp: str) -> str:
+    value = value.replace("\\\\", "/").replace("\\", "/")
+    for path, mask in ((tmp, "<tmp>"), (sys.executable, "<python>")):
+        value = value.replace(path.replace("\\", "/"), mask)
+    value = re.sub(r"^[A-Za-z]:/", "/", value)
+    return re.sub(r"[^\"\[]*/tool-server/[0-9a-f]+/mcp_server\.py", "<tool-server>", value)
+
+
+#: One CLI each: the runner's `cli`, model and flags, and how the stubs saw its launch.
+SINGLE_ENTRY_CLIS: Dict[str, Dict[str, Any]] = {
+    "claude": {"cli": "claude", "model": HAIKU},
+    "codex-exec": {"cli": "codex", "model": "gpt-6.1-sol", "flags": ["--no-app-server"]},
+    "codex-app-server": {"cli": "codex", "model": "gpt-6.1-sol"},
+    "copilot": {"cli": "copilot", "model": "claude-haiku-4.5"},
+}
+
+#: What decides an app-server turn's launch: its spawn argv is the constant `codex app-server`, so
+#: the rest is what `turn/start` is handed. The prompt and the context are this turn's.
+_RPC_LAUNCH_KEYS = ("cli", "model", "yolo", "posture", "config_overrides", "mcp_command")
+
+
+def _captured(drive: _Drive, which: str) -> Any:
+    if which == "claude":
+        return drive.claude.argvs[-1]
+    if which == "codex-exec":
+        return drive.codex.argvs[-1]
+    if which == "codex-app-server":
+        return {key: drive.codex_rpc[-1].get(key) for key in _RPC_LAUNCH_KEYS}
+    return drive.copilot_argvs[-1]
+
+
+async def _single_entry_argvs(drive: _Drive, tmp_path, which: str = "claude") -> Dict[str, Any]:
+    setup = SINGLE_ENTRY_CLIS[which]
+    runner = await drive.runner(
+        f"One {which}", setup["model"], cli=setup["cli"], flags=setup.get("flags")
+    )
     await drive.agent("solo", [{"runner_id": runner, "default": True}])
     await drive.agent("solo-checker", [{"runner_id": runner, "default": True}])
-    out: Dict[str, List[str]] = {}
+    out: Dict[str, Any] = {}
     await drive.send("solo")
-    out["chat"] = drive.claude.argvs[-1]
+    out["chat"] = _captured(drive, which)
     await drive.task("t-solo", builder="solo", checker="solo-checker")
     await drive.send("solo", task_id="t-solo")
-    out["task"] = drive.claude.argvs[-1]
+    out["task"] = _captured(drive, which)
     async with async_session_factory() as db:
         task = await db.get(Task, "t-solo")
         task.status = "completed"
         await db.commit()
     await drive.send("solo-checker", review_task_id="t-solo")
-    out["review"] = drive.claude.argvs[-1]
+    out["review"] = _captured(drive, which)
     async with async_session_factory() as db:
         conversation = new_conversation(project_id="proj-test", agent="solo", origin="job")
         db.add(conversation)
         await inherit_runtime_overrides(db, conversation)
         await db.commit()
     await drive.send("solo", conversation_id=conversation.id)
-    out["job"] = drive.claude.argvs[-1]
+    out["job"] = _captured(drive, which)
     return out
 
 
-async def test_single_entry_launch_unchanged(drive, tmp_path):
-    """Criterion single-entry-launch-unchanged: one entry, no overrides. GET agent shows it as the
-    default, every run records it, and each argv is the flags the same setup was launched with
-    before this change: `--model` the runner's, and no `--effort`."""
-    argvs = await _single_entry_argvs(drive, tmp_path)
-    runner = drive.runners["Claude Haiku"]
+def _codex_exec_argv(context: str) -> List[str]:
+    return [
+        "codex",
+        "exec",
+        "--json",
+        "--skip-git-repo-check",
+        "-c",
+        'mcp_servers.agentweave.command="<python>"',
+        "-c",
+        'mcp_servers.agentweave.args=["<tool-server>"]',
+        "-c",
+        "mcp_servers.agentweave.env_vars="
+        '["AW_RUN_TOKEN", "AW_AGENT_IDENTITY", "AW_RUN_ID", "AW_TURN_DEPTH", '
+        '"AW_QUESTION_TIMEOUT", "AW_CAN_ADMIN_SPECS", "HUB_URL"]',
+        "-c",
+        f"model_instructions_file=<tmp>/.agentweave/context/{context}.md",
+        "--model",
+        "gpt-6.1-sol",
+        "--sandbox",
+        "workspace-write",
+        "<prompt>",
+    ]
+
+
+_CODEX_APP_SERVER_LAUNCH: Dict[str, Any] = {
+    "cli": "codex",
+    "model": "gpt-6.1-sol",
+    "yolo": False,
+    "posture": None,
+    "config_overrides": {},
+    "mcp_command": ["<python>", "<tool-server>"],
+}
+
+
+def _copilot_argv(context: str) -> List[str]:
+    return [
+        "/usr/bin/cli",
+        "--acp",
+        "--stdio",
+        "--no-auto-update",
+        "--disable-builtin-mcps",
+        "--additional-mcp-config",
+        f"@<tmp>/.agentweave/hub/copilot-home/projects/proj-test/{context}/agentweave-mcp.json",
+        "--model",
+        "claude-haiku-4.5",
+    ]
+
+
+def _each_start(build) -> Dict[str, Any]:
+    return {
+        "chat": build("solo"),
+        "task": build("solo"),
+        "review": build("solo-checker"),
+        "job": build("solo"),
+    }
+
+
+#: What each start was launched with for `_single_entry_argvs`' setup on the code before this
+#: change, captured at ad3e8c3 (this file's helper run against `git archive ad3e8c3 hub`, with
+#: `hub.launch_entry` absent) and put through `_normalised`, which masks what is this machine's
+#: or this turn's. Codex's app-server spawns the constant `codex app-server`, so its entry is what
+#: the turn was started with.
+BASELINES: Dict[str, Dict[str, Any]] = {
+    "claude": _each_start(_argv),
+    "codex-exec": _each_start(_codex_exec_argv),
+    "codex-app-server": _each_start(lambda context: _CODEX_APP_SERVER_LAUNCH),
+    "copilot": _each_start(_copilot_argv),
+}
+
+
+@pytest.mark.parametrize("which", list(SINGLE_ENTRY_CLIS))
+async def test_single_entry_launch_unchanged(drive, tmp_path, which):
+    """Criterion single-entry-launch-unchanged, for each CLI: one entry, no overrides. GET agent
+    shows it as the default, every run records it, and each launch is what the same setup was
+    launched with before this change."""
+    setup = SINGLE_ENTRY_CLIS[which]
+    argvs = await _single_entry_argvs(drive, tmp_path, which)
+    runner = drive.runners[f"One {which}"]
     roster = (await drive.app.get(f"{PROJECT}/agents", headers=drive.headers)).json()
     solo = next(a for a in roster if a["name"] == "solo")
     assert [(e["runner_id"], e["effort"], e["default"]) for e in solo["pool"]] == [
@@ -629,10 +750,25 @@ async def test_single_entry_launch_unchanged(drive, tmp_path):
     ]
     async with async_session_factory() as db:
         runs = (await db.execute(select(Run).order_by(Run.started_at))).scalars().all()
-    assert len(runs) == 4
-    assert {(r.runner_id, r.model, r.effort) for r in runs} == {(runner, HAIKU, None)}
-    for kind, argv in argvs.items():
-        assert _flag(argv, "--model") == HAIKU, kind
-        assert "--effort" not in argv, kind
+    # Every start made at least one run (a retried delivery makes another), all on the one entry.
+    assert len(runs) >= 4
+    assert {(r.runner_id, r.model, r.effort) for r in runs} == {(runner, setup["model"], None)}
     got = {kind: _normalised(argv, str(tmp_path)) for kind, argv in argvs.items()}
-    assert got == BASELINE
+    assert got == BASELINES[which]
+
+
+async def test_an_agent_with_a_runner_and_no_pool_rows_launches_on_its_runner(drive, tmp_path):
+    """What the migration seeds from: an agent bound to a runner and holding no pool rows yet
+    resolves to that runner, as it launched before pools existed."""
+    runner = await drive.runner("Claude Haiku", HAIKU)
+    await drive.agent("legacy", [{"runner_id": runner, "default": True}])
+    async with async_session_factory() as db:
+        from hub.db.models import AgentPoolEntry
+
+        for row in (await db.execute(select(AgentPoolEntry))).scalars().all():
+            await db.delete(row)
+        await db.commit()
+    started = await drive.send("legacy")
+    assert _normalised(drive.claude.argvs[-1], str(tmp_path)) == _argv("legacy")
+    run = await _run(started["run_id"])
+    assert (run.runner_id, run.model, run.effort) == (runner, HAIKU, None)
