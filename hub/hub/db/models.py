@@ -441,6 +441,37 @@ class Runner(Base):
     )
 
 
+class AgentPoolEntry(Base):
+    """One entry of a profile's pool: a project runner plus an optional reasoning effort
+    (`a-profile-runs-each-task-on-a-runner-and-model-chosen-from-its-pool`, FR-1, migration 0186).
+
+    A pool that is not empty has exactly one `is_default` entry, and `Agent.runner_id` always
+    names that entry's runner (FR-4), so every reader of `runner_id` keeps working. Both are
+    written only through `agent_pool`, which is what keeps them agreeing. `effort` is a value of
+    the runner's CLI's catalog `effort` control; NULL leaves it to the CLI. An entry is identified
+    by its runner and effort: "Opus high" and "Opus medium" are two entries.
+    """
+
+    __tablename__ = "agent_pool_entries"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    project_id: Mapped[str] = mapped_column(String(64), ForeignKey("projects.id"), nullable=False)
+    agent_id: Mapped[str] = mapped_column(String(64), ForeignKey("agents.id"), nullable=False)
+    runner_id: Mapped[str] = mapped_column(String(64), ForeignKey("runners.id"), nullable=False)
+    effort: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    is_default: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="0", nullable=False
+    )
+    # The order the operator listed the entries in; the settings page and Build show it.
+    position: Mapped[int] = mapped_column(Integer, default=0, server_default="0", nullable=False)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, nullable=False)
+
+    __table_args__ = (
+        Index("ix_agent_pool_entries_agent", "agent_id"),
+        Index("ix_agent_pool_entries_runner", "runner_id"),
+    )
+
+
 class Charter(Base):
     """Authored behavior content an agent is bound to.
 
@@ -940,6 +971,12 @@ class Task(Base):
     # it when the next Build takes it in. Who checks a task in a build is the build's people
     # (`builds.checker_of`), which this seeds and does not replace.
     checker: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    # The pool entry this task's builder and checker runs launch with, fixed when the first run of
+    # each starts (`a-profile-runs-each-task-on-a-runner-and-model-chosen-from-its-pool`, FR-7,
+    # migration 0187): `{"agent", "runner_id", "effort"}`, written only by `launch_entry`. Null
+    # until that run starts; a later run by the same agent uses it, including every re-review.
+    builder_entry: Mapped[Optional[Any]] = mapped_column(JSON, nullable=True)
+    checker_entry: Mapped[Optional[Any]] = mapped_column(JSON, nullable=True)
 
     project: Mapped["Project"] = relationship(back_populates="tasks")
 
@@ -1637,6 +1674,14 @@ class Run(Base):
     # The CLI version the run's harness reported (Claude's `system/init` `claude_code_version`),
     # NULL when it reported none. F678: what a Claude result's totals mean changed at 2.1.277.
     runner_version: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    # What this run launched with (`a-profile-runs-each-task-on-a-runner-and-model-chosen-from-its-
+    # pool`, FR-12, migration 0187): the runner record, the model it was given (the runner's own,
+    # or a chat's override; null when the CLI chose), and the reasoning effort (null when left to
+    # the CLI). Written once, at spawn, from the same values the command is built from; null for
+    # runs that predate the columns.
+    runner_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    model: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)
+    effort: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
     # The directory this run *started* in, written at spawn from `effective_work_dir`
     # (`2026-08-27-work-is-isolated-per-task`, design D7).
     #
@@ -1738,7 +1783,7 @@ class TurnUsage(Base):
     agent: Mapped[str] = mapped_column(String(64), nullable=False)
     status: Mapped[str] = mapped_column(String(16), nullable=False)
     runner: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
-    model: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    model: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)
     input_tokens: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     output_tokens: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     total_tokens: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)

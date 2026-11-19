@@ -363,6 +363,9 @@ async def _run_facts_for(
             outside_workspace_writes=run.outside_workspace_writes,
             harness_mcp_status=run.harness_mcp_status,
             plane_surface=run.plane_surface,
+            runner_id=run.runner_id,
+            model=run.model,
+            effort=run.effort,
             error=fit_run_error(run.error),
         )
         for run in run_res.scalars()

@@ -36,6 +36,7 @@ from .permissions import router as permissions_router
 from .projects import router as projects_router
 from .questions import router as questions_router
 from .runners import router as runners_router
+from .runs import router as runs_router
 from .session_sync import router as session_sync_router
 from .setup import router as setup_router
 from .spec import router as spec_router
@@ -91,6 +92,7 @@ project_resources_router.include_router(queue_statuses_router)
 project_resources_router.include_router(workspace_router)
 project_resources_router.include_router(checkpoints_router)
 project_resources_router.include_router(runners_router)
+project_resources_router.include_router(runs_router)
 project_resources_router.include_router(charters_router)
 project_resources_router.include_router(manager_router)
 project_resources_router.include_router(stalls_router)
