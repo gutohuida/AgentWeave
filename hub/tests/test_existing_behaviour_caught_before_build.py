@@ -12,8 +12,8 @@ The guard `agent-guard-amendment-is-a-proposal` is behaviour the code already ha
 (hub/hub/spec_amendments.py:76-78, 541-547) and is listed as a guard: `test_tester_amendments.py`
 keeps it, and it is not among the checks here.
 
-Every test is marked expected-to-fail until the build lands (`confirmations-and-the-gate`); the
-`run-the-drive` task removes the mark.
+The expected-to-fail mark was removed once the build (`confirmations-and-the-gate`) landed;
+the drive now runs as a plain test.
 """
 
 import pytest
@@ -27,10 +27,6 @@ from .test_spec_documents_api import (  # noqa: F401  (run_headers is a fixture)
     _document,
     _submit,
     run_headers,
-)
-
-UNTIL_BUILT = pytest.mark.xfail(
-    reason="the confirmation gate is built by task confirmations-and-the-gate", strict=False
 )
 
 CONFIRM = f"{AGENT}/confirm-criteria"
@@ -117,7 +113,6 @@ def _names(finding, *keys):
 
 
 # check drive-unattended-approval-is-safe, step 1: the save names both in a blocking gap
-@UNTIL_BUILT
 @pytest.mark.asyncio
 async def test_check_save_names_both_criteria_in_a_blocking_gap(
     app, auth_headers, run_headers, tmp_path  # noqa: F811
@@ -133,7 +128,6 @@ async def test_check_save_names_both_criteria_in_a_blocking_gap(
 
 
 # check drive-unattended-approval-is-safe, step 2: approve_anyway is refused naming both
-@UNTIL_BUILT
 @pytest.mark.asyncio
 async def test_check_approve_anyway_is_refused_naming_both(
     app, auth_headers, run_headers, tmp_path  # noqa: F811
@@ -149,7 +143,6 @@ async def test_check_approve_anyway_is_refused_naming_both(
 
 
 # check drive-unattended-approval-is-safe, step 3: the agent confirms; the gap is gone
-@UNTIL_BUILT
 @pytest.mark.asyncio
 async def test_check_confirming_clears_the_gap(
     app, auth_headers, run_headers, tmp_path  # noqa: F811
@@ -170,7 +163,6 @@ async def test_check_confirming_clears_the_gap(
 
 
 # check drive-unattended-approval-is-safe, step 4: approval succeeds listing the guard
-@UNTIL_BUILT
 @pytest.mark.asyncio
 async def test_check_approval_succeeds_and_lists_the_guard(
     app, auth_headers, run_headers, tmp_path  # noqa: F811
@@ -188,7 +180,6 @@ async def test_check_approval_succeeds_and_lists_the_guard(
 
 
 # the whole drive, in the order the criterion gives
-@UNTIL_BUILT
 @pytest.mark.asyncio
 async def test_drive_unattended_approval_is_safe(
     app, auth_headers, run_headers, tmp_path  # noqa: F811
