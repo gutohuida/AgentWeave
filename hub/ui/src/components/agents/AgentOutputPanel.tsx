@@ -336,9 +336,6 @@ export function AgentOutputPanel({
     // without depending on an identity that changes more often than its content does.
   }, [agent.name, conversationId, conversations.length])
 
-  useEffect(() => {
-    if (agent.status !== 'running') setIsStopping(false)
-  }, [agent.status])
 
   /* The effect that used to sit here is deleted, not replaced.
    *
@@ -401,10 +398,27 @@ export function AgentOutputPanel({
   // Stop (which would stop that other run), no "responding" placeholder. A message sent here
   // still queues behind it, which the placeholder says. An older Hub or a run with no
   // conversation leaves the id empty and reads as before.
-  const runningConversationId = agent.running_conversation_id ?? null
+  //
+  // FR-11 (`one-profile-runs-many-turns-at-once-on-different-tasks`): with profiles running in
+  // parallel the agent can have several runs, so this conversation is running exactly when one of
+  // `running_runs` is its own, whichever started last. A Hub that predates the list sends none,
+  // and the single `running_conversation_id` decides as before.
+  const runningRuns = agent.running_runs ?? []
+  const ownRun = conversationId
+    ? runningRuns.find((run) => run.conversation_id === conversationId)
+    : undefined
+  const elsewhereRun = [...runningRuns]
+    .reverse()
+    .find((run) => !!run.conversation_id && run.conversation_id !== conversationId)
+  const runningConversationId = runningRuns.length > 0
+    ? (ownRun ? null : elsewhereRun?.conversation_id ?? null)
+    : agent.running_conversation_id ?? null
   const busyElsewhere =
-    agentIsRunning && !!runningConversationId && runningConversationId !== conversationId
+    agentIsRunning && !ownRun && !!runningConversationId && runningConversationId !== conversationId
   const isRunning = agentIsRunning && !busyElsewhere
+  useEffect(() => {
+    if (!isRunning) setIsStopping(false)
+  }, [isRunning])
   const handoffUnavailable = agent.runner === 'manual'
   const interactionLocked =
     agentIsRunning || isSending || handoffState === 'preparing'
@@ -1026,7 +1040,9 @@ export function AgentOutputPanel({
     if (!apiKey || !projectId || !isRunning || isStopping) return
     setIsStopping(true)
     try {
-      const response = await fetch(`/api/v1/projects/${projectId}/agent/${agent.name}/stop`, {
+      // FR-10: stop this conversation's own run, not whichever of the agent's runs is newest.
+      const target = ownRun ? `?run_id=${encodeURIComponent(ownRun.run_id)}` : ''
+      const response = await fetch(`/api/v1/projects/${projectId}/agent/${agent.name}/stop${target}`, {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${apiKey}` },
       })

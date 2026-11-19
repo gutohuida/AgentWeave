@@ -79,6 +79,7 @@ from ...schemas.agents import (
     AgentTimeline,
     AgentTimelineEvent,
     RunFacts,
+    RunningRun,
     fit_run_error,
 )
 from ...schemas.common import RequestModel
@@ -356,7 +357,7 @@ async def list_agents(
     # heartbeat-only effective_status below would show "idle" for the whole
     # duration of a live direct spawn.
     running_run_q = (
-        select(Run.agent, Run.conversation_id)
+        select(Run.agent, Run.conversation_id, Run.id, Run.task_id, Run.started_at)
         .where(
             Run.project_id == project_id,
             Run.agent.in_(agent_names),
@@ -366,11 +367,21 @@ async def list_agents(
     )
     running_run_res = await session.execute(running_run_q)
     # F844: which conversation the live run belongs to. `status` is the agent's, and a screen on
-    # another of its conversations needs this to tell whose turn is live. Newest run wins, the
-    # one `POST /agent/{agent}/stop` would stop.
+    # another of its conversations needs this to tell whose turn is live. With profiles running
+    # in parallel an agent can have several (FR-11), so every one is listed, oldest first;
+    # `running_conversation_id` stays the newest for a reader that knows only one.
     running_conversation_by_agent: dict[str, Optional[str]] = {}
-    for name, conversation_id in running_run_res:
+    running_runs_by_agent: dict[str, list[RunningRun]] = {}
+    for name, conversation_id, run_id, task_id, started_at in running_run_res:
         running_conversation_by_agent[name] = conversation_id
+        running_runs_by_agent.setdefault(name, []).append(
+            RunningRun(
+                run_id=run_id,
+                conversation_id=conversation_id,
+                task_id=task_id,
+                started_at=started_at,
+            )
+        )
     agents_with_active_run = set(running_conversation_by_agent)
 
     # F17: when each agent was last observed doing anything — runs and output, not only the
@@ -545,6 +556,7 @@ async def list_agents(
                 display_model=_display_model,
                 context_usage=context_usage,
                 running_conversation_id=running_conversation_by_agent.get(agent_name),
+                running_runs=running_runs_by_agent.get(agent_name, []),
                 session_started_at=session_started_at,
                 runner_options=agent_meta.get("runner_options"),
                 color_index=agent_row.color_index if agent_row else None,
