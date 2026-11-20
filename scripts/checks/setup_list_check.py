@@ -320,7 +320,10 @@ def drive(
             page.locator(".aw-setup-dismissed span", has_text="git repository").get_by_role(
                 "button", name="Show it again"
             ).click()
-            page.wait_for_timeout(500)
+            try:  # the restore is a request too: wait for the item to come back rather than a fixed delay
+                page.locator('[data-testid="setup-item-repository"]').wait_for(state="attached", timeout=SHORT)
+            except Exception:  # noqa: BLE001
+                pass
             back = read_items(page)
             c.ok("ac-dismiss", "'Show it again' brings the repository item back", "repository" in keys(back), f"{keys(back)}")
         del gone
