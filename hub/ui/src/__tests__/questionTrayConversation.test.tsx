@@ -12,6 +12,11 @@ import { setComposerText, getComposerByPlaceholder, queryComposerByPlaceholder }
 let openQuestions: Question[] = []
 const answerMutation = vi.fn().mockResolvedValue({})
 
+vi.mock('@/api/conversationSpec', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/api/conversationSpec')>()),
+  useConversationSpecDocuments: () => ({ data: undefined }),
+  useAnswerSpecDocumentOffer: () => ({ mutate: () => {}, isPending: false }),
+}))
 vi.mock('@/api/agents', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/api/agents')>()
   return {

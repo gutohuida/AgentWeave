@@ -18,6 +18,11 @@ import { setComposerText } from './testUtils/composerField'
 
 let roster: AgentSummary[] = []
 
+vi.mock('@/api/conversationSpec', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/api/conversationSpec')>()),
+  useConversationSpecDocuments: () => ({ data: undefined }),
+  useAnswerSpecDocumentOffer: () => ({ mutate: () => {}, isPending: false }),
+}))
 vi.mock('@/api/agents', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/api/agents')>()
   return {
