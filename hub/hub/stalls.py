@@ -609,6 +609,25 @@ def _git(root: Path, *args: str) -> str:
     return (result.stdout or result.stderr).strip()
 
 
+#: How many `git status --short` lines a mender brief shows. A checkout with 758 entries made the
+#: brief 36,537 characters, past what a turn's command line holds.
+STATUS_LINES_SHOWN = 40
+
+
+def _capped_status(status: str) -> str:
+    """*status* cut to `STATUS_LINES_SHOWN` lines, naming how many more there are."""
+    lines = status.splitlines()
+    if not lines:
+        return "(clean)"
+    if len(lines) <= STATUS_LINES_SHOWN:
+        return status
+    more = len(lines) - STATUS_LINES_SHOWN
+    return "\n".join(
+        lines[:STATUS_LINES_SHOWN]
+        + [f"... and {more} more (run `git status --short` in the checkout for all of them)"]
+    )
+
+
 async def _mend_checkout_note(root: Path, task_id: str, commit: Optional[str]) -> str:
     """Make the scratch checkout of a mend and say where it is, or "" when it cannot be made.
 
@@ -729,7 +748,7 @@ async def brief(db: AsyncSession, stall: Stall) -> str:
             "## The project's checkout",
             f"Path: {root}; main branch: {main}",
             "git status --short:",
-            await blocking.run(_git, root, "status", "--short") or "(clean)",
+            _capped_status(await blocking.run(_git, root, "status", "--short")),
         ]
     lines += [
         "",
