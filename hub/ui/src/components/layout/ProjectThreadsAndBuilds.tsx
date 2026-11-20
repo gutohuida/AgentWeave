@@ -7,9 +7,9 @@ import { sidebarBuilds, type ListState } from './threadsAndBuildsModel'
 
 /** A query's place in the list: rows once it has any, an error only when it has none to show, and
  *  loading otherwise. A failed refetch keeps the rows it already had rather than blanking them. */
-function listState(query: { data: unknown; isError: boolean }): ListState {
-  if (query.data !== undefined) return 'ready'
-  return query.isError ? 'error' : 'loading'
+function listState(data: unknown, isError: boolean): ListState {
+  if (data !== undefined) return 'ready'
+  return isError ? 'error' : 'loading'
 }
 
 interface ProjectThreadsAndBuildsProps {
@@ -47,11 +47,11 @@ export function ProjectThreadsAndBuilds({
       projectId={project.id}
       profiles={project.agents}
       threads={threads.data?.conversations ?? []}
-      threadsState={listState(threads)}
+      threadsState={listState(threads.data, threads.isError)}
       archivedCount={threads.data?.archived_count ?? 0}
       archivedThreads={showArchived ? (archived.data?.conversations ?? []) : null}
       builds={sidebarBuilds(builds.data ?? [])}
-      buildsState={listState(builds)}
+      buildsState={listState(builds.data, builds.isError)}
       activeProject={activeProject}
       activeConversation={activeConversation}
       activeBuild={activeBuild}
