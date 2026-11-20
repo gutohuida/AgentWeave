@@ -39,6 +39,14 @@ vi.mock('@/components/agents/AgentInfoTab', () => ({
 
 let openPayload: ProjectConversations = { conversations: [], archived_count: 0, archived_by_agent: {} }
 let archivedPayload: ProjectConversations = { conversations: [], archived_count: 0, archived_by_agent: {} }
+vi.mock('@/api/projectBuilds', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/api/projectBuilds')>()
+  return {
+    ...actual,
+    useBuildsOfProject: () => ({ data: [], isError: false, refetch: vi.fn() }),
+    useDismissProjectBuild: () => ({ mutate: vi.fn() }),
+  }
+})
 const rename = vi.fn()
 const archive = vi.fn()
 const unarchive = vi.fn()
@@ -47,8 +55,10 @@ vi.mock('@/api/agentChat', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/api/agentChat')>()
   return {
     ...actual,
-    useProjectConversations: (projectId: string | null, lifecycle: string = 'open') => ({
-      data: projectId === null ? undefined : lifecycle === 'archived' ? archivedPayload : openPayload,
+    useOperatorThreads: (_projectId: string, lifecycle: string = 'open', enabled = true) => ({
+      data: !enabled ? undefined : lifecycle === 'archived' ? archivedPayload : openPayload,
+      isError: false,
+      refetch: vi.fn(),
     }),
     useRenameConversation: () => ({ mutate: rename }),
     useArchiveConversation: () => ({ mutate: archive }),
@@ -74,9 +84,7 @@ function conversation(overrides: Partial<AgentConversation> = {}): AgentConversa
 
 function renderRail(overrides: Partial<React.ComponentProps<typeof Sidebar>> = {}) {
   const props: React.ComponentProps<typeof Sidebar> = {
-    activeAgent: null,
     onOpenProject: vi.fn(),
-    onOpenAgent: vi.fn(),
     onOpenConversation: vi.fn(),
     onNewConversation: vi.fn(),
     onOpenEnvironment: vi.fn(),
@@ -95,8 +103,6 @@ function renderRail(overrides: Partial<React.ComponentProps<typeof Sidebar>> = {
   }
 }
 
-const expandClaude = () => fireEvent.click(screen.getByTestId('agent-expander-proj-a-claude'))
-
 describe('every navigation row exposes its actions through a visible menu', () => {
   beforeEach(() => {
     cleanup()
@@ -112,10 +118,9 @@ describe('every navigation row exposes its actions through a visible menu', () =
   it('offers rename and archive on a conversation row', async () => {
     const user = userEvent.setup()
     renderRail()
-    expandClaude()
 
     // The control is on the row itself, not behind a right-click with no visible affordance.
-    const trigger = screen.getByTestId('rail-conversation-conv-1-menu')
+    const trigger = screen.getByTestId('rail-thread-conv-1-menu')
     await user.click(trigger)
 
     const items = (await screen.findAllByRole('menuitem')).map((item) => item.textContent ?? '')
@@ -125,9 +130,8 @@ describe('every navigation row exposes its actions through a visible menu', () =
   it('is operable by keyboard alone, and returns focus to its trigger', async () => {
     const user = userEvent.setup()
     renderRail()
-    expandClaude()
 
-    const trigger = screen.getByTestId('rail-conversation-conv-1-menu')
+    const trigger = screen.getByTestId('rail-thread-conv-1-menu')
     trigger.focus()
     await user.keyboard('{Enter}')
     await screen.findByRole('menu')
@@ -145,12 +149,11 @@ describe('every navigation row exposes its actions through a visible menu', () =
   it('renames in place, and sends the new title', async () => {
     const user = userEvent.setup()
     renderRail()
-    expandClaude()
 
-    await user.click(screen.getByTestId('rail-conversation-conv-1-menu'))
+    await user.click(screen.getByTestId('rail-thread-conv-1-menu'))
     await user.click(await screen.findByRole('menuitem', { name: 'Rename' }))
 
-    const input = await screen.findByTestId('rail-conversation-conv-1-rename')
+    const input = await screen.findByTestId('rail-thread-conv-1-rename')
     fireEvent.change(input, { target: { value: 'Checkout flake, day two' } })
     fireEvent.keyDown(input, { key: 'Enter' })
 
@@ -168,17 +171,16 @@ describe('every navigation row exposes its actions through a visible menu', () =
   it('leaves the title alone when a rename is escaped', async () => {
     const user = userEvent.setup()
     renderRail()
-    expandClaude()
 
-    await user.click(screen.getByTestId('rail-conversation-conv-1-menu'))
+    await user.click(screen.getByTestId('rail-thread-conv-1-menu'))
     await user.click(await screen.findByRole('menuitem', { name: 'Rename' }))
 
-    const input = await screen.findByTestId('rail-conversation-conv-1-rename')
+    const input = await screen.findByTestId('rail-thread-conv-1-rename')
     fireEvent.change(input, { target: { value: 'Never mind' } })
     fireEvent.keyDown(input, { key: 'Escape' })
 
     expect(rename).not.toHaveBeenCalled()
-    expect(screen.getByTestId('rail-conversation-conv-1')).toBeInTheDocument()
+    expect(screen.getByTestId('rail-thread-conv-1')).toBeInTheDocument()
   })
 
   it('archives from the row, and states the Hub’s reason when it refuses', async () => {
@@ -189,9 +191,8 @@ describe('every navigation row exposes its actions through a visible menu', () =
     )
     const user = userEvent.setup()
     renderRail()
-    expandClaude()
 
-    await user.click(screen.getByTestId('rail-conversation-conv-1-menu'))
+    await user.click(screen.getByTestId('rail-thread-conv-1-menu'))
     await user.click(await screen.findByRole('menuitem', { name: 'Archive' }))
 
     expect(archive).toHaveBeenCalledWith(
@@ -199,7 +200,7 @@ describe('every navigation row exposes its actions through a visible menu', () =
       expect.anything(),
     )
     // Refusing is the design; refusing silently is not.
-    expect(await screen.findByTestId('rail-conversation-conv-1-error')).toHaveTextContent(
+    expect(await screen.findByTestId('rail-thread-conv-1-error')).toHaveTextContent(
       'A run is still in progress',
     )
   })
@@ -213,57 +214,13 @@ describe('every navigation row exposes its actions through a visible menu', () =
     }
     const user = userEvent.setup()
     renderRail()
-    expandClaude()
 
-    await user.click(screen.getByTestId('agent-menu-proj-a-claude'))
-    await user.click(await screen.findByRole('menuitem', { name: /Show archived \(1\)/ }))
+    await user.click(screen.getByRole('button', { name: 'Show archived (1)' }))
 
-    const trigger = await screen.findByTestId('rail-archived-conv-gone-menu')
+    const trigger = await screen.findByTestId('rail-thread-archived-conv-gone-menu')
     await user.click(trigger)
     const items = (await screen.findAllByRole('menuitem')).map((item) => item.textContent ?? '')
     expect(items).toEqual(['Unarchive'])
-  })
-
-  it('offers new conversation, agent settings and the archived listing on an agent row', async () => {
-    openPayload = { conversations: [conversation()], archived_count: 2, archived_by_agent: { claude: 2 } }
-    const user = userEvent.setup()
-    const { props } = renderRail()
-
-    await user.click(screen.getByTestId('agent-menu-proj-a-claude'))
-    const items = (await screen.findAllByRole('menuitem')).map((item) => item.textContent ?? '')
-    expect(items[0]).toBe('New conversation')
-    expect(items[1]).toBe('Agent settings')
-    expect(items[2]).toContain('Show archived (2)')
-    expect(items).toHaveLength(3)
-
-    await user.click(screen.getByRole('menuitem', { name: 'New conversation' }))
-    expect(props.onNewConversation).toHaveBeenCalledWith('proj-a', 'claude')
-  })
-
-  it('disables the archived listing with its reason when the agent has none', async () => {
-    const user = userEvent.setup()
-    renderRail()
-
-    await user.click(screen.getByTestId('agent-menu-proj-a-claude'))
-    const item = await screen.findByRole('menuitem', { name: /Show archived/ })
-    expect(item).toHaveAttribute('aria-disabled', 'true')
-    expect(item).toHaveTextContent('Nothing archived yet')
-  })
-
-  it('opens agent settings as a destination rather than a dialog', async () => {
-    const user = userEvent.setup()
-    const onOpenAgentSettings = vi.fn()
-    renderRail({ onOpenAgentSettings })
-
-    await user.click(screen.getByTestId('agent-menu-proj-a-claude'))
-    await user.click(await screen.findByRole('menuitem', { name: 'Agent settings' }))
-
-    // Configuration is a page, not a 520px modal: it names its subject in the URL, so it is
-    // linkable and survives a reload. The rail-hosted dialog could be neither.
-    expect(onOpenAgentSettings).toHaveBeenCalledWith('proj-a', 'claude', 'agent')
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
-    // The rail itself is untouched — settings still open "without unmounting" navigation.
-    expect(screen.getByTestId('rail-agent-proj-a-claude')).toBeInTheDocument()
   })
 
   it('never shows a conversation identifier as a label anywhere in the rail', async () => {
@@ -276,7 +233,6 @@ describe('every navigation row exposes its actions through a visible menu', () =
       archived_by_agent: {},
     }
     renderRail()
-    expandClaude()
 
     const rail = screen.getByTestId('sidebar')
     expect(rail.textContent).toContain('A named thread')

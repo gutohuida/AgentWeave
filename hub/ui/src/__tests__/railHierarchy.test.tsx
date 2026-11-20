@@ -5,8 +5,8 @@ import type { AgentConversation, ProjectConversations } from '@/api/agentChat'
 import { Sidebar } from '@/components/layout/Sidebar'
 import { useConfigStore } from '@/store/configStore'
 
-/* The rail's information hierarchy: project → agent → conversation.
- *
+/* The rail's information hierarchy: project → its threads and builds.
+
  * The defect this file locks: the selection indicator was rendered on *project* rows and nowhere
  * else, so the outermost and least specific thing was marked most strongly while the conversation
  * being read carried nothing at all — and the indicator itself was the leading accent bar the
@@ -41,7 +41,22 @@ vi.mock('@/api/projects', () => ({ useProjects: () => ({ data: projects, isLoadi
 let payload: ProjectConversations = { conversations: [], archived_count: 0 }
 vi.mock('@/api/agentChat', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/api/agentChat')>()
-  return { ...actual, useProjectConversations: () => ({ data: payload }) }
+  return {
+    ...actual,
+    useOperatorThreads: (_projectId: string, lifecycle = 'open') => ({
+      data: lifecycle === 'open' ? payload : undefined,
+      isError: false,
+      refetch: vi.fn(),
+    }),
+  }
+})
+vi.mock('@/api/projectBuilds', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/api/projectBuilds')>()
+  return {
+    ...actual,
+    useBuildsOfProject: () => ({ data: [], isError: false, refetch: vi.fn() }),
+    useDismissProjectBuild: () => ({ mutate: vi.fn() }),
+  }
 })
 
 let connectionState = 'open'
@@ -68,9 +83,7 @@ function conversation(overrides: Partial<AgentConversation> = {}): AgentConversa
 
 function renderRail(overrides: Partial<React.ComponentProps<typeof Sidebar>> = {}) {
   const props: React.ComponentProps<typeof Sidebar> = {
-    activeAgent: null,
     onOpenProject: vi.fn(),
-    onOpenAgent: vi.fn(),
     onOpenConversation: vi.fn(),
     onNewConversation: vi.fn(),
     onOpenEnvironment: vi.fn(),
@@ -89,8 +102,6 @@ function renderRail(overrides: Partial<React.ComponentProps<typeof Sidebar>> = {
   }
 }
 
-const expandClaude = () => fireEvent.click(screen.getByTestId('agent-expander-proj-a-claude'))
-
 beforeEach(() => {
   cleanup()
   localStorage.clear()
@@ -99,29 +110,24 @@ beforeEach(() => {
   connectionState = 'open'
 })
 
-describe('one selection treatment across the three rail levels', () => {
+describe('one selection treatment across the rail levels', () => {
   it('grades every level of the open path, deepest last', () => {
     payload = { conversations: [conversation({ id: 'conv-open' })], archived_count: 0 }
-    renderRail({ activeAgent: 'claude', activeConversation: 'conv-open' })
-    // No expanding: the open conversation's agent opens itself, so the path is always visible.
+    renderRail({ activeConversation: 'conv-open' })
 
     const project = screen.getByTestId('project-name-proj-a')
-    const agent = screen.getByTestId('rail-agent-proj-a-claude')
-    const conv = screen.getByTestId('rail-conversation-conv-open')
+    const conv = screen.getByTestId('rail-thread-conv-open')
 
-    // All three are on the open path and all three say so — one treatment, not three.
-    for (const row of [project, agent, conv]) {
+    // Both are on the open path and both say so — one treatment, not two.
+    for (const row of [project, conv]) {
       expect(row).toHaveAttribute('data-active', 'true')
     }
     // And each declares which level it is, so the ladder in index.css can grade them.
     expect(project).toHaveAttribute('data-depth', 'project')
-    expect(agent).toHaveAttribute('data-depth', 'agent')
     expect(conv).toHaveAttribute('data-depth', 'conversation')
   })
 
-  it('marks the conversation, not just its ancestors', () => {
-    // The inversion, stated as an assertion: before this change the conversation row carried
-    // nothing that distinguished it from its five neighbours.
+  it('marks the conversation, not just its project', () => {
     payload = {
       conversations: [
         conversation({ id: 'conv-open', title: 'Open thread' }),
@@ -129,11 +135,11 @@ describe('one selection treatment across the three rail levels', () => {
       ],
       archived_count: 0,
     }
-    renderRail({ activeAgent: 'claude', activeConversation: 'conv-open' })
+    renderRail({ activeConversation: 'conv-open' })
 
-    expect(screen.getByTestId('rail-conversation-conv-open')).toHaveAttribute('data-active', 'true')
-    expect(screen.getByTestId('rail-conversation-conv-open')).toHaveAttribute('aria-current', 'page')
-    expect(screen.getByTestId('rail-conversation-conv-other')).toHaveAttribute('data-active', 'false')
+    expect(screen.getByTestId('rail-thread-conv-open')).toHaveAttribute('data-active', 'true')
+    expect(screen.getByTestId('rail-thread-conv-open')).toHaveAttribute('aria-current', 'page')
+    expect(screen.getByTestId('rail-thread-conv-other')).toHaveAttribute('data-active', 'false')
   })
 
   it('draws no leading accent bar on any level', () => {
@@ -141,120 +147,58 @@ describe('one selection treatment across the three rail levels', () => {
     // removed again here. Asserted so the next mock that proposes restoring it fails loudly
     // instead of quietly contradicting the comment that records the decision.
     payload = { conversations: [conversation({ id: 'conv-open' })], archived_count: 0 }
-    const { container } = renderRail({ activeAgent: 'claude', activeConversation: 'conv-open' })
-    expect(screen.getByTestId('rail-conversation-conv-open')).toBeInTheDocument()
+    const { container } = renderRail({ activeConversation: 'conv-open' })
+    expect(screen.getByTestId('rail-thread-conv-open')).toBeInTheDocument()
 
     expect(container.querySelectorAll('.row-selection-indicator')).toHaveLength(0)
   })
-
-  it('opens the active agent on its own, so the conversation being read is never hidden', () => {
-    payload = { conversations: [conversation({ id: 'conv-open' })], archived_count: 0 }
-    const { unmount } = renderRail({ activeAgent: null })
-    expect(screen.queryByTestId('rail-conversation-conv-open')).toBeNull()
-    unmount()
-    renderRail({ activeAgent: 'claude', activeConversation: 'conv-open' })
-    expect(screen.getByTestId('agent-expander-proj-a-claude')).toHaveAttribute('aria-expanded', 'true')
-    expect(screen.getByTestId('rail-conversation-conv-open')).toBeInTheDocument()
-  })
 })
 
-describe('conversation rows carry their recency', () => {
-  /* Ages are expressed as offsets from the real clock rather than through fake timers: freezing
-     time under React's renderer buys nothing here, and every row below is titled `null` on
-     purpose — five threads all labelled "New conversation" is the case with no ordering cue at
-     all, which is the defect. */
+describe('thread rows carry their recency in the tooltip', () => {
   const ago = (ms: number) => new Date(Date.now() - ms).toISOString()
-  const MINUTE = 60_000
-  const HOUR = 60 * MINUTE
-  const DAY = 24 * HOUR
+  const HOUR = 3_600_000
 
-  it('shows a compact age on every conversation row', () => {
-    payload = {
-      conversations: [
-        conversation({ id: 'conv-now', title: null, updated_at: ago(30 * 1000) }),
-        conversation({ id: 'conv-min', title: null, updated_at: ago(7 * MINUTE) }),
-        conversation({ id: 'conv-hour', title: null, updated_at: ago(3 * HOUR) }),
-        conversation({ id: 'conv-day', title: null, updated_at: ago(3 * DAY) }),
-        conversation({ id: 'conv-week', title: null, updated_at: ago(14 * DAY) }),
-      ],
-      archived_count: 0,
-    }
+  it('names the profile on the row and keeps the age in the tooltip, the list being in recency order', () => {
+    const at = ago(2 * HOUR)
+    payload = { conversations: [conversation({ id: 'conv-1', updated_at: at, last_activity_at: at })], archived_count: 0 }
     renderRail()
-    expandClaude()
-
-    expect(screen.getByTestId('rail-conversation-conv-now-age').textContent).toBe('now')
-    expect(screen.getByTestId('rail-conversation-conv-min-age').textContent).toBe('7m')
-    expect(screen.getByTestId('rail-conversation-conv-hour-age').textContent).toBe('3h')
-    expect(screen.getByTestId('rail-conversation-conv-day-age').textContent).toBe('3d')
-    expect(screen.getByTestId('rail-conversation-conv-week-age').textContent).toBe('2w')
+    const row = screen.getByTestId('rail-thread-conv-1')
+    expect(screen.getByTestId('rail-thread-conv-1-profile').textContent).toBe('claude')
+    expect(screen.queryByTestId('rail-thread-conv-1-age')).toBeNull()
+    expect(row.getAttribute('title')).toContain('last activity about 2 hours ago')
   })
 
-  it('floors the age, so a row never claims to be newer than it is', () => {
+  it('costs the tooltip its age rather than printing NaN', () => {
     payload = {
-      conversations: [conversation({ id: 'conv-1', updated_at: ago(HOUR + 59 * MINUTE) })],
+      conversations: [conversation({ id: 'conv-1', updated_at: 'not a timestamp', last_activity_at: null })],
       archived_count: 0,
     }
     renderRail()
-    expandClaude()
-    expect(screen.getByTestId('rail-conversation-conv-1-age').textContent).toBe('1h')
-  })
-
-  it('carries the age into the recency view, whose whole purpose is recency', () => {
-    payload = {
-      conversations: [conversation({ id: 'conv-1', updated_at: ago(2 * HOUR) })],
-      archived_count: 0,
-    }
-    renderRail()
-    fireEvent.click(screen.getByTestId('rail-view-toggle'))
-    expect(screen.getByTestId('recency-conversation-conv-1-age').textContent).toBe('2h')
-  })
-
-  it('costs the row its age rather than printing NaN', () => {
-    payload = {
-      conversations: [conversation({ id: 'conv-1', updated_at: 'not a timestamp' })],
-      archived_count: 0,
-    }
-    renderRail()
-    expandClaude()
-    expect(screen.getByTestId('rail-conversation-conv-1')).toBeInTheDocument()
-    expect(screen.queryByTestId('rail-conversation-conv-1-age')).toBeNull()
+    expect(screen.getByTestId('rail-thread-conv-1')).toBeInTheDocument()
+    expect(screen.getByTestId('rail-thread-conv-1').getAttribute('title')).not.toContain('NaN')
   })
 })
 
 describe('the rail empty state', () => {
-  it('offers the one action available from an empty agent branch', () => {
+  it('offers exactly one way in from a project with no threads', () => {
     const onNewConversation = vi.fn()
     renderRail({ onNewConversation })
-    expandClaude()
 
-    const empty = screen.getByTestId('no-conversations-proj-a-claude')
-    expect(empty).toHaveClass('rail-empty')
-    expect(empty.textContent).toContain('No conversations yet')
-
-    fireEvent.click(screen.getByTestId('agent-new-conversation-proj-a-claude'))
-    expect(onNewConversation).toHaveBeenCalledWith('proj-a', 'claude')
-  })
-
-  it('offers exactly one way in from an empty recency view', () => {
-    const onNewConversation = vi.fn()
-    renderRail({ onNewConversation })
-    fireEvent.click(screen.getByTestId('rail-view-toggle'))
-
-    expect(screen.getByTestId(`recency-empty-proj-a`)).toHaveClass('rail-empty')
+    const empty = screen.getByTestId('rail-threads-empty-proj-a')
+    expect(empty.textContent).toContain('Start a thread')
     // Not two stacked copies of the same action.
-    expect(screen.getAllByTestId('recency-new-conversation-proj-a')).toHaveLength(1)
+    expect(screen.queryByRole('button', { name: 'New thread' })).toBeNull()
 
-    fireEvent.click(screen.getByTestId('recency-new-conversation-proj-a'))
+    fireEvent.click(empty)
     expect(onNewConversation).toHaveBeenCalledWith('proj-a', null)
   })
 
-  it('gives the standalone action back once there is a list', () => {
+  it('gives the header action back once there is a list', () => {
     payload = { conversations: [conversation()], archived_count: 0 }
     renderRail()
-    fireEvent.click(screen.getByTestId('rail-view-toggle'))
 
-    expect(screen.queryByTestId('recency-empty-proj-a')).toBeNull()
-    expect(screen.getByTestId('recency-new-conversation-proj-a')).toBeInTheDocument()
+    expect(screen.queryByTestId('rail-threads-empty-proj-a')).toBeNull()
+    expect(screen.getByRole('button', { name: 'New thread' })).toBeInTheDocument()
   })
 })
 

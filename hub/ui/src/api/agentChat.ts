@@ -139,6 +139,11 @@ export interface AgentConversation {
   task_id?: string | null
   /** The checkpoint the operator started this conversation from, when they did. */
   started_from_checkpoint_id?: string | null
+  /** The operator started it, wrote in it, or it was cut over from one of theirs
+   *  (profiles-threads-and-builds-everywhere D1). Absent from an older Hub. */
+  operator_thread?: boolean
+  /** Its newest message or run, ISO-8601; what the sidebar's threads are ordered by. */
+  last_activity_at?: string | null
 }
 
 export interface ProjectConversations {
@@ -194,6 +199,24 @@ export function useProjectConversations(projectId: string | null, lifecycle: 'op
   })
 }
 
+/** The operator's own threads in one project (`operator_threads=true`, D1 of
+ *  profiles-threads-and-builds-everywhere): what the sidebar lists. Archived ones are read only
+ *  when `enabled`, once the operator asks for them. Shares the `conversations` key prefix, so
+ *  every invalidation of a project's listings refreshes these too. */
+export function useOperatorThreads(projectId: string, lifecycle: 'open' | 'archived' = 'open', enabled = true) {
+  const { isConfigured } = useConfigStore()
+
+  useSSE()
+
+  return useQuery<ProjectConversations>({
+    queryKey: ['project', projectId, 'conversations', lifecycle, 'operator'],
+    queryFn: () => readProjectConversations(`${lifecycle}&operator_threads=true`, projectId),
+    enabled: isConfigured && enabled,
+  })
+}
+
+/** Grouped by the query string after `lifecycle=`, so the plain and the operator-only listings
+ *  each travel in their own coalesced request. */
 const readProjectConversations = coalescedReadsByGroup<ProjectConversations>((lifecycle) =>
   coalescedReads(
     (projectId) =>
