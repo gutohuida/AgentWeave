@@ -105,6 +105,10 @@ class AgentSummary(BaseModel):
     # "open" or "archived". An agent is archived, never deleted; the default listing excludes
     # archived ones, so this is only ever "archived" for a caller that asked for them.
     lifecycle: str = Field(default="open", max_length=16)
+    # The profile this agent was folded into, or None (`fold-duplicate-agents-into-one-profile-
+    # with-their-history-kept`, FR-4). A folded agent is also archived, so it is listed only under
+    # `lifecycle=archived` and `all`.
+    folded_into: Optional[str] = Field(default=None, max_length=64)
     # The CLI this agent runs as. Free-form, not an enum: a Runner record supplies its own `cli`
     # and any value the registry accepts can appear here. "native" is the no-binding fallback.
     runner: str = Field(default="native", max_length=64)
