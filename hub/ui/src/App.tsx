@@ -105,7 +105,7 @@ export default function App() {
   const { data: projects } = useProjects()
   const { data: agents = [], isLoading: agentsLoading } = useAgents()
   // A folded agent is off the open roster but its conversations still open, read-only.
-  const { data: allAgents = [] } = useAgents('all')
+  const { data: allAgents = [], error: allAgentsError } = useAgents('all')
   const [setupOpen, setSetupOpen] = useState(false)
   const [projectManagerMode, setProjectManagerMode] = useState<ProjectManagerMode | null>(null)
   const [agentCreateProjectId, setAgentCreateProjectId] = useState<string | null>(null)
@@ -449,7 +449,7 @@ export default function App() {
         <ArchivedAgentNotice agentName={agentName} />
       ) : (
         <div className="flex h-full items-center justify-center" style={{ color: 'var(--text-3)' }}>
-          Agent unavailable.
+          {allAgentsError ? 'Agent unavailable: the full roster could not be read.' : 'Agent unavailable.'}
         </div>
       )
     )

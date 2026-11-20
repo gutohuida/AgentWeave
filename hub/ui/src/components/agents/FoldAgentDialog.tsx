@@ -149,7 +149,7 @@ export function FoldPreviewBody({ preview }: { preview: FoldPreview }) {
 }
 
 function FoldBody({ agent, onDone }: { agent: string; onDone: () => void }) {
-  const { data: roster = [] } = useAgents()
+  const { data: roster = [], error: rosterError } = useAgents()
   const profiles = roster.filter((candidate) => candidate.name !== agent && candidate.lifecycle !== 'archived' && !candidate.folded_into)
   const [into, setInto] = React.useState<string | null>(null)
   const { data: preview, error, isLoading } = useFoldPreview(agent, into)
@@ -184,6 +184,11 @@ function FoldBody({ agent, onDone }: { agent: string; onDone: () => void }) {
           options={profiles.map((profile) => ({ value: profile.name, label: profile.name }))}
         />
       </div>
+      {rosterError ? (
+        <p role="alert" className="mt-3 text-xs" style={{ color: 'var(--amber)' }}>
+          {readableApiError(rosterError, 'Could not read the agents to fold into.')}
+        </p>
+      ) : null}
       {isLoading ? <p className="mt-3 text-xs" style={{ color: 'var(--text-3)' }}>Checking what would change…</p> : null}
       {error ? (
         <p role="alert" className="mt-3 text-xs" style={{ color: 'var(--amber)' }}>
