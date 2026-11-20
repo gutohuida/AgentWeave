@@ -151,8 +151,15 @@ async def sync_session(
         if twin is not None:
             raise HTTPException(status.HTTP_409_CONFLICT, twin)
 
+    # A folded agent's record is never deleted, by omission or otherwise: every stored name in
+    # its history resolves to its profile through it (`fold-duplicate-agents-into-one-profile-with-
+    # their-history-kept`, FR-4).
     removed_agent_names = (
-        [name for name in existing_agents if name not in current_agent_names]
+        [
+            name
+            for name, row in existing_agents.items()
+            if name not in current_agent_names and not row.folded_into
+        ]
         if roster_given
         else []
     )

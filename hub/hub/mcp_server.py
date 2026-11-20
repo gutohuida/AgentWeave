@@ -5456,7 +5456,10 @@ def create_spec_document(
     with `roadmap: {"document": <roadmap path>, "slice": <key>}`, and can be approved only once
     the operator has approved the roadmap.
 
-    Returns the minted `path` and the `phase` it starts in (`exploring`).
+    Returns the minted `path` and the `phase` it starts in (`exploring`). For a `change-spec` it
+    also returns the `step` the document starts at (`intake`), its `size` (not set yet), its
+    `journey` and the `instructions` for that step: follow them now, in this turn, exactly as you
+    would for a document you were handed. A roadmap has no journey and returns none of these.
     """
     body: Dict[str, Any] = {}
     if title is not None:
