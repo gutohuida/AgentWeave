@@ -433,7 +433,12 @@ async def take_offer(
         "agent": chosen,
         "conversation_id": conversation_id,
         "entry_id": entry.id,
-        "document": document.path,
+        "document": {
+            "path": document.path,
+            "title": document.title,
+            "phase": document.phase,
+            "step": document.step,
+        },
     }
 
 

@@ -151,7 +151,7 @@ export function RoadmapSection({ doc, now, onOpenDocument }: { doc: SpecDocument
                   void refresh()
                   // The slice's document exists now (FR-1): open it, and the drafting turn is
                   // bound to it.
-                  if (taken?.document) onOpenDocument?.(taken.document)
+                  if (taken?.document) onOpenDocument?.(taken.document.path)
                 },
               },
             )

@@ -20,7 +20,10 @@ function TraceDrawerBody({ runId, traceId }: { runId?: string; traceId?: string 
     offset,
   )
   return (
-    <div data-testid="trace-detail" data-run-id={runId ?? ''} data-trace-id={traceId ?? ''}>
+    <div
+      data-testid="trace-detail"
+      className="min-h-0 flex-1"
+      data-run-id={runId ?? ''} data-trace-id={traceId ?? ''}>
       <TraceView
         detail={runId ? runData : idData}
         isLoading={runId ? runLoading : idLoading}
@@ -60,8 +63,10 @@ export function TraceDrawerPanel({
       width={DRAWER_WIDTH}
       triggerRef={givenTriggerRef ?? ownTriggerRef}
     >
-      {open && header ? <div className="aw-trace-drawer-header">{header}</div> : null}
-      {open && <TraceDrawerBody key={runId ?? traceId} runId={runId} traceId={traceId} />}
+      <div className="flex h-full min-h-0 flex-col" data-testid="trace-drawer-column">
+        {open && header ? <div className="aw-trace-drawer-header shrink-0">{header}</div> : null}
+        {open && <TraceDrawerBody key={runId ?? traceId} runId={runId} traceId={traceId} />}
+      </div>
     </Drawer>
   )
 }
@@ -118,7 +123,9 @@ export function TraceButton({
         width={DRAWER_WIDTH}
         triggerRef={triggerRef}
       >
-        {open && <TraceDrawerBody runId={runId} traceId={traceId} />}
+        <div className="flex h-full min-h-0 flex-col" data-testid="trace-drawer-column">
+          {open && <TraceDrawerBody runId={runId} traceId={traceId} />}
+        </div>
       </Drawer>
       </span>
     </>
