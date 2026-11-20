@@ -1036,6 +1036,7 @@ async def create_task_for_actor(
         builder=body.builder,
         assignee=body.assignee,
         checker=body.checker,
+        project_id=project_id,
     )
     if refusal is not None:
         raise HTTPException(status_code=422, detail=refusal)
