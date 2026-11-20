@@ -1,7 +1,7 @@
 """The profile an agent was folded into -- agents.folded_into
 
-Revision ID: 0188
-Revises: 0187
+Revision ID: 0189
+Revises: 0188
 Create Date: 2026-11-20 01:00:00.000000
 
 `fold-duplicate-agents-into-one-profile-with-their-history-kept`, FR-4 and FR-11. One nullable
@@ -21,8 +21,8 @@ from __future__ import annotations
 import sqlalchemy as sa
 from alembic import op
 
-revision = "0188"
-down_revision = "0187"
+revision = "0189"
+down_revision = "0188"
 branch_labels = None
 depends_on = None
 
