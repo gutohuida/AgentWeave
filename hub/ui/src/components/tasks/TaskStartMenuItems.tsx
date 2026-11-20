@@ -45,7 +45,7 @@ function ReviewItems({ taskId, onReviewTask }: { taskId: string; onReviewTask: (
       ) : isError ? (
         <MenuItem disabled>Could not read who can review it</MenuItem>
       ) : reviewers.length === 0 ? (
-        <MenuItem disabled>No agent other than its author can review it</MenuItem>
+        <MenuItem disabled>No profile other than its author can review it</MenuItem>
       ) : (
         reviewers.map((name) => (
           <MenuItem key={name} icon="fact_check" onSelect={() => onReviewTask(taskId, name)}>

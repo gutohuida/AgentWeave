@@ -35,7 +35,7 @@ export const BOARD_COLUMNS = [
   { key: 'assigned', label: 'Assigned', statuses: ['assigned'], empty: 'Assign a pending task to move it here.' },
   { key: 'in_progress', label: 'In progress', statuses: ['in_progress', 'blocked'], empty: 'Nothing running.' },
   { key: 'under_review', label: 'Under review', statuses: ['under_review'], empty: 'Completed work waits here for a verdict.' },
-  { key: 'completed', label: 'Completed', statuses: ['completed'], empty: 'An agent moves its own work here when it is done.' },
+  { key: 'completed', label: 'Completed', statuses: ['completed'], empty: 'A profile moves its own work here when it is done.' },
   { key: 'revision_needed', label: 'Needs revision', statuses: ['revision_needed'], empty: 'Nothing sent back.' },
   { key: 'approved', label: 'Approved', statuses: ['approved'], empty: 'Nothing approved yet.' },
   { key: 'rejected', label: 'Rejected', statuses: ['rejected'], empty: 'Nothing rejected.' },
@@ -143,7 +143,7 @@ export function BoardView({
           ]}
         />
         {scopeControl}
-        <div className="aw-board-filters" role="group" aria-label="Filter by agent">
+        <div className="aw-board-filters" role="group" aria-label="Filter by profile">
           <button
             type="button"
             data-slot="filter-chip"

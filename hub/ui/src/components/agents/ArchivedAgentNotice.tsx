@@ -26,8 +26,7 @@ export function ArchivedAgentNotice({ agentName }: { agentName: string }) {
     body = (
       <>
         <p>
-          <strong style={{ color: 'var(--text)' }}>{agentName} is archived.</strong> Its
-          conversations are kept. Unarchive it to read and continue this one.
+          <strong style={{ color: 'var(--text)' }}>{agentName} is archived.</strong> Its threads are kept. Unarchive it to read and continue this one.
         </p>
         <Button
           className="mt-3"

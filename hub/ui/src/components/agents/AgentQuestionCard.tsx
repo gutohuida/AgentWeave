@@ -129,8 +129,8 @@ export function AgentQuestionCard({
         <button
           type="button"
           aria-expanded={!collapsed}
-          aria-label={collapsed ? 'Show the question' : 'Fold the question to read the conversation'}
-          title={collapsed ? 'Show the question' : 'Fold to read the conversation'}
+          aria-label={collapsed ? 'Show the question' : 'Fold the question to read the thread'}
+          title={collapsed ? 'Show the question' : 'Fold to read the thread'}
           data-testid={`agent-question-fold-${question.id}`}
           onClick={() => setCollapsedId(collapsed ? null : question.id)}
           className="ml-auto shrink-0 p-0.5 rounded"

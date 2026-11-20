@@ -200,11 +200,11 @@ function RunDrawerHeader({ run, projectId }: { run: TraceSummary; projectId: str
           className="aw-bv-link"
           onClick={() => goTo(agentDestination(projectId, run.agent!, run.conversation_id))}
         >
-          Open the conversation
+          Open the thread
           <Icon name="arrow_forward" size={12} />
         </button>
       ) : (
-        <span className="aw-bv-drawer-sub">No conversation recorded</span>
+        <span className="aw-bv-drawer-sub">No thread recorded</span>
       )}
     </div>
   )

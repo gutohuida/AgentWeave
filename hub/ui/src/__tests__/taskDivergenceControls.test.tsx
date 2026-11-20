@@ -74,7 +74,7 @@ describe('the divergence policy is set where the work is', () => {
     expect(screen.getByTestId('task-policy-surface-task-1')).toHaveTextContent('Tell me')
     expect(screen.getByTestId('task-policy-retry-task-1')).toHaveTextContent('Try again once')
     expect(screen.getByTestId('task-policy-escalate-task-1')).toHaveTextContent(
-      'Hand to another agent',
+      'Hand to another profile',
     )
     expect(screen.getByTestId('task-policy-retry-task-1')).toHaveAttribute('aria-pressed', 'true')
     expect(screen.getByTestId('task-policy-surface-task-1')).toHaveAttribute('aria-pressed', 'false')

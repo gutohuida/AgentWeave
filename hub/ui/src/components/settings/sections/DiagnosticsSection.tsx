@@ -53,7 +53,7 @@ export function DiagnosticsSection() {
           lines: [
             { label: 'Name', value: data.project_name },
             { label: 'Project id', value: <span className="font-mono text-[12px]">{data.project_id}</span> },
-            { label: 'Agents working now', value: data.agents_active?.length ? data.agents_active.join(', ') : 'None' },
+            { label: 'Profiles working now', value: data.agents_active?.length ? data.agents_active.join(', ') : 'None' },
           ],
         },
         {

@@ -60,7 +60,7 @@ function show(overrides: Partial<LoopDetail> = {}) {
 
 const edit = () => fireEvent.click(screen.getByRole('button', { name: 'Edit' }))
 const saveButton = () => screen.getByRole('button', { name: 'Save' })
-const agentSelect = () => screen.getByLabelText('Default agent') as HTMLSelectElement
+const agentSelect = () => screen.getByLabelText('Default profile') as HTMLSelectElement
 
 beforeEach(() => save.mockReset())
 afterEach(() => cleanup())
@@ -69,7 +69,7 @@ describe('LoopTab settings', () => {
   it('reads the default agent, message and cadence at rest', () => {
     show()
     const read = screen.getByTestId('loop-tab-settings-read')
-    expect(read).toHaveTextContent('Default agent: A')
+    expect(read).toHaveTextContent('Default profile: A')
     expect(read).toHaveTextContent('Message: Work the queue.')
   })
 
@@ -102,7 +102,7 @@ describe('LoopTab settings', () => {
     const row = screen.getByTestId('loop-tab-pending-agent')
     expect(row).toHaveTextContent('In force now: A')
     expect(row).toHaveTextContent('From the next firing: B')
-    expect(screen.getByTestId('loop-tab-settings-read')).toHaveTextContent('Default agent: A')
+    expect(screen.getByTestId('loop-tab-settings-read')).toHaveTextContent('Default profile: A')
   })
 
   it('(g) offers no control that clears the stop time, and never sends a null one', () => {

@@ -57,12 +57,12 @@ export function CollaborationSummary({ onNavigate }: { onNavigate: (page: string
       </h2>
       <div className="mt-2 grid gap-x-6 md:grid-cols-2">
         <div className="collab-row" data-testid="collab-row-flows">
-          <RowText label="Agents may start flows" hint="Needed for create_job, create_flow and create_loop" />
+          <RowText label="Profiles may start flows" hint="Needed for create_job, create_flow and create_loop" />
           <button
             type="button"
             role="switch"
             aria-checked={settings.allow_agent_jobs}
-            aria-label="Agents may start flows"
+            aria-label="Profiles may start flows"
             disabled={update.isPending}
             onClick={() => update.mutate({ allow_agent_jobs: !settings.allow_agent_jobs })}
             className="collab-switch"
@@ -74,10 +74,10 @@ export function CollaborationSummary({ onNavigate }: { onNavigate: (page: string
           </button>
         </div>
 
-        <LinkRow id="hop" label="Hop budget" hint="Agent-to-agent hops before a chain pauses for you" onClick={() => onNavigate('settings')}>
+        <LinkRow id="hop" label="Hop budget" hint="Profile-to-profile hops before a chain pauses for you" onClick={() => onNavigate('settings')}>
           <Value>{settings.hop_budget} hops</Value>
           {agentsError && <Value flag>Queues could not be read</Value>}
-          {held > 0 && <Value flag>{held} agent{held === 1 ? '' : 's'} held</Value>}
+          {held > 0 && <Value flag>{held} profile{held === 1 ? '' : 's'} held</Value>}
         </LinkRow>
 
         <LinkRow id="token" label="Token budget" hint="Autonomous turns pause once it is spent" onClick={() => onNavigate('budgets')}>
@@ -102,14 +102,14 @@ export function CollaborationSummary({ onNavigate }: { onNavigate: (page: string
 
         <LinkRow
           id="limits"
-          label="Delivery cap · agent budget"
-          hint="Messages one turn drains · agents an agent may staff the project up to"
+          label="Delivery cap · profile budget"
+          hint="Messages one run drains · profiles a profile may staff the project up to"
           onClick={() => onNavigate('settings')}
         >
           {agentsError ? (
-            <Value flag>{settings.turn_delivery_cap} per turn · agents could not be read</Value>
+            <Value flag>{settings.turn_delivery_cap} per turn · profiles could not be read</Value>
           ) : (
-            <Value>{settings.turn_delivery_cap} per turn · {agents.length} of {settings.agent_budget} agents</Value>
+            <Value>{settings.turn_delivery_cap} per turn · {agents.length} of {settings.agent_budget} profiles</Value>
           )}
         </LinkRow>
       </div>

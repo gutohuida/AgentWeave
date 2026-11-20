@@ -33,7 +33,7 @@ export function ConversationSpecOffers({
         <div key={offer.path} className="aw-spec-message" data-testid="conversation-spec-offer" data-path={offer.path}>
           <span className="aw-spec-message-text">
             {offer.created_by ? `${offer.created_by} started` : 'Started'} <strong>{offer.title}</strong>
-            {offer.step ? ` (${stepKeyLabel(offer.step)})` : ''}. Work on it in this conversation?
+            {offer.step ? ` (${stepKeyLabel(offer.step)})` : ''}. Work on it in this thread?
           </span>
           <Button
             variant="primary"

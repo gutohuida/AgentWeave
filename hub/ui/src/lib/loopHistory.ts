@@ -33,7 +33,7 @@ export function loopEventSentence(event: LoopEvent): string {
     const door = data.door === 'approval' ? 'by approving a document' : 'from the jobs page'
     const document = typeof data.document_path === 'string' ? ` from ${data.document_path}` : ''
     const purpose = typeof data.purpose === 'string' && data.purpose ? `, to ${data.purpose}` : ''
-    return `${who(event)} created this loop ${door}, for ${String(data.agent ?? 'an agent')}${document}${purpose}.`
+    return `${who(event)} created this loop ${door}, for ${String(data.agent ?? 'a profile')}${document}${purpose}.`
   }
   if (event.event_type === 'loop_tasks_added') {
     const tasks = (Array.isArray(data.tasks) ? data.tasks : []) as Array<{ title?: string }>

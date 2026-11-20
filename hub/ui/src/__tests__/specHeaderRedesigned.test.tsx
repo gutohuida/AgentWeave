@@ -258,7 +258,7 @@ describe('messages-behind-a-count (FR-7)', () => {
     // The other message is the stale recommendation, in full when opened.
     const stale = screen.getByTestId('spec-notice-delivery-stale')
     await user.click(within(stale).getByRole('button', { name: /recommended build names Ghost/ }))
-    expect(within(stale).getByText(/choose another agent in the Build dialog/)).toBeInTheDocument()
+    expect(within(stale).getByText(/choose another profile in the Build dialog/)).toBeInTheDocument()
   })
 
   it('makes a page that could not be read, the retired requirements and a proposal each a notice', async () => {

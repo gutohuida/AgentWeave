@@ -73,7 +73,7 @@ export function SettingsSearchResults({
     <div className="aw-settings-search-results">
       {rosterError ? (
         <p className="aw-settings-search-note" role="alert" data-testid="settings-search-agents-error">
-          The agent list could not be loaded, so agents are not shown under agent settings.
+          The profile list could not be loaded, so profiles are not shown under profile settings.
         </p>
       ) : null}
       <ul className="aw-settings-search-list" aria-label="Matching settings">
@@ -97,13 +97,13 @@ export function SettingsSearchResults({
               >
                 <span className="aw-settings-search-label">{entry.label}</span>
                 <span className="aw-settings-search-where">
-                  {entry.scope === 'agent' ? 'Agent settings' : `${SCOPE_LABEL[entry.scope]} settings`} · {entry.sectionLabel}
+                  {entry.scope === 'agent' ? 'Profile settings' : `${SCOPE_LABEL[entry.scope]} settings`} · {entry.sectionLabel}
                 </span>
                 <span className="aw-settings-search-desc">{entry.description}</span>
               </button>
               {entry.scope === 'agent' && roster.length > 0 ? (
                 <div className="aw-settings-search-agents">
-                  <span className="aw-settings-search-agents-label">Agents</span>
+                  <span className="aw-settings-search-agents-label">Profiles</span>
                   {roster.map((candidate) => (
                     <button
                       key={candidate.name}

@@ -29,7 +29,7 @@ export const LINK_LABEL: Record<string, string> = {
   task: 'Open the task',
   run: 'Open the transcript',
   evidence: 'Open the evidence',
-  conversation: 'Open the conversation',
+  conversation: 'Open the thread',
   'job-firing': 'Open the firing',
   'vault-entry': 'Open the vault entry',
 }

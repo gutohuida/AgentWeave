@@ -151,7 +151,7 @@ export type CheckState =
 export type BuildDriver = 'flow' | 'lead' | 'hand'
 export type BuildLevel = 'fast' | 'reviewed' | 'gated'
 
-export const DRIVER_LABEL: Record<BuildDriver, string> = { flow: 'Hub flow', lead: 'Lead agent', hand: 'By hand' }
+export const DRIVER_LABEL: Record<BuildDriver, string> = { flow: 'Hub flow', lead: 'Lead profile', hand: 'By hand' }
 export const DRIVER_ICON: Record<BuildDriver, string> = { flow: 'sync', lead: 'compass', hand: 'hand' }
 export const LEVEL_LABEL: Record<BuildLevel, string> = { fast: 'Fast', reviewed: 'Reviewed', gated: 'Gated' }
 export const LEVEL_MEANING: Record<BuildLevel, string> = {
@@ -161,7 +161,7 @@ export const LEVEL_MEANING: Record<BuildLevel, string> = {
 }
 export const DRIVER_MEANING: Record<BuildDriver, string> = {
   flow: 'The Hub hands out each task as soon as its prerequisites are met.',
-  lead: 'One agent decides who builds what, and when.',
+  lead: 'One profile decides who builds what, and when.',
   hand: 'Nothing is handed out; you assign each task yourself.',
 }
 

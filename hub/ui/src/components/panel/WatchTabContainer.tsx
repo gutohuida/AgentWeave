@@ -25,11 +25,11 @@ function WatchedTimeline({ agentName, conversationId }: { agentName: string; con
   if (agentsError || chatError) {
     return (
       <p className="aw-ptab-note" data-testid="watch-load-error">
-        Could not load this conversation: {((chatError ?? agentsError) as Error).message}
+        Could not load this thread: {((chatError ?? agentsError) as Error).message}
       </p>
     )
   }
-  if (!agent || !chatData) return <p className="aw-ptab-note">Loading conversation</p>
+  if (!agent || !chatData) return <p className="aw-ptab-note">Loading thread</p>
   return (
     <AgentTimeline
       agent={agent}
@@ -81,16 +81,16 @@ export function WatchTabContainer({ projectId, mainConversationId, onOpenConvers
       ) : !agent ? (
         agentsLoading ? null : (
           <p className="aw-ptab-note" data-testid="watch-choose-agent">
-            Choose an agent to watch.
+            Choose a profile to watch.
           </p>
         )
       ) : !conversation ? (
         <p className="aw-ptab-note" data-testid="watch-no-conversation">
-          {agent.name} has no conversation yet.
+          {agent.name} has no thread yet.
         </p>
       ) : inMainView ? (
         <div className="aw-ptab-note" data-testid="watch-in-this-conversation">
-          <p>You are in this conversation.</p>
+          <p>You are in this thread.</p>
           {conversations.length > 1 ? <p>Watch another of {agent.name}’s conversations:</p> : null}
           {conversations
             .filter((c) => c.id !== conversation.id)

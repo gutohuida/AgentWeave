@@ -114,7 +114,7 @@ describe.each([
     hub.agents = [AUTHOR]
     renderBoard(compact)
     fireEvent.keyDown(screen.getByRole('button', { name: 'Start review of Add a greeting' }), { key: 'Enter' })
-    expect(await screen.findByText('No agent other than its author can review it')).toBeInTheDocument()
+    expect(await screen.findByText('No profile other than its author can review it')).toBeInTheDocument()
     expect(screen.queryByRole('menuitem', { name: /Review with/ })).toBeNull()
   })
 })

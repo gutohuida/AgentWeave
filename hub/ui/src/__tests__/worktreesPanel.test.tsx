@@ -68,7 +68,7 @@ describe('the project’s worktrees panel', () => {
   it('lists both kinds of checkout, under headings that say what each is', () => {
     renderPanel([AGENT, TASK])
 
-    expect(screen.getByText('Agent checkouts')).toBeInTheDocument()
+    expect(screen.getByText('Profile checkouts')).toBeInTheDocument()
     expect(screen.getByText('Task checkouts')).toBeInTheDocument()
     expect(screen.getByTestId('worktree-codex-1')).toHaveTextContent('agentweave/codex-1')
     expect(screen.getByTestId('worktree-task-aa11bb22cc33')).toHaveTextContent(
@@ -94,7 +94,7 @@ describe('the project’s worktrees panel', () => {
 
   it('omits a heading whose group is empty rather than showing an empty one', () => {
     renderPanel([TASK])
-    expect(screen.queryByText('Agent checkouts')).not.toBeInTheDocument()
+    expect(screen.queryByText('Profile checkouts')).not.toBeInTheDocument()
     expect(screen.getByText('Task checkouts')).toBeInTheDocument()
   })
 
@@ -153,7 +153,7 @@ describe('the worktrees panel reports conflicts (F241)', () => {
 
     const block = screen.getByTestId('worktree-conflicts')
     expect(block).toHaveTextContent('2 conflicts')
-    expect(block).toHaveTextContent('agent codex-1 and task task-aa11bb22cc33')
+    expect(block).toHaveTextContent('profile codex-1 and task task-aa11bb22cc33')
     expect(block).toHaveTextContent('the main branch (main) and task task-aa11bb22cc33')
     expect(block).toHaveTextContent('calc.py')
     expect(block).toHaveTextContent('tests/test_calc.py')
@@ -207,7 +207,7 @@ describe('the worktrees panel in a project that is not a repository (F249)', () 
     render(<WorktreesSection />)
 
     expect(screen.getByTestId('worktrees-not-a-repository')).toHaveTextContent('/p is not a git repository')
-    expect(screen.queryByText(/appear here when an agent starts work/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/appear here when a profile starts work/)).not.toBeInTheDocument()
     expect(screen.queryByTestId('worktree-conflicts-none')).not.toBeInTheDocument()
   })
 })

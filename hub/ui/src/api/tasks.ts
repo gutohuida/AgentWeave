@@ -179,7 +179,7 @@ export type DivergencePolicy = 'surface' | 'retry' | 'escalate'
 export const DIVERGENCE_POLICY_LABELS: Record<DivergencePolicy, string> = {
   surface: 'Tell me',
   retry: 'Try again once',
-  escalate: 'Hand to another agent',
+  escalate: 'Hand to another profile',
 }
 
 /**

@@ -184,7 +184,7 @@ describe('charter read view', () => {
     render(<ChartersPage />)
     expand('Empty One')
 
-    expect(screen.getByText(/contributes nothing to an agent's turn/)).toBeInTheDocument()
+    expect(screen.getByText(/contributes nothing to a profile's run/)).toBeInTheDocument()
   })
 
   it('fires no mutation when a charter is read', () => {

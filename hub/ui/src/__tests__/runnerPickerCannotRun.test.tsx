@@ -71,7 +71,7 @@ describe('the runner picker says when an agent cannot run (F179)', () => {
     }
     renderExecution(unbound)
 
-    expect(screen.getByRole('status')).toHaveTextContent(`This agent cannot run: ${NO_RUNNER}`)
+    expect(screen.getByRole('status')).toHaveTextContent(`This profile cannot run: ${NO_RUNNER}`)
     expect(screen.getByRole('button', { name: 'Model for q1' })).toHaveTextContent('Choose a model')
   })
 
@@ -105,7 +105,7 @@ describe('the runner picker says when an agent cannot run (F179)', () => {
     // Unbound is known without the Hub: it cannot run. Anything else waits for the verdict.
     launchability = undefined
     renderExecution(unbound)
-    expect(screen.getByRole('status')).toHaveTextContent('This agent cannot run until it has a model.')
+    expect(screen.getByRole('status')).toHaveTextContent('This profile cannot run until it has a model.')
   })
 
   it('says nothing for a bound agent before the verdict has loaded', () => {
@@ -119,7 +119,7 @@ describe('the runner picker says when an agent cannot run (F179)', () => {
     launchabilityError = new Error('boom')
     renderExecution(bound)
 
-    expect(screen.getByRole('status')).toHaveTextContent('Could not check whether this agent can run.')
+    expect(screen.getByRole('status')).toHaveTextContent('Could not check whether this profile can run.')
     launchabilityError = null
   })
 

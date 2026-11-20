@@ -1,0 +1,335 @@
+{
+  "acknowledge_spec_gap": [
+    "code",
+    "path",
+    "reason",
+    "where"
+  ],
+  "advance_spec_step": [
+    "path",
+    "to"
+  ],
+  "amend_spec_document": [
+    "change",
+    "criterion",
+    "how_to_check",
+    "op",
+    "path",
+    "reason",
+    "requirement",
+    "task"
+  ],
+  "approve_tool_call": [
+    "input",
+    "tool_name",
+    "tool_use_id"
+  ],
+  "archive_job": [
+    "job_id"
+  ],
+  "ask_user": [
+    "blocking",
+    "questions"
+  ],
+  "confirm_acceptance_criteria": [
+    "confirmations",
+    "path"
+  ],
+  "create_flow": [
+    "agent",
+    "cron",
+    "initial_tasks",
+    "message",
+    "name",
+    "purpose",
+    "spec_document_id",
+    "stop_at",
+    "stop_when_queue_empties",
+    "work_needs_evidence"
+  ],
+  "create_job": [
+    "agent",
+    "cron",
+    "enabled",
+    "message",
+    "name",
+    "session_mode"
+  ],
+  "create_loop": [
+    "agent",
+    "cron",
+    "initial_tasks",
+    "message",
+    "name",
+    "purpose",
+    "spec_document_id",
+    "stop_at",
+    "stop_when_queue_empties",
+    "work_needs_evidence"
+  ],
+  "create_spec_document": [
+    "kind",
+    "title"
+  ],
+  "create_task": [
+    "acceptance_criteria",
+    "assignee",
+    "builder",
+    "checker",
+    "depends_on",
+    "description",
+    "loop_id",
+    "priority",
+    "requirement_ids",
+    "requirements",
+    "spec_document",
+    "title"
+  ],
+  "dashboard_query_reference": [
+    "tables"
+  ],
+  "decide_evidence": [
+    "command",
+    "commit",
+    "covers",
+    "decision",
+    "evidence_id",
+    "output",
+    "reason",
+    "summary"
+  ],
+  "edit_dashboard": [
+    "base_version",
+    "dashboard_id",
+    "operations"
+  ],
+  "get_answer": [
+    "question_id"
+  ],
+  "get_task": [
+    "task_id"
+  ],
+  "hand_out_task": [
+    "agent",
+    "review",
+    "task_id"
+  ],
+  "list_checkpoints": [
+    "agent"
+  ],
+  "list_dashboards": [],
+  "list_evidence": [
+    "document",
+    "identifier",
+    "review_state"
+  ],
+  "list_tasks": [
+    "agent",
+    "limit",
+    "offset"
+  ],
+  "mend_end_stall": [
+    "outcome",
+    "stall_id",
+    "summary"
+  ],
+  "mend_reset_task": [
+    "assignee",
+    "status",
+    "task_id"
+  ],
+  "mend_stalls": [],
+  "mend_task_branch": [
+    "commit",
+    "task_id"
+  ],
+  "mend_withdraw_input": [
+    "entry_id"
+  ],
+  "read_chapters": [],
+  "read_checkpoint": [
+    "checkpoint_id"
+  ],
+  "read_dashboard": [
+    "dashboard_id"
+  ],
+  "read_model_record": [],
+  "read_shells": [],
+  "read_spec_document": [
+    "identifiers",
+    "include",
+    "path"
+  ],
+  "recall": [
+    "observation_id"
+  ],
+  "record_evidence": [
+    "command",
+    "covers",
+    "document",
+    "identifier",
+    "kind",
+    "locator",
+    "output",
+    "summary",
+    "task_id"
+  ],
+  "record_reconcile": [
+    "gaps",
+    "path",
+    "summary"
+  ],
+  "rename_spec_document": [
+    "path",
+    "subject"
+  ],
+  "report_cannot_satisfy": [
+    "criterion",
+    "path",
+    "reason"
+  ],
+  "request_agent": [
+    "name",
+    "task",
+    "template"
+  ],
+  "run_dashboard": [
+    "dashboard_id"
+  ],
+  "run_dashboard_query": [
+    "sql"
+  ],
+  "run_job": [
+    "job_id"
+  ],
+  "save_chapters": [
+    "chapters",
+    "reason"
+  ],
+  "save_dashboard": [
+    "base_version",
+    "dashboard_id",
+    "description",
+    "name",
+    "panels"
+  ],
+  "send_message": [
+    "content",
+    "conversation_id",
+    "message_type",
+    "start_new_thread",
+    "subject",
+    "task_id",
+    "to_agent"
+  ],
+  "set_spec_size": [
+    "path",
+    "reason",
+    "size"
+  ],
+  "submit_checkpoint_notes": [
+    "intent",
+    "suspicions",
+    "warnings"
+  ],
+  "submit_spec_document": [
+    "acceptance_criteria",
+    "algorithms",
+    "already_built",
+    "capabilities",
+    "delivery",
+    "design",
+    "evidence",
+    "kind",
+    "lifecycle",
+    "open_questions",
+    "path",
+    "problem",
+    "requirements",
+    "roadmap",
+    "schema_version",
+    "scope",
+    "slices",
+    "summary",
+    "tag",
+    "tasks",
+    "title"
+  ],
+  "task_history": [
+    "task_id"
+  ],
+  "tidy_spec_document": [
+    "algorithms",
+    "area",
+    "capability",
+    "changes",
+    "code_wins",
+    "creates",
+    "criteria",
+    "fold_from",
+    "op",
+    "path",
+    "reason",
+    "requirement",
+    "requirements",
+    "retire",
+    "retire_algorithms",
+    "retire_criteria",
+    "roadmap",
+    "slice",
+    "statement",
+    "successor",
+    "title"
+  ],
+  "toggle_job": [
+    "enabled",
+    "job_id"
+  ],
+  "undo_dashboard": [
+    "dashboard_id"
+  ],
+  "update_task": [
+    "failing_pieces",
+    "notes",
+    "reason_class",
+    "requirement_ids",
+    "spec_document",
+    "status",
+    "task_id"
+  ],
+  "vault_add": [
+    "dated",
+    "distil",
+    "paths",
+    "type",
+    "visibility"
+  ],
+  "vault_append": [
+    "entry_id",
+    "text"
+  ],
+  "vault_archive": [
+    "entry_id"
+  ],
+  "vault_map": [],
+  "vault_read": [
+    "entry_id",
+    "offset"
+  ],
+  "vault_replace_file": [
+    "entry_id",
+    "path"
+  ],
+  "vault_replace_passage": [
+    "entry_id",
+    "new",
+    "old"
+  ],
+  "vault_report": [
+    "entry_id",
+    "message"
+  ],
+  "vault_restore": [
+    "entry_id"
+  ]
+}

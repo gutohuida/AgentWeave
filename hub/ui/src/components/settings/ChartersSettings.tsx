@@ -50,7 +50,7 @@ export function ChartersSettings({
     <SettingsPage
       icon="menu_book"
       title="Charters"
-      description="What an agent is accountable for and where its authority ends. Give one to an agent in its settings."
+      description="What a profile is accountable for and where its authority ends. Give one to a profile in its settings."
       actions={
         <Button variant="primary" size="sm" onClick={onNew}>
           <Icon name="add" size={14} /> New charter
@@ -64,7 +64,7 @@ export function ChartersSettings({
             <Icon name="menu_book" size={18} />
           </span>
           <p className="aw-settings-empty-title">No charters yet</p>
-          <p className="aw-settings-empty-desc">Write one, then give it to an agent in that agent's settings.</p>
+          <p className="aw-settings-empty-desc">Write one, then give it to a profile in that profile's settings.</p>
         </div>
       ) : null}
       <ul className="aw-list" aria-label="Charters">
@@ -92,7 +92,7 @@ export function ChartersSettings({
                   </span>
                   {expanded ? null : <span className="aw-list-sub aw-list-clamp">{truncatedSummary(charterSummary(charter.content)) || 'No content'}</span>}
                 </button>
-                <span className="aw-reveal-rest aw-list-meta">{agents.length ? agents.join(', ') : 'Not given to an agent'}</span>
+                <span className="aw-reveal-rest aw-list-meta">{agents.length ? agents.join(', ') : 'Not given to a profile'}</span>
                 <span className="aw-reveal aw-list-actions">
                   <button type="button" data-slot="icon-button" className="aw-icon-button" aria-label={`Edit ${charter.name}`} title="Edit" onClick={() => onEdit(charter)}>
                     <Icon name="edit" size={13} />
@@ -109,7 +109,7 @@ export function ChartersSettings({
                   {charter.content.trim() ? (
                     <ReactMarkdown remarkPlugins={[remarkGfm]}>{charter.content.replace(/^#\s+.*\n+/, '')}</ReactMarkdown>
                   ) : (
-                    <p className="aw-empty-line">This charter has no content, so it contributes nothing to an agent's turn.</p>
+                    <p className="aw-empty-line">This charter has no content, so it contributes nothing to a profile's run.</p>
                   )}
                 </div>
               ) : null}

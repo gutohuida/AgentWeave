@@ -115,7 +115,7 @@ export function ConversationBar({
       {editing ? (
         <input
           className="control-field aw-convbar-title-input"
-          aria-label="Conversation title"
+          aria-label="Thread title"
           value={draft}
           autoFocus
           onChange={(e) => setDraft(e.target.value)}
@@ -176,7 +176,7 @@ export function ConversationBar({
             onClick={onCheckpoint}
             disabled={checkpointDisabledReason !== null}
             aria-label={checkpointDisabledReason ? `${checkpointLabel} — ${checkpointDisabledReason}` : checkpointLabel}
-            title={checkpointDisabledReason ?? 'Write a checkpoint and hand this conversation to a fresh one'}
+            title={checkpointDisabledReason ?? 'Write a checkpoint and hand this thread to a fresh one'}
           >
             <Icon name="move_up" size={13} />
             {checkpointLabel}
@@ -184,15 +184,15 @@ export function ConversationBar({
         ) : null}
         <Menu>
           <MenuTrigger asChild>
-            <Button variant="ghost" size="icon-xs" data-testid="conversation-more" aria-label="More conversation actions" title="More">
+            <Button variant="ghost" size="icon-xs" data-testid="conversation-more" aria-label="More thread actions" title="More">
               <Icon name="more_horiz" size={15} />
             </Button>
           </MenuTrigger>
           <MenuContent style={{ minWidth: 236 }}>
             {totalTokens ? (
               <MenuLabel>
-                <span data-testid="conversation-token-total" title={`${formatTokensExact(totalTokens)} used across this conversation`}>
-                  {`This conversation · ${formatTokens(totalTokens)}${creditsLabel ? ` · ${creditsLabel}` : ''}`}
+                <span data-testid="conversation-token-total" title={`${formatTokensExact(totalTokens)} used across this thread`}>
+                  {`This thread · ${formatTokens(totalTokens)}${creditsLabel ? ` · ${creditsLabel}` : ''}`}
                 </span>
               </MenuLabel>
             ) : null}
@@ -201,7 +201,7 @@ export function ConversationBar({
                 {checkpointCount > 0 ? `Checkpoints (${checkpointCount})` : 'Checkpoints'}
               </MenuItem>
             ) : null}
-            {onOpenConversationTrace ? <MenuItem icon="monitoring" data-testid="conversation-trace-open" onSelect={onOpenConversationTrace}>Trace of this conversation</MenuItem> : null}
+            {onOpenConversationTrace ? <MenuItem icon="monitoring" data-testid="conversation-trace-open" onSelect={onOpenConversationTrace}>Trace of this thread</MenuItem> : null}
             {onOpenTrace ? <MenuItem icon="monitoring" onSelect={onOpenTrace}>Trace of the latest run</MenuItem> : null}
             <MenuItem icon={diagnosticsHidden ? 'visibility' : 'visibility_off'} onSelect={onToggleDiagnostics}>
               {diagnosticsHidden ? 'Show diagnostics' : 'Hide diagnostics'}
@@ -227,7 +227,7 @@ export function ConversationBar({
             {onArchive && conversation ? (
               <>
                 <MenuSeparator />
-                <MenuItem icon="archive" destructive onSelect={onArchive}>Archive conversation</MenuItem>
+                <MenuItem icon="archive" destructive onSelect={onArchive}>Archive thread</MenuItem>
               </>
             ) : null}
           </MenuContent>

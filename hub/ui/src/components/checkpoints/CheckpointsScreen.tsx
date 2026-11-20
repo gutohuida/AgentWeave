@@ -49,7 +49,7 @@ export function CheckpointsScreen({
   const byId = useMemo(() => new Map(conversations.map((c) => [c.id, c])), [conversations])
   const conversationLabel = (id: string) => {
     const known = byId.get(id)
-    return known ? labelOf(known) : 'An earlier conversation'
+    return known ? labelOf(known) : 'An earlier thread'
   }
   const agentNames = useMemo(() => {
     const names = new Set((agents.data ?? []).map((agent) => agent.name))
@@ -88,11 +88,11 @@ export function CheckpointsScreen({
   const failures: QueryFailure[] = [
     ['the checkpoints', list.error, () => list.refetch()],
     ['the checkpoint being opened', whole.error, () => whole.refetch()],
-    ['the agents', agents.error, () => agents.refetch()],
-    ['the agents a conversation can start with', openAgents.error, () => openAgents.refetch()],
-    ['the open conversations', open.error, () => open.refetch()],
-    ['the archived conversations', archived.error, () => archived.refetch()],
-    ['the agent notes it carried', notes.error, () => notes.refetch()],
+    ['the profiles', agents.error, () => agents.refetch()],
+    ['the profiles a thread can start with', openAgents.error, () => openAgents.refetch()],
+    ['the open threads', open.error, () => open.refetch()],
+    ['the archived threads', archived.error, () => archived.refetch()],
+    ['the profile notes it carried', notes.error, () => notes.refetch()],
     ['what the model returned', raw.error, () => raw.refetch()],
   ]
 

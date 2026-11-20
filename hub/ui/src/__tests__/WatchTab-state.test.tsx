@@ -76,7 +76,7 @@ describe('Watch tab status motion', () => {
 describe('Watch tab agent menu', () => {
   it('marks each entry’s state detail with the same tone as the status line', async () => {
     render(tab('working'))
-    fireEvent.keyDown(screen.getByRole('button', { name: 'Agent to watch' }), { key: 'Enter' })
+    fireEvent.keyDown(screen.getByRole('button', { name: 'Profile to watch' }), { key: 'Enter' })
     for (const [text, tone] of [
       ['working', 'working'],
       ['waiting for your answer', 'waiting'],

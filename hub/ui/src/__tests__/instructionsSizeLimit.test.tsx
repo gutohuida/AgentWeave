@@ -42,7 +42,7 @@ describe('project instructions show their size against the limit (F686)', () => 
     // The size line first renders with the editor's initial '' and is seeded from `data` by an
     // effect, so the first paint reads "0 of 20"; wait for the seeded count rather than race it.
     await waitFor(() => expect(size).toHaveTextContent('11 / 20'))
-    expect(size).toHaveTextContent(/every agent turn/)
+    expect(size).toHaveTextContent(/every run/)
   })
 
   it('refuses to send instructions over the limit, saying why', async () => {

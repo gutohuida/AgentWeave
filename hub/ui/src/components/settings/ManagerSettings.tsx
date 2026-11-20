@@ -79,7 +79,7 @@ export function ManagerSettings({
           onChange(
             job.key,
             keepsModel ? { runner_id: runnerId } : { runner_id: runnerId, model: null },
-            `${job.title} runs on ${next?.name ?? (job.needs_runner ? 'no runner' : 'each agent’s own runner')}`,
+            `${job.title} runs on ${next?.name ?? (job.needs_runner ? 'no runner' : 'each profile’s own runner')}`,
           )
         }
         return (
@@ -102,7 +102,7 @@ export function ManagerSettings({
               <SettingsRow
                 label="Runner"
                 inactive={!job.enabled}
-                description={job.needs_runner ? 'This job does nothing until a runner is chosen.' : 'None: each conversation’s own agent runner.'}
+                description={job.needs_runner ? 'This job does nothing until a runner is chosen.' : 'None: each thread’s own profile runner.'}
                 control={
                   <MenuSelect
                     label={`${job.title} runner`}
@@ -112,7 +112,7 @@ export function ManagerSettings({
                       runners,
                       job.needs_runner
                         ? { label: 'No runner', detail: 'The job does nothing until one is chosen' }
-                        : { label: 'The agent’s own runner', detail: 'Each conversation’s own agent runner' },
+                        : { label: 'The profile’s own runner', detail: 'Each thread’s own profile runner' },
                       modelPart ?? ((r) => r.model ?? 'Provider default'),
                     )}
                   />
@@ -121,7 +121,7 @@ export function ManagerSettings({
               <SettingsRow
                 label="Model"
                 inactive={!job.enabled}
-                description={runner || job.model ? 'Only for this job, so it need not cost what the runner’s turns cost.' : 'Choose a runner first: with none, the job uses each agent’s runner, whose models are not known here.'}
+                description={runner || job.model ? 'Only for this job, so it need not cost what the runner’s turns cost.' : 'Choose a runner first: with none, the job uses each profile’s runner, whose models are not known here.'}
                 control={
                   <MenuSelect
                     label={`${job.title} model`}

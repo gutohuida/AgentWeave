@@ -252,8 +252,7 @@ export function EvidenceBrowser({
             Evidence
           </h1>
           <p className="text-[12.5px]" style={{ color: 'var(--text-2)' }}>
-            What agents recorded to show each requirement is met, and how the reviewing agent
-            decided it.
+            What profiles recorded to show each requirement is met, and how the reviewing profile decided it.
           </p>
         </div>
         {focusLabel ? (
@@ -301,13 +300,13 @@ export function EvidenceBrowser({
           </label>
           <select
             id="evidence-agent"
-            aria-label="Filter by agent"
+            aria-label="Filter by profile"
             value={agent}
             onChange={(event) => setAgent(event.target.value)}
             className="aw-select"
             data-testid="evidence-agent"
           >
-            <option value="">Every agent</option>
+            <option value="">Every profile</option>
             {agents.map((name) => (
               <option key={name} value={name}>
                 {name}
@@ -345,7 +344,7 @@ export function EvidenceBrowser({
           <Icon name="fact_check" size={22} aria-hidden="true" />
           <p>
             {pieces.length === 0
-              ? 'No evidence yet. It appears here as agents record what demonstrates each requirement.'
+              ? 'No evidence yet. It appears here as profiles record what demonstrates each requirement.'
               : 'Nothing matches these filters.'}
           </p>
         </div>

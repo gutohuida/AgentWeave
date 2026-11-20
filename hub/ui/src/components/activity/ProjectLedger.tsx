@@ -227,7 +227,7 @@ export function ProjectLedger({ onOpenTask }: { onOpenTask: (taskId: string) => 
     [
       ['spec', 'from specs'],
       ['loop', 'from loops'],
-      ['agent', 'by agents'],
+      ['agent', 'by profiles'],
       ['operator', 'by you'],
     ] as const
   )
@@ -353,10 +353,10 @@ export function ProjectLedger({ onOpenTask }: { onOpenTask: (taskId: string) => 
       />
 
       <Lane
-        title="Between agents"
+        title="Between profiles"
         testId="ledger-messages"
         rows={data.messages}
-        empty="Agents have not messaged each other."
+        empty="Profiles have not messaged each other."
         render={(message) => (
           <li key={message.id}>
             <span className="aw-ledger-meta">

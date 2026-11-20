@@ -128,7 +128,7 @@ export function PoolEditor({
                 <p className="aw-pool-refusal">{refusal}</p>
               ) : onOpenRunners ? (
                 <p className="aw-pool-note">
-                  A runner is a coding agent with its model and settings.{' '}
+                  A runner is a coding CLI with its model and settings.{' '}
                   <button data-slot="link" type="button" className="aw-pool-link" onClick={onOpenRunners}>
                     Manage runners
                   </button>

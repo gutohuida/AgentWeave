@@ -33,7 +33,7 @@ export function AgentIdentitySettings({
   descriptionMax = 256,
   notices,
   children,
-  title = 'Agent',
+  title = 'Profile',
 }: {
   agent: AgentSummary
   now: Date
@@ -64,9 +64,9 @@ export function AgentIdentitySettings({
   const nameError = /^[a-zA-Z0-9_-]{1,32}$/.test(name) ? null : 'Letters, digits, - and _ only, up to 32.'
 
   return (
-    <SettingsPage icon="badge" title={title} description="What this agent is called, what it is for, and the charter it works under.">
+    <SettingsPage icon="badge" title={title} description="What this profile is called, what it is for, and the charter it works under.">
       {notices}
-      <SettingsGroup title="Agent">
+      <SettingsGroup title="Profile">
         <SettingsRow
           label="Name"
           description={onRename ? 'How you and its peers address it. Renaming keeps its history under the new name.' : 'How you and its peers address it, and the attribution on everything it produced.'}
@@ -103,7 +103,7 @@ export function AgentIdentitySettings({
         <SettingsRow
           label="Description"
           htmlFor="a-desc"
-          description="For you. Agents never read it; the charter is where behaviour is stated."
+          description="For you. Profiles never read it; the charter is where behaviour is stated."
           stacked
           control={
             <Textarea
@@ -112,7 +112,7 @@ export function AgentIdentitySettings({
               rows={2}
               value={description}
               maxLength={descriptionMax}
-              placeholder="What this agent is for."
+              placeholder="What this profile is for."
               onChange={(e) => setDescription(e.target.value)}
               onBlur={() => {
                 // Blank clears it: the Hub stores no description rather than an empty one.
@@ -134,7 +134,7 @@ export function AgentIdentitySettings({
           <div className="min-w-0">
             <h2 className="aw-danger-title">{agent.name} was folded into {agent.folded_into}</h2>
             <p className="aw-danger-desc">
-              Its open work and runners moved to {agent.folded_into}, which keeps its own settings. Its conversations, runs and checkpoints stay readable under {agent.name}, but it accepts no new turn. A fold is one way: message {agent.folded_into} instead.
+              Its open work and runners moved to {agent.folded_into}, which keeps its own settings. Its threads, runs and checkpoints stay readable under {agent.name}, but it accepts no new turn. A fold is one way: message {agent.folded_into} instead.
             </p>
           </div>
         </section>
@@ -142,7 +142,7 @@ export function AgentIdentitySettings({
         <section className="aw-danger" aria-label="Archived" data-tone="neutral">
           <div className="min-w-0">
             <h2 className="aw-danger-title">{agent.name} is archived</h2>
-            <p className="aw-danger-desc">It is not offered anywhere an agent is chosen. Its conversations, runs and messages are unchanged, and you can bring it back at any time.</p>
+            <p className="aw-danger-desc">It is not offered anywhere a profile is chosen. Its threads, runs and messages are unchanged, and you can bring it back at any time.</p>
           </div>
           <Button variant="outline" size="sm" data-testid="agent-archive-toggle" disabled={archiving} onClick={onUnarchive}>
             Unarchive {agent.name}
@@ -152,7 +152,7 @@ export function AgentIdentitySettings({
       <section className="aw-danger" aria-label="Archive">
         <div className="min-w-0">
           <h2 className="aw-danger-title">Archive {agent.name}</h2>
-          <p className="aw-danger-desc">It leaves the sidebar, task assignment and peer messaging. Everything it did stays, under its name. An agent is never deleted: its name is the attribution on everything it produced.</p>
+          <p className="aw-danger-desc">It leaves the sidebar, task assignment and peer messaging. Everything it did stays, under its name. A profile is never deleted: its name is the attribution on everything it produced.</p>
           {archiveRefusal ? <div className="aw-danger-refusal" role="alert">{archiveRefusal}</div> : null}
         </div>
         <div className="flex shrink-0 items-center gap-2">
@@ -165,7 +165,7 @@ export function AgentIdentitySettings({
           </DialogTrigger>
           <DialogContent
             title={`Archive ${agent.name}?`}
-            description={`${agent.name} stops receiving work and messages. Its conversations, tasks and evidence stay readable, and you can bring it back from its settings. The Hub refuses while a run is in progress or messages are undelivered, and says which.`}
+            description={`${agent.name} stops receiving work and messages. Its threads, tasks and evidence stay readable, and you can bring it back from its settings. The Hub refuses while a run is in progress or messages are undelivered, and says which.`}
             footer={
               <>
                 <DialogClose asChild>
@@ -211,7 +211,7 @@ type PermissionGroupProps = {
 export function AgentPermissionGroup({ agent, permissionModes, permissionUnset, projectGrants, permissionNote, onChange }: PermissionGroupProps) {
   const ownGrants = agent.reach_grants != null
   return (
-    <SettingsGroup title="Permissions" description="What it may do when a conversation has not said. A conversation's own choice wins for that conversation.">
+    <SettingsGroup title="Permissions" description="What it may do when a thread has not said. A thread's own choice wins for that thread.">
       <SettingsRow
         label="Default permissions"
         changed={Boolean(agent.default_permission_mode)}
@@ -260,13 +260,13 @@ export function AgentAccessGroups({ agent, onChange }: { agent: AgentSummary; on
   const readCheckpoints = Boolean(agent.can_read_checkpoints)
   return (
     <>
-      <SettingsGroup title="Other agents' work" description="Both closed by default. A summary of a peer's work and the raw output behind it are granted separately.">
+      <SettingsGroup title="Other profiles' work" description="Both closed by default. A summary of a peer's work and the raw output behind it are granted separately.">
         <SettingsRow
-          label="Read other agents' checkpoints"
-          description="Summaries of where their conversations got to, from every conversation in this project."
+          label="Read other profiles' checkpoints"
+          description="Summaries of where their threads got to, from every thread in this project."
           control={
             <Switch
-              aria-label={`Read other agents’ checkpoints for ${agent.name}`}
+              aria-label={`Read other profiles’ checkpoints for ${agent.name}`}
               checked={readCheckpoints}
               onCheckedChange={(v) =>
                 onChange(v ? { can_read_checkpoints: true } : { can_read_checkpoints: false, can_recall: false }, v ? `${agent.name} may read checkpoints` : `${agent.name} may no longer read checkpoints`)
@@ -277,7 +277,7 @@ export function AgentAccessGroups({ agent, onChange }: { agent: AgentSummary; on
         <SettingsRow
           label="Recall what a checkpoint cites"
           inactive={!readCheckpoints}
-          description={readCheckpoints ? 'The original recorded output a checkpoint cites, word for word.' : 'Needs “Read other agents’ checkpoints” first: recall only reaches what a checkpoint it can read cites.'}
+          description={readCheckpoints ? 'The original recorded output a checkpoint cites, word for word.' : 'Needs “Read other profiles’ checkpoints” first: recall only reaches what a checkpoint it can read cites.'}
           control={
             <Switch
               aria-label={`Recall what a checkpoint cites for ${agent.name}`}
@@ -291,7 +291,7 @@ export function AgentAccessGroups({ agent, onChange }: { agent: AgentSummary; on
       <SettingsGroup title="Authority">
         <SettingsRow
           label="Accept or reject evidence"
-          description="Accepted evidence is what lets approving a task merge its work. It cannot accept its own: another agent, or you, decides that."
+          description="Accepted evidence is what lets approving a task merge its work. It cannot accept its own: another profile, or you, decides that."
           control={
             <Switch
               aria-label={`Accept evidence for ${agent.name}`}

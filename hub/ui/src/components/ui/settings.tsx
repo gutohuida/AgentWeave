@@ -21,7 +21,7 @@ export interface SettingOrigin {
 
 const ORIGIN_WORDS: Record<SettingOrigin['kind'], [string, string]> = {
   changed: ['Changed', 'default'],
-  own: ["Agent's own", 'project'],
+  own: ["Profile's own", 'project'],
   project: ['From project', ''],
 }
 

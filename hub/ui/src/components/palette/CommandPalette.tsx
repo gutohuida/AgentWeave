@@ -177,16 +177,16 @@ export function CommandPalette({
       overlayClassName="command-palette-overlay fixed inset-0 z-50"
     >
       <Dialog.Title className="sr-only">Command palette</Dialog.Title>
-      <Dialog.Description className="sr-only">Search the current project's agents, tasks, specification documents, and conversations.</Dialog.Description>
-      <Command.Input autoFocus value={query} onValueChange={setQuery} placeholder="Search conversations, agents, documents, tasks…" />
+      <Dialog.Description className="sr-only">Search the current project's profiles, tasks, specification documents, and threads.</Dialog.Description>
+      <Command.Input autoFocus value={query} onValueChange={setQuery} placeholder="Search threads, profiles, documents, tasks…" />
       <Command.List>
         <Command.Empty>
           <span className="block font-medium" style={{ color: 'var(--text-2)' }}>No matches</span>
-          <span className="mt-1 block">Try an agent, task, document, or conversation name.</span>
+          <span className="mt-1 block">Try a profile, task, document, or thread name.</span>
         </Command.Empty>
 
         {agents.length > 0 && (
-          <Command.Group heading="Agents">
+          <Command.Group heading="Profiles">
             {agents.map((agent) => (
               <Command.Item
                 key={agent.name}
@@ -244,7 +244,7 @@ export function CommandPalette({
         )}
 
         {conversationRows.length > 0 && (
-          <Command.Group heading="Conversations">
+          <Command.Group heading="Threads">
             {conversationRows.map(({ conversation, label, searchText }) => (
               <Command.Item
                 key={conversation.id}
@@ -255,7 +255,7 @@ export function CommandPalette({
                 }}
               >
                 <span className="palette-agent-dot" style={{ background: agentColorVars(agents.find((item) => item.name === conversation.agent)?.color_index).accent }} />
-                <span className="palette-row-main"><span className="palette-row-title">{highlight(label)}</span><span className="palette-row-sub">Conversation · updated {formatDistanceToNow(hubDate(conversation.updated_at), { addSuffix: true })}</span></span>
+                <span className="palette-row-main"><span className="palette-row-title">{highlight(label)}</span><span className="palette-row-sub">Thread · updated {formatDistanceToNow(hubDate(conversation.updated_at), { addSuffix: true })}</span></span>
               </Command.Item>
             ))}
           </Command.Group>
@@ -302,7 +302,7 @@ export function CommandPalette({
                   <Command.Item
                     key={`settings-agent-${agent.name}`}
                     value={`settings-agent-${agent.name} ${agent.name} settings`}
-                    keywords={['settings', 'agent settings']}
+                    keywords={['settings', 'profile settings']}
                     onSelect={() => {
                       onOpenAgentSettings(agent.name)
                       close()
@@ -311,7 +311,7 @@ export function CommandPalette({
                     <Icon name="settings" size={14} className="palette-row-icon" style={{ color: 'var(--text-3)' }} />
                     <span className="palette-row-main">
                       <span className="palette-row-title">{highlight(`${agent.name} settings`)}</span>
-                      <span className="palette-row-sub">This agent’s</span>
+                      <span className="palette-row-sub">This profile’s</span>
                     </span>
                   </Command.Item>
                 ))

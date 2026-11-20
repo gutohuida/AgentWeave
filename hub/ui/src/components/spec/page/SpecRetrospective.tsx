@@ -272,7 +272,7 @@ function Report({ report }: { report: RetrospectiveReport }) {
         <>
           <Findings rows={staffing.findings} />
           <Rows title="Builds" rows={staffing.builds.map((b) => ({ key: b.id, text: `${b.id}: ${b.driver}, ${b.level}` }))} />
-          <Rows title="By agent" rows={staffing.per_agent.map((a) => ({ key: a.agent, text: `${a.agent}: ${a.runs} ${a.runs === 1 ? 'run' : 'runs'}` }))} />
+          <Rows title="By profile" rows={staffing.per_agent.map((a) => ({ key: a.agent, text: `${a.agent}: ${a.runs} ${a.runs === 1 ? 'run' : 'runs'}` }))} />
         </>,
       )}
       {part(
@@ -281,7 +281,7 @@ function Report({ report }: { report: RetrospectiveReport }) {
         <>
           <Findings rows={spent.findings} />
           <p>Total {cost(spent.totals.cost_usd_micros)} over {spent.totals.runs} {spent.totals.runs === 1 ? 'run' : 'runs'}</p>
-          <Rows title="By agent" rows={spent.per_agent.map((a) => ({ key: a.agent, text: `${a.agent}: ${cost(a.cost_usd_micros)}` }))} />
+          <Rows title="By profile" rows={spent.per_agent.map((a) => ({ key: a.agent, text: `${a.agent}: ${cost(a.cost_usd_micros)}` }))} />
           <Rows title="By task" rows={spent.per_task.map((t) => ({ key: t.task_id, text: `${name(t.task_id)}: ${cost(t.cost_usd_micros)}` }))} />
         </>,
       )}

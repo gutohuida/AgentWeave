@@ -84,7 +84,7 @@ export function FilesTab({ agent, location, onLocationChange, hasCheckout = true
           )}
           {location === 'worktree' && changeCount > 0 ? (
             <label className="aw-files-changed-only">
-              <Switch checked={changedOnly} onCheckedChange={setChangedOnly} aria-label="Only files the agent changed" />
+              <Switch checked={changedOnly} onCheckedChange={setChangedOnly} aria-label="Only files the run changed" />
               Changed only
               <span className="aw-ptab-count">{changeCount}</span>
             </label>

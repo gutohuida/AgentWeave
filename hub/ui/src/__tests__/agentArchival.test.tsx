@@ -75,7 +75,7 @@ describe('an agent is archived, never deleted', () => {
     expect(toggle).toHaveTextContent('Archive…')
     // The absence is the requirement: there is no delete, and the copy says why.
     expect(screen.queryByRole('button', { name: /delete/i })).not.toBeInTheDocument()
-    expect(screen.getByText(/An agent is never deleted: its name is the attribution/)).toBeInTheDocument()
+    expect(screen.getByText(/A profile is never deleted: its name is the attribution/)).toBeInTheDocument()
 
     // Asked first; nothing is archived by the first click.
     await user.click(toggle)

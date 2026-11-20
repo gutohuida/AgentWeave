@@ -193,7 +193,7 @@ describe('the Build dialog', () => {
     const dialog = await openDialog()
 
     expect(trigger(dialog, 'Gamma thing: builder')).toHaveTextContent('Default (dev)')
-    expect(row(dialog, 'Gamma thing')).toHaveTextContent('Recommended ghost is not an open agent here.')
+    expect(row(dialog, 'Gamma thing')).toHaveTextContent('Recommended ghost is not an open profile here.')
 
     await userEvent.click(within(dialog).getByTestId('build-confirm'))
     await waitFor(() => expect(posts).toHaveLength(1))
@@ -208,7 +208,7 @@ describe('the Build dialog', () => {
     await pick(dialog, 'Alpha thing: checker', 'dev')
 
     expect(row(dialog, 'Alpha thing')).toHaveTextContent('Checks its own work')
-    expect(within(dialog).getByText(/One task has the same agent building and checking/)).toBeInTheDocument()
+    expect(within(dialog).getByText(/One task has the same profile building and checking/)).toBeInTheDocument()
     expect(confirm).toBeDisabled()
 
     await pick(dialog, 'Alpha thing: checker', 'qa')

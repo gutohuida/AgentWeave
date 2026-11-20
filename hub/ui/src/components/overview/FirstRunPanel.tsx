@@ -10,7 +10,7 @@ import '@/styles/setup.css'
 
 export const QUICKSTART_URL = 'https://gutohuida.github.io/AgentWeave/getting-started/quickstart/'
 
-const PATH = ['Add an agent', 'Ask for a change', 'Approve its spec', 'Build', 'Review and merge']
+const PATH = ['Add a profile', 'Ask for a change', 'Approve its spec', 'Build', 'Review and merge']
 
 export function FirstRunPanel({
   agent,
@@ -42,7 +42,7 @@ export function FirstRunPanel({
           </Button>
         ) : (
           <Button variant="primary" size="sm" onClick={onAddAgent}>
-            Add an agent
+            Add a profile
           </Button>
         )}
         <a className="aw-link aw-link-inline" href={QUICKSTART_URL} target="_blank" rel="noreferrer">

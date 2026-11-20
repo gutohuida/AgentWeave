@@ -68,7 +68,7 @@ export function BudgetsSection() {
   // coming, and never rows that could be saved over settings that were never read.
   if (error && !data) {
     return (
-      <SettingsPage icon="bar_chart" title="Budgets" description="What this project has used, and the limit that pauses agents working on their own.">
+      <SettingsPage icon="bar_chart" title="Budgets" description="What this project has used, and the limit that pauses profiles working on their own.">
         <SettingsNotice tone="error" title="This project's usage could not be read." action={{ label: 'Retry', onClick: () => void refetch() }}>
           <p>{readableApiError(error, 'The Hub did not return a reason.')}</p>
         </SettingsNotice>
@@ -77,7 +77,7 @@ export function BudgetsSection() {
   }
   if (isLoading || !data) {
     return (
-      <SettingsPage icon="bar_chart" title="Budgets" description="What this project has used, and the limit that pauses agents working on their own.">
+      <SettingsPage icon="bar_chart" title="Budgets" description="What this project has used, and the limit that pauses profiles working on their own.">
         <SettingsLoading label="Loading budgets" rows={3} />
       </SettingsPage>
     )

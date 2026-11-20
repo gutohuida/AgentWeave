@@ -74,7 +74,7 @@ export function writeCheckpoint(
       const result = await cutOver(projectId, checkpoint.id)
       update({
         status: 'succeeded',
-        message: 'Checkpoint written — continuing in the successor conversation.',
+        message: 'Checkpoint written — continuing in the successor thread.',
         successorConversationId: result.successor_conversation_id,
         checkpointId,
       })

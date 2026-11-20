@@ -450,7 +450,7 @@ describe('build-progress-on-the-document (FR-7)', () => {
     })
     const finished = anchor('build-build-1')!
     expect(within(running).getByText('Running')).toBeInTheDocument()
-    expect(within(running).getByText('Lead agent')).toBeInTheDocument()
+    expect(within(running).getByText('Lead profile')).toBeInTheDocument()
     expect(within(running).getByText('Fast')).toBeInTheDocument()
     expect(within(running).getByText('Architect')).toBeInTheDocument()
     expect(within(running).getByText(/1 of 3 approved/)).toBeInTheDocument()
@@ -554,7 +554,7 @@ describe('the side panel (FR-8, FR-11, FR-12)', () => {
         <SpecPickerContainer attachedPath={PATH} recent={[OTHER]} onOpen={onOpen} onNew={() => {}} />
       </QueryClientProvider>,
     )
-    await waitFor(() => expect(screen.getByText('This conversation')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText('This thread')).toBeInTheDocument())
     expect(screen.getAllByText('Building now').length).toBeGreaterThan(1)
     expect(screen.getByText('2 of 6')).toBeInTheDocument()
     expect(screen.getByText('All specs')).toBeInTheDocument()

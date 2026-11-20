@@ -82,7 +82,7 @@ function ProfileFields({
             onChange={(event) => onChange({ ...draft, name: event.target.value })}
           />
         </Field>
-        <Field label="Runner" htmlFor={`setup-profiles-${role}-runner`} hint="What runs its turns: a coding agent and a model.">
+        <Field label="Runner" htmlFor={`setup-profiles-${role}-runner`} hint="What it runs on: a coding CLI and a model.">
           <MenuSelect
             id={`setup-profiles-${role}-runner`}
             testId={`setup-profiles-${role}-runner`}

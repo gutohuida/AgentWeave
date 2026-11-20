@@ -40,7 +40,7 @@ interface SpecPageProps {
   onAddAgent?: () => void
 }
 
-const NEW_CHANGE_HINT = { title: 'Start a change from a conversation', description: "Open one and press the composer's Spec pill." }
+const NEW_CHANGE_HINT = { title: 'Start a change from a thread', description: "Open one and press the composer's Spec pill." }
 
 /**
  * The specification, on its own (spec `the-spec-page-redesigned`): the document list as a left
@@ -172,14 +172,14 @@ export function SpecPage({ document: openDocument, anchor, onOpenDocument, onOpe
         <EmptyState
           icon="article"
           title="No specification yet"
-          description={`The Hub could not say how this project could start its specifications: ${readableApiError(corpus.error, 'the corpus state did not load.')} Open a conversation and ask an agent to write one instead.`}
+          description={`The Hub could not say how this project could start its specifications: ${readableApiError(corpus.error, 'the corpus state did not load.')} Open a thread and ask a profile to write one instead.`}
         />
       </div>
     )
   } else if (!list.loading && inventory.nodes.length === 0) {
     main = (
       <div className="aw-sp-empty-page">
-        <EmptyState icon="article" title="No specification yet" description="Open a conversation and ask an agent to write one; the composer's Spec pill opens it beside the chat." />
+        <EmptyState icon="article" title="No specification yet" description="Open a thread and ask a profile to write one; the composer's Spec pill opens it beside the chat." />
       </div>
     )
   } else if (listMode && !openDocument) {

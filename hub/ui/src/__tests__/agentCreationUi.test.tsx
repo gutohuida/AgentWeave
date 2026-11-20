@@ -73,7 +73,7 @@ describe('operator agent creation dialog', () => {
         onToggleMode={vi.fn()}
       />,
     )
-    expect(screen.queryByRole('button', { name: 'Add agent' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Add profile' })).not.toBeInTheDocument()
   })
 
   it('collects a name, launchable provider and model, and optional charter', async () => {
@@ -84,10 +84,10 @@ describe('operator agent creation dialog', () => {
     expect(screen.getByText(/CLI unavailable/)).toBeInTheDocument()
     await userEvent.click(screen.getByRole('menuitemradio', { name: /Codex CLI/ }))
 
-    fireEvent.change(screen.getByLabelText('Agent name'), { target: { value: 'codex-gamma' } })
+    fireEvent.change(screen.getByLabelText('Profile name'), { target: { value: 'codex-gamma' } })
     fireEvent.change(screen.getByLabelText('Model'), { target: { value: 'gpt-5.6-sol' } })
     fireEvent.change(screen.getByLabelText('Charter'), { target: { value: 'charter-reviewer' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Create agent' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Create profile' }))
     expect(mutate).toHaveBeenCalledWith(
       { name: 'codex-gamma', provider: 'codex', model: 'gpt-5.6-sol', charter_id: 'charter-reviewer' },
       expect.objectContaining({ onSuccess: expect.any(Function) }),
@@ -103,7 +103,7 @@ describe('operator agent creation dialog', () => {
     // putting them here is friction at exactly the wrong moment.
     render(<AgentCreateDialog open onClose={vi.fn()} onCreated={vi.fn()} />)
 
-    expect(screen.getByLabelText('Agent name')).toBeInTheDocument()
+    expect(screen.getByLabelText('Profile name')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Provider' })).toBeInTheDocument()
     expect(screen.getByLabelText('Charter')).toBeInTheDocument()
 
@@ -117,8 +117,8 @@ describe('operator agent creation dialog', () => {
     // defines a no-charter contract. The configuration page must not tighten that.
     render(<AgentCreateDialog open onClose={vi.fn()} onCreated={vi.fn()} />)
     await pickProvider(/Codex CLI/)
-    fireEvent.change(screen.getByLabelText('Agent name'), { target: { value: 'no-charter' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Create agent' }))
+    fireEvent.change(screen.getByLabelText('Profile name'), { target: { value: 'no-charter' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Create profile' }))
 
     // The key is omitted rather than sent as null — "no charter" is the absence of a binding,
     // not a binding to nothing.
@@ -170,11 +170,11 @@ describe('operator agent creation dialog', () => {
   })
 
   it('preserves fields and shows a typed API failure inline', () => {
-    mutationError = new Error('{"detail":"Agent name already exists"}')
+    mutationError = new Error('{"detail":"Profile name already exists"}')
     render(<AgentCreateDialog open onClose={vi.fn()} onCreated={vi.fn()} />)
-    fireEvent.change(screen.getByLabelText('Agent name'), { target: { value: 'duplicate' } })
+    fireEvent.change(screen.getByLabelText('Profile name'), { target: { value: 'duplicate' } })
     expect(screen.getByDisplayValue('duplicate')).toBeInTheDocument()
-    expect(screen.getByRole('alert')).toHaveTextContent('Agent name already exists')
+    expect(screen.getByRole('alert')).toHaveTextContent('Profile name already exists')
   })
 
   it('traps keyboard focus and closes on Escape', () => {
@@ -183,7 +183,7 @@ describe('operator agent creation dialog', () => {
     const cancel = screen.getByRole('button', { name: 'Cancel' })
     cancel.focus()
     fireEvent.keyDown(document, { key: 'Tab' })
-    expect(screen.getByLabelText('Agent name')).toHaveFocus()
+    expect(screen.getByLabelText('Profile name')).toHaveFocus()
     fireEvent.keyDown(document, { key: 'Escape' })
     expect(onClose).toHaveBeenCalledOnce()
   })

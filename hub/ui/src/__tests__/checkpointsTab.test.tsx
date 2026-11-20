@@ -128,7 +128,7 @@ describe('the Checkpoints list', () => {
       expect(screen.getByTestId('checkpoint-detail').textContent).not.toMatch(forbidden)
     }
     expect(triggerWords('operator')).toBe('The operator asked')
-    expect(triggerWords('context_pressure')).toBe('The conversation grew long')
+    expect(triggerWords('context_pressure')).toBe('The thread grew long')
     expect(statusWords('unwritten').label).toBe('Nothing was written')
   })
 
@@ -142,7 +142,7 @@ describe('the Checkpoints list', () => {
     const onFilters = vi.fn()
     const user = userEvent.setup()
     page({ onFilters })
-    await chooseMenuOption(user, 'Agent', 'QA')
+    await chooseMenuOption(user, 'Profile', 'QA')
     expect(onFilters).toHaveBeenLastCalledWith({ agent: 'QA', trigger: '', conversationId: '' })
     await chooseMenuOption(user, 'What triggered it', 'The operator asked')
     expect(onFilters).toHaveBeenLastCalledWith({ agent: '', trigger: 'operator', conversationId: '' })
@@ -203,7 +203,7 @@ describe('an opened checkpoint', () => {
     }
     const bare = checkpoint({ id: 'bare' })
     rerender(<CheckpointsPage {...props} checkpoints={[bare]} selectedId="bare" notes={[]} />)
-    for (const heading of ['Files changed', 'Open questions', 'Cited', 'Notes the agent left']) {
+    for (const heading of ['Files changed', 'Open questions', 'Cited', 'Notes the run left']) {
       expect(screen.queryByRole('heading', { name: heading })).not.toBeInTheDocument()
     }
   })

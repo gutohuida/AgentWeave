@@ -237,7 +237,7 @@ describe('every navigation row exposes its actions through a visible menu', () =
     const rail = screen.getByTestId('sidebar')
     expect(rail.textContent).toContain('A named thread')
     // A conversation with no title yet is labelled as new, never by its id.
-    expect(rail.textContent).toContain('New conversation')
+    expect(rail.textContent).toContain('New thread')
     expect(rail.textContent).not.toContain('conv-a3f81b2c')
     expect(rail.textContent).not.toContain('conv-77ce01ff')
   })

@@ -207,7 +207,7 @@ export function SpecStepsSettings({
         })}
       </SettingsGroup>
 
-      <SettingsGroup title="Add a step" description="Paste the Markdown the step briefs an agent with. It joins the changes of the sizes you pick.">
+      <SettingsGroup title="Add a step" description="Paste the Markdown the step briefs a profile with. It joins the changes of the sizes you pick.">
         <div className="aw-step-form">
           <Field label="Title" htmlFor="new-step-title">
             <Input id="new-step-title" data-testid="spec-steps-new-title" value={title} placeholder="Security review" onChange={(e) => setTitle(e.target.value)} />

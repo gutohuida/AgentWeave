@@ -79,7 +79,7 @@ beforeEach(() => {
 describe('an agent settings page has five sections (FR-8)', () => {
   it('lists exactly Agent, Running, Permissions, Checkpoints and Workspace', () => {
     open('agent')
-    const wanted = ['Agent', 'Running', 'Permissions', 'Checkpoints', 'Workspace']
+    const wanted = ['Profile', 'Running', 'Permissions', 'Checkpoints', 'Workspace']
     const nav = screen.getByRole('navigation')
     const listed = within(nav)
       .getAllByRole('button')

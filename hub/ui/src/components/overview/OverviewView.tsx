@@ -322,7 +322,7 @@ export function OverviewView({
           Running now {running.length ? <span className="aw-ov-count" data-tone="green">{running.length}</span> : null}
         </h2>
         {running.length === 0 ? (
-          <div className="aw-ov-calm">No agent is working right now.</div>
+          <div className="aw-ov-calm">No profile is working right now.</div>
         ) : (
           <ul className="aw-ov-list">
             {running.map((r) => (
@@ -364,13 +364,13 @@ export function OverviewView({
         </section>
 
         <section className="aw-ov-section" aria-labelledby="ov-agents">
-          <h2 id="ov-agents" className="aw-ov-heading">Agents</h2>
+          <h2 id="ov-agents" className="aw-ov-heading">Profiles</h2>
           {agents.length === 0 ? (
             <div className="aw-ov-calm">
-              No agents yet.{' '}
+              No profiles yet.{' '}
               {onAddAgent ? (
                 <button data-slot="add-agent" type="button" className="aw-overview-link" onClick={onAddAgent}>
-                  Add agent
+                  Add profile
                 </button>
               ) : (
                 'Add one from the sidebar.'

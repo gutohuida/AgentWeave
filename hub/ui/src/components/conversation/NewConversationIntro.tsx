@@ -39,7 +39,7 @@ export function NewConversationIntro({
       <span className="aw-newconv-avatar" style={{ background: color.tint, color: color.accent, boxShadow: `inset 0 0 0 1px ${color.border}` }} aria-hidden="true">
         {agent.name.slice(0, 2)}
       </span>
-      <h2 className="aw-newconv-title" data-testid={headlineTestId}>New conversation with {agent.name}</h2>
+      <h2 className="aw-newconv-title" data-testid={headlineTestId}>New thread with {agent.name}</h2>
       {agent.description ? <p className="aw-newconv-desc">{agent.description}</p> : null}
       <p className="aw-newconv-runs" data-unbound={runsOn ? 'false' : 'true'}>
         {runsOn ?? `${agent.name} has no runner, so a message here will wait until one is bound.`}

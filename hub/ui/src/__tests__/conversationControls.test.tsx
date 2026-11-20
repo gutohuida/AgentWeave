@@ -314,7 +314,7 @@ describe('conversation controls — context usage placement', () => {
         observed_at: 0,
       },
     }
-    // This conversation has produced no reading of its own.
+    // This thread has produced no reading of its own.
     conversations = [conversation]
     render(<AgentOutputPanel agent={agentWithUsage} conversationId="conv-old" />)
 
@@ -401,7 +401,7 @@ describe('conversation controls — whole-conversation token total', () => {
     expect(await screen.findByTestId('conversation-token-total')).toHaveTextContent('42.3K tokens')
     expect(screen.getByTestId('conversation-token-total')).toHaveAttribute(
       'title',
-      '42,300 tokens used across this conversation',
+      '42,300 tokens used across this thread',
     )
     expect(screen.getByTestId('conversation-token-total')).not.toHaveTextContent('AI credits')
   })
@@ -883,14 +883,14 @@ describe('the conversation’s own trace of its latest run (FR-11)', () => {
     chatRuns = {}
   })
 
-  it('offers “Trace of this conversation” only once the conversation has a run, and opens that conversation', async () => {
+  it('offers “Trace of this thread” only once the conversation has a run, and opens that conversation', async () => {
     recordedEntries = []
     chatRuns = {}
     const { unmount } = render(<AgentOutputPanel agent={idleAgent} conversationId="conv-old" />)
     await waitFor(() => expect(screen.getByTestId('session-continuity')).toHaveTextContent('A conversation'))
     await userEvent.setup().click(screen.getByTestId('conversation-more'))
     await screen.findByRole('menuitem', { name: 'Fold all turns' })
-    expect(screen.queryByRole('menuitem', { name: 'Trace of this conversation' })).toBeNull()
+    expect(screen.queryByRole('menuitem', { name: 'Trace of this thread' })).toBeNull()
     unmount()
 
     recordedEntries = [{ id: 'o1', kind: 'agent_output', content: 'reply', timestamp: '2026-08-02T10:00:00Z', delivery_state: 'delivered', run_id: 'run-1' } as TimelineEntry]
@@ -898,7 +898,7 @@ describe('the conversation’s own trace of its latest run (FR-11)', () => {
     render(<AgentOutputPanel agent={idleAgent} conversationId="conv-old" />)
     await waitFor(() => expect(screen.getByTestId('session-continuity')).toHaveTextContent('A conversation'))
     await userEvent.setup().click(screen.getByTestId('conversation-more'))
-    await userEvent.setup().click(await screen.findByRole('menuitem', { name: 'Trace of this conversation' }))
+    await userEvent.setup().click(await screen.findByRole('menuitem', { name: 'Trace of this thread' }))
     expect(screen.getByTestId('conversation-trace-drawer')).toHaveAttribute('data-conversation-id', 'conv-old')
     chatRuns = {}
   })

@@ -177,7 +177,7 @@ describe('diagnostics can be hidden', () => {
   /** The toggle lives in the bar's menu: open it, and read the item it offers. */
   async function diagnosticsItem(name: 'Hide diagnostics' | 'Show diagnostics') {
     const user = userEvent.setup()
-    await user.click(screen.getByRole('button', { name: 'More conversation actions' }))
+    await user.click(screen.getByRole('button', { name: 'More thread actions' }))
     const menu = await screen.findByRole('menu')
     return { user, item: within(menu).getByRole('menuitem', { name }) }
   }

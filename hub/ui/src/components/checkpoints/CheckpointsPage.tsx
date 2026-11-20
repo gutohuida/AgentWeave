@@ -49,7 +49,7 @@ export interface CheckpointsPageProps {
   rawAnswer?: string | null
   onShowRaw?: (checkpointId: string) => void
   onOpenConversation?: (agent: string | null, conversationId: string) => void
-  /** Start a conversation of `agent` from the opened checkpoint; the container opens the result. */
+  /** Start a thread of `agent` from the opened checkpoint; the container opens the result. */
   onStart?: (checkpointId: string, agent: string, message: string) => Promise<void>
   /** The project's open agents, which a start may choose from (the filter's `agents` also holds archived ones). */
   startAgents?: string[]
@@ -147,7 +147,7 @@ function StartPanel({
       setOpen(false)
       setMessage('')
     } catch (error) {
-      setFailure(error instanceof Error ? error.message : 'The conversation could not be started.')
+      setFailure(error instanceof Error ? error.message : 'The thread could not be started.')
     } finally {
       setBusy(false)
     }
@@ -161,14 +161,14 @@ function StartPanel({
         data-testid="checkpoint-start-open"
         onClick={() => setOpen(true)}
       >
-        Start a conversation
+        Start a thread
       </button>
     )
   }
   return (
     <div className="aw-ckpts-start" data-testid="checkpoint-start-form">
       <select
-        aria-label="Agent"
+        aria-label="Profile"
         data-testid="checkpoint-start-agent"
         value={agent}
         onChange={(event) => setAgent(event.target.value)}
@@ -253,7 +253,7 @@ function CheckpointDetail({
         <div className="aw-ckpts-lineage" data-testid="checkpoint-detail-lineage">
           {carriedFrom ? (
             <p>
-              This conversation started from{' '}
+              This thread started from{' '}
               <button
                 type="button"
                 data-slot="checkpoint-link"
@@ -281,7 +281,7 @@ function CheckpointDetail({
           ) : null}
           {started.length ? (
             <div data-testid="checkpoint-detail-started">
-              <p>Conversations started from this checkpoint:</p>
+              <p>Threads started from this checkpoint:</p>
               <ul className="aw-ckpts-list">
                 {started.map((item) => (
                   <li key={item.conversation_id} data-testid={`checkpoint-started-${item.conversation_id}`}>
@@ -291,7 +291,7 @@ function CheckpointDetail({
                       className="aw-link aw-link-inline"
                       onClick={() => onOpenConversation?.(item.agent, item.conversation_id)}
                     >
-                      {item.title?.trim() || 'New conversation'}
+                      {item.title?.trim() || 'New thread'}
                     </button>{' '}
                     · {item.agent} · {when(item.created_at, now)}
                   </li>
@@ -395,7 +395,7 @@ function CheckpointDetail({
         </Section>
       ) : null}
       {notes.length ? (
-        <Section title="Notes the agent left" testId="checkpoint-notes">
+        <Section title="Notes the run left" testId="checkpoint-notes">
           <ul className="aw-ckpts-list">
             {notes.map((note) => (
               <li key={note.id} data-testid={`checkpoint-note-${note.id}`}>
@@ -433,11 +433,11 @@ export function CheckpointsPage(props: CheckpointsPageProps) {
     <div className="aw-ckpts" data-testid="checkpoints-page">
       <div className="aw-ckpts-filters" role="group" aria-label="Narrow the checkpoints">
         <MenuSelect
-          label="Agent"
+          label="Profile"
           testId="checkpoints-filter-agent"
           value={filters.agent || ALL}
           onChange={(value) => onFilters({ ...filters, agent: value === ALL ? '' : value })}
-          options={[{ value: ALL, label: 'All agents' }, ...agents.map((agent) => ({ value: agent, label: agent }))]}
+          options={[{ value: ALL, label: 'All profiles' }, ...agents.map((agent) => ({ value: agent, label: agent }))]}
         />
         <MenuSelect
           label="What triggered it"
@@ -447,12 +447,12 @@ export function CheckpointsPage(props: CheckpointsPageProps) {
           options={[{ value: ALL, label: 'Any reason' }, ...TRIGGER_FILTER_OPTIONS]}
         />
         <MenuSelect
-          label="Conversation"
+          label="Thread"
           testId="checkpoints-filter-conversation"
           value={filters.conversationId || ALL}
           onChange={(value) => onFilters({ ...filters, conversationId: value === ALL ? '' : value })}
           options={[
-            { value: ALL, label: 'All conversations' },
+            { value: ALL, label: 'All threads' },
             ...(filters.conversationId && !conversations.some((c) => c.id === filters.conversationId)
               ? [{ value: filters.conversationId, label: conversationLabel(filters.conversationId) }]
               : []),
@@ -477,7 +477,7 @@ export function CheckpointsPage(props: CheckpointsPageProps) {
         <div className="aw-ckpts-lineage" data-testid="checkpoints-lineage">
           {lineage.started_from ? (
             <p data-testid="checkpoints-started-from">
-              This conversation started from{' '}
+              This thread started from{' '}
               <button
                 type="button"
                 data-slot="checkpoint-link"
@@ -491,7 +491,7 @@ export function CheckpointsPage(props: CheckpointsPageProps) {
           ) : null}
           {lineage.carried_into ? (
             <p data-testid="checkpoints-carried-into">
-              This conversation was carried over into{' '}
+              This thread was carried over into{' '}
               <button
                 type="button"
                 data-slot="conversation-link"

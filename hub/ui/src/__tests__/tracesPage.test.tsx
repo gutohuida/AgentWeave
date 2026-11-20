@@ -120,7 +120,7 @@ describe('TracesPage', () => {
     expect(rows[0]).toHaveAttribute('data-trace-id', 'tr-req')
     const note = screen.getByTestId('traces-internal-note')
     expect(note).toHaveTextContent('requests')
-    fireEvent.click(within(note).getByRole('button', { name: 'Back to agent runs' }))
+    fireEvent.click(within(note).getByRole('button', { name: 'Back to profile runs' }))
     await waitFor(() => expect(screen.getAllByTestId('trace-row')).toHaveLength(4))
     expect(listedUrls().slice(-1)[0]!.searchParams.get('operation')).toBe('invoke_agent')
   })
@@ -167,7 +167,7 @@ describe('TracesPage', () => {
     expect(task).toHaveAttribute('data-error', 'true')
     expect(task).toHaveTextContent('error')
 
-    expect(conv).toHaveTextContent('Conversation turn')
+    expect(conv).toHaveTextContent('Thread')
     expect(conv).toHaveTextContent('Planning chat')
     expect(conv).toHaveAttribute('data-error', 'false')
 

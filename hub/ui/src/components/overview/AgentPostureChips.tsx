@@ -27,7 +27,7 @@ const CHIP_STYLE = {
 
 const GRANTS: { grant: Grant; label: string; title: string }[] = [
   { grant: 'can_accept_evidence', label: 'evidence', title: 'May accept or reject evidence; approval merges nothing until evidence is accepted' },
-  { grant: 'can_read_checkpoints', label: 'checkpoints', title: "May read other agents' checkpoints" },
+  { grant: 'can_read_checkpoints', label: 'checkpoints', title: "May read other profiles' checkpoints" },
   { grant: 'can_recall', label: 'recall', title: 'May read the recorded output behind those checkpoints' },
 ]
 
@@ -87,10 +87,10 @@ export function AgentPostureChips({ agent, onNavigate }: { agent: AgentSummary; 
         )}
         {/* A failed read is flagged: without it the card reads as an agent with nothing wrong. */}
         {!!agent.runner_id && launchError && (
-          <span className="aw-chip" data-pill="true" data-flag="true" style={CHIP_STYLE.flag} title="Whether this agent's runner can launch could not be read">launch not checked</span>
+          <span className="aw-chip" data-pill="true" data-flag="true" style={CHIP_STYLE.flag} title="Whether this profile's runner can launch could not be read">launch not checked</span>
         )}
         {queueError && (
-          <span className="aw-chip" data-pill="true" data-flag="true" style={CHIP_STYLE.flag} title="This agent's queue could not be read, so a hold would not show">queue not read</span>
+          <span className="aw-chip" data-pill="true" data-flag="true" style={CHIP_STYLE.flag} title="This profile's queue could not be read, so a hold would not show">queue not read</span>
         )}
         {/* The hop budget is a Project settings > General setting: the chip opens it. */}
         {queue?.waiting_reason === HOP_HELD_REASON && (
@@ -146,7 +146,7 @@ function AgentDetails({ agent, onNavigate }: { agent: AgentSummary; onNavigate: 
       <dt>Waits for an answer</dt><dd>{wait(agent.question_timeout_seconds, QUESTION_WAIT_FALLBACK_SECONDS)}</dd>
       <dd className="col-span-2">
         <button type="button" className="text-[11px] underline-offset-2 hover:underline" style={{ color: 'var(--text-2)' }} onClick={() => onNavigate(`agent-settings:${agent.name}:running`)}>
-          Agent settings
+          Profile settings
         </button>
       </dd>
     </dl>

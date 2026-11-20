@@ -127,13 +127,13 @@ function ConversationTraceOf({
   }, [requested, traces])
 
   if (isLoading)
-    return <LoadingThread label="Loading the conversation’s turns" />
+    return <LoadingThread label="Loading the thread’s runs" />
   if (error) {
     return (
       <p role="alert" className="aw-traces-error">
         {readableApiError(
           error,
-          'The conversation’s turns could not be listed.',
+          'The thread’s runs could not be listed.',
         )}
       </p>
     )
@@ -144,7 +144,7 @@ function ConversationTraceOf({
         <p role="status" className="aw-traces-error">
           {readableApiError(
             lineageError,
-            'Where this conversation continued from could not be read.',
+            'Where this thread continued from could not be read.',
           )}
         </p>
       ) : null}
@@ -160,7 +160,7 @@ function ConversationTraceOf({
           earlier
             ? {
                 id: earlier.conversation_id,
-                title: earlier.title || 'an earlier conversation',
+                title: earlier.title || 'an earlier thread',
               }
             : null
         }
@@ -169,7 +169,7 @@ function ConversationTraceOf({
             ? () =>
                 onView({
                   id: earlier.conversation_id,
-                  title: earlier.title || 'An earlier conversation',
+                  title: earlier.title || 'An earlier thread',
                 })
             : undefined
         }
@@ -206,7 +206,7 @@ export function ConversationTraceDrawer({
     <Drawer
       open={open}
       onOpenChange={onOpenChange}
-      title="Trace of this conversation"
+      title="Trace of this thread"
       side="right"
       width={DRAWER_WIDTH}
       triggerRef={triggerRef}

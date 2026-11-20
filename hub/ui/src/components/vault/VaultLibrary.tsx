@@ -333,7 +333,7 @@ export function VaultLibrary(props: VaultLibraryProps) {
           {filter.kind === 'contradictions' ? (
             <div className="vault-review" data-testid="vault-contradictions">
               <p className="vault-review-intro">
-                Two sources state different things. Until you decide, agents are told both are disputed and that the
+                Two sources state different things. Until you decide, profiles are told both are disputed and that the
                 later-dated one is presumed to hold.
               </p>
               {contradictions.map((c) => (
@@ -343,7 +343,7 @@ export function VaultLibrary(props: VaultLibraryProps) {
           ) : filter.kind === 'reports' ? (
             <div className="vault-review" data-testid="vault-reports">
               <p className="vault-review-intro">
-                Agents tell the manager when an entry looks wrong. It corrects the entry when the source shows the error, and
+                Profiles tell the manager when an entry looks wrong. It corrects the entry when the source shows the error, and
                 refers the rest to you.
               </p>
               {reports.map((r) => (
@@ -394,7 +394,7 @@ export function VaultLibrary(props: VaultLibraryProps) {
                 Archived
                 <span>{archived.length}</span>
               </p>
-              <p className="vault-review-intro">Agents do not see these. Restore one to bring it and its facts back.</p>
+              <p className="vault-review-intro">Profiles do not see these. Restore one to bring it and its facts back.</p>
               {restoreRefusal ? (
                 <p className="vault-note" role="alert" data-tone="amber" data-testid="vault-restore-refusal">
                   <Icon name="alert_triangle" size={14} />
@@ -549,7 +549,7 @@ function EntryRow({
             <span>
               {entry.dated ? `Said ${formatDay(entry.dated, now)}` : `Added ${formatDay(entry.created_at, now)}`}
               {entry.added_by ? (
-                <span data-testid={`vault-added-by-${entry.id}`} title="An agent added this source by path">
+                <span data-testid={`vault-added-by-${entry.id}`} title="A profile added this source by path">
                   {' '}
                   by {entry.added_by}
                 </span>
@@ -563,7 +563,7 @@ function EntryRow({
             ) : null}
             {factCount ? <span>{factCount === 1 ? '1 fact' : `${factCount} facts`}</span> : null}
             {entry.fetches ? (
-              <span data-testid={`vault-fetches-${entry.id}`} title="Times agents read this entry">
+              <span data-testid={`vault-fetches-${entry.id}`} title="Times profiles read this entry">
                 Read {entry.fetches}×
               </span>
             ) : null}
@@ -585,7 +585,7 @@ function EntryRow({
                 Extract facts
               </MenuItem>
               <MenuItem icon="content_copy" onSelect={() => void navigator.clipboard?.writeText(entry.id)}>
-                Copy id for an agent
+                Copy id for a profile
               </MenuItem>
               {onDelete ? (
                 <>
@@ -621,10 +621,9 @@ export function VaultEmptyState({ onAdd, onFiles }: { onAdd: () => void; onFiles
       <span className="vault-empty-mark" aria-hidden="true">
         <Icon name="library" size={22} />
       </span>
-      <h2 className="vault-empty-title">Give your agents the context your project lives in</h2>
+      <h2 className="vault-empty-title">Give your profiles the context your project lives in</h2>
       <p className="vault-empty-text">
-        What was said in meetings, the rules that always hold, the decisions already made. Every agent turn lists the vault,
-        and agents read what their work needs.
+        What was said in meetings, the rules that always hold, the decisions already made. Every run lists the vault, and profiles read what their work needs.
       </p>
       <ul className="vault-empty-kinds">
         {VAULT_KINDS.slice(0, 4).map((k) => (

@@ -302,7 +302,7 @@ function renderEvent(event: StoryEvent, index: number, fresh: boolean, runs: Run
                     conversationId={runs.get(event.run_id)!.conversation_id}
                     testId={`story-transition-run-${event.id}`}
                   >
-                    conversation
+                    thread
                   </ConversationLink>
                 </>
               ) : null}
@@ -355,7 +355,7 @@ function renderEvent(event: StoryEvent, index: number, fresh: boolean, runs: Run
                     conversationId={event.conversation_id}
                     testId={`story-run-conversation-${event.id}`}
                   >
-                    conversation
+                    thread
                   </ConversationLink>
                 </>
               ) : null}
@@ -574,8 +574,8 @@ function renderEvent(event: StoryEvent, index: number, fresh: boolean, runs: Run
           head={
             <span>
               {event.declared
-                ? `${event.reviewer ?? 'An agent'} reviews it, as its named checker`
-                : `The Hub picked ${event.reviewer ?? 'an agent'} to review it: nobody was declared`}
+                ? `${event.reviewer ?? 'A profile'} reviews it, as its named checker`
+                : `The Hub picked ${event.reviewer ?? 'a profile'} to review it: nobody was declared`}
             </span>
           }
           meta={<Time value={event.at} />}
@@ -680,7 +680,7 @@ function FoldedSteps({ id, count, actors, from, to, index, onOpen, events }: { i
                 <>
                   {' · '}
                   <ConversationLink agent={run.agent} conversationId={run.conversation_id} testId={`story-run-conversation-${run.id}`}>
-                    conversation
+                    thread
                   </ConversationLink>
                 </>
               ) : null}

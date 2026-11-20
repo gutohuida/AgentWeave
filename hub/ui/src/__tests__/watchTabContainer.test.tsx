@@ -21,7 +21,7 @@ const data = {
 vi.mock('@/api/agents', () => ({ useAgents: () => ({ data: data.agents, isLoading: false }) }))
 vi.mock('@/api/questions', () => ({ useQuestions: () => ({ data: data.questions }) }))
 vi.mock('@/api/agentChat', () => ({
-  conversationLabel: (c: { title: string | null }) => c.title ?? 'New conversation',
+  conversationLabel: (c: { title: string | null }) => c.title ?? 'New thread',
   useProjectConversations: () => ({ data: { conversations: data.conversations } }),
   useAgentChatHistory: (_agent: string, id: string) => ({
     data: { entries: [{ id }], runs: {} },
@@ -46,7 +46,7 @@ function mount(main: string | null = 'c1', onOpen = vi.fn()) {
 }
 
 async function pickAgent(name: string) {
-  await userEvent.click(screen.getByRole('button', { name: /Agent to watch/ }))
+  await userEvent.click(screen.getByRole('button', { name: /Profile to watch/ }))
   await userEvent.click(screen.getByRole('menuitemradio', { name: new RegExp(`^${name}`) }))
 }
 
@@ -63,20 +63,20 @@ describe('Watch tab container', () => {
   it('opens on an agent menu with nothing watched (watch-tab-opens)', () => {
     mount()
     expect(screen.getByTestId('watch-tab')).toBeTruthy()
-    expect(screen.getByTestId('watch-choose-agent').textContent).toMatch(/Choose an agent/)
+    expect(screen.getByTestId('watch-choose-agent').textContent).toMatch(/Choose a profile/)
     expect(screen.queryByTestId('timeline')).toBeNull()
   })
 
   it('lists every agent with its state, and the picked agent’s conversations newest first (menus-list-right-things)', async () => {
     data.agents = [agent('A'), agent('B', { running_conversation_id: 'c3' })]
     mount('other')
-    await userEvent.click(screen.getByRole('button', { name: /Agent to watch/ }))
+    await userEvent.click(screen.getByRole('button', { name: /Profile to watch/ }))
     const agentRows = screen.getAllByRole('menuitemradio').map((r) => r.textContent ?? '')
     expect(agentRows).toHaveLength(2)
     expect(agentRows[0]).toMatch(/A.*idle/)
     expect(agentRows[1]).toMatch(/B.*working/)
     await userEvent.click(screen.getByRole('menuitemradio', { name: /^A/ }))
-    await userEvent.click(screen.getByRole('button', { name: /^Conversation/ }))
+    await userEvent.click(screen.getByRole('button', { name: /^Thread/ }))
     const rows = screen.getAllByRole('menuitemradio').map((r) => r.textContent ?? '')
     expect(rows.map((t) => /Title (c\d)/.exec(t)?.[1])).toEqual(['c2', 'c1'])
   })
@@ -91,7 +91,7 @@ describe('Watch tab container', () => {
     mount('other')
     expect(screen.getByTestId('timeline').textContent).toBe('B:c4')
     await pickAgent('E')
-    expect(screen.getByTestId('watch-no-conversation').textContent).toMatch(/E has no conversation yet/)
+    expect(screen.getByTestId('watch-no-conversation').textContent).toMatch(/E has no thread yet/)
     expect(screen.queryByTestId('timeline')).toBeNull()
   })
 
@@ -103,7 +103,7 @@ describe('Watch tab container', () => {
     data.agents = [agent('A'), agent('B', { running_conversation_id: 'c4' })]
     again()
     expect(screen.getByTestId('timeline').textContent).toBe('B:c4')
-    await userEvent.click(screen.getByRole('button', { name: /^Conversation/ }))
+    await userEvent.click(screen.getByRole('button', { name: /^Thread/ }))
     await userEvent.click(screen.getByRole('menuitemradio', { name: /Title c3/ }))
     expect(screen.getByTestId('timeline').textContent).toBe('B:c3')
     data.agents = [agent('A'), agent('B', { running_conversation_id: 'c4' }), ]
@@ -147,7 +147,7 @@ describe('Watch tab container', () => {
   it('keeps B and C3 across the main view moving, and falls back when they go (survives-switch-and-reload)', async () => {
     const { again } = mount('c1')
     await pickAgent('B')
-    await userEvent.click(screen.getByRole('button', { name: /^Conversation/ }))
+    await userEvent.click(screen.getByRole('button', { name: /^Thread/ }))
     await userEvent.click(screen.getByRole('menuitemradio', { name: /Title c3/ }))
     again('d1')
     expect(screen.getByTestId('timeline').textContent).toBe('B:c3')
@@ -175,7 +175,7 @@ describe('Watch tab container', () => {
     again('c2')
     expect(screen.queryByTestId('timeline')).toBeNull()
     const note = screen.getByTestId('watch-in-this-conversation')
-    expect(note.textContent).toMatch(/You are in this conversation/)
+    expect(note.textContent).toMatch(/You are in this thread/)
     await userEvent.click(within(note).getByRole('button', { name: 'Title c1' }))
     expect(screen.getByTestId('timeline').textContent).toBe('A:c1')
     again('c1')

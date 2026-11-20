@@ -162,7 +162,7 @@ describe('LogsView agent filter (F256)', () => {
     roster = [{ name: 'claude' }]
     render(withQueryClient(<LogsView />))
 
-    const agents = document.querySelector('optgroup[label="Agents"]')
+    const agents = document.querySelector('optgroup[label="Profiles"]')
     const logOnly = document.querySelector('optgroup[label="Only in the log (not on the roster)"]')
     expect([...(agents?.querySelectorAll('option') ?? [])].map((o) => o.textContent)).toEqual(['claude'])
     expect([...(logOnly?.querySelectorAll('option') ?? [])].map((o) => o.textContent)).toEqual([

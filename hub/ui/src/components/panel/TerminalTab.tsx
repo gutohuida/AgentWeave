@@ -164,7 +164,7 @@ function NewShellMenu({ agent, options, lastPick, onOpen, worktreeUnavailable, l
   const ordered = lastPick ? [...options].sort((a, b) => Number(b.id === lastPick.optionId) - Number(a.id === lastPick.optionId)) : options
   if (full) {
     return (
-      <span className="aw-term-new" data-disabled="true" title={`${limit} shells is the limit for one conversation. Close one to open another.`}>
+      <span className="aw-term-new" data-disabled="true" title={`${limit} shells is the limit for one thread. Close one to open another.`}>
         <Icon name="add" size={14} />
         <span className="aw-term-limit">Limit of {limit} reached</span>
       </span>

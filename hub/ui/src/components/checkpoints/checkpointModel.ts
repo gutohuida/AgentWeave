@@ -10,7 +10,7 @@ import type { ProjectCheckpoint } from '@/api/checkpoints'
 const TRIGGER_WORDS: Record<string, string> = {
   task_completion: 'A task finished',
   operator: 'The operator asked',
-  context_pressure: 'The conversation grew long',
+  context_pressure: 'The thread grew long',
 }
 
 /** The triggers the filter offers: the ones the Hub records today. */
@@ -50,7 +50,7 @@ export function madeByHubWords(checkpoint: Pick<ProjectCheckpoint, 'title_made_b
     return 'The title and summary were made by the Hub from the start of the checkpoint, because the model’s answers were rejected.'
   }
   if (checkpoint.title_made_by === 'hub_from_facts') {
-    return 'The title was made by the Hub from the agent, the reason and the date, because the model’s answers could not be read.'
+    return 'The title was made by the Hub from the profile, the reason and the date, because the model’s answers could not be read.'
   }
   return madeByHub(checkpoint) ? 'The title and summary were made by the Hub, not written by the model.' : null
 }

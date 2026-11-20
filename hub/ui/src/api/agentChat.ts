@@ -160,7 +160,7 @@ export interface ProjectConversations {
 /** What navigation shows for a conversation. A conversation with no message yet is labelled as
  *  new; its identifier is never a label, on any surface. */
 export function conversationLabel(conversation: AgentConversation): string {
-  return conversation.title?.trim() || 'New conversation'
+  return conversation.title?.trim() || 'New thread'
 }
 
 export function useAgentConversations(agent: string | null) {

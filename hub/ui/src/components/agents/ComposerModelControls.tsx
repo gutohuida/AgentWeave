@@ -154,7 +154,7 @@ function RunnerModel({ model, label }: { model: string | null; label: string | u
     <span
       data-slot="composer-runner-model"
       className={`${composerControlClassName} inline-flex h-8 min-w-0 max-w-full items-center gap-1 px-2.5 text-xs`}
-      title={`Model: ${shown}. This agent's runner sends its own model to its provider; change it on the runner.`}
+      title={`Model: ${shown}. This profile's runner sends its own model to its provider; change it on the runner.`}
     >
       <span className="shrink-0" style={{ color: 'var(--text-3)' }}>Model: </span>
       <span className="min-w-0 truncate">{shown}</span>
@@ -231,7 +231,7 @@ export function ComposerModelControls({
     return (
       <>
         <PoolPicker
-          agentName={agentName ?? 'This agent'}
+          agentName={agentName ?? 'This profile'}
           pool={pool}
           catalog={catalog}
           current={currentEntry}
@@ -276,7 +276,7 @@ export function ComposerModelControls({
           data-testid="composer-withheld-model"
           className="min-w-0 truncate text-[11px]"
           style={{ color: 'var(--text-3)' }}
-          title={`${withheld} is this conversation's model. ${provider.label} does not offer it, so the next turn runs on the runner's model. It is kept, and applies again if the agent is bound back to a runner that offers it.`}
+          title={`${withheld} is this thread's model. ${provider.label} does not offer it, so the next run uses the runner's model. It is kept, and applies again if the profile is bound back to a runner that offers it.`}
         >
           {withheld} is not offered by {provider.label}
         </span>

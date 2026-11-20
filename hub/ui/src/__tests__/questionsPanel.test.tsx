@@ -203,13 +203,13 @@ describe('whether anyone is still waiting', () => {
   it('keeps a dead question out from under the banner that claims agents are waiting', () => {
     pending[0].asker_waiting = false
     render(<QuestionsPanel />)
-    expect(screen.queryByText(/Blocking — agents are waiting/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/Blocking — runs are waiting/)).not.toBeInTheDocument()
     expect(screen.getByText('Unanswered')).toBeInTheDocument()
   })
 
   it('still shows the banner for a blocking question with someone on the other end', () => {
     render(<QuestionsPanel />)
-    expect(screen.getByText(/Blocking — agents are waiting/)).toBeInTheDocument()
+    expect(screen.getByText(/Blocking — runs are waiting/)).toBeInTheDocument()
     expect(screen.queryByTestId('question-stale-question-1')).not.toBeInTheDocument()
   })
 })

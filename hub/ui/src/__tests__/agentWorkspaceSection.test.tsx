@@ -104,7 +104,7 @@ describe('where an agent works on disk', () => {
     // that has never run — presenting it as an absence would read as a fault.
     renderWorkspace(info({ provisioned: false }))
     expect(screen.getByTestId('agent-worktree')).toHaveTextContent(
-      'created the first time this agent runs',
+      'created the first time this profile runs',
     )
   })
 

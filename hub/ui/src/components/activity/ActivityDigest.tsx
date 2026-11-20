@@ -92,18 +92,18 @@ export function ActivityDigest({
           ]}
         />
         <MenuSelect
-          label="Agent"
+          label="Profile"
           value={agent}
           onChange={setAgent}
           maxWidth={200}
-          options={[{ value: '__all', label: 'Every agent' }, ...agents.map((a) => ({ value: a, label: a, icon: <span className="aw-agent-dot" style={{ background: agentColorVars(colorIndexOf(a)).accent }} /> }))]}
+          options={[{ value: '__all', label: 'Every profile' }, ...agents.map((a) => ({ value: a, label: a, icon: <span className="aw-agent-dot" style={{ background: agentColorVars(colorIndexOf(a)).accent }} /> }))]}
         />
       </div>
 
       {visible.length === 0 ? (
         <div className="aw-digest-empty">
           <Icon name="monitoring" size={18} />
-          <p>Nothing matches. Try “Everything” or another agent.</p>
+          <p>Nothing matches. Try “Everything” or another profile.</p>
         </div>
       ) : null}
 
@@ -160,7 +160,7 @@ export function ActivityDigest({
                       </ul>
                       {row.kind === 'turn' && row.conversationId && row.agent && onOpenConversation ? (
                         <button data-slot="digest-link" type="button" className="aw-digest-link" onClick={() => onOpenConversation(row.agent!, row.conversationId!)}>
-                          Open the conversation <Icon name="arrow_forward" size={12} />
+                          Open the thread <Icon name="arrow_forward" size={12} />
                         </button>
                       ) : null}
                     </div>
