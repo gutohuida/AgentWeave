@@ -228,6 +228,32 @@ def context_file_for(work_dir: str, agent: str, run_id: str) -> Path:
     return own if own.exists() else run_context_file(work_dir, agent, run_id, shared=False)
 
 
+#: The longest prompt passed as a `-p` argument. Windows caps a whole command line at 32,767
+#: characters, and the rest of a Claude turn's argv (MCP config, flags, paths) takes a few thousand;
+#: a 36,537-character mender brief failed every spawn with "The filename or extension is too long".
+PROMPT_ARGV_LIMIT = 24_000
+
+
+def spill_long_prompt(cmd: List[str], prompt: str, context_file: Path) -> List[str]:
+    """*cmd* with an over-long trailing `-p <prompt>` replaced by a pointer to a file holding it.
+
+    A turn's prompt cannot go on stdin as a one-shot's does (F682): the turn runs in a
+    pseudo-terminal. So it is written beside the run's context file and the agent is told to read
+    it. A prompt that fits, or an argv that does not end in `-p <prompt>`, is returned unchanged.
+    """
+    if len(prompt) <= PROMPT_ARGV_LIMIT or len(cmd) < 2 or cmd[-2:] != ["-p", prompt]:
+        return cmd
+    input_file = context_file.with_name(f"{context_file.stem}.input.md")
+    input_file.parent.mkdir(parents=True, exist_ok=True)
+    input_file.write_text(prompt, encoding="utf-8")
+    pointer = (
+        f"This turn's input is {len(prompt):,} characters, too long to pass on the command line, "
+        f"so it is in the file {input_file}. Read that whole file first (in parts if it is large) "
+        "and act on it exactly as if it had been given to you here."
+    )
+    return cmd[:-1] + [pointer]
+
+
 def remove_run_context_file(work_dir: Optional[str], agent: str, run_id: str) -> None:
     """Remove a run's own context file once it has ended. Best effort; `<agent>.md` stays."""
     if not work_dir:
@@ -2335,6 +2361,7 @@ async def _trigger_agent_directly(
                 described_access_path=described_path,
                 control_overrides=control_overrides,
             )
+            cmd = await blocking.run(spill_long_prompt, cmd, prompt, context_file)
         except UnsupportedRunnerError as exc:
             raise TriggerAgentError(
                 status.HTTP_501_NOT_IMPLEMENTED, str(exc), request_level=True
