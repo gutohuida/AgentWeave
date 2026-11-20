@@ -278,6 +278,8 @@ export function projectRowOf(read: BuildRead, clock?: Date): ProjectBuildRow {
     created_at: at(read.build.created_at),
     stopped_at: at(read.build.stopped_at),
     finished_at: at(read.build.stopped_at),
+    needs_operator: read.build.needs_operator ?? null,
+    attention_dismissed: read.build.attention_dismissed ?? false,
     open_questions: 0,
     question: null,
   }

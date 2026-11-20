@@ -27,6 +27,7 @@ import {
   leftOutShort,
   NEEDS,
   ROLE,
+  stoppedLine,
   taskFigures,
   taskKey,
   taskName,
@@ -328,6 +329,7 @@ function BuildHeader({
   const pct = totals.tasks ? (totals.approved / totals.tasks) * 100 : 0
   const cost = totalCell(totals.cost)
   const note = leftOut(totals.cost)
+  const stopped = b.needs_operator?.kind === 'stopped'
   return (
     <header className="aw-bv-header">
       <div className="aw-bv-titleline">
@@ -429,7 +431,7 @@ function BuildHeader({
             <small>{totals.sendBacks ? `across ${read.tasks.filter((t) => t.send_backs.length).length} of ${totals.tasks} tasks` : totals.tasks ? 'No task was sent back' : 'No task yet'}</small>
           </dd>
         </div>
-        <div className="aw-bv-figure" data-attention={totals.needsOperator ? 'true' : undefined}>
+        <div className="aw-bv-figure" data-attention={totals.needsOperator || stopped ? 'true' : undefined}>
           <dt>Needs you</dt>
           <dd>
             {totals.needsOperator ? (
@@ -441,6 +443,17 @@ function BuildHeader({
                 <button type="button" data-slot="link-button" className="aw-bv-link" onClick={onShowNeeds}>
                   Show {totals.needsOperator === 1 ? 'it' : 'them'}
                 </button>
+                {stopped ? <small data-testid="build-needs-stopped">{stoppedLine(read)}</small> : null}
+              </>
+            ) : stopped ? (
+              <>
+                <strong className="aw-bv-needs-figure" data-testid="build-needs">
+                  <Icon name="alert_triangle" size={15} />
+                  Stopped
+                </strong>
+                <small data-testid="build-needs-stopped" title={read.build.needs_operator?.text}>
+                  {stoppedLine(read)}
+                </small>
               </>
             ) : (
               <>

@@ -17,10 +17,9 @@ from typing import Any, Dict, Iterable, List, Optional
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from . import work_tally
+from . import build_needs, work_tally
 from .db.models import (
     Build,
-    Question,
     RequirementEvidence,
     Run,
     SpecDocument,
@@ -36,7 +35,6 @@ from .spec_identity import natural_key
 #: `work_tally.ROLES` in the view's words (`RunRole`).
 _ROLE = {"building": "build", "reviewing": "review", "mending": "mender", "leading": "lead"}
 _SEND_BACKS = ("revision_needed", "rejected")
-_DONE = ("approved", "rejected")
 
 
 def _iso(value: Optional[datetime]) -> Optional[str]:
@@ -273,40 +271,8 @@ async def build_read(
     for tr in transitions:
         last_change[tr.task_id] = tr.created_at
 
-    # ── what waits on the operator ──
-    asked: Dict[str, Question] = {}
-    if task_ids:
-        for q in (
-            (
-                await session.execute(
-                    select(Question)
-                    .where(
-                        Question.blocked_task_id.in_(task_ids),
-                        Question.answered.is_(False),
-                        Question.declined.is_(False),
-                    )
-                    .order_by(Question.created_at)
-                )
-            )
-            .scalars()
-            .all()
-        ):
-            asked.setdefault(q.blocked_task_id, q)
-
-    def needs(task: Task) -> Optional[Dict[str, str]]:
-        if task.status in _DONE:
-            return None
-        mine = [s for s in stalls if s.task_id == task.id]
-        for stall in reversed(mine):
-            if stall.outcome == "open":
-                return {"kind": "stalled", "text": stall.reason}
-        question = asked.get(task.id)
-        if question is not None:
-            return {"kind": "question", "text": question.question}
-        for stall in reversed(mine):
-            if stall.outcome == "gave_up":
-                return {"kind": "gave-up", "text": stall.outcome_detail or stall.reason}
-        return None
+    # ── what waits on the operator: the one definition the build list reads too ──
+    needs = (await build_needs.needs_of_builds(session, project_id, [build]))[build.id]
 
     tasks_read = []
     for task, declared in _ordered(task_rows, build.document_id, _declared_keys(payload)):
@@ -320,7 +286,7 @@ async def build_read(
                 "builder": task.builder or task.assignee,
                 "checker": _checker(build, task),
                 "last_change_at": _iso(last_change.get(task.id) or task.updated),
-                "needs_operator": needs(task),
+                "needs_operator": needs.tasks.get(task.id),
                 "requirements": requirements[task.id],
                 "runs": on_task[task.id],
                 "send_backs": send_backs[task.id],
@@ -338,6 +304,8 @@ async def build_read(
             "created_at": _iso(build.created_at),
             "stopped_at": _iso(build.stopped_at),
             "stop_reason": build.stop_reason,
+            "needs_operator": needs.build,
+            "attention_dismissed": build_needs.attention_dismissed(build, needs),
         },
         "tasks": tasks_read,
         "build_runs": on_build,
