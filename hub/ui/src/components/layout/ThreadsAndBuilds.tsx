@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNod
 import type { AgentConversation } from '@/api/agentChat'
 import type { ProjectAgentSummary } from '@/api/projects'
 import { Icon } from '@/components/common/Icon'
+import { LoadingThread } from '@/components/common/LoadingThread'
 import { Input } from '@/components/ui/input'
 import { agentColorVars } from '@/lib/agentColors'
 import { formatCount } from '@/lib/format'
@@ -403,15 +404,9 @@ function BuildRow({
   )
 }
 
-/** Shaped like the rows it stands in for, and shown only after the loader delay. */
-function RowsLoading({ rows, label }: { rows: number; label: string }) {
-  return (
-    <div className="aw-delayed" role="status" aria-label={label}>
-      {Array.from({ length: rows }, (_, i) => (
-        <div key={i} className="aw-rail-skeleton" style={{ width: `${88 - ((i * 17) % 34)}%` }} />
-      ))}
-    </div>
-  )
+/** The brand's loading thread, shown only after the loader delay. */
+function RowsLoading({ label }: { rows: number; label: string }) {
+  return <LoadingThread size="inline" label={label} />
 }
 
 function ListError({ what, onRetry, testId }: { what: string; onRetry: () => void; testId: string }) {

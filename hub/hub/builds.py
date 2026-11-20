@@ -199,7 +199,10 @@ async def _links_of(
 
 
 async def project_rows(
-    session: AsyncSession, project_id: str, workspace: Optional[Any] = None
+    session: AsyncSession,
+    project_id: str,
+    workspace: Optional[Any] = None,
+    build_id: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
     """Every build of every document in the project, running and ended, whatever drives it, one
     row each (`the-side-panel-s-running-tab`, FR-2): the document's title, the build's loop where it
@@ -208,14 +211,18 @@ async def project_rows(
     Newest first, the order `builds_of` gives one document's. Titles, loops, task counts and
     questions are each one grouped read, not one per document; only the spend is read per build.
     With a `workspace`, each row also names the roadmap slice and capabilities its document's file
-    holds (`roadmap`, `capabilities`); without one they are null and empty."""
+    holds (`roadmap`, `capabilities`); without one they are null and empty. With a `build_id`,
+    only that build's row."""
     from .db.models import AIJob, Question
 
     builds = list(
         (
             await session.execute(
                 select(Build)
-                .where(Build.project_id == project_id)
+                .where(
+                    Build.project_id == project_id,
+                    *([Build.id == build_id] if build_id is not None else []),
+                )
                 .order_by(Build.created_at.desc(), Build.id.desc())
             )
         )
@@ -340,6 +347,9 @@ async def project_rows(
         if owner:
             questions.setdefault(owner, []).append(question)
 
+    from . import build_needs
+
+    needs = await build_needs.needs_of_builds(session, project_id, builds)
     rows: List[Dict[str, Any]] = []
     for build in builds:
         pair = loops.get(build.loop_id or "")
@@ -378,6 +388,10 @@ async def project_rows(
                 "stop_reason": build.stop_reason,
                 "created_at": _iso(build.created_at),
                 "stopped_at": _iso(build.stopped_at),
+                # What the build needs from the operator (`build_needs`, the build read's own),
+                # and whether they dismissed it from the sidebar since it began needing that.
+                "needs_operator": needs[build.id].build,
+                "attention_dismissed": build_needs.attention_dismissed(build, needs[build.id]),
                 "open_questions": len(asked),
                 "question": (
                     {

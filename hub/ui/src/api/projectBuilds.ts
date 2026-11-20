@@ -1,7 +1,8 @@
-import { useQuery } from '@tanstack/react-query'
-import { getJson } from './client'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { getJson, postJson } from './client'
 import { useConfigStore } from '@/store/configStore'
 import type { BuildDriver, BuildLevel } from './spec'
+import type { BuildNeedsRead } from '@/components/builds/buildViewModel'
 
 /** One row of `GET /projects/{id}/project/builds`: a build of any of the project's documents, with
  *  the document's title, its loop, its task counts and the blocking question its work waits on.
@@ -43,6 +44,11 @@ export interface ProjectBuildRow {
   stop_reason: string | null
   created_at: string | null
   stopped_at: string | null
+  /** What the build needs from the operator, the build read's own (`hub/hub/build_needs.py`):
+   *  "stopped" first, otherwise its first task's need; null when it needs nothing. */
+  needs_operator: BuildNeedsRead | null
+  /** The operator dismissed it from the sidebar and its needs are still the ones dismissed. */
+  attention_dismissed: boolean
   open_questions: number
   question: {
     id: string
@@ -74,5 +80,17 @@ export function useProjectBuilds(refetchMs?: number) {
       (await getJson<{ builds: ProjectBuildRow[] }>(`/api/v1/projects/${projectId}/project/builds`)).builds,
     enabled: isConfigured && !!projectId,
     refetchInterval: refetchMs,
+  })
+}
+
+/** Dismiss a build that is not running from the sidebar, until what it needs changes. Answers its
+ *  row; the Hub refuses (409) a running build and one that needs nothing. */
+export function useDismissBuildAttention() {
+  const queryClient = useQueryClient()
+  const { selectedProjectId: projectId } = useConfigStore()
+  return useMutation({
+    mutationFn: (buildId: string) =>
+      postJson<ProjectBuildRow>(`/api/v1/projects/${projectId}/project/builds/${buildId}/attention/dismiss`, {}),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['project', projectId, 'builds'] }),
   })
 }
