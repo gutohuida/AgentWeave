@@ -1,7 +1,8 @@
 import * as React from 'react'
 import type { AgentConversation } from '@/api/agentChat'
 import type { ProjectAgentSummary, ProjectSummary } from '@/api/projects'
-import { ThreadsAndBuilds, type SidebarBuild } from '@/components/layout/ThreadsAndBuilds'
+import { ThreadsAndBuilds } from '@/components/layout/ThreadsAndBuilds'
+import type { ListState, SidebarBuild } from '@/components/layout/threadsAndBuildsModel'
 import { PROJECT_ID } from './fixtures'
 
 /** The sidebar's threads and builds (spec profiles-threads-and-builds-everywhere).
@@ -10,12 +11,16 @@ import { PROJECT_ID } from './fixtures'
  *  is mock state throughout, modelled on this repository's own roster, threads and builds, and
  *  shaped exactly as `AgentConversation` and the D2 build row, so the app's data plugs in. */
 
-export type SidebarMockState = 'mixed' | 'quiet' | 'empty' | 'today'
+export type SidebarMockState = 'mixed' | 'quiet' | 'empty' | 'many40' | 'many300' | 'loading' | 'error' | 'today'
 
 export const SIDEBAR_MOCK_STATES: Array<{ value: SidebarMockState; label: string }> = [
   { value: 'mixed', label: 'Sidebar: builds running and needing you' },
   { value: 'quiet', label: 'Sidebar: no builds, threads only' },
   { value: 'empty', label: 'Sidebar: new project, nothing yet' },
+  { value: 'many40', label: 'Sidebar: 40 threads' },
+  { value: 'many300', label: 'Sidebar: 300 threads' },
+  { value: 'loading', label: 'Sidebar: loading' },
+  { value: 'error', label: 'Sidebar: could not load' },
   { value: 'today', label: 'Sidebar: today’s agent tree' },
 ]
 
@@ -101,6 +106,21 @@ const THREADS: AgentConversation[] = [
   thread('conv-4a0e5f3c9d17', 'Architect', 'Explore: dashboards an agent builds', 60 * 72, { origin: 'spec' }),
 ]
 
+// mock state: a long-running project, for the 40 and 300 rows the vault note asks to be shown.
+const TOPICS = ['Fix', 'Spec:', 'Explore:', 'Drive', 'Why did', 'Review', 'Try', 'Roadmap:']
+const SUBJECTS = ['the landing queue', 'vault import', 'build retrospectives', 'the composer', 'pool pricing', 'trace drawer', 'checkpoint cutover', 'the Jobs screen', 'dashboards', 'GitLab landing']
+function manyThreads(n: number): AgentConversation[] {
+  const extra = Array.from({ length: Math.max(0, n - THREADS.length) }, (_, i) =>
+    thread(
+      `conv-many${String(i).padStart(7, '0')}`,
+      PROFILES[i % PROFILES.length]!.name,
+      `${TOPICS[i % TOPICS.length]} ${SUBJECTS[(i * 7) % SUBJECTS.length]} (${i + 1})`,
+      60 * 80 + i * 97,
+    ),
+  )
+  return [...THREADS, ...extra]
+}
+
 const ARCHIVED: AgentConversation[] = [
   thread('conv-0aa1b2c3d4e5', 'Developer', 'Old CLI session cleanup', 60 * 24 * 9, { lifecycle: 'archived' }),
   thread('conv-0bb1b2c3d4e6', 'QA', 'Trial Hub smoke test', 60 * 24 * 12, { lifecycle: 'archived' }),
@@ -108,7 +128,7 @@ const ARCHIVED: AgentConversation[] = [
 
 // mock state: what `GET /builds` with D2's `needs_operator` would list for the sidebar: running,
 // or needing the operator and not dismissed. A finished build with nothing open is not here.
-const BUILDS: SidebarBuild[] = [
+export const BUILDS: SidebarBuild[] = [
   { id: 'build-pf01', document_title: 'Profiles, threads and builds everywhere', state: 'running', tasks_total: 9, tasks_done: 3, needs_operator: null },
   {
     id: 'build-rt02',
@@ -148,14 +168,25 @@ export function useSidebarProjectBody(go: {
   if (mock.state === 'today') return undefined
   return (project, activeProject) => {
     const main = project.id === PROJECT_ID
-    const threads = !main || mock.state === 'empty' ? [] : THREADS
-    const builds = !main || mock.state !== 'mixed' ? [] : BUILDS.filter((b) => !mock.dismissed.has(b.id))
+    const listState: ListState = main && mock.state === 'loading' ? 'loading' : main && mock.state === 'error' ? 'error' : 'ready'
+    const threads =
+      !main || mock.state === 'empty' || listState !== 'ready'
+        ? []
+        : mock.state === 'many40'
+          ? manyThreads(40)
+          : mock.state === 'many300'
+            ? manyThreads(300)
+            : THREADS
+    const withBuilds = mock.state === 'mixed' || mock.state === 'many40' || mock.state === 'many300'
+    const builds = !main || !withBuilds ? [] : BUILDS.filter((b) => !mock.dismissed.has(b.id))
     return (
       <ThreadsAndBuilds
         projectId={project.id}
         profiles={main ? PROFILES : project.agents}
         threads={threads}
-        archivedCount={main && mock.state !== 'empty' ? ARCHIVED.length : 0}
+        threadsState={listState}
+        buildsState={listState}
+        archivedCount={main && mock.state !== 'empty' && listState === 'ready' ? ARCHIVED.length : 0}
         archivedThreads={main && mock.showArchived ? ARCHIVED : null}
         builds={builds}
         activeProject={activeProject}
@@ -172,7 +203,18 @@ export function useSidebarProjectBody(go: {
           showArchived = show
           emit()
         }}
+        onRetry={() => setSidebarMockState('mixed')}
       />
     )
   }
+}
+
+/** The collapsed rail's mark: the titles of the builds that need the operator, per project. */
+export function useBuildsNeedingYou(): ((projectId: string) => string[]) | undefined {
+  const mock = useSidebarMock()
+  if (mock.state === 'today') return undefined
+  return (projectId) =>
+    projectId === PROJECT_ID && (mock.state === 'mixed' || mock.state === 'many40' || mock.state === 'many300')
+      ? BUILDS.filter((b) => b.needs_operator && !mock.dismissed.has(b.id)).map((b) => b.document_title)
+      : []
 }

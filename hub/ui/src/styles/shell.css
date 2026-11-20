@@ -232,22 +232,49 @@
 .aw-rail .rail-empty { display: block; margin: 0; padding: 0; border: 0; background: none; }
 
 /* ── Threads and builds (profiles-threads-and-builds-everywhere) ───────── */
-.aw-rail-tb section + section { margin-top: 4px; }
-.aw-rail-section-head { display: flex; align-items: center; justify-content: space-between; padding-right: 2px; }
+/* Anything that carries meaning sits on --text-2: --text-3 is the 3:1 tier (vault note P22). */
+.aw-rail-tb section + section { margin-top: 6px; }
+.aw-rail-section-head { display: flex; align-items: center; justify-content: space-between; gap: 4px; padding: 6px 2px 2px 0; }
 .aw-rail-section-head .aw-icon-button { width: 20px; height: 20px; }
-.aw-rail-profile {
-  flex: none; max-width: 40%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-  font-size: 11px; color: var(--text-3);
+.aw-rail-section-toggle {
+  display: inline-flex; align-items: center; gap: 5px; min-width: 0; height: 22px; padding: 0 6px 0 2px;
+  border-radius: var(--radius-sm); font-size: 11px; font-weight: 600; color: var(--text-2);
 }
-.aw-rail-conversation-host:hover .aw-rail-profile, .aw-rail-conversation-host:focus-within .aw-rail-profile { opacity: 0; }
-.aw-rail-build-icon { flex: none; color: var(--text-3); }
-.aw-rail-build { height: auto; min-height: 40px; padding-top: 4px; padding-bottom: 4px; align-items: center; }
-.aw-rail-build-icon { align-self: flex-start; margin-top: 3px; }
-.aw-rail-build-status { font-size: 11px; color: var(--text-3); font-variant-numeric: tabular-nums; white-space: nowrap; }
-.aw-rail-build[data-needs]:not([data-needs="none"]) .aw-rail-build-status { color: var(--amber); }
+.aw-rail-section-toggle:hover { color: var(--text); background: var(--row-hover); }
+.aw-rail-section-toggle:focus-visible { outline: none; box-shadow: inset 0 0 0 2px var(--ring); }
+.aw-rail-section-count { font-weight: 400; color: var(--text-2); }
+.aw-rail-section-note { display: inline-flex; align-items: center; gap: 3px; font-weight: 600; color: var(--text); white-space: nowrap; }
+.aw-rail-section-note svg { color: var(--amber); }
+.aw-rail-profile {
+  flex: none; max-width: 38%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-size: 11px; color: var(--text-2);
+}
+.aw-rail-attention { display: inline-flex; flex: none; }
+.aw-rail-attention[data-attention="running"] { color: var(--green); }
+.aw-rail-attention[data-attention="waiting"] { color: var(--amber); }
+.aw-rail-conversation-host:hover .aw-rail-profile, .aw-rail-conversation-host:focus-within .aw-rail-profile,
+.aw-rail-conversation-host:hover .aw-rail-attention, .aw-rail-conversation-host:focus-within .aw-rail-attention { opacity: 0; }
+.aw-rail-build-icon { flex: none; color: var(--text-2); }
+.aw-rail-build[data-needs]:not([data-needs="none"]) .aw-rail-build-icon { color: var(--amber); }
+.aw-rail-build-status { flex: none; font-size: 11px; color: var(--text-2); white-space: nowrap; }
+/* Amber is a mark, not a text colour: light-theme amber is 3.35:1 on the rail, under the 4.5:1 text
+   needs. The word carries the state at full strength; the amber hand beside it is the 3:1 mark. */
+.aw-rail-build[data-needs]:not([data-needs="none"]) .aw-rail-build-status { color: var(--text); font-weight: 600; }
 .aw-rail-build-host .aw-rail-build-dismiss {
-  position: absolute; right: 4px; top: 10px; width: 20px; height: 20px; opacity: 0;
+  position: absolute; right: 4px; top: 4px; width: 20px; height: 20px; opacity: 0;
   background: var(--row-hover); transition: opacity var(--dur-fast) ease;
 }
 .aw-rail-build-host:hover .aw-rail-build-dismiss, .aw-rail-build-dismiss:focus-visible { opacity: 1; }
-.aw-rail-build-host:has(.aw-rail-build-dismiss):hover .aw-waiting-dot { visibility: hidden; }
+.aw-rail-build-host:has(.aw-rail-build-dismiss):hover .aw-rail-build-status,
+.aw-rail-build-host:has(.aw-rail-build-dismiss:focus-visible) .aw-rail-build-status { visibility: hidden; }
+.aw-rail-filter { padding: 2px 4px 4px 0; }
+.aw-rail-filter input { height: 26px; font-size: 12px; }
+.aw-rail-note { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; padding: 4px 8px; font-size: 12px; color: var(--text-2); }
+.aw-rail-note-error { color: var(--text); }
+.aw-rail-note-error svg { color: var(--red); }
+.aw-rail-link { color: var(--text); text-decoration: underline; text-underline-offset: 2px; border-radius: var(--radius-sm); }
+.aw-rail-link:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--ring); }
+.aw-rail-skeleton { height: 10px; margin: 9px 8px; border-radius: var(--radius-sm); background: var(--row-hover); }
+.aw-rail-compact-mark { position: absolute; right: -3px; top: -3px; display: inline-flex; align-items: center; justify-content: center; width: 14px; height: 14px; border-radius: 999px; border: 2px solid var(--rail); background: var(--amber); color: var(--bg); }
+@media (prefers-reduced-motion: reduce) { .aw-rail-tb .aw-pulse { animation: none; } }
+.aw-rail-tb .aw-rail-more { color: var(--text-2); }

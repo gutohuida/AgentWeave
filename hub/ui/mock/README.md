@@ -278,9 +278,48 @@ Approved by the operator on 2026-11-19 as it renders, including the author's cho
 
 ## The sidebar's threads and builds (profiles-threads-and-builds-everywhere)
 
-`src/components/layout/ThreadsAndBuilds.tsx` is the list that replaces the agent tree and the
-recency view under each project. The mock passes it to the real `Sidebar` through its
-`projectBody` prop (the app does not pass it yet, so the app is unchanged). The mock bar's
-"Sidebar" select switches between builds running and needing you, threads only, a new empty
-project, and today's agent tree. The data is mock state (`mock/sidebarMock.tsx`): neither
-`operator_threads` nor `needs_operator` exists on any route yet.
+`src/components/layout/ThreadsAndBuilds.tsx` (rules in `threadsAndBuildsModel.ts`, tested in
+`src/__tests__/threadsAndBuildsModel.test.ts`) replaces the agent tree and the recency view under
+each project. The mock passes it to the real `Sidebar` through `projectBody`, and the collapsed
+rail's marks through `buildsNeedingYou`; the app passes neither yet, so the app is unchanged. The
+data is mock state (`mock/sidebarMock.tsx`): neither `operator_threads` nor `needs_operator` exists
+on a route yet. Review it at `#tab/jobs?sidebar=<state>` (mixed, quiet, empty, many40, many300,
+loading, error, today); the Jobs screen renders on the stub fixtures, Overview does not.
+
+Decided with the operator, 2026-11-20, against the vault UI note (src-0b85ea5a1d1d):
+- Two sections, Builds then Threads. No Profiles section; no "All builds" link (the side panel's
+  Running tab already lists every build). Finished builds needing nothing are not listed.
+- Rows are one line. A build: hammer (running) or hand (needs you), title, one word ("3/9",
+  "Stopped", "Stalled", "Question", "Given up"); the reason is in the tooltip. A thread: profile
+  colour edge, title, profile name, and a shape for running (dot in a ring) or waiting (hand); its
+  age is in the tooltip, the list already being in recency order.
+- Needs-you rises: such builds above running ones, waiting threads above the rest.
+- Section headers are disclosures with a count and remember being collapsed; Builds also says
+  "N need you". Past 15 threads a filter appears; "Show N more" and "Show archived" stay.
+- Loading is a delayed skeleton; an error says so with "Try again", never an empty list.
+- Rows hold their places while the pointer is over the list.
+- Collapsed, the rail shows projects only, with an amber hand when a build needs the operator.
+- Amber is never text colour: light-theme amber is 3.35:1 on the rail. Measured text: 5.86 to
+  17.44 (dark), 6.01 to 16.12 (light).
+
+Names a drive can rely on: sections "Builds" and "Threads" (disclosure buttons of the same names);
+"Build: <title>, <n> of <m> tasks done, running" or "..., <stopped|stalled|question|given up>,
+needs you"; "Dismiss build: <title>"; "New thread"; "Filter threads"; test ids
+`rail-threads-builds-<project>`, `rail-build-<id>`, `rail-thread-<conversation>`,
+`rail-compact-needs-<project>`. Arrow keys, Home and End move between rows; Enter opens; after a
+dismiss, focus goes to the Builds header. Executable checks: `testbed/ui-judge/mock/sidebar/
+check_sidebar.py` (names, keyboard walk, dismiss focus, contrast in both themes, greyscale).
+
+Heuristic pass (Nielsen's ten):
+1. Visibility of status: builds show progress or the need in words; threads show working/waiting.
+2. Match with the real world: profile, thread, build; no ids or enum values on screen.
+3. Control and freedom: dismiss is undoable in effect (a new need brings the build back); filters
+   clear with Escape or "Clear the filter".
+4. Consistency: the rows reuse ConversationRow and the rail's tokens and disclosure chevrons.
+5. Error prevention: a running build offers no dismiss.
+6. Recognition over recall: each thread names its profile; the tooltip gives build reasons.
+7. Flexibility: keyboard movement, filter past 15, collapsible sections.
+8. Minimal design: one status per row; age and reasons move to tooltips.
+9. Recovering from errors: a failed list says so with Try again.
+10. Help: the dismiss tooltip says the build comes back if it needs you again.
+Not checkable by an agent: whether it feels calm at a glance, left to the operator's review.

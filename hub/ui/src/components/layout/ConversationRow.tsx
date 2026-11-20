@@ -296,7 +296,21 @@ export function ConversationRow({
                 {age}
               </span>
             )}
-            {attention && (
+            {attention && showProfile && (
+              /* A shape as well as a colour, so running and waiting stay apart in greyscale
+                 (vault note P21): the threads list names the profile, so no word fits. */
+              <span
+                data-testid={`${testId}-attention`}
+                className="aw-rail-attention"
+                data-attention={conversation.attention}
+                title={attention.label}
+                aria-label={attention.label}
+                role="img"
+              >
+                <Icon name={conversation.attention === 'running' ? 'circle_dot' : 'hand'} size={12} aria-hidden="true" />
+              </span>
+            )}
+            {attention && !showProfile && (
               <span
                 data-testid={`${testId}-attention`}
                 className={conversation.attention === 'running' ? 'aw-live-dot aw-pulse' : 'aw-waiting-dot'}

@@ -8,7 +8,7 @@ import { BUILD_MOCK_STATES, DEFAULT_BUILD, RECORDED_BUILDS, useBuildHash, type B
 import { beforeKey, type MockRoute } from './routes'
 import { SCREENS, screenFor } from './screens'
 import { useSetupTitles } from './setupMock'
-import { SIDEBAR_MOCK_STATES, setSidebarMockState, useSidebarMock, useSidebarProjectBody, type SidebarMockState } from './sidebarMock'
+import { SIDEBAR_MOCK_STATES, setSidebarMockState, useBuildsNeedingYou, useSidebarMock, useSidebarProjectBody, type SidebarMockState } from './sidebarMock'
 import { NOTICE_LEVELS } from './specBanner'
 import { SPEC_MOCK_STATES, setSpecMockControls, useSpecMockControls } from './specMock'
 import { setTasksMockControls, useTasksMockControls } from './tasksMock'
@@ -115,6 +115,7 @@ export function MockApp() {
   })()
 
   const setupFor = useSetupTitles()
+  const buildsNeedingYou = useBuildsNeedingYou()
   const projectBody = useSidebarProjectBody({
     openThread: (agent, conversationId) => go({ kind: 'conversation', agent, conversationId }),
     newThread: () => go({ kind: 'conversation', agent: 'Architect', conversationId: null }),
@@ -142,6 +143,7 @@ export function MockApp() {
         onOpenAppSettings={() => go({ kind: 'app-settings', section: 'notifications' })}
         appSettingsActive={route.kind === 'app-settings'}
         projectBody={projectBody}
+        buildsNeedingYou={buildsNeedingYou}
       />
       <div className="aw-main">
         <TopBar

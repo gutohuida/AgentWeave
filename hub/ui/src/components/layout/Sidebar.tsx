@@ -55,6 +55,9 @@ interface SidebarProps {
    *  view, and their toggle goes (profiles-threads-and-builds-everywhere: the threads-and-builds
    *  list; the mock passes it, the app does not yet). */
   projectBody?: (project: ProjectSummary, activeProject: boolean) => ReactNode
+  /** With `projectBody`, the collapsed rail shows projects only, marked when a build needs the
+   *  operator: these are the titles of those builds (empty when none). */
+  buildsNeedingYou?: (projectId: string) => string[]
 }
 
 export const SIDEBAR_WIDTH = 248
@@ -120,6 +123,7 @@ export function Sidebar({
   onCompactChange,
   width = SIDEBAR_WIDTH,
   projectBody,
+  buildsNeedingYou,
 }: SidebarProps) {
   const { data: projects = [] } = useProjects()
   const selectedProjectId = useConfigStore((state) => state.selectedProjectId)
@@ -254,6 +258,8 @@ export function Sidebar({
           onOpenAppSettings={onOpenAppSettings}
           appSettingsActive={appSettingsActive}
           setupFor={setupFor}
+          projectsOnly={Boolean(projectBody)}
+          buildsNeedingYou={buildsNeedingYou}
         />
       ) : (
         <>
@@ -437,8 +443,12 @@ function CompactRail({
   onOpenAppSettings,
   appSettingsActive,
   setupFor,
+  projectsOnly,
+  buildsNeedingYou,
 }: {
   setupFor?: (projectId: string) => string[]
+  projectsOnly: boolean
+  buildsNeedingYou?: (projectId: string) => string[]
   projects: ProjectSummary[]
   selectedProjectId: string | null
   activeAgent: string | null
@@ -462,6 +472,8 @@ function CompactRail({
         />
         {projects.map((project) => {
           const activeProject = selectedProjectId === project.id
+          const needs = projectsOnly ? (buildsNeedingYou?.(project.id) ?? []) : []
+          const name = needs.length > 0 ? `${project.name}: ${needs.length} build${needs.length === 1 ? '' : 's'} need${needs.length === 1 ? 's' : ''} you` : project.name
           return (
             <div key={project.id} className="aw-rail-icon-group">
               <button
@@ -471,14 +483,20 @@ function CompactRail({
                 data-testid={`rail-compact-project-${project.id}`}
                 data-active={activeProject ? 'true' : 'false'}
                 aria-current={activeProject ? 'page' : undefined}
-                aria-label={project.name}
-                title={project.name}
+                aria-label={name}
+                title={needs.length > 0 ? [name, ...needs].join('. ') : project.name}
                 onClick={() => onOpenProject(project.id)}
               >
                 {project.name.slice(0, 2).toUpperCase()}
                 <SetupCount titles={setupFor?.(project.id) ?? []} />
+                {/* A hand as well as amber: the mark is not colour alone (vault note P21). */}
+                {needs.length > 0 ? (
+                  <span className="aw-rail-compact-mark" data-testid={`rail-compact-needs-${project.id}`} aria-hidden="true">
+                    <Icon name="hand" size={8} />
+                  </span>
+                ) : null}
               </button>
-              {project.agents.map((agent) => {
+              {!projectsOnly && project.agents.map((agent) => {
                 const colors = agentColorVars(agent.color_index)
                 const active = activeProject && activeAgent === agent.name
                 const running = agent.status === 'running' || agent.status === 'working'
