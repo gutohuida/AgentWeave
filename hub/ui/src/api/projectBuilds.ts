@@ -3,6 +3,7 @@ import { getJson, postJson } from './client'
 import { useConfigStore } from '@/store/configStore'
 import type { BuildDriver, BuildLevel } from './spec'
 import type { BuildNeedsRead } from '@/components/builds/buildViewModel'
+import { sidebarBuilds } from '@/components/layout/threadsAndBuildsModel'
 
 /** One row of `GET /projects/{id}/project/builds`: a build of any of the project's documents, with
  *  the document's title, its loop, its task counts and the blocking question its work waits on.
@@ -72,25 +73,45 @@ export interface ProjectBuildLanding {
   reason: string
 }
 
+const readProjectBuilds = async (projectId: string) =>
+  (await getJson<{ builds: ProjectBuildRow[] }>(`/api/v1/projects/${projectId}/project/builds`)).builds
+
 export function useProjectBuilds(refetchMs?: number) {
   const { isConfigured, selectedProjectId: projectId } = useConfigStore()
   return useQuery<ProjectBuildRow[]>({
     queryKey: ['project', projectId, 'builds'],
-    queryFn: async () =>
-      (await getJson<{ builds: ProjectBuildRow[] }>(`/api/v1/projects/${projectId}/project/builds`)).builds,
+    queryFn: () => readProjectBuilds(projectId as string),
     enabled: isConfigured && !!projectId,
     refetchInterval: refetchMs,
   })
 }
 
-/** Dismiss a build that is not running from the sidebar, until what it needs changes. Answers its
- *  row; the Hub refuses (409) a running build and one that needs nothing. */
-export function useDismissBuildAttention() {
+/** The same rows for a project named explicitly: the sidebar draws every registered project, not
+ *  only the selected one. One cache entry with `useProjectBuilds` for the selected project. */
+export function useBuildsOfProject(projectId: string, enabled = true) {
+  const { isConfigured } = useConfigStore()
+  return useQuery<ProjectBuildRow[]>({
+    queryKey: ['project', projectId, 'builds'],
+    queryFn: () => readProjectBuilds(projectId),
+    enabled: isConfigured && enabled,
+  })
+}
+
+/** The titles of a project's builds that need the operator and were not dismissed: the collapsed
+ *  rail's mark (FR-14), read from the same rows as the sidebar's expanded list. */
+export function useBuildsNeedingYouOf(projectId: string): string[] {
+  const { data } = useBuildsOfProject(projectId)
+  return sidebarBuilds(data ?? [])
+    .filter((build) => build.needs_operator !== null)
+    .map((build) => build.document_title)
+}
+
+/** Dismiss a listed build of any project from the sidebar (D3); the Hub refuses a running one. */
+export function useDismissProjectBuild() {
   const queryClient = useQueryClient()
-  const { selectedProjectId: projectId } = useConfigStore()
   return useMutation({
-    mutationFn: (buildId: string) =>
+    mutationFn: ({ projectId, buildId }: { projectId: string; buildId: string }) =>
       postJson<ProjectBuildRow>(`/api/v1/projects/${projectId}/project/builds/${buildId}/attention/dismiss`, {}),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['project', projectId, 'builds'] }),
+    onSuccess: (_row, { projectId }) => queryClient.invalidateQueries({ queryKey: ['project', projectId, 'builds'] }),
   })
 }

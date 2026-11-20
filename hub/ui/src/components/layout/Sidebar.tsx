@@ -3,14 +3,15 @@ import { SetupCount } from '@/components/overview/SetupList'
 import { useProjects, type ProjectSummary } from '@/api/projects'
 import { BrandLoop } from '@/components/common/BrandLoop'
 import { Icon } from '@/components/common/Icon'
-import { agentColorVars } from '@/lib/agentColors'
-import type { AgentSettingsSection, EnvironmentSection } from '@/lib/navigation'
+import type { EnvironmentSection } from '@/lib/navigation'
 import { useConfigStore } from '@/store/configStore'
 import { useSSEConnectionState, type SSEConnectionState } from '@/hooks/useSSE'
-import { AgentTree } from './AgentTree'
-import { RecencyView } from './RecencyView'
+import { useBuildsNeedingYouOf } from '@/api/projectBuilds'
+import { ProjectThreadsAndBuilds } from './ProjectThreadsAndBuilds'
 
-/** The rail: projects → agents → conversations, and nothing else.
+/** The rail: projects, and under each the builds that are running or need the operator, then the
+ *  operator's own threads (profiles-threads-and-builds-everywhere FR-1, FR-3). Task, review and
+ *  mender runs are reached through their build, not listed here.
  *
  *  It used to change into three other things — an Environment section list, an agent-settings
  *  section list and the Spec document tree — whenever the page beside it had sections of its own.
@@ -23,16 +24,16 @@ import { RecencyView } from './RecencyView'
  *  changes width; full-row hit targets. */
 
 interface SidebarProps {
-  activeAgent?: string | null
   activeConversation?: string | null
+  /** The build whose build view is open, if one is. */
+  activeBuild?: string | null
   onOpenProject: (projectId: string) => void
-  onOpenAgent: (projectId: string, agent: string) => void
   onOpenConversation?: (projectId: string, agent: string, conversationId: string) => void
-  /** `agent` is null when the operator started from the recency view, where no agent is
-   *  implied — the surface asks for one before the first message can be sent. */
+  /** The sidebar's New thread implies no profile (`agent` is null): the surface asks for one
+   *  before the first message can be sent. */
   onNewConversation?: (projectId: string, agent: string | null) => void
+  onOpenBuild?: (projectId: string, buildId: string) => void
   onOpenEnvironment?: (projectId: string, section: EnvironmentSection) => void
-  onOpenAgentSettings?: (projectId: string, agent: string, section: AgentSettingsSection) => void
   onAddAgent?: (projectId: string) => void
   /** Open a folder as a project. `open_existing` initialises it if it is not one yet,
    *  so this single action covers both opening and creating. */
@@ -51,12 +52,11 @@ interface SidebarProps {
   compact?: boolean
   onCompactChange?: (compact: boolean) => void
   width?: number
-  /** What hangs under an open project. When given, it replaces the agent tree and the recency
-   *  view, and their toggle goes (profiles-threads-and-builds-everywhere: the threads-and-builds
-   *  list; the mock passes it, the app does not yet). */
+  /** What hangs under an open project, in place of the Hub-fed threads and builds: the mock
+   *  passes its fixtures here. */
   projectBody?: (project: ProjectSummary, activeProject: boolean) => ReactNode
-  /** With `projectBody`, the collapsed rail shows projects only, marked when a build needs the
-   *  operator: these are the titles of those builds (empty when none). */
+  /** The titles of a project's builds that need the operator, for the collapsed rail's mark, in
+   *  place of the Hub's rows: the mock passes its fixtures here. */
   buildsNeedingYou?: (projectId: string) => string[]
 }
 
@@ -66,12 +66,6 @@ export const SIDEBAR_MIN_WIDTH = 180
 export const SIDEBAR_MAX_WIDTH = 420
 
 const COLLAPSED_KEY = 'aw.projectRailCollapsed'
-const AGENTS_EXPANDED_KEY = 'aw.railAgentsExpanded'
-const RAIL_VIEW_KEY = 'aw.railView'
-
-/** The tree is the default: the agent roster is what AgentWeave has that a two-level chat
- *  sidebar does not. The recency view recovers the flat scan the extra level costs. */
-export type RailView = 'tree' | 'recency'
 
 /**
  * What the dot beside the wordmark actually reports.
@@ -99,21 +93,14 @@ function loadFlags(key: string): Record<string, boolean> {
   }
 }
 
-/** Agents are keyed by project too — two projects may both have an agent called `claude`, and
- *  expanding one must not expand the other. */
-function agentKey(projectId: string, agent: string): string {
-  return `${projectId}/${agent}`
-}
-
 export function Sidebar({
-  activeAgent = null,
   activeConversation = null,
+  activeBuild = null,
   onOpenProject,
-  onOpenAgent,
   onOpenConversation,
   onNewConversation,
+  onOpenBuild,
   onOpenEnvironment,
-  onOpenAgentSettings,
   onAddAgent,
   onAddProject,
   onOpenAppSettings,
@@ -129,38 +116,11 @@ export function Sidebar({
   const selectedProjectId = useConfigStore((state) => state.selectedProjectId)
   const connection = useSSEConnectionState()
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>(() => loadFlags(COLLAPSED_KEY))
-  const [expandedAgents, setExpandedAgents] = useState<Record<string, boolean>>(() =>
-    loadFlags(AGENTS_EXPANDED_KEY),
-  )
-  const [railView, setRailView] = useState<RailView>(() => {
-    try {
-      return (localStorage.getItem(RAIL_VIEW_KEY) as RailView | null) ?? 'tree'
-    } catch {
-      return 'tree'
-    }
-  })
-  /** The tree component keys its agents by bare name; the store keys them by project too. */
-  const agentExpansionFor = (projectId: string): Record<string, boolean> => {
-    const prefix = `${projectId}/`
-    const scoped: Record<string, boolean> = {}
-    for (const [key, value] of Object.entries(expandedAgents)) {
-      if (key.startsWith(prefix)) scoped[key.slice(prefix.length)] = value
-    }
-    return scoped
-  }
   const duplicateNames = useMemo(() => {
     const counts = new Map<string, number>()
     for (const project of projects) counts.set(project.name, (counts.get(project.name) ?? 0) + 1)
     return counts
   }, [projects])
-
-  // The open conversation is always visible: arriving at an agent from anywhere — the palette, a
-  // link, the Overview — opens its branch here, so the rail never points at a collapsed row.
-  useEffect(() => {
-    if (!selectedProjectId || !activeAgent) return
-    const key = agentKey(selectedProjectId, activeAgent)
-    setExpandedAgents((state) => (state[key] ? state : { ...state, [key]: true }))
-  }, [selectedProjectId, activeAgent])
 
   useEffect(() => {
     try {
@@ -170,29 +130,13 @@ export function Sidebar({
     }
   }, [collapsed])
 
-  useEffect(() => {
-    try {
-      localStorage.setItem(AGENTS_EXPANDED_KEY, JSON.stringify(expandedAgents))
-    } catch {
-      // Persistence is optional.
-    }
-  }, [expandedAgents])
-
-  useEffect(() => {
-    try {
-      localStorage.setItem(RAIL_VIEW_KEY, railView)
-    } catch {
-      // Persistence is optional.
-    }
-  }, [railView])
-
   return (
     <aside
       className="aw-rail workspace-rail"
       data-testid="sidebar"
       data-collapsed={compact ? 'true' : 'false'}
       data-compact={compact ? 'true' : 'false'}
-      aria-label="Projects and agents"
+      aria-label="Projects, builds and threads"
       style={compact ? undefined : { width }}
     >
       <div className="aw-rail-head">
@@ -214,21 +158,6 @@ export function Sidebar({
           </span>
         )}
         <span className="aw-rail-head-actions">
-          {!compact && !projectBody && (
-            <button
-              data-slot="icon-button"
-              type="button"
-              className="aw-icon-button"
-              data-testid="rail-view-toggle"
-              data-view={railView}
-              aria-pressed={railView === 'recency'}
-              onClick={() => setRailView((view) => (view === 'tree' ? 'recency' : 'tree'))}
-              aria-label={railView === 'tree' ? 'Switch to recent conversations' : 'Switch to agent tree'}
-              title={railView === 'tree' ? 'Recent conversations' : 'Agent tree'}
-            >
-              <Icon name={railView === 'tree' ? 'schedule' : 'smart_toy'} size={15} />
-            </button>
-          )}
           {onCompactChange && (
             <button
               data-slot="icon-button"
@@ -250,15 +179,12 @@ export function Sidebar({
         <CompactRail
           projects={projects}
           selectedProjectId={selectedProjectId}
-          activeAgent={activeAgent}
           connection={connection}
           onOpenProject={onOpenProject}
-          onOpenAgent={onOpenAgent}
           onAddProject={onAddProject}
           onOpenAppSettings={onOpenAppSettings}
           appSettingsActive={appSettingsActive}
           setupFor={setupFor}
-          projectsOnly={Boolean(projectBody)}
           buildsNeedingYou={buildsNeedingYou}
         />
       ) : (
@@ -292,9 +218,8 @@ export function Sidebar({
                       className="aw-rail-row-main"
                       data-testid={`project-name-${project.id}`}
                       data-active={activeProject ? 'true' : 'false'}
-                      /* Level 1 of the rail's selection ladder: the project is marked by weight
-                       * alone — which one is current is already stated by the subtree hanging
-                       * open beneath it. */
+                      /* The project is marked by weight alone — which one is current is already
+                       * stated by the list hanging open beneath it. */
                       data-depth="project"
                       aria-current={activeProject ? 'true' : undefined}
                       // Navigation, not expansion: the two stay independent (the chevron folds).
@@ -349,38 +274,20 @@ export function Sidebar({
                       </span>
                     </span>
                   </div>
-                  {expanded && projectBody && projectBody(project, activeProject)}
-                  {expanded && !projectBody && railView === 'recency' && (
-                    <RecencyView
-                      projectId={project.id}
-                      agents={project.agents}
-                      activeProject={activeProject}
-                      activeConversation={activeConversation}
-                      onOpenConversation={onOpenConversation}
-                      onNewConversation={onNewConversation}
-                    />
-                  )}
-                  {expanded && !projectBody && railView === 'tree' && (
-                    <AgentTree
-                      projectId={project.id}
-                      agents={project.agents}
-                      activeProject={activeProject}
-                      activeAgent={activeAgent}
-                      activeConversation={activeConversation}
-                      expandedAgents={agentExpansionFor(project.id)}
-                      onToggleAgent={(agent: string) =>
-                        setExpandedAgents((state) => {
-                          const key = agentKey(project.id, agent)
-                          return { ...state, [key]: !state[key] }
-                        })
-                      }
-                      onOpenAgent={onOpenAgent}
-                      onOpenConversation={onOpenConversation}
-                      onNewConversation={onNewConversation}
-                      onOpenAgentSettings={(id, agent) => onOpenAgentSettings?.(id, agent, 'agent')}
-                      onAddAgent={onAddAgent}
-                    />
-                  )}
+                  {expanded &&
+                    (projectBody ? (
+                      projectBody(project, activeProject)
+                    ) : (
+                      <ProjectThreadsAndBuilds
+                        project={project}
+                        activeProject={activeProject}
+                        activeConversation={activeConversation}
+                        activeBuild={activeBuild}
+                        onOpenThread={(id, profile, conversationId) => onOpenConversation?.(id, profile, conversationId)}
+                        onNewThread={(id) => onNewConversation?.(id, null)}
+                        onOpenBuild={(id, buildId) => onOpenBuild?.(id, buildId)}
+                      />
+                    ))}
                 </div>
               )
             })}
@@ -426,42 +333,35 @@ export function Sidebar({
 }
 
 /**
- * The rail while collapsed.
+ * The rail while collapsed: the projects only (FR-14).
  *
- * It renders destinations, not decoration: every project and agent reachable when expanded is
- * reachable here, each with an accessible name, and the active one is marked. Conversations are
- * deliberately not here — 52px cannot name one. The agent leads to its most recent conversation.
+ * 52px cannot name a thread or a profile, so neither is here. A project with a build that needs
+ * the operator carries a hand as well as amber, and its accessible name says how many.
  */
 function CompactRail({
   projects,
   selectedProjectId,
-  activeAgent,
   connection,
   onOpenProject,
-  onOpenAgent,
   onAddProject,
   onOpenAppSettings,
   appSettingsActive,
   setupFor,
-  projectsOnly,
   buildsNeedingYou,
 }: {
   setupFor?: (projectId: string) => string[]
-  projectsOnly: boolean
   buildsNeedingYou?: (projectId: string) => string[]
   projects: ProjectSummary[]
   selectedProjectId: string | null
-  activeAgent: string | null
   connection: SSEConnectionState
   onOpenProject: (projectId: string) => void
-  onOpenAgent: (projectId: string, agent: string) => void
   onAddProject: () => void
   onOpenAppSettings?: () => void
   appSettingsActive: boolean
 }) {
   return (
     <>
-      <nav aria-label="Projects and agents" className="aw-rail-icons">
+      <nav aria-label="Projects" className="aw-rail-icons">
         <span
           className="aw-wordmark-dot rail-live-dot"
           data-testid="rail-live-dot"
@@ -470,58 +370,26 @@ function CompactRail({
           aria-label={CONNECTION_LABEL[connection]}
           title={CONNECTION_LABEL[connection]}
         />
-        {projects.map((project) => {
-          const activeProject = selectedProjectId === project.id
-          const needs = projectsOnly ? (buildsNeedingYou?.(project.id) ?? []) : []
-          const name = needs.length > 0 ? `${project.name}: ${needs.length} build${needs.length === 1 ? '' : 's'} need${needs.length === 1 ? 's' : ''} you` : project.name
-          return (
-            <div key={project.id} className="aw-rail-icon-group">
-              <button
-                data-slot="rail-icon"
-                type="button"
-                className="aw-rail-icon aw-rail-project-icon"
-                data-testid={`rail-compact-project-${project.id}`}
-                data-active={activeProject ? 'true' : 'false'}
-                aria-current={activeProject ? 'page' : undefined}
-                aria-label={name}
-                title={needs.length > 0 ? [name, ...needs].join('. ') : project.name}
-                onClick={() => onOpenProject(project.id)}
-              >
-                {project.name.slice(0, 2).toUpperCase()}
-                <SetupCount titles={setupFor?.(project.id) ?? []} />
-                {/* A hand as well as amber: the mark is not colour alone (vault note P21). */}
-                {needs.length > 0 ? (
-                  <span className="aw-rail-compact-mark" data-testid={`rail-compact-needs-${project.id}`} aria-hidden="true">
-                    <Icon name="hand" size={8} />
-                  </span>
-                ) : null}
-              </button>
-              {!projectsOnly && project.agents.map((agent) => {
-                const colors = agentColorVars(agent.color_index)
-                const active = activeProject && activeAgent === agent.name
-                const running = agent.status === 'running' || agent.status === 'working'
-                return (
-                  <button
-                    data-slot="rail-icon"
-                    key={agent.name}
-                    type="button"
-                    className="aw-rail-icon"
-                    data-testid={`rail-compact-agent-${project.id}-${agent.name}`}
-                    data-active={active ? 'true' : 'false'}
-                    aria-current={active ? 'page' : undefined}
-                    aria-label={agent.name}
-                    title={agent.name}
-                    onClick={() => onOpenAgent(project.id, agent.name)}
-                    style={{ '--agent-accent': colors.accent, '--agent-tint': colors.tint } as React.CSSProperties}
-                  >
-                    {agent.name.slice(0, 2)}
-                    {running ? <span className="aw-rail-icon-dot" data-attention="running" /> : null}
-                  </button>
-                )
-              })}
-            </div>
-          )
-        })}
+        {projects.map((project) =>
+          buildsNeedingYou ? (
+            <CompactProject
+              key={project.id}
+              project={project}
+              active={selectedProjectId === project.id}
+              needs={buildsNeedingYou(project.id)}
+              setup={setupFor?.(project.id) ?? []}
+              onOpen={onOpenProject}
+            />
+          ) : (
+            <LiveCompactProject
+              key={project.id}
+              project={project}
+              active={selectedProjectId === project.id}
+              setup={setupFor?.(project.id) ?? []}
+              onOpen={onOpenProject}
+            />
+          ),
+        )}
       </nav>
       <div className="aw-rail-foot aw-rail-foot-compact">
         <button
@@ -552,5 +420,47 @@ function CompactRail({
         ) : null}
       </div>
     </>
+  )
+}
+
+interface CompactProjectProps {
+  project: ProjectSummary
+  active: boolean
+  setup: string[]
+  onOpen: (projectId: string) => void
+}
+
+/** A collapsed project fed from the Hub's build rows, the same ones the expanded list reads. */
+function LiveCompactProject(props: CompactProjectProps) {
+  const needs = useBuildsNeedingYouOf(props.project.id)
+  return <CompactProject {...props} needs={needs} />
+}
+
+function CompactProject({ project, active, needs, setup, onOpen }: CompactProjectProps & { needs: string[] }) {
+  const count = needs.length
+  const name = count > 0 ? `${project.name}: ${count} build${count === 1 ? '' : 's'} need${count === 1 ? 's' : ''} you` : project.name
+  return (
+    <div className="aw-rail-icon-group">
+      <button
+        data-slot="rail-icon"
+        type="button"
+        className="aw-rail-icon aw-rail-project-icon"
+        data-testid={`rail-compact-project-${project.id}`}
+        data-active={active ? 'true' : 'false'}
+        aria-current={active ? 'page' : undefined}
+        aria-label={name}
+        title={count > 0 ? [name, ...needs].join('. ') : project.name}
+        onClick={() => onOpen(project.id)}
+      >
+        {project.name.slice(0, 2).toUpperCase()}
+        <SetupCount titles={setup} />
+        {/* A hand as well as amber: the mark is not colour alone (vault note P21). */}
+        {count > 0 ? (
+          <span className="aw-rail-compact-mark" data-testid={`rail-compact-needs-${project.id}`} aria-hidden="true">
+            <Icon name="hand" size={8} />
+          </span>
+        ) : null}
+      </button>
+    </div>
   )
 }

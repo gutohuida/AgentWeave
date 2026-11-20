@@ -127,17 +127,14 @@ export function MockApp() {
   return (
     <div className="aw-app">
       <Sidebar
-        activeAgent={route.kind === 'conversation' || route.kind === 'agent-settings' ? route.agent : null}
         activeConversation={route.kind === 'conversation' ? route.conversationId : null}
         compact={collapsed}
         onCompactChange={setCollapsed}
         onOpenProject={() => go({ kind: 'tab', tab: 'overview' })}
         setupFor={setupFor}
-        onOpenAgent={(_, agent) => go({ kind: 'conversation', agent, conversationId: null })}
         onOpenConversation={(_, agent, conversationId) => go({ kind: 'conversation', agent, conversationId })}
         onNewConversation={(_, agent) => (agent ? go({ kind: 'conversation', agent, conversationId: null }) : undefined)}
         onOpenEnvironment={() => go({ kind: 'settings', section: 'general' })}
-        onOpenAgentSettings={(_, agent) => go({ kind: 'agent-settings', agent, section: 'running' })}
         onAddAgent={() => undefined}
         onAddProject={() => undefined}
         onOpenAppSettings={() => go({ kind: 'app-settings', section: 'notifications' })}

@@ -31,6 +31,7 @@ import {
   agentSettingsDestination,
   resolveAgentSettingsSection,
   appSettingsDestination,
+  buildDestination,
   destinationProjectId,
   environmentDestination,
   isNewConversationDestination,
@@ -680,26 +681,23 @@ export default function App() {
     <div className="flex h-screen flex-col overflow-hidden" style={{ background: 'var(--bg)' }}>
       <div className="workspace-shell aw-app">
           <Sidebar
-            activeAgent={
-              destination.kind === 'conversation' || destination.kind === 'agent-settings'
-                ? destination.agent
-                : null
-            }
             activeConversation={
               destination.kind === 'conversation' ? destination.conversationId : null
             }
+            activeBuild={
+              destination.kind === 'project' && destination.tab === 'spec' && destination.view === 'build'
+                ? (destination.focus ?? null)
+                : null
+            }
             onOpenProject={(id) => navigateTo(projectDestination(id))}
-            onOpenAgent={(id, agent) => navigateTo(agentDestination(id, agent, null))}
             onOpenConversation={(id, agent, conversationId) =>
               navigateTo(agentDestination(id, agent, conversationId))
             }
             onNewConversation={(id, agent) =>
               navigateTo(newConversationDestination(id, agent))
             }
+            onOpenBuild={(id, buildId) => navigateTo(buildDestination(id, buildId))}
             onOpenEnvironment={(id, section) => navigateTo(environmentDestination(id, section))}
-            onOpenAgentSettings={(id, agent, section) =>
-              navigateTo(agentSettingsDestination(id, agent, section))
-            }
             // Navigating is not decoration here, it is what scopes the dialog. Everything the
             // dialog reads — `useCreateAgent`, `useCharters`, `useProviderLaunchability` — resolves
             // the *selected* project, and selection is derived from the destination by the effect

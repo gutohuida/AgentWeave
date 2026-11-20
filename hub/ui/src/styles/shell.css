@@ -125,21 +125,13 @@
 .aw-rail-children { padding-left: 8px; }
 
 .aw-agent-dot { width: 7px; height: 7px; flex: none; border-radius: 999px; background: var(--agent-accent, var(--text-3)); }
-.aw-rail-agent-row .aw-rail-agent-name { font-weight: 500; }
-.aw-rail-agent-row[data-attention="idle"] { color: var(--text-2); }
-.aw-rail-agent-row[data-attention="idle"] .aw-agent-dot { opacity: .55; }
-.aw-rail-agent-row[data-attention="running"] { color: var(--text); }
-.aw-rail-agent-row[data-attention="waiting"] .aw-rail-meta { color: var(--amber); }
-.aw-rail-agent-row[data-attention="running"] .aw-rail-meta { color: var(--green); }
 .aw-rail-meta { font-size: 11.5px; color: var(--text-3); font-variant-numeric: tabular-nums; white-space: nowrap; }
 
-.aw-rail-conversations { position: relative; margin: 1px 0 4px 17px; padding-left: 8px; border-left: 1px solid var(--border); }
 .aw-rail-conversation { width: 100%; gap: 6px; padding: 0 8px; height: 28px; min-height: 28px; font-size: 12.5px; text-align: left; }
 .aw-rail-conversation[data-active="true"] { font-weight: 500; }
 .aw-rail-conversation[data-active="true"]::before {
   content: ''; position: absolute; left: -9px; top: 6px; bottom: 6px; width: 2px; border-radius: 2px; background: var(--text-2);
 }
-.aw-rail-loop-icon { color: var(--text-3); flex: none; }
 .aw-rail-more { display: block; height: 24px; padding: 0 8px; font-size: 12px; color: var(--text-3); border-radius: var(--radius-sm); }
 .aw-rail-more:hover { color: var(--text); background: var(--row-hover); }
 .aw-rail-empty { display: flex; align-items: center; gap: 8px; height: 28px; padding: 0 8px; font-size: 12.5px; color: var(--text-3); border-radius: var(--radius-md); }
@@ -191,8 +183,6 @@
 .aw-rail-row-end .aw-reveal[data-persistent="true"] { opacity: 1; }
 .aw-reveal-host:has(.aw-reveal[data-persistent="true"]) .aw-reveal-rest { opacity: 0; }
 .aw-rail-actions .row-action { opacity: 1; width: 22px; height: 22px; }
-.aw-rail-section-label { display: block; padding: 8px 8px 2px; font-size: 11px; color: var(--text-3); }
-.aw-rail-orphans { margin-top: 4px; }
 
 .aw-rail-conversation-host { position: relative; }
 .aw-rail-conversation-host .aw-rail-row-menu { position: absolute; right: 4px; top: 3px; }
@@ -210,7 +200,6 @@
 }
 .aw-rail-rename:focus { box-shadow: inset 0 0 0 2px var(--ring); }
 .aw-rail-error { padding: 0 8px 4px; font-size: 11px; color: var(--red); }
-.aw-rail-loop-row .aw-rail-row-main { gap: 6px; font-size: 12.5px; height: 28px; }
 
 .aw-rail-icon-group { display: flex; flex-direction: column; align-items: center; gap: 6px; }
 .aw-rail-icon-group + .aw-rail-icon-group { padding-top: 6px; border-top: 1px solid var(--border); }
