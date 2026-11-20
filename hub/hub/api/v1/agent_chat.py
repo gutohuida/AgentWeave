@@ -15,7 +15,7 @@ delivery").
 
 import asyncio
 from datetime import datetime
-from typing import Any, Dict, List, Literal, Optional, Tuple
+from typing import Any, Dict, List, Literal, Optional, Set, Tuple
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
@@ -33,6 +33,8 @@ from ...conversations import (
     backfill_titles,
     conversation_attention,
     get_conversation_by_id,
+    last_activity,
+    operator_thread_ids,
     unarchive,
 )
 from ...db.engine import get_session
@@ -169,6 +171,12 @@ class ConversationResponse(BaseModel):
     # at its end — which is what the composer has to be able to show, and what the operator has to
     # be able to let go of.
     task_id: Optional[str] = None
+    # Whether this is one of the operator's threads: they wrote in it, or it was cut over from
+    # one they did (`conversations.operator_thread_ids`, profiles-threads-and-builds-everywhere D1).
+    operator_thread: bool = False
+    # The newest message or run in it, or its creation when it has neither: what a thread list
+    # orders by. Not `updated_at`, which a rename or an archive also moves.
+    last_activity_at: Optional[datetime] = None
 
 
 class ConversationRenameRequest(RequestModel):
@@ -410,11 +418,22 @@ async def _loops_by_conversation(
 
 
 async def _to_response(
-    session: AsyncSession, conversations: List[Conversation]
+    session: AsyncSession,
+    conversations: List[Conversation],
+    operator_threads: Optional[Set[str]] = None,
 ) -> List[ConversationResponse]:
-    """Serialise conversations with their attention state, one query for the whole page."""
+    """Serialise conversations with their attention state, one query for the whole page.
+
+    `operator_threads` is the project's set, when the caller has already read it."""
     await backfill_titles(session, conversations)
     conversation_ids = [row.id for row in conversations]
+    if operator_threads is None:
+        operator_threads = (
+            await operator_thread_ids(session, conversations[0].project_id)
+            if conversations
+            else set()
+        )
+    activity = await last_activity(session, conversations)
     attention = await conversation_attention(session, conversation_ids)
     loops = await _loops_by_conversation(session, conversation_ids)
     context = (
@@ -434,6 +453,8 @@ async def _to_response(
         response.loop = loops.get(row.id)
         response.context_usage = context.get(row.id)
         response.started_cli = started.get(row.id)
+        response.operator_thread = row.id in operator_threads
+        response.last_activity_at = activity.get(row.id)
         responses.append(response)
     return responses
 
@@ -533,6 +554,7 @@ async def list_conversations(
 @conversations_router.get("", response_model=ProjectConversationsResponse)
 async def list_project_conversations(
     lifecycle: Literal["open", "archived", "all"] = Query("open"),
+    operator_threads: bool = Query(False),
     project: Tuple[str, str] = Depends(get_project),
     session: AsyncSession = Depends(get_session),
 ):
@@ -541,9 +563,13 @@ async def list_project_conversations(
     What navigation reads: the tree groups these by agent, the recency view lists them as they
     come. One request either way, so switching views costs nothing and expanding an agent shows
     its conversations immediately rather than starting a fetch.
+
+    `operator_threads=true` narrows it to the operator's threads, newest `last_activity_at` first,
+    and the archived counts to theirs (profiles-threads-and-builds-everywhere D1). The client
+    raises the threads waiting on the operator above the rest.
     """
     project_id, _ = project
-    return await _project_conversations(session, project_id, lifecycle)
+    return await _project_conversations(session, project_id, lifecycle, operator_threads)
 
 
 class AttachedSpecDocument(BaseModel):
@@ -724,6 +750,7 @@ class SidebarConversationsResponse(BaseModel):
 async def list_sidebar_conversations(
     project_id: List[str] = Query(..., min_length=1, max_length=SIDEBAR_LISTING_LIMIT),
     lifecycle: Literal["open", "archived", "all"] = Query("open"),
+    operator_threads: bool = Query(False),
     operator: OperatorCredential = Depends(get_operator),
     session: AsyncSession = Depends(get_session),
 ):
@@ -739,18 +766,26 @@ async def list_sidebar_conversations(
     projects = {}
     for pid in wanted:
         if pid in known:
-            projects[pid] = await _project_conversations(session, pid, lifecycle)
+            projects[pid] = await _project_conversations(session, pid, lifecycle, operator_threads)
     return SidebarConversationsResponse(
         projects=projects, missing=[pid for pid in wanted if pid not in known]
     )
 
 
 async def _project_conversations(
-    session: AsyncSession, project_id: str, lifecycle: str
+    session: AsyncSession, project_id: str, lifecycle: str, operator_threads: bool = False
 ) -> ProjectConversationsResponse:
+    threads = await operator_thread_ids(session, project_id)
     predicates = [Conversation.project_id == project_id]
     if lifecycle != "all":
         predicates.append(Conversation.lifecycle == lifecycle)
+    archived_predicates = [
+        Conversation.project_id == project_id,
+        Conversation.lifecycle == "archived",
+    ]
+    if operator_threads:
+        predicates.append(Conversation.id.in_(threads))
+        archived_predicates.append(Conversation.id.in_(threads))
     result = await session.execute(
         select(Conversation)
         .where(*predicates)
@@ -758,12 +793,16 @@ async def _project_conversations(
     )
     archived = await session.execute(
         select(Conversation.agent, func.count())
-        .where(Conversation.project_id == project_id, Conversation.lifecycle == "archived")
+        .where(*archived_predicates)
         .group_by(Conversation.agent)
     )
     archived_by_agent = dict(archived.all())
+    conversations = await _to_response(session, list(result.scalars()), threads)
+    if operator_threads:
+        # Stable, so rows tied on activity keep the newest-updated-first order of the query.
+        conversations.sort(key=lambda row: row.last_activity_at or row.updated_at, reverse=True)
     return ProjectConversationsResponse(
-        conversations=await _to_response(session, list(result.scalars())),
+        conversations=conversations,
         archived_count=sum(archived_by_agent.values()),
         archived_by_agent=archived_by_agent,
     )

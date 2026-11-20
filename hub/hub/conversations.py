@@ -3,16 +3,18 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Dict, Iterable, List, Optional
+from typing import Dict, Iterable, List, Optional, Set
 
-from sqlalchemy import or_, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .db.models import (
     CONVERSATION_ORIGINS,
     CONVERSATION_TITLE_MAX_LENGTH,
+    Checkpoint,
     Conversation,
     InboundQueueEntry,
+    Message,
     PermissionRequest,
     Question,
     Run,
@@ -564,6 +566,119 @@ async def conversation_attention(
                 attention[cid] = "waiting"
 
     return attention
+
+
+async def operator_thread_ids(db: AsyncSession, project_id: str) -> Set[str]:
+    """The project's conversations that are the operator's threads (profiles-threads-and-builds-
+    everywhere, FR-1, FR-2, design D1).
+
+    A conversation is the operator's when the operator wrote in it, or it was cut over at a
+    checkpoint from one that is. Decided by what was written, never by `Conversation.origin`:
+    that column defaults to "operator", and the Hub's own task starts carry it.
+
+    What counts as the operator writing:
+
+    - an `origin_type="operator"` queue entry bound to no task and no review. The composer, an
+      operator message, an answer to a question and the operator's note on a report all write
+      one. A task's own briefing also carries `origin_type="operator"` (`assigned_task_start`,
+      the board's "Start work" and "Review with"), and always names the task it starts, which is
+      what leaves it out: a task build or review run is not a thread until the operator writes
+      in it. The composer names no task on a follow-up, so writing into such a run lists it.
+    - a Message with sender "operator" (`schemas/messages.OPERATOR_SENDER`), whatever it names.
+    - starting the conversation from a checkpoint (`checkpoint_start`): the operator chose to.
+    """
+    written: Set[str] = set()
+    entries = await db.execute(
+        select(InboundQueueEntry.conversation_id)
+        .where(
+            InboundQueueEntry.project_id == project_id,
+            InboundQueueEntry.origin_type == "operator",
+            InboundQueueEntry.task_id.is_(None),
+            InboundQueueEntry.review_task_id.is_(None),
+            InboundQueueEntry.conversation_id.is_not(None),
+        )
+        .distinct()
+    )
+    written.update(entries.scalars())
+    messages = await db.execute(
+        select(Message.conversation_id)
+        .where(
+            Message.project_id == project_id,
+            Message.sender == "operator",
+            Message.conversation_id.is_not(None),
+        )
+        .distinct()
+    )
+    written.update(messages.scalars())
+    started = await db.execute(
+        select(Conversation.id).where(
+            Conversation.project_id == project_id,
+            Conversation.started_from_checkpoint_id.is_not(None),
+        )
+    )
+    written.update(started.scalars())
+
+    # The checkpoint chain, predecessor -> successor, followed forward only: a successor counts
+    # through its predecessor, and a predecessor does not become the operator's because somebody
+    # wrote in what it was cut over to.
+    cutovers = await db.execute(
+        select(Checkpoint.conversation_id, Checkpoint.cut_over_to_conversation_id).where(
+            Checkpoint.project_id == project_id,
+            Checkpoint.cut_over_to_conversation_id.is_not(None),
+        )
+    )
+    successors: Dict[str, List[str]] = {}
+    for predecessor, successor in cutovers.all():
+        successors.setdefault(predecessor, []).append(successor)
+    threads: Set[str] = set()
+    frontier = [cid for cid in written if cid]
+    while frontier:
+        cid = frontier.pop()
+        if cid in threads:
+            continue
+        threads.add(cid)
+        frontier.extend(successors.get(cid, ()))
+    return threads
+
+
+async def last_activity(db: AsyncSession, conversations: List[Conversation]) -> Dict[str, datetime]:
+    """Each conversation's newest message or run: what a thread list orders by (design D1).
+
+    The newest of its queue entries, messages and runs' starts and ends, and its creation when it
+    has none. Not `updated_at`, which a rename or an archive also moves.
+    """
+    activity: Dict[str, datetime] = {
+        row.id: _aware(row.created_at) or row.created_at for row in conversations
+    }
+    ids = list(activity)
+    if not ids:
+        return activity
+    queries = (
+        select(InboundQueueEntry.conversation_id, func.max(InboundQueueEntry.arrived_at))
+        .where(InboundQueueEntry.conversation_id.in_(ids))
+        .group_by(InboundQueueEntry.conversation_id),
+        select(Message.conversation_id, func.max(Message.timestamp))
+        .where(Message.conversation_id.in_(ids))
+        .group_by(Message.conversation_id),
+        select(Run.conversation_id, func.max(Run.started_at))
+        .where(Run.conversation_id.in_(ids))
+        .group_by(Run.conversation_id),
+        select(Run.conversation_id, func.max(Run.ended_at))
+        .where(Run.conversation_id.in_(ids), Run.ended_at.is_not(None))
+        .group_by(Run.conversation_id),
+    )
+    for query in queries:
+        for cid, moment in (await db.execute(query)).all():
+            moment = _aware(moment)
+            if cid in activity and moment is not None and moment > activity[cid]:
+                activity[cid] = moment
+    return activity
+
+
+def _aware(moment: Optional[datetime]) -> Optional[datetime]:
+    if moment is not None and moment.tzinfo is None:
+        return moment.replace(tzinfo=timezone.utc)
+    return moment
 
 
 def archive(conversation: Conversation) -> None:
