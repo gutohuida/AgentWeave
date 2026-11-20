@@ -16,7 +16,7 @@ export interface ConversationSpecDocuments {
 }
 
 export const conversationSpecKey = (projectId: string | null, conversationId: string | null) =>
-  ['conversation-spec-documents', projectId, conversationId] as const
+  ['project', projectId, 'conversation', conversationId, 'spec-documents'] as const
 
 const base = (projectId: string, conversationId: string) =>
   `/api/v1/projects/${projectId}/conversations/${conversationId}`

@@ -218,7 +218,18 @@ export default function App() {
         { replace: true },
       )
     } else {
-      setConversationDocument.mutate({ conversationId: syncedConversationId, path: destination.document })
+      // A URL's document can be stale (the agent renames a placeholder path at intake): when the
+      // Hub refuses it, the document it holds for the conversation wins and the URL follows.
+      const conversationId = syncedConversationId
+      setConversationDocument.mutate(
+        { conversationId, path: destination.document },
+        {
+          onError: () =>
+            navigateTo(agentDestination(destination.projectId, destination.agent ?? '', conversationId, held), {
+              replace: true,
+            }),
+        },
+      )
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps -- `setConversationDocument` is a fresh object each render
   }, [destination, syncedConversationId, conversationDocuments.data, conversationDocuments.isFetching, conversationDocuments.error,

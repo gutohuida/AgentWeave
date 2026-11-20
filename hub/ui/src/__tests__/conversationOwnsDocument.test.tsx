@@ -26,6 +26,8 @@ vi.mock('@/hooks/useSSE', () => ({
 // What the Hub holds, per conversation; the PUTs the app made.
 const held: Record<string, string | null> = {}
 const puts: Array<{ conversation: string; path: string | null }> = []
+// Paths the Hub no longer knows (a placeholder renamed at intake): a PUT naming one is a 404.
+const gone = new Set<string>()
 const attached = (path: string | null) => ({
   attached: path ? { path, title: path, phase: 'exploring', step: null } : null,
   offers: [],
@@ -39,6 +41,10 @@ vi.stubGlobal(
     if (m && m[2] === 's') return json(attached(held[m[1]] ?? null))
     if (m && init?.method === 'PUT') {
       const path = JSON.parse(String(init.body)).path as string | null
+      if (path && gone.has(path)) {
+        puts.push({ conversation: m[1], path })
+        return { ok: false, status: 404, json: async () => ({ detail: { code: 'unknown_document' } }) } as unknown as Response
+      }
       held[m[1]] = path
       puts.push({ conversation: m[1], path })
       return json(attached(path))
@@ -141,6 +147,7 @@ describe('a conversation owns its document', () => {
     cleanup()
     for (const k of Object.keys(held)) delete held[k]
     puts.length = 0
+    gone.clear()
     window.history.pushState(null, '', '?project=proj-test&agent=claude&conversation=conv-a')
     useConfigStore.setState({
       apiKey: 'aw_live_TESTKEY', hubUrl: 'http://hub.test', selectedProjectId: 'proj-test',
@@ -153,6 +160,21 @@ describe('a conversation owns its document', () => {
     mount()
     await waitFor(() => expect(shown()).toBe(X))
     expect(window.location.search).toContain('document=')
+  })
+
+  it('drafting-conversation-opens-the-document: a URL naming a renamed path yields to the held document', async () => {
+    const P = 'spec/changes/placeholder/spec.json'
+    const Q = 'spec/changes/renamed/spec.json'
+    gone.add(P)
+    held['conv-a'] = Q
+    window.history.pushState(null, '', `?project=proj-test&agent=claude&conversation=conv-a&document=${encodeURIComponent(P)}`)
+    mount()
+    await waitFor(() => expect(shown()).toBe(Q))
+    await new Promise((r) => setTimeout(r, 100))
+    expect(shown()).toBe(Q)
+    expect(decodeURIComponent(window.location.search)).toContain(Q)
+    expect(puts).toEqual([{ conversation: 'conv-a', path: P }])
+    expect(held['conv-a']).toBe(Q)
   })
 
   it('opening a document writes it to the conversation', async () => {
