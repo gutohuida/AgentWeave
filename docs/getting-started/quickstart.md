@@ -4,7 +4,7 @@ description: From an empty project to an approved, merged change, in one sitting
 
 # Your first project
 
-This walkthrough takes a small project from nothing to one merged change. It uses three agents:
+This walkthrough takes a small project from nothing to one merged change. It uses three profiles:
 one plans, one builds and one reviews. The screenshots come from doing exactly this on a small
 invoicing service. It takes about fifteen minutes, most of it the agents working.
 
@@ -17,8 +17,8 @@ cd ~/code/northwind-invoicing
 agentweave
 ```
 
-The app opens on the project's **Overview**. Your projects are listed in the left rail, and each
-one expands to show its agents and their conversations. Across the top are the project's tabs:
+The app opens on the project's **Overview**. Your projects are listed in the sidebar on the left, and
+each one lists its running builds and your own threads. Across the top are the project's tabs:
 **Overview, Tasks, Spec, Vault, Jobs, Activity**. The gear on the right opens the project settings.
 
 !!! tip "Set the main branch"
@@ -27,10 +27,13 @@ one expands to show its agents and their conversations. Across the top are the p
     it opens a project. You can also add **Checks** there, such as `pytest -q`. Approval is then
     refused until the checks pass on the merged result.
 
-## 2. Add three agents
+## 2. Add three profiles
 
-Click **+** next to the project in the rail (**Add agent**). An agent needs a name, a provider, a
-model, and optionally a charter:
+A new project's setup list on the Overview offers **Add a builder and a checker**, which creates
+two profiles in one dialog: a name and a runner for each, and a charter if you want one. That is
+all a build needs. This walkthrough also wants a planner, so it adds all three by hand instead:
+click **+** next to the project in the sidebar. A profile needs a name, a provider, a model, and
+optionally a charter:
 
 | Name | Provider and model | Charter |
 |---|---|---|
@@ -39,17 +42,18 @@ model, and optionally a charter:
 | `reviewer` | Claude Code · Sonnet | Code Reviewer |
 
 <figure class="aw-shot" markdown>
-![The Create agent dialog with name, provider, model and charter](../assets/screenshots/create-agent-light.webp#only-light)
-![The Create agent dialog with name, provider, model and charter](../assets/screenshots/create-agent-dark.webp#only-dark)
+![Creating a profile: name, provider, model and charter](../assets/screenshots/create-agent-light.webp#only-light)
+![Creating a profile: name, provider, model and charter](../assets/screenshots/create-agent-dark.webp#only-dark)
 </figure>
 
 A provider whose CLI cannot launch is greyed out, with the reason. The Hub creates the matching
 runner for you. Everything else, such as default permissions, timeouts and grants, lives in the
-agent's settings, and the defaults are sensible.
+profile's settings, and the defaults are sensible. A profile can later run on more than one
+model: see [Profiles](../guides/agents.md#the-pool-what-a-profile-runs-on).
 
 ## 3. Ask for a change
 
-Open `planner` and describe what you want. Be concrete about the outcome, not the implementation:
+Start a thread with `planner` (**New thread** in the sidebar) and describe what you want. Be concrete about the outcome, not the implementation:
 
 > Two things for Northwind Invoicing. 1) The CSV export should end with a totals row: subtotal,
 > tax and total for the invoice region. 2) Tax must round half-up to the cent, per region. Please
@@ -58,15 +62,15 @@ Open `planner` and describe what you want. Be concrete about the outcome, not th
 
 The planner reads the code and writes a **change specification** into `spec/changes/…/spec.json`.
 The Hub gives each requirement a stable identifier (`FR-1` … `FR-4`). Open it beside the
-conversation from the side panel's **Specs** tab, or on the **Spec** tab:
+thread from the side panel's **Specs** tab, or on the **Spec** tab:
 
 <figure class="aw-shot" markdown>
-![A conversation with the planner, with the change specification it wrote open in the side panel](../assets/screenshots/conversation-spec-light.webp#only-light)
-![A conversation with the planner, with the change specification it wrote open in the side panel](../assets/screenshots/conversation-spec-dark.webp#only-dark)
+![A thread with the planner, with the change specification it wrote open in the side panel](../assets/screenshots/conversation-spec-light.webp#only-light)
+![A thread with the planner, with the change specification it wrote open in the side panel](../assets/screenshots/conversation-spec-dark.webp#only-dark)
 </figure>
 
-If the agent needs a decision from you, it asks with a question card above the composer, and its
-turn waits for your answer. Agents never guess at what you meant.
+If the planner needs a decision from you, it asks with a question card above the composer, and
+its run waits for your answer. Agents never guess at what you meant.
 
 ## 4. Check, approve and build
 
@@ -89,7 +93,7 @@ from an unapproved specification says so and stops.
 ## 5. Build
 
 Open **Tasks**. Approval put the document's tasks on the board, in dependency order. Hover over a
-card and choose **Start builder on this**, or tell `builder` in its conversation to take the task.
+card and choose **Start builder on this**, or tell `builder` in a thread to take the task.
 
 The builder works in the task's own worktree (`.agentweave/tasks/<task-id>`, on branch
 `agentweave/task/<task-id>`). It implements the change, runs the tests, commits, and **records
@@ -107,17 +111,20 @@ not enough.
 ## 6. Review and merge
 
 You do not need to ask for a review. Once the task is *completed* and the project's checks pass,
-the Hub starts a review turn by an agent other than the builder, and the task moves to
+the Hub starts a review run by a profile other than the builder, and the task moves to
 *under review*. It picks the task's named checker if it has one; otherwise it chooses an idle
-agent other than the builder, which may be `planner` rather than `reviewer`, and the task's story
+profile other than the builder, which may be `planner` rather than `reviewer`, and the task's story
 says who was picked and that nobody was named. If
-the builder is the project's only agent, no review starts and the task says there is nobody else
+the builder is the project's only profile, no review starts and the task says there is nobody else
 to review it.
 
 To choose the reviewer yourself, hover over a completed card and choose **Review with reviewer**.
-The menu lists every agent except the task's author.
+The menu lists every profile except the task's author.
 
-A review turn gets a clean checkout of exactly the commit the evidence names. The reviewer runs
+The review run is not added to your threads in the sidebar. It is on the task's story, and in the
+reviewer's **Runs**.
+
+A review run gets a clean checkout of exactly the commit the evidence names. The reviewer runs
 the tests, decides the evidence, and either approves the task or sends it back to the builder
 with the reason. The builder cannot approve its own work.
 
