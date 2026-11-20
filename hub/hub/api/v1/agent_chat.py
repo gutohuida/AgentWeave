@@ -556,7 +556,8 @@ class AttachedSpecDocument(BaseModel):
 class ConversationSpecDocumentsResponse(BaseModel):
     """The conversation's own document (FR-11), and the documents offered to it.
 
-    `offers` is always empty until agent-created documents are offered (FR-7, a later task)."""
+    `offers` are the change documents an agent of this conversation created that the operator has
+    not answered here (FR-7)."""
 
     attached: Optional[AttachedSpecDocument] = None
     offers: List[Dict[str, Any]] = Field(default_factory=list)
@@ -603,7 +604,61 @@ async def get_conversation_spec_documents(
     project_id, _ = project
     conversation = await _project_conversation(session, project_id, conversation_id)
     return ConversationSpecDocumentsResponse(
-        attached=await conversation_document.attached(session, conversation), offers=[]
+        attached=await conversation_document.attached(session, conversation),
+        offers=await conversation_document.offers(session, conversation),
+    )
+
+
+class SpecDocumentAnswerRequest(RequestModel):
+    path: str = Field(max_length=512)
+    answer: Literal["open", "not_now"]
+
+
+@conversations_router.post(
+    "/{conversation_id}/spec-documents/answer", response_model=ConversationSpecDocumentsResponse
+)
+async def answer_conversation_spec_document_offer(
+    conversation_id: str,
+    body: SpecDocumentAnswerRequest,
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    """Answer the notice for a document an agent created here (FR-8, FR-9).
+
+    `open` makes it this conversation's document; `not_now` hides the notice for that document in
+    this conversation and changes nothing else. Either way the answer is recorded, so it holds
+    after a reload.
+    """
+    project_id, _ = project
+    conversation = await _project_conversation(session, project_id, conversation_id)
+    try:
+        await conversation_document.answer_offer(session, conversation, body.path, body.answer)
+    except LookupError:
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "message": f"No document {body.path} in this project",
+                "code": "unknown_document",
+            },
+        ) from None
+    await session.commit()
+    await session.refresh(conversation)
+    attached = await conversation_document.attached(session, conversation)
+    if body.answer == "open":
+        await sse_manager.broadcast(
+            project_id,
+            "conversation_updated",
+            {
+                "project_id": project_id,
+                "agent": conversation.agent,
+                "conversation_id": conversation.id,
+                "lifecycle": conversation.lifecycle,
+                "title": conversation.title,
+                "spec_document": attached["path"] if attached else None,
+            },
+        )
+    return ConversationSpecDocumentsResponse(
+        attached=attached, offers=await conversation_document.offers(session, conversation)
     )
 
 

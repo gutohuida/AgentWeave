@@ -16,12 +16,13 @@ sent with no document leaves the conversation's document as it is.
 
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from . import spec_lifecycle
-from .db.models import Conversation, SpecDocument
+from .db.models import Conversation, Run, SpecDocument, SpecDocumentEvent
 
 
 async def set_by_path(
@@ -39,6 +40,96 @@ async def set_by_path(
     if document is None:
         raise LookupError(path)
     conversation.spec_document_id = document.id
+    return document
+
+
+#: Events recording how the operator answered an offer, kept beside the document's own history so
+#: no table is needed. They name the conversation in `detail`; neither touches the document.
+OFFER_OPENED = "offer_opened"
+OFFER_DECLINED = "offer_declined"
+OFFER_ANSWERS = {"open": OFFER_OPENED, "not_now": OFFER_DECLINED}
+
+
+async def offers(session: AsyncSession, conversation: Conversation) -> List[Dict[str, Any]]:
+    """Change documents an agent of this conversation created, still awaiting an answer.
+
+    Derived from creation events by runs of this conversation (FR-7). A roadmap has no journey, so
+    it is never offered; nor is the conversation's own open document, an archived one, or one the
+    operator already answered here (Open or Not now). Oldest first.
+    """
+    created = (
+        await session.execute(
+            select(SpecDocumentEvent.document_id)
+            .join(Run, Run.id == SpecDocumentEvent.run_id)
+            .where(
+                SpecDocumentEvent.project_id == conversation.project_id,
+                SpecDocumentEvent.kind == "created",
+                SpecDocumentEvent.actor_kind == "agent",
+                Run.conversation_id == conversation.id,
+            )
+            .order_by(SpecDocumentEvent.created_at)
+        )
+    ).scalars()
+    answered = {
+        row.document_id
+        for row in (
+            await session.execute(
+                select(SpecDocumentEvent).where(
+                    SpecDocumentEvent.project_id == conversation.project_id,
+                    SpecDocumentEvent.kind.in_(list(OFFER_ANSWERS.values())),
+                )
+            )
+        ).scalars()
+        if (row.detail or {}).get("conversation_id") == conversation.id
+    }
+    out: List[Dict[str, Any]] = []
+    seen = set()
+    for document_id in created:
+        if document_id in seen or document_id in answered:
+            continue
+        seen.add(document_id)
+        if document_id == conversation.spec_document_id:
+            continue
+        document = await session.get(SpecDocument, document_id)
+        if (
+            document is None
+            or document.kind != "change-spec"
+            or document.phase != spec_lifecycle.EXPLORING
+        ):
+            continue
+        out.append(
+            {
+                "path": document.path,
+                "title": document.title,
+                "phase": document.phase,
+                "step": document.step,
+            }
+        )
+    return out
+
+
+async def answer_offer(
+    session: AsyncSession, conversation: Conversation, path: str, answer: str
+) -> Optional[SpecDocument]:
+    """Record the operator's `open` or `not_now` for the offered document at `path`.
+
+    `open` makes it the conversation's own; `not_now` changes nothing but hides the offer here.
+    Raises `LookupError` for an unknown path and `ValueError` for another answer. Not committed.
+    """
+    if answer not in OFFER_ANSWERS:
+        raise ValueError(answer)
+    document = await spec_lifecycle.get_document(session, conversation.project_id, path)
+    if document is None:
+        raise LookupError(path)
+    if answer == "open":
+        conversation.spec_document_id = document.id
+    await spec_lifecycle.record_event(
+        session,
+        document,
+        kind=OFFER_ANSWERS[answer],
+        actor=spec_lifecycle.Actor(kind="operator"),
+        detail={"conversation_id": conversation.id},
+    )
     return document
 
 
