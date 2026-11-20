@@ -2,6 +2,8 @@ import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { readableApiError } from '@/api/client'
 import { useAgents } from '@/api/agents'
+import { useConfigStore } from '@/store/configStore'
+import { openConversationAt } from '@/lib/navigation'
 import {
   offerTarget,
   offerTitle,
@@ -19,6 +21,7 @@ import {
 export function NextSliceOfferNotice({ path }: { path: string }) {
   const { data: offers = [], error: offersError } = useNextSliceOffers()
   const { data: agents = [], error: agentsError } = useAgents()
+  const projectId = useConfigStore((s) => s.selectedProjectId)
   const take = useTakeNextSliceOffer()
   const decline = useDeclineNextSliceOffer()
   // The notice sits on a roadmap (its first offered slice) or on the document of the slice an
@@ -35,7 +38,23 @@ export function NextSliceOfferNotice({ path }: { path: string }) {
       </p>
     )
   }
-  if (!offer) return null
+  if (!offer) {
+    // Drafted from here: the offer is gone and the slice's document exists (FR-1); link its
+    // conversation, which opens with its own document.
+    const taken = take.data
+    return taken?.conversation_id && projectId ? (
+      <div className="aw-spec-message" data-testid="next-slice-taken">
+        <span className="aw-spec-message-text">Asked {taken.agent} to draft it.</span>
+        <Button
+          variant="outline"
+          size="xs"
+          onClick={() => openConversationAt(projectId, taken.agent, taken.conversation_id!, taken.document)}
+        >
+          Open the conversation
+        </Button>
+      </div>
+    ) : null
+  }
   const names = agents.map((agent) => agent.name)
   const options = offer.agent && !names.includes(offer.agent) ? [offer.agent, ...names] : names
   const agent = chosen ?? offer.agent ?? options[0] ?? ''

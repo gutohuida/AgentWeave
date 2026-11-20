@@ -7,7 +7,7 @@ import { useMoveSlice, useRemoveSlice, useStartSliceConversation } from '@/api/r
 import { useArchiveBatch, type ArchiveBatchResult } from '@/api/specTidy'
 import { Icon } from '@/components/common/Icon'
 import { Button } from '@/components/ui/button'
-import { agentDestination, serializeDestination } from '@/lib/navigation'
+import { openConversationAt } from '@/lib/navigation'
 import { useConfigStore } from '@/store/configStore'
 import { RoadmapSlices, type RoadmapSliceView } from './RoadmapSlices'
 import type { SpecDocumentView } from './model'
@@ -82,10 +82,7 @@ function viewOf(doc: SpecDocumentView): RoadmapSliceView[] {
 }
 
 /** Open a conversation: the app reads where it is from the address. */
-function openConversation(projectId: string, agent: string, conversationId: string, document: string) {
-  window.history.pushState(null, '', serializeDestination(agentDestination(projectId, agent, conversationId, document)))
-  window.dispatchEvent(new PopStateEvent('popstate'))
-}
+const openConversation = openConversationAt
 
 /** A roadmap's slices on its page, wired to the Hub (`a-roadmap-that-is-recognisably-a-roadmap`):
  *  drafting offers, the operator's reorder and remove, "Add a slice with an agent" (a conversation,
@@ -149,9 +146,12 @@ export function RoadmapSection({ doc, now, onOpenDocument }: { doc: SpecDocument
             take.mutate(
               { roadmap: doc.path, slice: target, agent: agent || author || agents[0] || '' },
               {
-                onSuccess: () => {
+                onSuccess: (taken) => {
                   setPicking(null)
                   void refresh()
+                  // The slice's document exists now (FR-1): open it, and the drafting turn is
+                  // bound to it.
+                  if (taken?.document) onOpenDocument?.(taken.document)
                 },
               },
             )

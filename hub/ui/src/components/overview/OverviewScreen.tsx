@@ -271,7 +271,15 @@ export function OverviewScreen({
             takeOffer.mutate(
               { ...target, agent },
               {
-                onSuccess: () => toast({ title: `Asked ${agent} to draft ${offer.next_slice.title || offer.next_slice.key}`, tone: 'success' }),
+                onSuccess: (taken) =>
+                  toast({
+                    title: `Asked ${agent} to draft ${offer.next_slice.title || offer.next_slice.key}`,
+                    tone: 'success',
+                    // The slice's document exists now (FR-1); its conversation opens with it.
+                    action: taken?.conversation_id
+                      ? { label: 'Open the conversation', onClick: () => openConversation(taken.agent || agent, taken.conversation_id!) }
+                      : undefined,
+                  }),
                 onError: refusal('The drafting turn was not queued'),
               },
             ),

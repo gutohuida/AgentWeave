@@ -238,6 +238,20 @@ describe('main moving outside the Hub, and a next slice offered', () => {
     )
   })
 
+  it('names the drafting conversation once Draft created the slice document (take-from-every-surface: Overview)', async () => {
+    nextSliceOffers = [offer()]
+    const open = vi.fn()
+    takeOfferMutate.mockImplementationOnce((_args, options) =>
+      options.onSuccess({ state: 'queued', agent: 'builder', conversation_id: 'conv-7', entry_id: 'e1', document: 'spec/changes/two/spec.json' }),
+    )
+    render(<OverviewScreen onNavigate={vi.fn()} onOpenConversation={open} />)
+    fireEvent.click(within(rowOf('Slice s1 is built: draft Slice two?')).getByRole('button', { name: 'Draft' }))
+    const action = (toastSpy.mock.lastCall?.[0] as { action?: { label: string; onClick: () => void } }).action
+    expect(action?.label).toBe('Open the conversation')
+    action?.onClick()
+    expect(open).toHaveBeenCalledWith('builder', 'conv-7')
+  })
+
   it('answers an offer that builds after no slice, by roadmap and slice', () => {
     nextSliceOffers = [
       { ...offer(), document: null, document_id: null, title: null, approved_slice: null, next_slice: { key: 's1', title: 'Slice one' } },
