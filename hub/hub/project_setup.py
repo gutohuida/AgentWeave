@@ -7,8 +7,13 @@ project's state now, never from anything recorded when it was created (FR-5), so
 before this module reads the same as a new one.
 
 Only the repository item can be dismissed (FR-3): a scratch folder may deliberately have no git,
-but without a folder, an agent, or an agent that runs, nothing works at all. A dismissal is a
+but without a folder, or an agent that runs, nothing works at all. A dismissal is a
 `SetupDismissal` row; showing the item again deletes it.
+
+The agent item is the `profiles` offer (`profiles-threads-and-builds-everywhere` D6, FR-8): shown
+while the project has no open agent, until the operator uses it or dismisses it. Using it
+(`create_offered_profiles`) records the same row a dismissal does, so it does not come back when
+those profiles are archived.
 
 A fifth item, `specification`, is shown while the project's corpus is empty
 (`a-project-with-no-specs-is-offered-a-start`, FR-3; `corpus_start.corpus_state`). It opens the
@@ -34,10 +39,10 @@ from .db.models import Agent, Project, Runner, SetupDismissal
 from .launchability import probe_agent
 from .runner_provider import runner_probe_config
 
-SetupKey = Literal["folder", "repository", "agent", "can-run", "specification"]
+SetupKey = Literal["folder", "repository", "profiles", "can-run", "specification"]
 
 #: The items an operator may dismiss. The rest cannot be waved away (FR-3).
-DISMISSABLE = frozenset({"repository", "specification"})
+DISMISSABLE = frozenset({"repository", "profiles", "specification"})
 
 #: The event the app re-reads a project's set-up items on.
 SETUP_CHANGED = "project_setup_changed"
@@ -145,7 +150,7 @@ async def project_setup(
         .all()
     )
     if not agents:
-        candidates.append(SetupItem(id="agent", key="agent"))
+        candidates.append(SetupItem(id="profiles", key="profiles", dismissable=True))
     cache = verdicts if verdicts is not None else {}
     for agent in agents:
         runner = await session.get(Runner, agent.runner_id) if agent.runner_id else None

@@ -104,7 +104,7 @@ def test_a_project_row_from_before_0175_carries_the_agent_item(tmp_path, monkeyp
     setup = asyncio.run(_read())
 
     # An empty folder has an empty corpus too (`a-project-with-no-specs-is-offered-a-start`).
-    assert [item.id for item in setup.items] == ["repository", "agent", "specification"]
+    assert [item.id for item in setup.items] == ["repository", "profiles", "specification"]
     assert setup.dismissed == []
 
 

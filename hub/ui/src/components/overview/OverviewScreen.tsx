@@ -451,7 +451,7 @@ export function OverviewScreen({
       onOpenLedger={() => onNavigate('activity')}
       onOpenQuestions={() => onNavigate('questions')}
       onAddAgent={onAddAgent}
-      setup={<ProjectSetupList place="overview" onAddAgent={onAddAgent} />}
+      setup={<ProjectSetupList place="overview" />}
       firstRun={<ProjectFirstRun onAddAgent={onAddAgent} />}
       knownFailing={
         // A Hub older than the list answers null: it has none to show, so no section.
