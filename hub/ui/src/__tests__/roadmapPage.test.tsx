@@ -137,6 +137,15 @@ describe('a roadmap page', () => {
     expect(take).toHaveBeenCalledWith({ roadmap: RM, slice: 's3', agent: 'Architect' }, expect.anything())
   })
 
+  it('opens the slice document the take created (take-from-every-surface: roadmap page)', async () => {
+    const open = vi.fn()
+    take.mockImplementationOnce((_args, options) => options.onSuccess({ state: 'queued', agent: 'Architect', conversation_id: 'c1', entry_id: 'e1', document: 'spec/changes/s3/spec.json' }))
+    renderBody(view(SPEC_VISUALS), open)
+    await userEvent.click(within(slice('s3')).getByRole('button', { name: /Draft this slice/ }))
+    await userEvent.click(screen.getByRole('button', { name: 'Draft' }))
+    expect(open).toHaveBeenCalledWith('spec/changes/s3/spec.json')
+  })
+
   it('links a written retrospective and says none exists for the other (ac-retro)', () => {
     const rows = SPEC_VISUALS.map((r) => (r.key === 's2' ? { ...r, retrospective: null } : r))
     renderBody(view(rows))

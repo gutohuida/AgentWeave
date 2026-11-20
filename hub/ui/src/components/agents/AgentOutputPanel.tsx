@@ -26,6 +26,8 @@ import { useRunners } from '@/api/runners'
 import { overridesForRunner, runnerSetsModel } from '@/lib/runnerProvider'
 import { useWorkspacePaths } from '@/api/workspace'
 import { useSpecDocuments } from '@/api/spec'
+import { useAnswerSpecDocumentOffer, useConversationSpecDocuments } from '@/api/conversationSpec'
+import { ConversationSpecOffers } from '@/components/conversation/ConversationSpecOffers'
 import {
   continueConversation,
   cutOver,
@@ -33,7 +35,7 @@ import {
   useCheckpoints,
   useProjectCheckpoints,
 } from '@/api/checkpoints'
-import { ApiError, deleteJson, readableRefusal } from '@/api/client'
+import { ApiError, deleteJson, readableApiError, readableRefusal } from '@/api/client'
 import { useAccounting, useConversationAccounting } from '@/api/accounting'
 import { formatAiCredits } from '@/components/accounting/accountingDisplay'
 import { useConfigStore } from '@/store/configStore'
@@ -93,6 +95,8 @@ interface AgentOutputPanelProps {
   /** Reopen a document not currently attached to this conversation. See Composer's prop of the
    *  same name for why this is distinct from `onOpenSpecPicker`. */
   onOpenExistingSpec?: () => void
+  /** Open a document the operator chose from a notice: written to the conversation and shown. */
+  onOpenSpecDocument?: (path: string) => void
   specBusy?: boolean
   /** Forwarded to `Composer` verbatim — see its prop of the same name (task 5.4,
    *  `2026-08-18-one-shell-three-panels`). */
@@ -196,6 +200,7 @@ export function AgentOutputPanel({
   createExploration,
   onExplorationStarted,
   onOpenExistingSpec,
+  onOpenSpecDocument,
   specBusy = false,
   insertRequest = null,
   onTogglePanel,
@@ -487,6 +492,9 @@ export function AgentOutputPanel({
   const { data: workspacePaths = [] } = useWorkspacePaths()
   // The project's documents: the composer's `@` menu lists them as specs.
   const { data: specDocumentList, isError: specDocumentsFailed } = useSpecDocuments()
+  // Change documents an agent created in this conversation, offered to the operator (FR-7).
+  const offeredDocuments = useConversationSpecDocuments(projectId, startingFresh ? null : (conversationId ?? null))
+  const answerOffer = useAnswerSpecDocumentOffer(projectId, startingFresh ? null : (conversationId ?? null))
   const conversationChat = useAgentChatHistory(agent.name, currentConversationId ?? null)
   const recentChat = useAgentRecentChat(agent.name)
   const chat = currentConversationId ? conversationChat : recentChat
@@ -1485,6 +1493,19 @@ export function AgentOutputPanel({
         }}
       >
           <BannerStack banners={banners} />
+
+          <ConversationSpecOffers
+            offers={(offeredDocuments.data?.offers ?? []).filter((offer) => offer.path !== specDocumentPath)}
+            busy={answerOffer.isPending}
+            readError={offeredDocuments.error ? readableApiError(offeredDocuments.error, 'the Hub did not answer.') : null}
+            answerError={answerOffer.error ? readableApiError(answerOffer.error, 'The Hub refused this.') : null}
+            onAnswer={(path, answer) =>
+              answerOffer.mutate(
+                { path, answer },
+                { onSuccess: () => (answer === 'open' ? onOpenSpecDocument?.(path) : undefined) },
+              )
+            }
+          />
 
           {/* A successor is handed its checkpoint as a queued entry and then waits. Without this
               the only way to start it was to type a message, which is a strange thing to invent

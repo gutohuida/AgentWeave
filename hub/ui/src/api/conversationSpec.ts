@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { getJson, putJson } from './client'
+import { getJson, postJson, putJson } from './client'
 
 /** The document a conversation has open — the conversation's own, held by the Hub
  *  (`every-spec-entry-point-leads-into-the-journey`, FR-11/FR-12). */
@@ -10,9 +10,18 @@ export interface AttachedSpecDocument {
   step: string | null
 }
 
+/** A change document an agent created in this conversation, offered to the operator. */
+export interface SpecDocumentOffer {
+  path: string
+  title: string
+  step: string | null
+  created_by: string | null
+  created_at: string | null
+}
+
 export interface ConversationSpecDocuments {
   attached: AttachedSpecDocument | null
-  offers: Array<Record<string, unknown>>
+  offers: SpecDocumentOffer[]
 }
 
 export const conversationSpecKey = (projectId: string | null, conversationId: string | null) =>
@@ -44,5 +53,20 @@ export function useSetConversationDocumentFor(projectId: string | null) {
         (old) => ({ offers: old?.offers ?? [], attached: result.attached }),
       )
     },
+  })
+}
+
+/** Open a document in a conversation: a document an agent created there, offered. */
+export function useAnswerSpecDocumentOffer(projectId: string | null, conversationId: string | null) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ path, answer }: { path: string; answer: 'open' | 'not_now' }) =>
+      postJson<{ path: string; answer: string; attached: AttachedSpecDocument | null }>(
+        `${base(projectId!, conversationId!)}/spec-documents/answer`,
+        { path, answer },
+      ),
+    // The answer is recorded on the Hub, so the read is refetched and the notice is gone after a
+    // reload as well as now.
+    onSettled: () => queryClient.invalidateQueries({ queryKey: conversationSpecKey(projectId, conversationId) }),
   })
 }
