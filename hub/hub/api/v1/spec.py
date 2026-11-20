@@ -4804,7 +4804,9 @@ async def take_next_slice_offer(
     project: Tuple[str, str] = Depends(get_project),
     session: AsyncSession = Depends(get_session),
 ):
-    """Take a slice's drafting offer: one drafting turn queued to the chosen agent, carrying the
+    """Take a slice's drafting offer: the slice's change document created at intake, linked to the
+    slice (the answer's `document`), and one drafting turn bound to it queued to the chosen agent,
+    carrying the
     outcomes and retrospectives of the slices it builds after, in the conversation the roadmap was
     written in while it is open, else a new one (F1047). 409 when there is no offer (a second take
     queues nothing)."""
