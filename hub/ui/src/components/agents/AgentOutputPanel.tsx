@@ -54,6 +54,7 @@ import { ConversationBar } from '@/components/conversation/ConversationBar'
 import { TraceDrawerPanel } from '@/components/traces/TraceDrawer'
 import { ConversationTraceDrawer } from '@/components/traces/ConversationTraceDrawer'
 import type { ComposerInsertRequest } from '@/components/agents/Composer'
+import { foldedComposerReason } from '@/lib/foldPresentation'
 import { ConversationComposerDock } from '@/components/conversation/ConversationComposerDock'
 import { useDiagnosticsHidden } from '@/lib/diagnosticsPreference'
 import { hubDate } from '@/lib/hubTime'
@@ -1455,6 +1456,8 @@ export function AgentOutputPanel({
             ? `${agent.name} is busy in another conversation — a message here will queue`
             : undefined,
           onSubmit: handleComposerSubmit,
+          // A folded agent's history is read-only: the turn is refused naming the profile.
+          disabledReason: foldedComposerReason(agent),
           workspacePaths,
           specDocuments: specDocumentList?.documents,
           specDocumentsStatus: specDocumentList ? undefined : specDocumentsFailed ? 'error' : 'loading',

@@ -104,6 +104,8 @@ export default function App() {
   const { isConfigured, mode, bootstrapState, selectedProjectId: projectId } = useConfigStore()
   const { data: projects } = useProjects()
   const { data: agents = [], isLoading: agentsLoading } = useAgents()
+  // A folded agent is off the open roster but its conversations still open, read-only.
+  const { data: allAgents = [] } = useAgents('all')
   const [setupOpen, setSetupOpen] = useState(false)
   const [projectManagerMode, setProjectManagerMode] = useState<ProjectManagerMode | null>(null)
   const [agentCreateProjectId, setAgentCreateProjectId] = useState<string | null>(null)
@@ -270,7 +272,9 @@ export default function App() {
   }
 
   const selectedAgent = destination.kind === 'conversation'
-    ? agents.find((agent) => agent.name === destination.agent) ?? null
+    ? agents.find((agent) => agent.name === destination.agent)
+      ?? allAgents.find((agent) => agent.name === destination.agent && agent.folded_into)
+      ?? null
     : null
   const currentProject = projects?.find((project) => project.id === currentProjectId)
 
