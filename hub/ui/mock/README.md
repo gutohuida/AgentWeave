@@ -275,3 +275,12 @@ http://localhost:5199/mock.html#profile-pools/chat                          # ne
 ```
 
 Approved by the operator on 2026-11-19 as it renders, including the author's choices: a started chat lists another coding agent's entries greyed out (a new chat is needed for them), an agent's menu detail is its default plus a count, and efforts use the catalog's labels.
+
+## The sidebar's threads and builds (profiles-threads-and-builds-everywhere)
+
+`src/components/layout/ThreadsAndBuilds.tsx` is the list that replaces the agent tree and the
+recency view under each project. The mock passes it to the real `Sidebar` through its
+`projectBody` prop (the app does not pass it yet, so the app is unchanged). The mock bar's
+"Sidebar" select switches between builds running and needing you, threads only, a new empty
+project, and today's agent tree. The data is mock state (`mock/sidebarMock.tsx`): neither
+`operator_threads` nor `needs_operator` exists on any route yet.

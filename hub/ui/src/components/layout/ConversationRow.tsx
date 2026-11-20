@@ -80,6 +80,10 @@ interface ConversationRowProps {
   /** The owning agent is not on the open roster — archived (F193). The row stays, marked, and
    *  opening it offers to unarchive the agent. */
   agentArchived?: boolean
+  /** Name the owning profile on the row itself, not only in its tooltip: the threads list
+   *  interleaves every profile's threads, and its colour edge alone does not say whose a thread is
+   *  (profiles-threads-and-builds-everywhere FR-1). */
+  showProfile?: boolean
   testId: string
 }
 
@@ -92,6 +96,7 @@ export function ConversationRow({
   agentName,
   showLoopMarker = true,
   agentArchived = false,
+  showProfile = false,
   testId,
 }: ConversationRowProps) {
   const attention = ATTENTION[conversation.attention]
@@ -215,7 +220,13 @@ export function ConversationRow({
             data-origin={conversation.origin}
             aria-current={active ? 'page' : undefined}
             onClick={onOpen}
-            title={agentName ? `${label} — ${agentName}` : label}
+            title={
+              showProfile && agentName && age
+                ? `${label} — ${agentName}, last activity ${formatDistanceToNow(hubDate(conversation.updated_at), { addSuffix: true })}`
+                : agentName
+                  ? `${label} — ${agentName}`
+                  : label
+            }
           >
             {agentColor && (
               <span
@@ -252,6 +263,11 @@ export function ConversationRow({
                 agent archived
               </span>
             )}
+            {showProfile && agentName && (
+              <span className="aw-rail-profile" data-testid={`${testId}-profile`}>
+                {agentName}
+              </span>
+            )}
             {conversation.origin === 'peer' && (
               <span
                 data-testid={`${testId}-origin`}
@@ -268,7 +284,10 @@ export function ConversationRow({
                 carries the unabbreviated reading, since "2m" on its own is a guess. */}
             {/* The attention dot takes the age's place: one signal per row, and a running or
                 waiting conversation's age is not what the operator needs from it. */}
-            {age && !attention && (
+            {/* With the profile named, the profile takes the age's slot: the list is already in
+                recency order, and three signals do not fit a rail row. The age stays in the
+                tooltip. */}
+            {age && !attention && !showProfile && (
               <span
                 className="aw-rail-meta"
                 data-testid={`${testId}-age`}

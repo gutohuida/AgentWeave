@@ -8,6 +8,7 @@ import { BUILD_MOCK_STATES, DEFAULT_BUILD, RECORDED_BUILDS, useBuildHash, type B
 import { beforeKey, type MockRoute } from './routes'
 import { SCREENS, screenFor } from './screens'
 import { useSetupTitles } from './setupMock'
+import { SIDEBAR_MOCK_STATES, setSidebarMockState, useSidebarMock, useSidebarProjectBody, type SidebarMockState } from './sidebarMock'
 import { NOTICE_LEVELS } from './specBanner'
 import { SPEC_MOCK_STATES, setSpecMockControls, useSpecMockControls } from './specMock'
 import { setTasksMockControls, useTasksMockControls } from './tasksMock'
@@ -114,6 +115,13 @@ export function MockApp() {
   })()
 
   const setupFor = useSetupTitles()
+  const projectBody = useSidebarProjectBody({
+    openThread: (agent, conversationId) => go({ kind: 'conversation', agent, conversationId }),
+    newThread: () => go({ kind: 'conversation', agent: 'Architect', conversationId: null }),
+    openBuild: (buildId) => go({ kind: 'build', buildId }),
+    activeConversation: route.kind === 'conversation' ? route.conversationId : null,
+    activeBuild: route.kind === 'build' ? route.buildId : null,
+  })
 
   return (
     <div className="aw-app">
@@ -133,6 +141,7 @@ export function MockApp() {
         onAddProject={() => undefined}
         onOpenAppSettings={() => go({ kind: 'app-settings', section: 'notifications' })}
         appSettingsActive={route.kind === 'app-settings'}
+        projectBody={projectBody}
       />
       <div className="aw-main">
         <TopBar
@@ -206,12 +215,27 @@ function MockBar({
       {(route.kind === 'tab' && route.tab === 'spec') || (route.kind === 'conversation' && (route.panel === 'spec' || route.panel === 'specs')) ? (
         <SpecMockBar showLayout={route.kind === 'tab'} />
       ) : null}
+      <SidebarMockBar />
       {route.kind === 'tab' && route.tab === 'tasks' ? <TasksMockBar /> : null}
       {route.kind === 'build' || route.kind === 'build-summaries' ? <BuildMockBar showBuild={route.kind === 'build'} /> : null}
       <button type="button" className="mock-bar-button" disabled={!hasBefore} data-on={before ? 'true' : 'false'} onClick={onBefore}>
         {before ? 'Showing today' : 'Compare with today'}
       </button>
     </div>
+  )
+}
+
+/** The sidebar's states (profiles-threads-and-builds-everywhere), on every screen: the sidebar is. */
+function SidebarMockBar() {
+  const { state } = useSidebarMock()
+  return (
+    <select className="mock-bar-select" aria-label="Sidebar" value={state} onChange={(e) => setSidebarMockState(e.target.value as SidebarMockState)}>
+      {SIDEBAR_MOCK_STATES.map((s) => (
+        <option key={s.value} value={s.value}>
+          {s.label}
+        </option>
+      ))}
+    </select>
   )
 }
 

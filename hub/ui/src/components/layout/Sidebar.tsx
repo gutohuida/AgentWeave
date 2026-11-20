@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { SetupCount } from '@/components/overview/SetupList'
 import { useProjects, type ProjectSummary } from '@/api/projects'
 import { BrandLoop } from '@/components/common/BrandLoop'
@@ -51,6 +51,10 @@ interface SidebarProps {
   compact?: boolean
   onCompactChange?: (compact: boolean) => void
   width?: number
+  /** What hangs under an open project. When given, it replaces the agent tree and the recency
+   *  view, and their toggle goes (profiles-threads-and-builds-everywhere: the threads-and-builds
+   *  list; the mock passes it, the app does not yet). */
+  projectBody?: (project: ProjectSummary, activeProject: boolean) => ReactNode
 }
 
 export const SIDEBAR_WIDTH = 248
@@ -115,6 +119,7 @@ export function Sidebar({
   compact = false,
   onCompactChange,
   width = SIDEBAR_WIDTH,
+  projectBody,
 }: SidebarProps) {
   const { data: projects = [] } = useProjects()
   const selectedProjectId = useConfigStore((state) => state.selectedProjectId)
@@ -205,7 +210,7 @@ export function Sidebar({
           </span>
         )}
         <span className="aw-rail-head-actions">
-          {!compact && (
+          {!compact && !projectBody && (
             <button
               data-slot="icon-button"
               type="button"
@@ -338,7 +343,8 @@ export function Sidebar({
                       </span>
                     </span>
                   </div>
-                  {expanded && railView === 'recency' && (
+                  {expanded && projectBody && projectBody(project, activeProject)}
+                  {expanded && !projectBody && railView === 'recency' && (
                     <RecencyView
                       projectId={project.id}
                       agents={project.agents}
@@ -348,7 +354,7 @@ export function Sidebar({
                       onNewConversation={onNewConversation}
                     />
                   )}
-                  {expanded && railView === 'tree' && (
+                  {expanded && !projectBody && railView === 'tree' && (
                     <AgentTree
                       projectId={project.id}
                       agents={project.agents}
