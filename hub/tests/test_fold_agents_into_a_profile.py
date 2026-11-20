@@ -761,9 +761,9 @@ def test_the_migration_adds_one_null_column_and_changes_no_row(tmp_path) -> None
     _run(_create_all_at(db_url))
     with sqlite3.connect(db_file) as conn:
         conn.execute("CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL)")
-        conn.execute("INSERT INTO alembic_version (version_num) VALUES ('0188')")
+        conn.execute("INSERT INTO alembic_version (version_num) VALUES ('0189')")
         conn.commit()
-    _downgrade_to(db_url, "0187")
+    _downgrade_to(db_url, "0188")
     with sqlite3.connect(db_file) as conn:
         columns = {row[1] for row in conn.execute("PRAGMA table_info('agents')")}
         assert "folded_into" not in columns
@@ -775,7 +775,7 @@ def test_the_migration_adds_one_null_column_and_changes_no_row(tmp_path) -> None
         conn.commit()
         before = conn.execute("SELECT * FROM agents ORDER BY id").fetchall()
 
-    _upgrade_to(db_url, "0188")
+    _upgrade_to(db_url, "0189")
 
     with sqlite3.connect(db_file) as conn:
         names = [row[1] for row in conn.execute("PRAGMA table_info('agents')")]
@@ -787,8 +787,8 @@ def test_the_migration_adds_one_null_column_and_changes_no_row(tmp_path) -> None
     assert [row[:-1] for row in rows] == before
     assert [row[-1] for row in rows] == [None, None]
 
-    _upgrade_to(db_url, "0188")  # idempotent
-    _downgrade_to(db_url, "0187")
+    _upgrade_to(db_url, "0189")  # idempotent
+    _downgrade_to(db_url, "0188")
     with sqlite3.connect(db_file) as conn:
         assert "folded_into" not in {row[1] for row in conn.execute("PRAGMA table_info('agents')")}
         assert conn.execute("SELECT * FROM agents ORDER BY id").fetchall() == before

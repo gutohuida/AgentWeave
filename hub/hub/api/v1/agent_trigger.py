@@ -43,6 +43,7 @@ from ... import (
     bound_address,
     build_retrospective,
     claude_signin,
+    conversation_document,
     flow_advance,
     instance_identity,
     launch_entry,
@@ -2940,6 +2941,14 @@ async def trigger_agent(
         # this validated against is unchanged (design.md: "Rejected: overrides on the
         # agent").
         conversation.runtime_overrides = accepted
+
+    if body.spec_document:
+        # A message sent under a document makes it this conversation's own (FR-11, design D3),
+        # Explore's first message included. A message with none leaves the conversation's as it
+        # is: only stopping exploring clears it. A path no document row has attaches nothing, and
+        # the turn still goes, as it always has.
+        with contextlib.suppress(LookupError):
+            await conversation_document.set_by_path(session, conversation, body.spec_document)
 
     entry = new_entry(
         project_id=project_id,
