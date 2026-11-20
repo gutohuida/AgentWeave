@@ -1,4 +1,4 @@
-import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useInfiniteQuery, useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ApiError, deleteJson, fetchWithAuth, getJson, putJson } from './client'
 import { useConfigStore } from '@/store/configStore'
 
@@ -14,6 +14,9 @@ export type SpanStatus = 'unset' | 'ok' | 'error'
 /** A root's operation: a run, a worker call, or the Hub's own request, event or background work. */
 export type TraceOperation = 'invoke_agent' | 'chat' | 'aw.request' | 'aw.event' | 'aw.work'
 export type TraceKind = 'run' | 'worker' | 'request' | 'event' | 'work'
+/** What a run was (profiles-threads-and-builds-everywhere D5): the operator's thread, a task's
+ *  build, a review, the mender's turn, a job's firing, or a run a message started. */
+export type RunKind = 'thread' | 'task' | 'review' | 'mender' | 'job' | 'message'
 
 export interface TraceSummary {
   trace_id: string
@@ -49,6 +52,8 @@ export interface TraceSummary {
   tool_errors?: number
   /** Failed, stopped (cancelled or interrupted) or ended in error. */
   is_error?: boolean
+  /** A run's kind; absent on other kinds of trace. */
+  run_kind?: RunKind
 }
 
 export interface TraceList {
@@ -129,6 +134,10 @@ export interface TraceFilters {
   /** The runs that worked a task of this build. */
   build_id?: string
   agent?: string
+  /** A profile's runs, the runs of names folded into it included. */
+  profile?: string
+  /** The runs a flow (or loop) started: on its tasks, or in the conversations its firings opened. */
+  loop_id?: string
   /** Started at or after / before: ISO datetimes. */
   since?: string
   until?: string
@@ -165,6 +174,25 @@ export function useTraces(filters: TraceFilters = {}, enabled = true) {
         `/api/v1/projects/${projectId}/traces${query({ limit: 50, ...filters })}`,
       ),
     enabled: enabled && isConfigured && !!projectId,
+  })
+}
+
+/** A run list's page size: the runs a profile's or a flow's list reads at a time. */
+export const RUN_LIST_PAGE = 50
+
+/** The runs a profile or a flow started, newest first, a page at a time on the route's own cursor
+ *  (`before`). Only run traces (`invoke_agent`), so a worker call or a request is not a run here. */
+export function useRunList(filters: Pick<TraceFilters, 'profile' | 'loop_id'>, enabled = true) {
+  const { isConfigured, selectedProjectId: projectId } = useConfigStore()
+  return useInfiniteQuery<TraceList>({
+    queryKey: ['project', projectId, 'traces', 'runs', filters],
+    queryFn: ({ pageParam }) =>
+      getJson<TraceList>(
+        `/api/v1/projects/${projectId}/traces${query({ ...filters, operation: 'invoke_agent', limit: RUN_LIST_PAGE, before: pageParam as string | null })}`,
+      ),
+    initialPageParam: null as string | null,
+    getNextPageParam: (last) => last.next_before ?? undefined,
+    enabled: enabled && isConfigured && !!projectId && Boolean(filters.profile || filters.loop_id),
   })
 }
 

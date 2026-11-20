@@ -75,6 +75,7 @@ from sqlalchemy.orm.attributes import set_committed_value
 from . import run_secrets
 from .db.models import (
     Conversation,
+    InboundQueueEntry,
     PermissionRequest,
     Question,
     Run,
@@ -2041,18 +2042,32 @@ async def _describe_runs(
             .all()
         }
     conversation_ids = {s["conversation_id"] for s in runs if s["conversation_id"]}
+    conversation_ids |= {r.conversation_id for r in run_rows.values() if r.conversation_id}
     titles: Dict[str, Optional[str]] = {}
+    origins: Dict[str, Optional[str]] = {}
     if conversation_ids:
-        titles = dict(
-            (
-                await db.execute(
-                    select(Conversation.id, Conversation.title).where(
-                        Conversation.project_id == project_id,
-                        Conversation.id.in_(conversation_ids),
-                    )
+        for conversation_id, title, origin in (
+            await db.execute(
+                select(Conversation.id, Conversation.title, Conversation.origin).where(
+                    Conversation.project_id == project_id,
+                    Conversation.id.in_(conversation_ids),
                 )
-            ).all()
+            )
+        ).all():
+            titles[conversation_id] = title
+            origins[conversation_id] = origin
+    reviews = set(
+        (
+            await db.execute(
+                select(InboundQueueEntry.delivered_in_run_id).where(
+                    InboundQueueEntry.delivered_in_run_id.in_(run_ids),
+                    InboundQueueEntry.review_task_id.isnot(None),
+                )
+            )
         )
+        .scalars()
+        .all()
+    )
     tool_errors = await _tool_error_counts(db, run_ids)
     for summary in runs:
         run = run_rows.get(summary["run_id"])
@@ -2075,7 +2090,39 @@ async def _describe_runs(
         summary["task_ref"] = task.readable_id if task else None
         summary["task_title"] = task.title if task else None
         summary["task_missing"] = bool(task_id and task is None)
+        summary["conversation_id"] = summary["conversation_id"] or (
+            run.conversation_id if run else None
+        )
         summary["conversation_title"] = titles.get(summary["conversation_id"] or "")
+        summary["run_kind"] = run_kind(
+            origins.get(summary["conversation_id"] or ""),
+            bool(task_id),
+            summary["run_id"] in reviews,
+        )
+
+
+#: What a run was, as a profile's and a flow's run lists name it
+#: (`profiles-threads-and-builds-everywhere` D5). `kind` on a trace row is already the trace's own
+#: kind (a run, a worker call, a request), so a run's kind is its own field.
+RUN_KINDS = ("thread", "task", "review", "mender", "job", "message")
+
+
+def run_kind(origin: Optional[str], has_task: bool, reviewed: bool) -> str:
+    """A run's kind, from its conversation's origin and whether it reviewed a task: a review, a
+    mender's turn, a task build (any run bound to a task, a flow's firing on a task or a briefing
+    on assignment included), a job's unbound firing, the operator's thread (a document's
+    conversation is one), or a run a message started (a peer's, a handoff, a divergence's)."""
+    if reviewed:
+        return "review"
+    if origin == "mender":
+        return "mender"
+    if has_task:
+        return "task"
+    if origin == "job":
+        return "job"
+    if origin in ("operator", "spec"):
+        return "thread"
+    return "message"
 
 
 def _cursor_text(span: TraceSpan) -> str:

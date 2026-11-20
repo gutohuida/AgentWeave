@@ -76,7 +76,7 @@ export function resolveEnvironmentSection(raw: string | null | undefined): Envir
 
 /** An agent's settings, in five sections. Permissions and Checkpoints carry the names of the project
  *  sections they override. */
-export const AGENT_SETTINGS_SECTIONS = ['agent', 'running', 'permissions', 'checkpoints', 'workspace'] as const
+export const AGENT_SETTINGS_SECTIONS = ['agent', 'running', 'permissions', 'checkpoints', 'workspace', 'runs'] as const
 export type AgentSettingsSection = (typeof AGENT_SETTINGS_SECTIONS)[number]
 
 /** The seven sections the five replaced, and the one that holds what each held, so a saved link or a
