@@ -178,6 +178,10 @@ async def test_deleting_a_document_takes_what_it_produced_and_its_file(app, auth
                 spec_document_id=document.id,
             )
         )
+        conversation = (
+            await session.execute(select(Conversation).where(Conversation.id == "conv-del"))
+        ).scalar_one()
+        conversation.spec_document_id = document.id
         await session.commit()
 
     response = await app.delete(f"{BASE}/documents/{CHANGE}", headers=auth_headers)
@@ -215,6 +219,7 @@ async def test_deleting_a_document_takes_what_it_produced_and_its_file(app, auth
         delivered = await _entry(session, "q-done")
     assert run is not None and run.task_id is None
     assert conversation is not None and conversation.task_id is None
+    assert conversation.spec_document_id is None
     assert delivered is not None and delivered.task_id is None
 
 
