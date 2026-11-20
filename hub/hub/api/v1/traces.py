@@ -14,13 +14,13 @@ from urllib.parse import urlparse
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from pydantic import Field
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ... import readable_ids, trace_export, trace_retention, traces, work_tally
 from ...auth import get_project
 from ...db.engine import async_session_factory, get_session
-from ...db.models import Run, TraceSettings
+from ...db.models import Agent, JobRun, Loop, Run, Task, TraceSettings
 from ...schemas.common import RequestModel
 
 router = APIRouter(prefix="/traces", tags=["traces"])
@@ -46,9 +46,11 @@ async def _run_ids(
     conversation_id: Optional[str],
     agent: Optional[str],
     build_id: Optional[str] = None,
+    profile: Optional[str] = None,
+    loop_id: Optional[str] = None,
 ) -> Optional[List[str]]:
     """The runs the run-side filters leave, or None when none is in force."""
-    if not (run_id or task_id or conversation_id or build_id or agent):
+    if not (run_id or task_id or conversation_id or build_id or agent or profile or loop_id):
         return None
     query = select(Run.id).where(Run.project_id == project_id)
     if run_id:
@@ -67,6 +69,27 @@ async def _run_ids(
         query = query.where(Run.id.in_(whole["build_runs"].get(build_id, [])))
     if agent:
         query = query.where(Run.agent == agent)
+    if profile:
+        # The profile's own runs and those of every agent folded into it (D5).
+        folded = select(Agent.name).where(
+            Agent.project_id == project_id, Agent.folded_into == profile
+        )
+        query = query.where(or_(Run.agent == profile, Run.agent.in_(folded)))
+    if loop_id:
+        # The runs on the flow's tasks, and those in conversations its firings opened (D5), so an
+        # unbound firing is listed too. Read from the rows, so a stopped or archived flow keeps
+        # its runs.
+        loop_tasks = select(Task.id).where(Task.project_id == project_id, Task.loop_id == loop_id)
+        firings = (
+            select(JobRun.conversation_id)
+            .join(Loop, Loop.job_id == JobRun.job_id)
+            .where(
+                Loop.id == loop_id,
+                Loop.project_id == project_id,
+                JobRun.conversation_id.isnot(None),
+            )
+        )
+        query = query.where(or_(Run.task_id.in_(loop_tasks), Run.conversation_id.in_(firings)))
     return list((await session.execute(query)).scalars().all())
 
 
@@ -79,6 +102,12 @@ async def list_project_traces(
     conversation_id: Optional[str] = Query(None),
     build_id: Optional[str] = Query(None, description="The runs that worked a task of this build"),
     agent: Optional[str] = Query(None, max_length=64, description="Only this agent's runs"),
+    profile: Optional[str] = Query(
+        None, max_length=64, description="This profile's runs, those of names folded into it too"
+    ),
+    loop_id: Optional[str] = Query(
+        None, max_length=64, description="The runs this flow started, on its tasks or firings"
+    ),
     since: Optional[str] = Query(
         None, description="Started at or after: YYYY-MM-DD or ISO datetime"
     ),
@@ -92,11 +121,13 @@ async def list_project_traces(
     session: AsyncSession = Depends(get_session),
 ):
     """The project's traces, newest first. `task_id`/`conversation_id` select the traces of the
-    runs that worked that task (or a task of that `build_id`) or ran in that conversation; `agent` one agent's runs; `operation`
+    runs that worked that task (or a task of that `build_id`) or ran in that conversation; `agent` one agent's runs, `profile` a profile's with the names folded into it, `loop_id` a flow's; `operation`
     one kind of trace; `since`/`until` the traces that started in that range."""
     project_id, _ = project
     start, end = _bounds(since, until)
-    run_ids = await _run_ids(session, project_id, run_id, task_id, conversation_id, agent, build_id)
+    run_ids = await _run_ids(
+        session, project_id, run_id, task_id, conversation_id, agent, build_id, profile, loop_id
+    )
     try:
         return await traces.list_traces(
             session,
@@ -119,6 +150,8 @@ async def project_trace_totals(
     conversation_id: Optional[str] = Query(None),
     build_id: Optional[str] = Query(None),
     agent: Optional[str] = Query(None, max_length=64),
+    profile: Optional[str] = Query(None, max_length=64),
+    loop_id: Optional[str] = Query(None, max_length=64),
     since: Optional[str] = Query(None),
     until: Optional[str] = Query(None),
     operation: Optional[str] = Query(None, max_length=32),
@@ -136,7 +169,9 @@ async def project_trace_totals(
     and tool calls and waiting time. Takes the list route's filters, so both read the same set."""
     project_id, _ = project
     start, end = _bounds(since, until)
-    run_ids = await _run_ids(session, project_id, run_id, task_id, conversation_id, agent, build_id)
+    run_ids = await _run_ids(
+        session, project_id, run_id, task_id, conversation_id, agent, build_id, profile, loop_id
+    )
     try:
         return await traces.trace_totals(
             session,
