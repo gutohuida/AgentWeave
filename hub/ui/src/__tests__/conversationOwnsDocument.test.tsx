@@ -228,7 +228,7 @@ describe('a conversation owns its document', () => {
     held['conv-a'] = X
     mount()
     await waitFor(() => expect(shown()).toBe(X))
-    fireEvent.click(screen.getByTestId('agent-new-conversation-proj-test-claude'))
+    fireEvent.click(screen.getByTestId('rail-threads-empty-proj-test'))
     await waitFor(() => expect(screen.getByTestId('new-conversation')).toBeInTheDocument())
     expect(window.location.search).not.toContain('document=')
   })

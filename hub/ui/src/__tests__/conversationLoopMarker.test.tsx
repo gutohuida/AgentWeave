@@ -41,7 +41,22 @@ vi.mock('@/api/projects', () => ({ useProjects: () => ({ data: projects, isLoadi
 let payload: ProjectConversations = { conversations: [], archived_count: 0 }
 vi.mock('@/api/agentChat', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/api/agentChat')>()
-  return { ...actual, useProjectConversations: () => ({ data: payload }) }
+  return {
+    ...actual,
+    useOperatorThreads: (_projectId: string, lifecycle = 'open') => ({
+      data: lifecycle === 'open' ? payload : undefined,
+      isError: false,
+      refetch: vi.fn(),
+    }),
+  }
+})
+vi.mock('@/api/projectBuilds', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/api/projectBuilds')>()
+  return {
+    ...actual,
+    useBuildsOfProject: () => ({ data: [], isError: false, refetch: vi.fn() }),
+    useDismissProjectBuild: () => ({ mutate: vi.fn() }),
+  }
 })
 
 function conversation(overrides: Partial<AgentConversation> = {}): AgentConversation {
@@ -62,9 +77,7 @@ function conversation(overrides: Partial<AgentConversation> = {}): AgentConversa
 
 function renderRail(overrides: Partial<React.ComponentProps<typeof Sidebar>> = {}) {
   const props: React.ComponentProps<typeof Sidebar> = {
-    activeAgent: null,
     onOpenProject: vi.fn(),
-    onOpenAgent: vi.fn(),
     onOpenConversation: vi.fn(),
     onOpenEnvironment: vi.fn(),
     onAddAgent: vi.fn(),
@@ -80,10 +93,6 @@ function renderRail(overrides: Partial<React.ComponentProps<typeof Sidebar>> = {
     ),
     props,
   }
-}
-
-function expandClaude() {
-  fireEvent.click(screen.getByTestId('agent-expander-proj-a-claude'))
 }
 
 describe('a loop firing names its loop on the conversation row', () => {
@@ -103,9 +112,8 @@ describe('a loop firing names its loop on the conversation row', () => {
       archived_count: 0,
     }
     renderRail()
-    expandClaude()
 
-    const marker = screen.getByTestId('rail-conversation-conv-fired-loop')
+    const marker = screen.getByTestId('rail-thread-conv-fired-loop')
     expect(marker.textContent).toContain('nightly sweep')
     expect(marker.getAttribute('data-loop-id')).toBe('loop-7')
   })
@@ -116,17 +124,15 @@ describe('a loop firing names its loop on the conversation row', () => {
       archived_count: 0,
     }
     renderRail()
-    expandClaude()
 
-    expect(screen.queryByTestId('rail-conversation-conv-job-loop')).toBeNull()
+    expect(screen.queryByTestId('rail-thread-conv-job-loop')).toBeNull()
   })
 
   it('shows nothing on a conversation the operator started', () => {
     payload = { conversations: [conversation({ id: 'conv-typed' })], archived_count: 0 }
     renderRail()
-    expandClaude()
 
-    expect(screen.queryByTestId('rail-conversation-conv-typed-loop')).toBeNull()
+    expect(screen.queryByTestId('rail-thread-conv-typed-loop')).toBeNull()
   })
 
   it('opens the loop’s existing drill-down tab, without opening the conversation', () => {
@@ -137,11 +143,10 @@ describe('a loop firing names its loop on the conversation row', () => {
       archived_count: 0,
     }
     const { props } = renderRail()
-    expandClaude()
 
     // From the row's menu: the row itself opens the conversation, and nothing nests in it.
-    fireEvent.keyDown(screen.getByTestId('rail-conversation-conv-fired-menu'), { key: 'Enter' })
-    fireEvent.click(screen.getByTestId('rail-conversation-conv-fired-menu-open-loop'))
+    fireEvent.keyDown(screen.getByTestId('rail-thread-conv-fired-menu'), { key: 'Enter' })
+    fireEvent.click(screen.getByTestId('rail-thread-conv-fired-menu-open-loop'))
 
     const panel = selectProjectPanel(usePanelTabsStore.getState(), 'proj-a')
     expect(panel.tabs.map((tab) => tab.id)).toContain('loop:loop-7')
@@ -149,22 +154,5 @@ describe('a loop firing names its loop on the conversation row', () => {
     expect(panel.isOpen).toBe(true)
     // Opening the loop is not opening the conversation.
     expect(props.onOpenConversation).not.toHaveBeenCalled()
-  })
-
-  it('marks the row in the recency view too, where firings interleave with typed threads', () => {
-    payload = {
-      conversations: [
-        conversation({ id: 'conv-fired', origin: 'job', loop: { id: 'loop-7', label: 'nightly sweep' } }),
-        conversation({ id: 'conv-typed' }),
-      ],
-      archived_count: 0,
-    }
-    renderRail()
-    fireEvent.click(screen.getByTestId('rail-view-toggle'))
-
-    expect(screen.getByTestId('recency-conversation-conv-fired-loop').textContent).toContain(
-      'nightly sweep',
-    )
-    expect(screen.queryByTestId('recency-conversation-conv-typed-loop')).toBeNull()
   })
 })

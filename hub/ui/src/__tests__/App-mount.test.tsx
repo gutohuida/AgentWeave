@@ -30,6 +30,26 @@ vi.stubGlobal(
   vi.fn(async () => ({ ok: true, status: 200, json: async () => [] }) as unknown as Response),
 )
 
+// The rail lists the operator's threads (profiles-threads-and-builds-everywhere FR-1): one each
+// for claude and codex, so a thread row opens its profile's conversation.
+vi.mock('@/api/agentChat', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/api/agentChat')>()
+  const thread = (id: string, agent: string) => ({
+    id, agent, provider_session_id: null, lifecycle: 'open', title: `Thread ${id}`,
+    title_set_by_operator: false, origin: 'operator', attention: 'idle',
+    created_at: '2026-11-20T08:00:00Z', updated_at: '2026-11-20T08:00:00Z', operator_thread: true,
+  })
+  const page = { conversations: [thread('conv-1', 'claude'), thread('conv-2', 'codex')], archived_count: 0 }
+  return {
+    ...actual,
+    useOperatorThreads: (projectId: string, lifecycle = 'open') => ({
+      data: lifecycle !== 'open' ? undefined : projectId === 'proj-test' ? page : { conversations: [], archived_count: 0 },
+      isError: false,
+      refetch: () => {},
+    }),
+  }
+})
+
 vi.mock('@/api/projects', () => ({
   useProjects: () => ({
     data: [{
@@ -315,7 +335,7 @@ describe('phase 5 App.tsx: rail-only navigation, tabs own project content', () =
     )
     render(withQueryClient(<App />))
 
-    fireEvent.click(screen.getByTestId('rail-agent-proj-test-codex'))
+    fireEvent.click(screen.getByTestId('rail-thread-conv-2'))
 
     expect(window.location.search).toContain('agent=codex')
     expect(window.location.search).not.toContain('document=')
@@ -325,7 +345,7 @@ describe('phase 5 App.tsx: rail-only navigation, tabs own project content', () =
     window.history.pushState(null, '', '?project=proj-test&agent=claude&conversation=conv-1')
     render(withQueryClient(<App />))
 
-    fireEvent.click(screen.getByTestId('rail-agent-proj-test-codex'))
+    fireEvent.click(screen.getByTestId('rail-thread-conv-2'))
 
     expect(window.location.search).toContain('agent=codex')
     expect(window.location.search).not.toContain('document')
@@ -340,7 +360,7 @@ describe('phase 5 App.tsx: rail-only navigation, tabs own project content', () =
     render(withQueryClient(<App />))
     // The project tab bar only exists on a project destination, so leave the conversation first.
     fireEvent.click(screen.getByTestId('project-name-proj-test'))
-    fireEvent.click(screen.getByTestId('rail-agent-proj-test-claude'))
+    fireEvent.click(screen.getByTestId('rail-thread-conv-1'))
 
     expect(window.location.search).toContain('agent=claude')
     expect(window.location.search).not.toContain('document')

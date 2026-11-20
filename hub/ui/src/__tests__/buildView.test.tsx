@@ -8,6 +8,7 @@ import {
   buildTotals,
   costTotal,
   leftOut,
+  needsLine,
   NO_ADDRESS,
   parseAddress,
   summaryOf,
@@ -66,7 +67,7 @@ function task(id: string, over: Partial<BuildTaskRead> = {}): BuildTaskRead {
  *  an unpriced run beside a priced one; a task with only unpriced runs that waits on the operator;
  *  and a fix task added later. */
 const READ: BuildRead = {
-  build: { id: 'build-1', document_id: 'doc-1', document_title: 'A build', document_path: null, state: 'running', level: 'reviewed', created_at: '2026-11-17T08:00:00Z', stopped_at: null, stop_reason: null },
+  build: { id: 'build-1', document_id: 'doc-1', document_title: 'A build', document_path: null, state: 'running', level: 'reviewed', created_at: '2026-11-17T08:00:00Z', stopped_at: null, stop_reason: null, needs_operator: null, attention_dismissed: false },
   tasks: [
     task('a-1', {
       requirements: [
@@ -217,5 +218,19 @@ describe('build view', () => {
     expect(screen.getByTestId('build-needs')).toHaveTextContent('1 task')
     expect(screen.getByTestId('build-cost')).toHaveTextContent('$6.00')
     expect(screen.getByTestId('build-cost-note')).toHaveTextContent('Leaves out 2 unpriced runs')
+  })
+
+  it('says a build stopped before its work was done needs you, with no task needing anything (stopped-needs-operator)', () => {
+    const stopped: BuildRead = {
+      ...READ,
+      build: { ...READ.build, state: 'stopped', stopped_at: '2026-11-17T11:30:00Z', stop_reason: 'stopped by the operator', needs_operator: { kind: 'stopped', text: 'stopped by the operator' } },
+      tasks: READ.tasks.map((t) => ({ ...t, needs_operator: null })),
+    }
+    renderView(stopped)
+    expect(screen.getByTestId('build-needs')).toHaveTextContent('Stopped')
+    expect(screen.getByTestId('build-needs-stopped')).toHaveTextContent('Stopped with 1 task not done')
+    expect(needsLine(stopped)).toBe('Stopped with 1 task not done')
+    // The same read with no build need says nothing waits.
+    expect(needsLine({ ...stopped, build: { ...stopped.build, needs_operator: null } })).toBeNull()
   })
 })

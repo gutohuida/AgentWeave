@@ -1,7 +1,9 @@
-import { useQuery } from '@tanstack/react-query'
-import { getJson } from './client'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { getJson, postJson } from './client'
 import { useConfigStore } from '@/store/configStore'
 import type { BuildDriver, BuildLevel } from './spec'
+import type { BuildNeedsRead } from '@/components/builds/buildViewModel'
+import { sidebarBuilds } from '@/components/layout/threadsAndBuildsModel'
 
 /** One row of `GET /projects/{id}/project/builds`: a build of any of the project's documents, with
  *  the document's title, its loop, its task counts and the blocking question its work waits on.
@@ -43,6 +45,11 @@ export interface ProjectBuildRow {
   stop_reason: string | null
   created_at: string | null
   stopped_at: string | null
+  /** What the build needs from the operator, the build read's own (`hub/hub/build_needs.py`):
+   *  "stopped" first, otherwise its first task's need; null when it needs nothing. */
+  needs_operator: BuildNeedsRead | null
+  /** The operator dismissed it from the sidebar and its needs are still the ones dismissed. */
+  attention_dismissed: boolean
   open_questions: number
   question: {
     id: string
@@ -66,13 +73,45 @@ export interface ProjectBuildLanding {
   reason: string
 }
 
+const readProjectBuilds = async (projectId: string) =>
+  (await getJson<{ builds: ProjectBuildRow[] }>(`/api/v1/projects/${projectId}/project/builds`)).builds
+
 export function useProjectBuilds(refetchMs?: number) {
   const { isConfigured, selectedProjectId: projectId } = useConfigStore()
   return useQuery<ProjectBuildRow[]>({
     queryKey: ['project', projectId, 'builds'],
-    queryFn: async () =>
-      (await getJson<{ builds: ProjectBuildRow[] }>(`/api/v1/projects/${projectId}/project/builds`)).builds,
+    queryFn: () => readProjectBuilds(projectId as string),
     enabled: isConfigured && !!projectId,
     refetchInterval: refetchMs,
+  })
+}
+
+/** The same rows for a project named explicitly: the sidebar draws every registered project, not
+ *  only the selected one. One cache entry with `useProjectBuilds` for the selected project. */
+export function useBuildsOfProject(projectId: string, enabled = true) {
+  const { isConfigured } = useConfigStore()
+  return useQuery<ProjectBuildRow[]>({
+    queryKey: ['project', projectId, 'builds'],
+    queryFn: () => readProjectBuilds(projectId),
+    enabled: isConfigured && enabled,
+  })
+}
+
+/** The titles of a project's builds that need the operator and were not dismissed: the collapsed
+ *  rail's mark (FR-14), read from the same rows as the sidebar's expanded list. */
+export function useBuildsNeedingYouOf(projectId: string): string[] {
+  const { data } = useBuildsOfProject(projectId)
+  return sidebarBuilds(data ?? [])
+    .filter((build) => build.needs_operator !== null)
+    .map((build) => build.document_title)
+}
+
+/** Dismiss a listed build of any project from the sidebar (D3); the Hub refuses a running one. */
+export function useDismissProjectBuild() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ projectId, buildId }: { projectId: string; buildId: string }) =>
+      postJson<ProjectBuildRow>(`/api/v1/projects/${projectId}/project/builds/${buildId}/attention/dismiss`, {}),
+    onSuccess: (_row, { projectId }) => queryClient.invalidateQueries({ queryKey: ['project', projectId, 'builds'] }),
   })
 }

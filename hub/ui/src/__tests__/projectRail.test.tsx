@@ -26,16 +26,13 @@ vi.mock('@/api/projects', () => ({ useProjects: () => ({ data: projects, isLoadi
 
 function renderRail(overrides: Partial<React.ComponentProps<typeof Sidebar>> = {}) {
   const props: React.ComponentProps<typeof Sidebar> = {
-    activeAgent: null,
     onOpenProject: vi.fn(),
-    onOpenAgent: vi.fn(),
     onOpenEnvironment: vi.fn(),
     onAddAgent: vi.fn(),
     onAddProject: vi.fn(),
     ...overrides,
   }
-  // The rail fetches each project's conversations now that agents expand to them, so it
-  // needs a client even for the tests that never expand an agent.
+  // Each open project reads its threads and builds, so the rail needs a client.
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return {
     ...render(
@@ -54,12 +51,14 @@ describe('phase 5 project collection rail', () => {
     useConfigStore.setState({ selectedProjectId: 'proj-a' })
   })
 
-  it('renders every project and its own agents with live directory state', () => {
+  it('renders every project and its own threads and builds with live directory state', () => {
     renderRail()
     expect(screen.getByTestId('rail-project-proj-a')).toBeInTheDocument()
     expect(screen.getByTestId('rail-project-proj-b')).toBeInTheDocument()
-    expect(screen.getByTestId('rail-agent-proj-a-claude')).toBeInTheDocument()
-    expect(screen.getByTestId('rail-agent-proj-b-codex')).toBeInTheDocument()
+    expect(screen.getByTestId('rail-threads-builds-proj-a')).toBeInTheDocument()
+    expect(screen.getByTestId('rail-threads-builds-proj-b')).toBeInTheDocument()
+    // No agent tree under a project any more (profiles-threads-and-builds-everywhere FR-1).
+    expect(screen.queryByTestId('rail-agent-proj-a-claude')).toBeNull()
     // One signal per row: an available folder says nothing, a missing one says so in words.
     expect(screen.queryByTestId('project-state-proj-a')).toBeNull()
     expect(screen.getByTestId('project-state-proj-b')).toHaveAccessibleName('Directory unavailable')
@@ -75,12 +74,12 @@ describe('phase 5 project collection rail', () => {
     const onOpenProject = vi.fn()
     renderRail({ onOpenProject })
     fireEvent.click(screen.getByTestId('project-expander-proj-a'))
-    expect(screen.queryByTestId('rail-agent-proj-a-claude')).not.toBeInTheDocument()
-    expect(screen.getByTestId('rail-agent-proj-b-codex')).toBeInTheDocument()
+    expect(screen.queryByTestId('rail-threads-builds-proj-a')).not.toBeInTheDocument()
+    expect(screen.getByTestId('rail-threads-builds-proj-b')).toBeInTheDocument()
     expect(onOpenProject).not.toHaveBeenCalled()
     fireEvent.click(screen.getByTestId('project-name-proj-a'))
     expect(onOpenProject).toHaveBeenCalledWith('proj-a')
-    expect(screen.queryByTestId('rail-agent-proj-a-claude')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('rail-threads-builds-proj-a')).not.toBeInTheDocument()
   })
 
   it('persists collapsed projects across remounts', () => {
@@ -88,8 +87,8 @@ describe('phase 5 project collection rail', () => {
     fireEvent.click(screen.getByTestId('project-expander-proj-b'))
     first.unmount()
     renderRail()
-    expect(screen.queryByTestId('rail-agent-proj-b-codex')).not.toBeInTheDocument()
-    expect(screen.getByTestId('rail-agent-proj-a-claude')).toBeInTheDocument()
+    expect(screen.queryByTestId('rail-threads-builds-proj-b')).not.toBeInTheDocument()
+    expect(screen.getByTestId('rail-threads-builds-proj-a')).toBeInTheDocument()
   })
 
   it('opens configuration and agent creation from the scoped project row', () => {
@@ -119,7 +118,7 @@ describe('phase 5 project collection rail', () => {
  * when it does."
  *
  * The previous compact mode gated every branch on `!compact`, so it rendered the "AW" avatar and
- * nothing else — no projects, no agents, no way back, and no way to undo it. A rail that renders
+ * nothing else — no projects, no way back, and no way to undo it. A rail that renders
  * no destinations is hidden, not collapsed. */
 describe('the collapsed rail', () => {
   beforeEach(() => {
@@ -127,7 +126,7 @@ describe('the collapsed rail', () => {
     useConfigStore.setState({ selectedProjectId: 'proj-a' })
   })
 
-  it('reaches every project and agent the expanded rail reaches, by name', () => {
+  it('reaches every project the expanded rail reaches, by name, and shows no profiles', () => {
     renderRail({ compact: true, onCompactChange: vi.fn() })
 
     for (const project of projects) {
@@ -135,24 +134,17 @@ describe('the collapsed rail', () => {
       expect(screen.getByTestId(`rail-compact-project-${project.id}`)).toHaveAccessibleName(
         project.name,
       )
-      for (const agent of project.agents) {
-        expect(
-          screen.getByTestId(`rail-compact-agent-${project.id}-${agent.name}`),
-        ).toHaveAccessibleName(agent.name)
-      }
     }
+    // Projects only (FR-14): 52px cannot name a thread, and profiles are not destinations here.
+    expect(screen.queryByTestId(/^rail-compact-agent-/)).toBeNull()
   })
 
   it('navigates from the collapsed rail', () => {
     const onOpenProject = vi.fn()
-    const onOpenAgent = vi.fn()
-    renderRail({ compact: true, onCompactChange: vi.fn(), onOpenProject, onOpenAgent })
+    renderRail({ compact: true, onCompactChange: vi.fn(), onOpenProject })
 
     fireEvent.click(screen.getByTestId('rail-compact-project-proj-b'))
     expect(onOpenProject).toHaveBeenCalledWith('proj-b')
-
-    fireEvent.click(screen.getByTestId('rail-compact-agent-proj-a-claude'))
-    expect(onOpenAgent).toHaveBeenCalledWith('proj-a', 'claude')
   })
 
   it('offers open-existing alongside add-project when collapsed', () => {
@@ -163,13 +155,10 @@ describe('the collapsed rail', () => {
     expect(onAddProject).toHaveBeenCalledOnce()
   })
 
-  it('indicates the active project and agent', () => {
-    renderRail({ compact: true, onCompactChange: vi.fn(), activeAgent: 'claude' })
+  it('indicates the active project', () => {
+    renderRail({ compact: true, onCompactChange: vi.fn() })
     expect(screen.getByTestId('rail-compact-project-proj-a')).toHaveAttribute('data-active', 'true')
     expect(screen.getByTestId('rail-compact-project-proj-b')).toHaveAttribute('data-active', 'false')
-    expect(screen.getByTestId('rail-compact-agent-proj-a-claude')).toHaveAttribute('data-active', 'true')
-    // Same agent name, different project: the active marker follows the project too.
-    expect(screen.getByTestId('rail-compact-agent-proj-b-codex')).toHaveAttribute('data-active', 'false')
   })
 
   it('can be expanded again from within itself', () => {
