@@ -44,6 +44,7 @@ import {
 import { applyColorMode } from '@/lib/colorMode'
 import { linkTarget } from '@/lib/threadKnots'
 import { useProjectConversations } from '@/api/agentChat'
+import { useConversationSpecDocuments, useSetConversationDocumentFor } from '@/api/conversationSpec'
 import { useConfigStore } from '@/store/configStore'
 import { useBoardScopeStore } from '@/store/boardScopeStore'
 import { useTaskFilterStore } from '@/store/taskFilterStore'
@@ -199,6 +200,30 @@ export default function App() {
     projectConversations?.conversations ?? [],
   )
 
+  // The conversation's own document (FR-11, FR-12): what the Hub holds for it is what it opens
+  // with, and a document the destination names that the Hub does not hold is written to it.
+  const syncedConversationId = destination.kind === 'conversation' ? resolvedConversationId ?? null : null
+  const conversationDocuments = useConversationSpecDocuments(currentProjectId || null, syncedConversationId)
+  const setConversationDocument = useSetConversationDocumentFor(currentProjectId || null)
+  const documentWrite = useRef(false)
+  useEffect(() => {
+    if (destination.kind !== 'conversation' || !syncedConversationId) return
+    if (documentWrite.current || setConversationDocument.isPending) return
+    if (!conversationDocuments.data || conversationDocuments.isFetching) return
+    const held = conversationDocuments.data.attached?.path ?? null
+    if (destination.document === held) return
+    if (destination.document === null) {
+      navigateTo(
+        agentDestination(destination.projectId, destination.agent ?? '', syncedConversationId, held),
+        { replace: true },
+      )
+    } else {
+      setConversationDocument.mutate({ conversationId: syncedConversationId, path: destination.document })
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- `setConversationDocument` is a fresh object each render
+  }, [destination, syncedConversationId, conversationDocuments.data, conversationDocuments.isFetching,
+    navigateTo, setConversationDocument.isPending])
+
   // Auto-selection is destination resolution, not a navigation the operator performed: it is
   // written back with `replace` so Back does not return to the conversation they are already in.
   // It deliberately does nothing when the destination names a conversation, and nothing when the
@@ -219,30 +244,6 @@ export default function App() {
       { replace: true },
     )
   }, [destination, resolvedConversationId, navigateTo])
-
-  /**
-   * The last document state the operator had while on a conversation, kept across destinations
-   * that are not conversations.
-   *
-   * Recorded per project, because a document path belongs to one project's corpus and must not
-   * follow the operator into another. Records `null` too: closing the document is a state worth
-   * remembering, and is what keeps "changing agent with it closed keeps it closed" true.
-   *
-   * Declared here, above the bootstrap early-returns below, because it is a hook and the returns
-   * are conditional.
-   */
-  const lastConversationDocument = useRef<{ projectId: string | null; document: string | null }>({
-    projectId: null,
-    document: null,
-  })
-  useEffect(() => {
-    if (destination.kind === 'conversation') {
-      lastConversationDocument.current = {
-        projectId: destination.projectId,
-        document: destination.document,
-      }
-    }
-  }, [destination])
 
   useSSE()
   // A notification's Open goes to the project's overview, where its questions and stalls are; a
@@ -293,14 +294,6 @@ export default function App() {
    * restricts the agent's file writes, so it changed how the following run behaved with nothing
    * on screen to say so.
    */
-  const rememberedDocument =
-    destination.kind === 'agent-settings' &&
-    lastConversationDocument.current.projectId === currentProjectId
-      ? lastConversationDocument.current.document
-      : null
-  const openDocument =
-    destination.kind === 'conversation' ? destination.document : rememberedDocument
-
   // Tasks the operator has to look at: finished work waiting on review.
   const awaitingReview = (allTasks ?? []).filter(
     (task) => task.status === 'completed' || task.status === 'under_review',
@@ -321,7 +314,7 @@ export default function App() {
       return
     }
     if (value.startsWith('agent:')) {
-      navigateTo(agentDestination(currentProjectId, value.slice('agent:'.length), null, openDocument))
+      navigateTo(agentDestination(currentProjectId, value.slice('agent:'.length)))
       return
     }
     if (value === 'overview') {
@@ -381,18 +374,13 @@ export default function App() {
         // Replace, not push: retargeting an unsent message is a change of mind about one
         // message, not a place the operator navigated to and might want Back out of.
         onChooseAgent={(agent) =>
-          navigateTo(newConversationDestination(destination.projectId, agent, openDocument), {
+          navigateTo(newConversationDestination(destination.projectId, agent), {
             replace: true,
           })
         }
         onStarted={(agent, conversationId, document) =>
           navigateTo(
-            agentDestination(
-              destination.projectId,
-              agent,
-              conversationId,
-              document ?? openDocument,
-            ),
+            agentDestination(destination.projectId, agent, conversationId, document),
           )
         }
         onBackToProject={() => navigateTo(projectDestination(destination.projectId))}
@@ -409,22 +397,27 @@ export default function App() {
         document={destination.document}
         onSelectConversation={(conversationId) => {
           if (destination.conversationId !== conversationId) {
-            navigateTo(
-              agentDestination(
-                destination.projectId,
-                agentName,
-                conversationId,
-                // The document stays open across a conversation change: it is what the operator
-                // is working on, not a property of the thread they are working on it in.
-                destination.document,
-              ),
-            )
+            // A conversation owns its document: the one switched to shows its own, or none,
+            // which `useConversationDocumentSync` reads from the Hub (FR-12).
+            navigateTo(agentDestination(destination.projectId, agentName, conversationId))
           }
         }}
         onOpenAgentConversation={(agent, conversationId) =>
-          navigateTo(agentDestination(destination.projectId, agent, conversationId, destination.document))
+          navigateTo(agentDestination(destination.projectId, agent, conversationId))
         }
-        onOpenDocument={(path) => navigateTo(withDocument(conversationDestination, path))}
+        onOpenDocument={(path) => {
+          // Written to the conversation first, so reopening or reloading shows it (FR-11).
+          const target = resolvedConversationId
+          const open = () => navigateTo(withDocument(conversationDestination, path))
+          if (!target) return open()
+          documentWrite.current = true
+          setConversationDocument
+            .mutateAsync({ conversationId: target, path })
+            .then(open, open)
+            .finally(() => {
+              documentWrite.current = false
+            })
+        }}
         onBackToProject={() => navigateTo(projectDestination(destination.projectId))}
         onOpenAgentSettings={() =>
           navigateTo(agentSettingsDestination(destination.projectId, agentName))
@@ -463,7 +456,6 @@ export default function App() {
           navigateTo(
             agentSettingsBackDestination(
               agentSettingsDestination(settingsDestination.projectId, settingsDestination.agent),
-              openDocument,
             ),
           )
         }
@@ -494,7 +486,7 @@ export default function App() {
       navigateTo(projectDestination(destination.projectId, 'tasks'))
     }
     const openConversation = (agent: string, conversationId: string) =>
-      navigateTo(agentDestination(destination.projectId, agent, conversationId, openDocument))
+      navigateTo(agentDestination(destination.projectId, agent, conversationId))
     let projectContent: React.ReactNode
     if (destination.tab === 'overview') {
       projectContent = overviewQuestionsOpen
@@ -517,7 +509,7 @@ export default function App() {
             if (target.to === 'spec') navigateTo(projectDestination(pid, 'spec', target.path))
             else if (target.to === 'task') openTask(target.id)
             else if (target.to === 'conversation') {
-              navigateTo(agentDestination(pid, target.agent, target.conversation, openDocument))
+              navigateTo(agentDestination(pid, target.agent, target.conversation))
             } else if (target.to === 'evidence') navigateTo(evidenceDestination(pid, target.focus))
             else navigateTo(projectDestination(pid, target.tab))
           }}
@@ -683,12 +675,12 @@ export default function App() {
               destination.kind === 'conversation' ? destination.conversationId : null
             }
             onOpenProject={(id) => navigateTo(projectDestination(id))}
-            onOpenAgent={(id, agent) => navigateTo(agentDestination(id, agent, null, openDocument))}
+            onOpenAgent={(id, agent) => navigateTo(agentDestination(id, agent, null))}
             onOpenConversation={(id, agent, conversationId) =>
-              navigateTo(agentDestination(id, agent, conversationId, openDocument))
+              navigateTo(agentDestination(id, agent, conversationId))
             }
             onNewConversation={(id, agent) =>
-              navigateTo(newConversationDestination(id, agent, openDocument))
+              navigateTo(newConversationDestination(id, agent))
             }
             onOpenEnvironment={(id, section) => navigateTo(environmentDestination(id, section))}
             onOpenAgentSettings={(id, agent, section) =>
@@ -775,7 +767,7 @@ export default function App() {
             onCreated={(name) => {
               const createdProjectId = agentCreateProjectId
               setAgentCreateProjectId(null)
-              navigateTo(agentDestination(createdProjectId, name, null, openDocument))
+              navigateTo(agentDestination(createdProjectId, name, null))
             }}
           />
         </Suspense>
@@ -786,10 +778,10 @@ export default function App() {
         documents={specDocuments?.documents ?? []}
         tasks={allTasks ?? []}
         onOpenConversation={(agent, conversationId) =>
-          navigateTo(agentDestination(currentProjectId, agent, conversationId, openDocument))
+          navigateTo(agentDestination(currentProjectId, agent, conversationId))
         }
         onOpenAgent={(agent) =>
-          navigateTo(agentDestination(currentProjectId, agent, null, openDocument))
+          navigateTo(agentDestination(currentProjectId, agent, null))
         }
         onOpenDocument={(path) =>
           navigateTo(projectDestination(currentProjectId, 'spec', path), { replace: true })

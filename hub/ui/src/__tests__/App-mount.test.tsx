@@ -306,9 +306,9 @@ describe('phase 5 App.tsx: rail-only navigation, tabs own project content', () =
     expect(screen.queryByTestId('page-overview')).not.toBeInTheDocument()
   })
 
-  /* The document is what the operator is working on, not a property of the thread they are
-   * working on it in (operator: "a memory between agents"). */
-  it('keeps an open document open when the agent changes', () => {
+  /* Reversed (every-spec-entry-point-leads-into-the-journey, FR-12): a conversation owns its
+   * document, so opening another agent's conversation does not carry this one across. */
+  it('does not carry an open document to another agent', () => {
     window.history.pushState(
       null, '',
       '?project=proj-test&agent=claude&conversation=conv-1&document=spec%2Fspec.json',
@@ -318,7 +318,7 @@ describe('phase 5 App.tsx: rail-only navigation, tabs own project content', () =
     fireEvent.click(screen.getByTestId('rail-agent-proj-test-codex'))
 
     expect(window.location.search).toContain('agent=codex')
-    expect(window.location.search).toContain('document=spec%2Fspec.json')
+    expect(window.location.search).not.toContain('document=')
   })
 
   it('keeps it closed when it was closed', () => {
