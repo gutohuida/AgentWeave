@@ -22,6 +22,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ... import conversation_document
 from ...agent_roster import require_known_agent
 from ...auth import get_operator, get_project
 from ...checkpoint_cutover import handover_of
@@ -543,6 +544,166 @@ async def list_project_conversations(
     """
     project_id, _ = project
     return await _project_conversations(session, project_id, lifecycle)
+
+
+class AttachedSpecDocument(BaseModel):
+    path: str
+    title: str
+    phase: str
+    step: Optional[str] = None
+
+
+class ConversationSpecDocumentsResponse(BaseModel):
+    """The conversation's own document (FR-11), and the documents offered to it.
+
+    `offers` are the change documents an agent of this conversation created that the operator has
+    not answered here (FR-7)."""
+
+    attached: Optional[AttachedSpecDocument] = None
+    offers: List[Dict[str, Any]] = Field(default_factory=list)
+
+
+class ConversationSpecDocumentRequest(RequestModel):
+    #: The document to make this conversation's own, or null to clear it (Stop exploring).
+    path: Optional[str] = Field(default=None, max_length=512)
+
+
+class ConversationSpecDocumentResponse(BaseModel):
+    attached: Optional[AttachedSpecDocument] = None
+
+
+async def _project_conversation(
+    session: AsyncSession, project_id: str, conversation_id: str
+) -> Conversation:
+    conversation = await get_conversation_by_id(session, conversation_id)
+    if conversation is None or conversation.project_id != project_id:
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "message": f"No conversation {conversation_id} in this project",
+                "code": "unknown_conversation",
+            },
+        )
+    return conversation
+
+
+@conversations_router.get(
+    "/{conversation_id}/spec-documents", response_model=ConversationSpecDocumentsResponse
+)
+async def get_conversation_spec_documents(
+    conversation_id: str,
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    """The document this conversation has open, which is its own (FR-11, FR-12, design D3).
+
+    Read when the conversation is opened, from wherever and after a reload, so it shows its own
+    document and never the one the operator was looking at before. An archived or deleted
+    document reads as `attached: null`.
+    """
+    project_id, _ = project
+    conversation = await _project_conversation(session, project_id, conversation_id)
+    return ConversationSpecDocumentsResponse(
+        attached=await conversation_document.attached(session, conversation),
+        offers=await conversation_document.offers(session, conversation),
+    )
+
+
+class SpecDocumentAnswerRequest(RequestModel):
+    path: str = Field(max_length=512)
+    answer: Literal["open", "not_now"]
+
+
+@conversations_router.post(
+    "/{conversation_id}/spec-documents/answer", response_model=ConversationSpecDocumentsResponse
+)
+async def answer_conversation_spec_document_offer(
+    conversation_id: str,
+    body: SpecDocumentAnswerRequest,
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    """Answer the notice for a document an agent created here (FR-8, FR-9).
+
+    `open` makes it this conversation's document; `not_now` hides the notice for that document in
+    this conversation and changes nothing else. Either way the answer is recorded, so it holds
+    after a reload.
+    """
+    project_id, _ = project
+    conversation = await _project_conversation(session, project_id, conversation_id)
+    try:
+        await conversation_document.answer_offer(session, conversation, body.path, body.answer)
+    except LookupError:
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "message": f"No document {body.path} in this project",
+                "code": "unknown_document",
+            },
+        ) from None
+    await session.commit()
+    await session.refresh(conversation)
+    attached = await conversation_document.attached(session, conversation)
+    if body.answer == "open":
+        await sse_manager.broadcast(
+            project_id,
+            "conversation_updated",
+            {
+                "project_id": project_id,
+                "agent": conversation.agent,
+                "conversation_id": conversation.id,
+                "lifecycle": conversation.lifecycle,
+                "title": conversation.title,
+                "spec_document": attached["path"] if attached else None,
+            },
+        )
+    return ConversationSpecDocumentsResponse(
+        attached=attached, offers=await conversation_document.offers(session, conversation)
+    )
+
+
+@conversations_router.put(
+    "/{conversation_id}/spec-document", response_model=ConversationSpecDocumentResponse
+)
+async def put_conversation_spec_document(
+    conversation_id: str,
+    body: ConversationSpecDocumentRequest,
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    """Open a document in this conversation, or clear it with `path: null` (Stop exploring).
+
+    Recorded without a message being sent, so an opened document survives a reload. Clearing
+    changes nothing about the document itself.
+    """
+    project_id, _ = project
+    conversation = await _project_conversation(session, project_id, conversation_id)
+    try:
+        await conversation_document.set_by_path(session, conversation, body.path)
+    except LookupError:
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "message": f"No document {body.path} in this project",
+                "code": "unknown_document",
+            },
+        ) from None
+    await session.commit()
+    await session.refresh(conversation)
+    attached = await conversation_document.attached(session, conversation)
+    await sse_manager.broadcast(
+        project_id,
+        "conversation_updated",
+        {
+            "project_id": project_id,
+            "agent": conversation.agent,
+            "conversation_id": conversation.id,
+            "lifecycle": conversation.lifecycle,
+            "title": conversation.title,
+            "spec_document": attached["path"] if attached else None,
+        },
+    )
+    return ConversationSpecDocumentResponse(attached=attached)
 
 
 #: How many projects one sidebar listing request may name; more than any rail shows.
