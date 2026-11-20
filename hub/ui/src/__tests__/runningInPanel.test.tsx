@@ -145,6 +145,8 @@ function seed(): void {
       stop_reason: null,
       created_at: hoursAgo(1),
       stopped_at: null,
+      needs_operator: null,
+      attention_dismissed: false,
       open_questions: 1,
       question: { id: 'q-1', question: 'Which?', from_agent: 'dev', conversation_id: 'conv-1', created_at: hoursAgo(0.5) },
     },

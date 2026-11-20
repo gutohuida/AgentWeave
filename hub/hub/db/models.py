@@ -3637,6 +3637,10 @@ class Build(Base):
     # `{"at", "finished_at", "finished_ago", "tasks": [{"id", "display_id", "title", "filer"}],
     # "dismissed_at", "cleared_at"}`. The last is the Overview's warning until dismissed or ended.
     reopenings: Mapped[Optional[Any]] = mapped_column(JSON, nullable=True)
+    # The operator dismissed this build from the sidebar (migration 0190): `{"at", "fingerprint"}`,
+    # the needs it was dismissed against (`build_needs.fingerprint`). It stays dismissed only while
+    # its needs are those. Null when never dismissed.
+    attention_dismissed: Mapped[Optional[Any]] = mapped_column(JSON, nullable=True)
     loop_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
     # A build landing as a pull request (`a-build-lands-as-one-pull-request`, migration 0168): its
     # PR on GitHub once one is opened, the state the Hub last read (`draft`, `ready`, `merged`,
