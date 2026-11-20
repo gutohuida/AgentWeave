@@ -69,7 +69,7 @@ export interface TakenOffer {
   agent: string
   conversation_id: string | null
   entry_id: string
-  document: string
+  document: { path: string; title: string; phase: string; step: string | null }
 }
 
 /** Draft: create the slice's document and queue the drafting turn to the chosen agent. */

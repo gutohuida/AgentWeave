@@ -76,7 +76,7 @@ async def test_take_creates_document_before_turn(
     taken = await _take(app, auth_headers, slice_path)
 
     assert taken.status_code == 200, taken.text
-    path = taken.json()["document"]
+    path = taken.json()["document"]["path"]
     assert path and path != roadmap_path
     (document,) = await _documents_naming(roadmap_path, "s2")
     assert document.path == path
@@ -104,10 +104,10 @@ async def test_draft_entry_bound_to_new_document(
 
     assert taken.status_code == 200, taken.text
     (entry,) = await _queued("planner")
-    assert entry.spec_document == taken.json()["document"] != roadmap_path
+    assert entry.spec_document == taken.json()["document"]["path"] != roadmap_path
     assert "create_spec_document" not in entry.content
     assert "dozen requirements" not in entry.content
-    assert taken.json()["document"] in entry.content
+    assert taken.json()["document"]["path"] in entry.content
     assert "step by step" in entry.content
 
 
@@ -127,7 +127,7 @@ async def test_take_marks_slice_drafting_at_once(
         view = await slice_progress.roadmap_view(session, workspace, roadmap)
     (s2,) = [row for row in view["slices"] if row["key"] == "s2"]
     assert s2["state"] == slice_progress.DRAFTING
-    assert s2["document"] == taken.json()["document"]
+    assert s2["document"] == taken.json()["document"]["path"]
     assert s2["offers_drafting"] is False
 
 

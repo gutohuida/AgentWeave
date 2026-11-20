@@ -126,7 +126,7 @@ describe('Draft from the spec page notice', () => {
       if (url.endsWith('/next-slice-offers')) return json(offers.offers.length ? offers : { offers: [] })
       if (url.endsWith('/next-slice/take') && init?.method === 'POST') {
         offers.offers = []
-        return json({ state: 'queued', agent: 'claude', conversation_id: 'conv-9', entry_id: 'e1', document: 'spec/changes/two/spec.json' })
+        return json({ state: 'queued', agent: 'claude', conversation_id: 'conv-9', entry_id: 'e1', document: { path: 'spec/changes/two/spec.json', title: 'T', phase: 'exploring', step: 'intake' } })
       }
       return json([])
     })
