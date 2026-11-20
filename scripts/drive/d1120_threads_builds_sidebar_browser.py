@@ -37,7 +37,9 @@ has a runner and every job is off, so nothing can start a turn):
       operator with a task not approved, finished with every task approved.
   project B: one profile and one running build.
 
-Recency, newest first: peer message, replied job firing, mender run, Architect thread, review run,
+Recency, newest first, by the route's `last_activity_at` (a conversation's newest queue entry,
+message or run; conversations.last_activity): peer message (Developer's run picking it up), replied
+job firing, mender run, Architect thread (its run, and the message it sent during it), review run,
 job firing, flow task run, task started on assignment. So a list that keeps every conversation in
 recency order, today's, does not happen to read as the expected one.
 
@@ -407,16 +409,20 @@ def seed():
     insert_touch.commit()
     insert_touch.close()
 
+    # Architect sends the message during its run in its thread (50 minutes ago): the message
+    # counts as that thread's activity (design D1, conversations.last_activity), so a send stamped
+    # after the run ended would lift the Architect thread above the replied firing. Developer's
+    # run picks it up later, which is what makes the peer conversation the newest.
     message_id = uid("msg")
-    peer = conversation(a, "Developer", "peer", "Sidebar wording", 20,
+    peer = conversation(a, "Developer", "peer", "Sidebar wording", 20, created_minutes_ago=50,
                         bound_sender_conversation_id=architect)
     insert("messages", {"id": message_id, "project_id": a, "sender": "Architect",
                         "recipient": "Developer", "subject": "Sidebar wording",
                         "content": "Please use 'thread'.", "type": "message",
-                        "timestamp": at(21), "read": 1, "conversation_id": architect})
+                        "timestamp": at(50.5), "read": 1, "conversation_id": architect})
     rid = run(a, "Developer", peer, 20)
-    entry(a, "Developer", peer, "agent", "Please use 'thread'.", 21, rid,
-          origin_agent="Architect", message_id=message_id)
+    entry(a, "Developer", peer, "agent", "Please use 'thread'.", 50.5, rid,
+          origin_agent="Architect", message_id=message_id, delivered_at=at(21))
 
     return {
         "a": a, "b": b,
