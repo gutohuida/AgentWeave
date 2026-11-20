@@ -1409,8 +1409,9 @@ async def _shares_author_profile(
 async def _refuse_own_evidence(
     session: AsyncSession, evidence: RequirementEvidence, actor: Actor
 ) -> None:
-    """An agent decides no evidence its own profile recorded. Checked first, so the author is told
-    it is the author rather than which grant or review it lacks."""
+    """An agent decides no evidence its own profile recorded. Checked after the grant and the
+    review, where the same-name refusal always stood, so a reproduction by a run not reviewing the
+    task is still refused `reproduction_not_reviewing` whoever recorded the piece."""
     profile = await _shares_author_profile(session, evidence, actor)
     if profile is None:
         return
@@ -1656,8 +1657,6 @@ async def decide(
             http_status=422,
         )
 
-    await _refuse_own_evidence(session, evidence, actor)
-
     if reproduction is not None:
         if decision != ACCEPTED:
             raise EvidenceRefusedError(
@@ -1678,6 +1677,8 @@ async def decide(
             "A project that has granted no agent still has the operator.",
             code="acceptance_not_granted",
         )
+
+    await _refuse_own_evidence(session, evidence, actor)
 
     previous = evidence.review_state
     if previous == HELD and actor.kind != "operator":

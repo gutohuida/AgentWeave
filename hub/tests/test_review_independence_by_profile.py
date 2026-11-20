@@ -69,6 +69,17 @@ async def _authored(task_id: str, author: str, *, status: str = "completed", **c
     )
 
 
+async def _grant(*names: str) -> None:
+    """Grant *names* evidence acceptance, so the own-work refusal is what a decision meets: it is
+    checked after the grant, where the same-name refusal always stood."""
+    async with async_session_factory() as db:
+        for agent in (
+            await db.execute(select(Agent).where(Agent.project_id == P, Agent.name.in_(names)))
+        ).scalars():
+            agent.can_accept_evidence = True
+        await db.commit()
+
+
 async def _fold(app, headers, name: str, into: str) -> None:
     resp = await app.post(f"{AGENTS}/{name}/fold", json={"into": into}, headers=headers)
     assert resp.status_code == 200, resp.text
@@ -138,6 +149,7 @@ async def test_a_review_turn_for_the_profile_is_refused_before_it_starts(folded)
 
 @pytest.mark.asyncio
 async def test_the_profile_may_not_decide_the_folded_names_evidence(folded):
+    await _grant("Developer", "QA")
     async with async_session_factory() as db:
         evidence = await db.get(RequirementEvidence, f"ev-{folded}")
         with pytest.raises(requirement_evidence.EvidenceRefusedError) as refused:
@@ -147,12 +159,11 @@ async def test_the_profile_may_not_decide_the_folded_names_evidence(folded):
         assert refused.value.code == "self_acceptance"
         assert "profile 'Developer'" in str(refused.value)
 
-        with pytest.raises(requirement_evidence.EvidenceRefusedError) as other:
-            await requirement_evidence.decide(
-                db, evidence, decision="accepted", actor=Actor(kind="agent", name="QA")
-            )
-        # QA is refused only for lacking the grant: it is not the author.
-        assert other.value.code == "acceptance_not_granted"
+        # QA, granted like Developer, is another profile: its decision goes through.
+        review = await requirement_evidence.decide(
+            db, evidence, decision="accepted", actor=Actor(kind="agent", name="QA")
+        )
+        assert review.decision == "accepted"
 
 
 @pytest.mark.asyncio
@@ -249,6 +260,7 @@ async def test_with_nothing_folded_the_same_name_is_refused_as_before(app, add_a
         assert (await decide_move(db, task, "approved", _run_of("QA"))).allowed
 
         evidence = await db.get(RequirementEvidence, "ev-t-3")
+        await _grant("Developer")
         with pytest.raises(requirement_evidence.EvidenceRefusedError) as refused:
             await requirement_evidence.decide(
                 db, evidence, decision="accepted", actor=Actor(kind="agent", name="Developer")
