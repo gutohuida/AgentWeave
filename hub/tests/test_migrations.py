@@ -37,7 +37,7 @@ ALEMBIC_INI = Path(__file__).parent.parent / "hub" / "alembic.ini"
 # The revision `alembic upgrade head` must land on. Named once so the assertion and its failure
 # message cannot disagree — they did, for two head bumps, telling anyone debugging a failure to go
 # read the wrong migration.
-HEAD_REVISION = "0188"
+HEAD_REVISION = "0189"
 
 
 # ---------------------------------------------------------------------------
@@ -4400,6 +4400,8 @@ def test_migration_0113_leaves_the_real_agents_table_insertable(tmp_path) -> Non
         conn.execute(_REAL_AGENTS_DDL)
         # A column a later revision adds (0172), which the ORM insert below names.
         conn.execute("ALTER TABLE agents ADD COLUMN can_admin_specs BOOLEAN DEFAULT '0' NOT NULL")
+        # And one 0189 adds.
+        conn.execute("ALTER TABLE agents ADD COLUMN folded_into VARCHAR(64)")
         conn.execute("CREATE INDEX ix_agents_name ON agents (name)")
         conn.execute("CREATE INDEX ix_agents_created_by_run_id ON agents (created_by_run_id)")
         conn.execute("CREATE UNIQUE INDEX ix_agents_project_name ON agents (project_id, name)")

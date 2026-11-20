@@ -380,6 +380,10 @@ class Agent(Base):
         String(16), default="open", server_default="open", nullable=False
     )
     archived_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), nullable=True)
+    # The profile this agent was folded into (its name); group by coalesce(folded_into, name) for
+    # per-profile analysis. NULL for an agent never folded. Set once by the fold, which also
+    # archives the agent; never cleared (a fold is one way).
+    folded_into: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, nullable=False)
     updated: Mapped[datetime] = mapped_column(
         UTCDateTime(), default=_now, onupdate=_now, nullable=False
