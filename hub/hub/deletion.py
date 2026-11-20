@@ -110,6 +110,8 @@ DOCUMENT_REFERENCES: List[Reference] = [
     ("spec_requirements", "document_id", DELETE),
     # The document's builds: how it was built goes with it (slice D).
     ("builds", "document_id", DELETE),
+    # A conversation that had it open keeps its history and opens no document (ESEPL FR-11).
+    ("conversations", "spec_document_id", CLEAR),
 ]
 
 LOOP_REFERENCES: List[Reference] = [
@@ -320,7 +322,7 @@ async def delete_document(session: AsyncSession, document: SpecDocument) -> Dele
     await _apply(session, REQUIREMENT_REFERENCES, requirement_ids)
     await _apply(
         session,
-        [ref for ref in DOCUMENT_REFERENCES if ref[2] == DELETE],
+        [ref for ref in DOCUMENT_REFERENCES if ref[2] in (DELETE, CLEAR)],
         {document.id},
     )
     await session.execute(_table("spec_documents").delete().where(SpecDocument.id == document.id))
