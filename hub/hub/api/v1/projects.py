@@ -28,7 +28,15 @@ from ...agent_status import effective_heartbeat_status
 from ...auth import get_operator, get_operator_project
 from ...checkpoint_policy import agent_window, threshold_error
 from ...db.engine import get_session
-from ...db.models import Agent, AgentHeartbeat, OperatorCredential, Project, Run, Runner
+from ...db.models import (
+    Agent,
+    AgentHeartbeat,
+    OperatorCredential,
+    Project,
+    Run,
+    Runner,
+    SetupDismissal,
+)
 from ...model_catalog import permission_mode_values, undeclared_model_reason
 from ...project_checks import FAST_CHECK_MAX_SECONDS
 from ...project_lifecycle import ProjectLifecycleService, RepositoryOfferError
@@ -1382,15 +1390,114 @@ async def _setup_dismissal(project_id: str, item: str, session: AsyncSession, un
             detail={
                 "code": "setup_item_not_dismissable",
                 "message": (
-                    f"'{item}' cannot be dismissed: only the repository and specification "
-                    "items can be. Without a folder, an agent, or an agent that runs, nothing in "
-                    "this project works."
+                    f"'{item}' cannot be dismissed: only the repository, profiles and "
+                    "specification items can be. Without a folder, or an agent that runs, "
+                    "nothing in this project works."
                 ),
             },
         ) from exc
     summary = await _project_summary(session, project)
     await publish_setup_changed(project_id)
     return summary
+
+
+class OfferedProfile(RequestModel):
+    """One of the setup offer's two profiles: a name, an optional charter, and a runner."""
+
+    name: str = Field(min_length=1, max_length=32)
+    charter_id: Optional[str] = Field(default=None, min_length=1, max_length=64)
+    runner_id: str = Field(min_length=1, max_length=64)
+
+
+class OfferedProfilesCreate(RequestModel):
+    builder: OfferedProfile
+    checker: OfferedProfile
+
+
+class OfferedProfileCreated(BaseModel):
+    id: str
+    name: str
+    runner_id: str
+    charter_id: Optional[str]
+    color_index: int
+
+
+class OfferedProfilesCreated(BaseModel):
+    builder: OfferedProfileCreated
+    checker: OfferedProfileCreated
+
+
+@router.post(
+    "/{project_id}/setup/profiles",
+    response_model=OfferedProfilesCreated,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_offered_profiles(
+    body: OfferedProfilesCreate,
+    project_identity: Tuple[str, str] = Depends(get_operator_project),
+    session: AsyncSession = Depends(get_session),
+) -> OfferedProfilesCreated:
+    """The setup offer (`profiles-threads-and-builds-everywhere` D6, FR-8): a builder and a checker
+    profile, created in one transaction, after which the offer is gone.
+
+    409 naming the problem when the two names are equal, a name is taken (archived and folded
+    profiles keep theirs), or a runner or charter is not the project's; nothing is created then.
+    """
+    from ... import project_workspace
+    from .agents import add_operator_agent, announce_agent_created
+
+    project_id = project_identity[0]
+    await _operator_project_row(project_id, session)
+    try:
+        await project_workspace.resolve_project_workspace(session, project_id)
+    except ProjectWorkspaceError as exc:
+        raise_workspace_http_error(exc)
+    if body.builder.name.casefold() == body.checker.name.casefold():
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                f"The builder and the checker are both named '{body.checker.name}': "
+                "one profile cannot check its own work, so give them different names."
+            ),
+        )
+    created = []
+    try:
+        for role, entry in (("builder", body.builder), ("checker", body.checker)):
+            try:
+                created.append(
+                    await add_operator_agent(
+                        session,
+                        project_id,
+                        name=entry.name,
+                        runner_id=entry.runner_id,
+                        charter_id=entry.charter_id,
+                        taken=[agent.name for agent in created],
+                    )
+                )
+            except HTTPException as exc:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT, detail=f"The {role}: {exc.detail}"
+                ) from exc
+    except HTTPException:
+        await session.rollback()
+        raise
+    if await session.get(SetupDismissal, (project_id, "profiles")) is None:
+        session.add(SetupDismissal(project_id=project_id, item="profiles"))
+    await session.commit()
+    for agent in created:
+        await session.refresh(agent)
+        await announce_agent_created(session, project_id, agent)
+    builder, checker = (
+        OfferedProfileCreated(
+            id=agent.id,
+            name=agent.name,
+            runner_id=agent.runner_id,
+            charter_id=agent.charter_id,
+            color_index=agent.color_index,
+        )
+        for agent in created
+    )
+    return OfferedProfilesCreated(builder=builder, checker=checker)
 
 
 @router.put("/{project_id}/setup/dismissed/{item}", response_model=ProjectSummary)

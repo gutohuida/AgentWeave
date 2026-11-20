@@ -4,12 +4,12 @@ import '@/styles/setup.css'
 
 /**
  * What a project still needs before it can do its work (`a-project-says-what-it-still-needs`):
- * its folder found, a git repository, an agent, and every agent able to run. Shown at the top of
+ * its folder found, a git repository, a builder and a checker, and every agent able to run. Shown at the top of
  * Overview and of Project settings while anything is left; each item opens what resolves it.
  * Presentational: the container works the items out from the Hub's state.
  */
 
-export type SetupItemKey = 'folder' | 'repository' | 'agent' | 'can-run' | 'specification'
+export type SetupItemKey = 'folder' | 'repository' | 'profiles' | 'can-run' | 'specification'
 
 export interface SetupItem {
   /** One per kind, except `can-run`, which is one per agent that cannot run. */
@@ -18,14 +18,14 @@ export interface SetupItem {
   title: string
   detail: string
   action: { label: string; onClick: () => void }
-  /** Only the repository and specification items may be dismissed: without the others nothing works. */
+  /** The repository, profiles and specification items may be dismissed: without the others nothing works. */
   dismissable?: boolean
 }
 
 const ICON: Record<SetupItemKey, string> = {
   folder: 'folder',
   repository: 'call_split',
-  agent: 'person_add',
+  profiles: 'person_add',
   'can-run': 'terminal',
   specification: 'description',
 }

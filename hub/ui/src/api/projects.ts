@@ -36,8 +36,8 @@ export interface ProjectSummary {
  */
 export interface ProjectSetupItem {
   id: string
-  key: 'folder' | 'repository' | 'agent' | 'can-run' | 'specification'
-  /** Only the repository and specification items. */
+  key: 'folder' | 'repository' | 'profiles' | 'can-run' | 'specification'
+  /** The repository, profiles and specification items. */
   dismissable: boolean
   agent: string | null
   provider: string | null
@@ -339,6 +339,42 @@ export function useSetupDismissal(projectId: string) {
       queryClient.setQueryData<ProjectSummary[]>(['projects'], (current = []) =>
         current.map((project) => project.id === projectId ? updated : project),
       )
+    },
+  })
+}
+
+/** One of the setup offer's two profiles. `charter_id` null is no charter. */
+export interface OfferedProfileInput {
+  name: string
+  charter_id: string | null
+  runner_id: string
+}
+
+export interface OfferedProfileCreated {
+  id: string
+  name: string
+  runner_id: string
+  charter_id: string | null
+  color_index: number
+}
+
+/**
+ * The setup offer (`profiles-threads-and-builds-everywhere` D6, FR-8): a builder and a checker,
+ * created together or not at all. The Hub refuses (409, a sentence in `detail`) two equal names,
+ * a taken name, or a runner or charter that is not the project's. On success the offer is gone,
+ * so the projects (which carry the setup list) and the roster are read again.
+ */
+export function useCreateOfferedProfiles(projectId: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (body: { builder: OfferedProfileInput; checker: OfferedProfileInput }) =>
+      postJson<{ builder: OfferedProfileCreated; checker: OfferedProfileCreated }>(
+        `/api/v1/projects/${projectId}/setup/profiles`,
+        body,
+      ),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['projects'] })
+      void queryClient.invalidateQueries({ queryKey: ['project', projectId, 'agents'] })
     },
   })
 }

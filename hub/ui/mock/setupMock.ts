@@ -52,11 +52,12 @@ function terraItems(go: (route: MockRoute) => void): SetupItem[] {
 function huidaItems(): SetupItem[] {
   return [
     {
-      id: 'agent',
-      key: 'agent',
-      title: 'Add an agent',
-      detail: 'A project with no agent has nobody to give work to.',
-      action: { label: 'Add an agent', onClick: () => toast({ title: 'Add an agent', description: 'Opens the new agent dialog (unchanged in this mock).' }) },
+      id: 'profiles',
+      key: 'profiles',
+      title: 'Add a builder and a checker',
+      detail: 'A build needs two profiles: one builds each task and the other checks it. Name them and choose what runs each.',
+      dismissable: true,
+      action: { label: 'Add both…', onClick: () => toast({ title: 'Add a builder and a checker', description: 'Opens the setup offer’s dialog (SetupProfilesDialog).' }) },
     },
   ]
 }

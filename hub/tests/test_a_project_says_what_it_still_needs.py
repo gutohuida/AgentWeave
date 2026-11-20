@@ -79,7 +79,7 @@ def _ids(items: list[dict]) -> list[str]:
 
 
 @pytest.mark.asyncio
-async def test_a_fresh_folder_lists_the_repository_and_agent_items_and_nothing_else(
+async def test_a_fresh_folder_lists_the_repository_and_profiles_items_and_nothing_else(
     app, auth_headers, tmp_path
 ) -> None:
     """ac-fresh-folder (FR-1): no git, no agents and, since the corpus start, no specs."""
@@ -87,8 +87,8 @@ async def test_a_fresh_folder_lists_the_repository_and_agent_items_and_nothing_e
 
     setup = await _setup(app, auth_headers, project_id)
 
-    assert _ids(setup["items"]) == ["repository", "agent", "specification"]
-    assert [i["dismissable"] for i in setup["items"]] == [True, False, True]
+    assert _ids(setup["items"]) == ["repository", "profiles", "specification"]
+    assert [i["dismissable"] for i in setup["items"]] == [True, True, True]
     assert setup["dismissed"] == []
 
 
@@ -160,7 +160,7 @@ async def test_an_archived_agent_neither_counts_as_an_agent_nor_needs_to_run(
     project_id = await _open(app, auth_headers, _folder(tmp_path, git=True))
     await add_agent("Gone", project_id=project_id, lifecycle="archived")
 
-    assert _ids((await _setup(app, auth_headers, project_id))["items"]) == ["agent"]
+    assert _ids((await _setup(app, auth_headers, project_id))["items"]) == ["profiles"]
 
 
 @pytest.mark.asyncio
@@ -171,13 +171,16 @@ async def test_a_missing_folder_lists_the_folder_item(app, auth_headers, tmp_pat
 
     items = (await _setup(app, auth_headers, project_id))["items"]
 
-    assert _ids(items) == ["folder", "agent"]
+    assert _ids(items) == ["folder", "profiles"]
     assert items[0]["dismissable"] is False
 
 
 @pytest.mark.asyncio
-async def test_the_agent_item_cannot_be_dismissed(app, auth_headers, tmp_path, broadcasts) -> None:
-    """ac-dismiss (FR-3): the folder, agent and can-run items are refused, and nothing is kept."""
+async def test_the_folder_and_can_run_items_cannot_be_dismissed(
+    app, auth_headers, tmp_path, broadcasts
+) -> None:
+    """ac-dismiss (FR-3): the folder and can-run items are refused, and nothing is kept. The old
+    `agent` item is gone (`profiles-threads-and-builds-everywhere` D6) and is refused too."""
     project_id = await _open(app, auth_headers, _folder(tmp_path))
 
     for item in ("agent", "folder", "can-run-Alpha", "anything"):
@@ -189,7 +192,10 @@ async def test_the_agent_item_cannot_be_dismissed(app, auth_headers, tmp_path, b
 
     async with async_session_factory() as session:
         assert (await session.execute(select(SetupDismissal))).scalars().all() == []
-    assert _ids((await _setup(app, auth_headers, project_id))["items"]) == ["repository", "agent"]
+    assert _ids((await _setup(app, auth_headers, project_id))["items"]) == [
+        "repository",
+        "profiles",
+    ]
     assert (project_id, SETUP_CHANGED) not in broadcasts
 
 
@@ -204,7 +210,7 @@ async def test_a_dismissed_repository_item_stays_dismissed_across_a_restart_unti
         f"/api/v1/projects/{project_id}/setup/dismissed/repository", headers=auth_headers
     )
     assert dismissed.status_code == 200, dismissed.text
-    assert _ids(dismissed.json()["setup"]["items"]) == ["agent"]
+    assert _ids(dismissed.json()["setup"]["items"]) == ["profiles"]
     assert _ids(dismissed.json()["setup"]["dismissed"]) == ["repository"]
     assert (project_id, SETUP_CHANGED) in broadcasts
 
@@ -216,14 +222,14 @@ async def test_a_dismissed_repository_item_stays_dismissed_across_a_restart_unti
         transport=ASGITransport(app=restarted_app), base_url="http://test"
     ) as restarted:
         setup = await _setup(restarted, auth_headers, project_id)
-        assert _ids(setup["items"]) == ["agent"]
+        assert _ids(setup["items"]) == ["profiles"]
         assert _ids(setup["dismissed"]) == ["repository"]
 
         shown = await restarted.delete(
             f"/api/v1/projects/{project_id}/setup/dismissed/repository", headers=auth_headers
         )
         assert shown.status_code == 200, shown.text
-        assert _ids(shown.json()["setup"]["items"]) == ["repository", "agent"]
+        assert _ids(shown.json()["setup"]["items"]) == ["repository", "profiles"]
         assert shown.json()["setup"]["dismissed"] == []
 
 
@@ -246,17 +252,17 @@ async def test_making_the_repository_clears_its_item_and_tells_the_app(
 
     assert made.status_code == 200, made.text
     assert (project_id, SETUP_CHANGED) in broadcasts
-    assert _ids((await _setup(app, auth_headers, project_id))["items"]) == ["agent"]
+    assert _ids((await _setup(app, auth_headers, project_id))["items"]) == ["profiles"]
 
 
 @pytest.mark.asyncio
-async def test_archiving_the_last_agent_raises_the_agent_item_and_tells_the_app(
+async def test_archiving_the_last_agent_raises_the_profiles_offer_and_tells_the_app(
     app, auth_headers, add_agent, broadcasts, monkeypatch
 ) -> None:
     """FR-6: an agent archived is one of the changes the app re-reads on."""
     monkeypatch.setattr(adapter_base.shutil, "which", lambda name, *a, **k: f"/bin/{name}")
     await add_agent("Solo")
-    assert "agent" not in _ids((await _setup(app, auth_headers, "proj-test"))["items"])
+    assert "profiles" not in _ids((await _setup(app, auth_headers, "proj-test"))["items"])
 
     archived = await app.post(
         "/api/v1/projects/proj-test/agents/Solo/archive", headers=auth_headers
@@ -264,4 +270,4 @@ async def test_archiving_the_last_agent_raises_the_agent_item_and_tells_the_app(
 
     assert archived.status_code == 200, archived.text
     assert ("proj-test", SETUP_CHANGED) in broadcasts
-    assert "agent" in _ids((await _setup(app, auth_headers, "proj-test"))["items"])
+    assert "profiles" in _ids((await _setup(app, auth_headers, "proj-test"))["items"])
