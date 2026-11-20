@@ -9,7 +9,8 @@ temporary database (the harness `long_values_check.py` uses), serves this checko
 server, proxied to that Hub), opens a scratch folder with no git as a project and, in a headless
 browser, checks:
 
-  * ac-fresh-folder  Overview lists the repository and profiles items and nothing else;
+  * ac-fresh-folder  Overview lists the repository and profiles items and nothing else (the
+                     specification item is dismissed first: it is another spec's);
   * ac-three-places  the list is at the top of Overview and of Project settings sections, the rail
                      row shows "2" beside the name, naming both on hover, and no hover action
                      overlaps it; after both are resolved none of the three shows anything;
@@ -319,7 +320,10 @@ def drive(
         c.ok("ac-dismiss", "the rail count drops to 1", rail.get("count") == "1", f"{rail}")
         c.shot(page, "6-dismissed")
         if page.get_by_role("button", name="Show it again").count():
-            page.get_by_role("button", name="Show it again").first.click()
+            # The specification item is dismissed too (see main), so pick the repository's own link.
+            page.locator(".aw-setup-dismissed span", has_text="git repository").get_by_role(
+                "button", name="Show it again"
+            ).click()
             page.wait_for_timeout(500)
             back = read_items(page)
             c.ok("ac-dismiss", "'Show it again' brings the repository item back", "repository" in keys(back), f"{keys(back)}")
@@ -465,6 +469,10 @@ def main() -> int:
 
         project = api.call("POST", "/projects/open", {"path": str(folder), "name": "Scratch"})
         pid = project["id"]
+        # A folder with no specifications is also offered `specification`
+        # (a-project-with-no-specs-is-offered-a-start). It is not what this drive checks, so it is
+        # dismissed before the page is opened, and every expectation below is about the other items.
+        api.call("PUT", f"/projects/{pid}/setup/dismissed/specification")
         probe = api.call("GET", f"/projects/{pid}/runners/launchability-by-provider")["providers"]
         runnable_clis = [cli for cli, v in probe.items() if v.get("runnable")]
         if len(runnable_clis) < 2:
