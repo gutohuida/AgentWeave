@@ -74,13 +74,16 @@ def check(key, ok, detail="", reached=True):
     results.append((key, ok))
     print(("PASS " if ok else "FAIL ") + key + (f" -- {detail}" if detail else ""), flush=True)
     failed = (not ok) and reached
+    # The Hub's baseline parser reads `check <key> (<text>): reached=...`: no colon in the key.
+    name, _, what = key.partition(": ")
+    label = f"{name} ({what.replace(')', ']').replace('(', '[')})" if what else name
     if "-fixture" in key or key.startswith("draft-take-queues"):
         # Setup, not a criterion: shown in the baseline only when it stops the drive short.
         if not ok:
-            baseline.append(f"check {key}: reached=no failed_at_assertion=no -- setup failed: {detail}")
+            baseline.append(f"check {label}: reached=no failed_at_assertion=no -- setup failed: {detail}")
         return ok
     baseline.append(
-        f"check {key}: reached={'yes' if reached else 'no'} "
+        f"check {label}: reached={'yes' if reached else 'no'} "
         f"failed_at_assertion={'yes' if failed else 'no'} -- {detail or ('passes today' if ok else '')}"
     )
     return ok
@@ -285,7 +288,8 @@ def scenario_agent_create():
     known = conversation_known(conv)
     code, open_doc, _ = attached(conv)
     check("drive-agent-create-is-offered-and-opened: the conversation starts with no open document",
-          code == 200 and open_doc is None, route_note(code, f"attached={open_doc!r}"), reached=known)
+          code == 200 and open_doc is None, route_note(code, f"attached={open_doc!r}")
+          + " [precondition: its value is right before the build; it fails only because the route is absent]", reached=known)
     before = {d.get("path") for d in documents()}
     turn = send(f"Call create_spec_document once with title 'Drive probe {STAMP}', kind change-spec. "
                 "Then reply done and do nothing else.", conversation_id=conv)
@@ -336,7 +340,8 @@ def scenario_two_conversations():
     known = conversation_known(conv_a) and conversation_known(conv_b)
     code, doc_b, _ = attached(conv_b)
     check("drive-two-conversations-keep-their-own-documents: B's attached document is null",
-          code == 200 and doc_b is None, route_note(code, f"attached={doc_b!r}"), reached=known)
+          code == 200 and doc_b is None, route_note(code, f"attached={doc_b!r}")
+          + " [its value is right before the build; it fails only because the route is absent]", reached=known)
     again = send("Reply with the single word b2.", conversation_id=conv_b)
     queued = entry(again.get("queue_entry_id")) or {}
     bound = queued.get("spec_document", "<field absent>")
