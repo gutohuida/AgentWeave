@@ -1,3 +1,4 @@
+import { stepKeyLabel } from './stepLabels'
 import * as React from 'react'
 import { Icon } from '@/components/common/Icon'
 import { Button } from '@/components/ui/button'
@@ -23,23 +24,12 @@ const SIZES: ReadonlyArray<{ value: SpecSize; label: string }> = [
 const DEFAULT_NEW_SIZES: SpecSize[] = ['small', 'large']
 const MAX_KEY = 48
 
-/** Built-in steps by what an operator calls them; the key stays in the title for a reference. */
-const BUILT_IN_TITLES: Record<string, string> = {
-  intake: 'Intake',
-  requirements: 'Requirements',
-  'requirements-and-acceptance': 'Requirements and acceptance',
-  acceptance: 'Acceptance criteria',
-  approach: 'Approach',
-  tasks: 'Tasks',
-  build: 'Build',
-}
-
 /** A step is custom when it carries its own text; a built-in step is its key alone. */
 const isCustom = (step: JourneyStep) => step.instructions !== undefined
 
 function stepTitle(step: JourneyStep): string {
   if (isCustom(step)) return step.title ?? step.key
-  return BUILT_IN_TITLES[step.key] ?? step.key.replace(/-/g, ' ').replace(/^./, (c) => c.toUpperCase())
+  return stepKeyLabel(step.key)
 }
 
 /** The key a title gives a custom step: a lowercase slug, the form the Hub accepts. */

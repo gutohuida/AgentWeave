@@ -703,3 +703,10 @@ export function resolveDestination(
   }
   return { kind: 'zero' }
 }
+
+/** Open a conversation by address, as a link would: the app reads where it is from the address. A
+ *  document opens with it only when the conversation's own is named (the Hub holds the rest). */
+export function openConversationAt(projectId: string, agent: string, conversationId: string, document?: string | null) {
+  window.history.pushState(null, '', serializeDestination(agentDestination(projectId, agent, conversationId, document)))
+  window.dispatchEvent(new PopStateEvent('popstate'))
+}

@@ -18,6 +18,11 @@ let conversationUsage:
   | { total_tokens: number | null; measured_turns: number; ai_nano_aiu?: number | null }
   | undefined = undefined
 
+vi.mock('@/api/conversationSpec', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/api/conversationSpec')>()),
+  useConversationSpecDocuments: () => ({ data: undefined }),
+  useAnswerSpecDocumentOffer: () => ({ mutate: () => {}, isPending: false }),
+}))
 vi.mock('@/api/agents', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/api/agents')>()
   return {
