@@ -48,7 +48,7 @@ export function NextSliceOfferNotice({ path }: { path: string }) {
         <Button
           variant="outline"
           size="xs"
-          onClick={() => openConversationAt(projectId, taken.agent, taken.conversation_id!, taken.document)}
+          onClick={() => openConversationAt(projectId, taken.agent, taken.conversation_id!, taken.document.path)}
         >
           Open the conversation
         </Button>

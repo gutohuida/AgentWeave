@@ -242,7 +242,7 @@ describe('main moving outside the Hub, and a next slice offered', () => {
     nextSliceOffers = [offer()]
     const open = vi.fn()
     takeOfferMutate.mockImplementationOnce((_args, options) =>
-      options.onSuccess({ state: 'queued', agent: 'builder', conversation_id: 'conv-7', entry_id: 'e1', document: 'spec/changes/two/spec.json' }),
+      options.onSuccess({ state: 'queued', agent: 'builder', conversation_id: 'conv-7', entry_id: 'e1', document: { path: 'spec/changes/two/spec.json', title: 'T', phase: 'exploring', step: 'intake' } }),
     )
     render(<OverviewScreen onNavigate={vi.fn()} onOpenConversation={open} />)
     fireEvent.click(within(rowOf('Slice s1 is built: draft Slice two?')).getByRole('button', { name: 'Draft' }))
