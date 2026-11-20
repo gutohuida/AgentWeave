@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 
 from ... import (
+    agent_profiles,
     bound_address,
     project_workspace,
     route_words,
@@ -25,6 +26,7 @@ from ... import (
 )
 from ...agent_activity import latest_activity_by_agent
 from ...agent_colors import next_color_index
+from ...agent_fold import apply_fold, plan_fold
 from ...agent_lifecycle import archivable as agent_archivable
 from ...agent_lifecycle import archive as archive_agent_row
 from ...agent_lifecycle import unarchive as unarchive_agent_row
@@ -556,6 +558,7 @@ async def list_agents(
                 message_count=msg_count,
                 active_task_count=task_count,
                 lifecycle=(agent_row.lifecycle if agent_row else "open"),
+                folded_into=(agent_row.folded_into if agent_row else None),
                 runner=_runner,
                 display_model=_display_model,
                 context_usage=context_usage,
@@ -4011,9 +4014,11 @@ async def unarchive_agent(
     project: Tuple[str, str] = Depends(get_project),
     session: AsyncSession = Depends(get_session),
 ):
-    """Reopen an archived agent. Never refused — reopening obstructs nothing."""
+    """Reopen an archived agent. Refused only for a folded one: a fold is one way (FR-4)."""
     project_id, _ = project
     agent_row = await _owned_agent(session, project_id, name)
+    if agent_row.folded_into:
+        raise HTTPException(status_code=409, detail=agent_folded_detail(agent_row))
     # F397's mirror: already open is already done, and a second `agent_unarchived` event would read
     # in the log like a real reopening.
     if agent_row.lifecycle != "archived":
@@ -4044,6 +4049,89 @@ async def unarchive_agent(
             "not restore it. An agent with no charter still runs — bind one only if this agent "
             "should have one."
         ),
+    }
+
+
+def agent_folded_detail(agent_row: Agent) -> Dict[str, Any]:
+    """The one refusal for anything addressed to a folded agent (design D4)."""
+    return agent_profiles.folded_detail(agent_row.name, agent_row.folded_into)
+
+
+class FoldRequest(RequestModel):
+    into: str = Field(min_length=1, max_length=64)
+
+
+async def _fold_pair(
+    session: AsyncSession, project_id: str, name: str, into: str
+) -> Tuple[Agent, Agent]:
+    """The source and the profile, each in this project, or 404 naming the one that is not."""
+    source = await _owned_agent(session, project_id, name)
+    result = await session.execute(
+        select(Agent).where(Agent.project_id == project_id, Agent.name == into)
+    )
+    profile = result.scalars().first()
+    if profile is None:
+        raise HTTPException(
+            status_code=404,
+            detail=(
+                f"Agent '{into}' not found in this project; an agent can only be folded into "
+                "another agent of its own project."
+            ),
+        )
+    return source, profile
+
+
+@router.get("/{name}/fold")
+async def preview_fold(
+    name: str,
+    into: str = Query(..., min_length=1, max_length=64),
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    """What folding *name* into *into* would do (FR-2), and every reason it cannot (FR-1, FR-6,
+    FR-8). Read-only: the fold itself re-checks all of it (design D5)."""
+    project_id, _ = project
+    source, profile = await _fold_pair(session, project_id, name, into)
+    return (await plan_fold(session, source, profile)).preview()
+
+
+@router.post("/{name}/fold")
+async def fold_agent(
+    name: str,
+    body: FoldRequest,
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    """Fold *name* into the profile *body.into*, one way (`fold-duplicate-agents-into-one-profile-
+    with-their-history-kept`).
+
+    Archives the source with `folded_into` naming the profile, adds its pool entries to the
+    profile's pool, and re-points its open work to the profile, all in one commit (design D6). The
+    profile's own settings are left as they are. Refused 409 with every reason when any holds,
+    nothing written.
+    """
+    project_id, _ = project
+    source, profile = await _fold_pair(session, project_id, name, body.into)
+    plan = await plan_fold(session, source, profile)
+    if not plan.can_fold:
+        raise HTTPException(status_code=409, detail=plan.refusal_detail())
+
+    repointed = await apply_fold(session, plan)
+    await session.commit()
+    await session.refresh(source)
+    await session.refresh(profile)
+
+    event_payload = {"agent": source.name, "folded_into": profile.name, "repointed": repointed}
+    await persist_event(session, project_id, "agent_folded", event_payload, agent=source.name)
+    await sse_manager.broadcast(project_id, "agent_folded", event_payload)
+    await publish_setup_changed(project_id)
+
+    return {
+        "name": source.name,
+        "lifecycle": source.lifecycle,
+        "folded_into": source.folded_into,
+        "profile": {"name": profile.name, "pool": await pool_out(session, profile)},
+        "repointed": repointed,
     }
 
 
@@ -4132,3 +4220,18 @@ async def get_agent_output(
     ).limit(limit)
     result = await session.execute(q)
     return list(reversed(result.scalars().all()))
+
+
+# Last in this router on purpose: a one-segment GET would otherwise shadow `/configured`,
+# `/launchability` and `/agent-context`, which are declared above it.
+@router.get("/{name}", response_model=AgentSummary)
+async def get_agent(
+    name: str,
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    """One agent as the roster lists it, open, archived or folded (`folded_into`, FR-4)."""
+    project_id, _ = project
+    await _owned_agent(session, project_id, name)
+    roster = await list_agents(lifecycle="all", project=project, session=session)
+    return next(summary for summary in roster if summary.name == name)

@@ -2453,7 +2453,7 @@ async def create_spec_document(
     the system name where a write lands (design D2). The path arrives second, once
     `rename_spec_document` gives the document a name that means something.
     """
-    from ... import project_workspace, spec_lifecycle, spec_naming, spec_service
+    from ... import project_workspace, spec_journey, spec_lifecycle, spec_naming, spec_service
     from .spec import SCHEMA_VERSION, UNTITLED
 
     kind = body.kind or "change-spec"
@@ -2517,7 +2517,23 @@ async def create_spec_document(
     await sse_manager.broadcast(
         actor.project_id, "spec_updated", {"path": document.path, "phase": document.phase}
     )
-    return {"path": document.path, "phase": document.phase}
+    answer: Dict[str, Any] = {"path": document.path, "phase": document.phase}
+    if spec_journey.has_journey(document):
+        # The same text a turn bound to this document renders, so the agent starts the journey in
+        # the turn that created it rather than the next (FR-6).
+        steps = await spec_journey.project_steps(session, actor.project_id)
+        answer.update(
+            step=document.step,
+            size=document.size,
+            journey=spec_journey.journey(document.size, steps),
+            instructions=spec_journey.duty(
+                document.step,
+                steps,
+                size=document.size,
+                roster=await spec_journey.open_roster(session, actor.project_id),
+            ),
+        )
+    return answer
 
 
 @router.post("/spec/documents/rename")
@@ -3171,6 +3187,20 @@ async def submit_spec_document(
                 "then rename_spec_document once you know its subject, before submitting again."
             ),
         )
+
+    # FR-12: a task's builder or checker, or the delivery's agent, naming a folded agent is refused.
+    from ... import agent_profiles
+
+    submitted = body.document if isinstance(body.document, dict) else {}
+    delivery = submitted.get("delivery")
+    named = [
+        entry.get(field)
+        for entry in [*(submitted.get("tasks") or []), delivery]
+        if isinstance(entry, dict)
+        for field in ("builder", "checker", "agent")
+    ]
+    for name in dict.fromkeys(n for n in named if isinstance(n, str) and n.strip()):
+        await agent_profiles.require_not_folded(session, actor.project_id, name.strip())
 
     # FR-16: the save is based on the version this conversation last read or saved, and is
     # refused when somebody else saved the document since.

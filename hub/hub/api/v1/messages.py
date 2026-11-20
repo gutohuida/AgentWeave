@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import and_, literal_column, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ... import project_workspace
+from ... import agent_profiles, project_workspace
 from ...auth import get_project
 from ...conversations import (
     get_conversation_by_id,
@@ -226,6 +226,24 @@ async def create_message_for_actor(
                 f"Unknown recipient '{body.recipient}': no agent by that name is "
                 "registered in this project"
             ),
+        )
+
+    if recipient_row.folded_into:
+        await persist_event(
+            session,
+            project_id,
+            "agent_action_rejected",
+            {
+                "endpoint": "POST /messages",
+                "reason": "agent_folded",
+                "recipient": body.recipient,
+            },
+            agent=event_agent,
+            severity="warn",
+        )
+        raise HTTPException(
+            status_code=409,
+            detail=agent_profiles.folded_detail(recipient_row.name, recipient_row.folded_into),
         )
 
     if recipient_row.lifecycle == "archived":
