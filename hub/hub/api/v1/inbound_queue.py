@@ -69,6 +69,9 @@ class QueueEntryResponse(BaseModel):
     #: Set when the Hub stopped trying. Present with `state == "withdrawn"`, which an operator
     #: withdrawal also produces — the reason is what distinguishes the two.
     abandoned_reason: Optional[str] = None
+    #: The spec document the entry's turn is bound to, or null. Always present, so a surface or a
+    #: drive can tell "bound to this document" from "bound to none".
+    spec_document: Optional[str] = None
 
     model_config = {"from_attributes": True}
 
