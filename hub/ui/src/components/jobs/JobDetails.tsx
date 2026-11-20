@@ -1,3 +1,4 @@
+import type * as React from 'react'
 import { Icon } from '@/components/common/Icon'
 import { StatusBadge } from '@/components/common/Badge'
 import { TraceButton } from '@/components/traces/TraceDrawer'
@@ -199,6 +200,7 @@ export function JobDetails({
   runsError,
   loopTaskIds,
   onOpenTasks,
+  loopRuns,
   now,
 }: {
   job: Job
@@ -207,6 +209,8 @@ export function JobDetails({
   runsError?: string | null
   loopTaskIds?: string[]
   onOpenTasks?: (taskIds: string[]) => void
+  /** A loop's or flow's runs, every one it started (`FlowRuns`); its container fills this. */
+  loopRuns?: React.ReactNode
   now: Date
 }) {
   return (
@@ -220,6 +224,12 @@ export function JobDetails({
         <RunHistory runs={runs} isLoading={runsLoading} error={runsError} now={now} />
       </section>
       {job.loop ? <LoopBlock job={job} loopTaskIds={loopTaskIds} onOpenTasks={onOpenTasks} /> : null}
+      {job.loop && loopRuns ? (
+        <section data-testid="job-loop-runs">
+          <p className="aw-job-detail-label">Runs</p>
+          {loopRuns}
+        </section>
+      ) : null}
       <p className="aw-job-ids">
         <button data-slot="job-copy-id" type="button" className="aw-job-id" title="Copy the job's id" onClick={() => void navigator.clipboard?.writeText(job.id)}>
           <Icon name="content_copy" size={11} /> Copy job id

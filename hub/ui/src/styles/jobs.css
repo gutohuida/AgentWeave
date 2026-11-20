@@ -103,3 +103,7 @@
 .aw-job-archived { display: flex; flex-direction: column; gap: 2px; padding: 10px 14px; border-bottom: 1px solid var(--border); }
 .aw-job-archived:last-child { border-bottom: 0; }
 @media (prefers-reduced-motion: reduce) { .aw-job-detail-host { animation: none; } .aw-job-chevron { transition: none; } }
+.aw-job-archived-runs-toggle { display: inline-flex; align-self: flex-start; align-items: center; gap: 4px; margin-top: 4px; padding: 2px 4px; border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--text-2); font-size: 12px; cursor: pointer; }
+.aw-job-archived-runs-toggle:hover { color: var(--text); background: var(--row-hover); }
+.aw-job-archived-runs-toggle:focus-visible { outline: 2px solid var(--ring); outline-offset: 1px; }
+.aw-job-archived-runs { margin-top: 6px; }

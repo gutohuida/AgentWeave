@@ -15,6 +15,7 @@ import {
 import { useTasks } from '@/api/tasks'
 import { QueryErrorNotice } from '@/components/common/QueryErrorNotice'
 import { toast } from '@/lib/toast'
+import { FlowRuns } from './FlowRuns'
 import { JobDetails } from './JobDetails'
 import { JobForm } from './JobForm'
 import { JobsView, type JobRowExtras } from './JobsView'
@@ -94,6 +95,7 @@ export function JobsScreen({ onOpenTasks }: { onOpenTasks?: (taskIds: string[]) 
         }}
         onNew={() => setShowForm(true)}
         renderRow={(job, row) => <LiveJobRow job={job} row={row} onOpenTasks={onOpenTasks} />}
+        renderArchivedRuns={(job) => <FlowRuns job={job} />}
         now={new Date()}
       />
       {showForm ? (
@@ -143,7 +145,7 @@ function LiveRow({
         history,
         openTasks: canOpen ? () => onOpenTasks!(loopTaskIds!) : undefined,
         details: (
-          <JobDetails job={job} runs={history} runsLoading={isLoading} runsError={historyError ? errorDetail(historyError, 'the Hub did not answer.') : null} loopTaskIds={loopTaskIds} onOpenTasks={onOpenTasks} now={new Date()} />
+          <JobDetails job={job} runs={history} runsLoading={isLoading} runsError={historyError ? errorDetail(historyError, 'the Hub did not answer.') : null} loopTaskIds={loopTaskIds} onOpenTasks={onOpenTasks} loopRuns={job.loop ? <FlowRuns job={job} /> : undefined} now={new Date()} />
         ),
       })}
     </>

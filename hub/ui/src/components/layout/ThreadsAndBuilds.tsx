@@ -178,7 +178,7 @@ export function ThreadsAndBuilds({
           />
           {!isCollapsed('builds') && (
             <>
-              {buildsState === 'loading' && <LoadingThread size="inline" label="Loading builds" />}
+              {buildsState === 'loading' && <RowsLoading label="Loading builds" />}
               {buildsState === 'error' && (
                 <ListError what="builds" onRetry={() => onRetry(projectId, 'builds')} testId={`rail-builds-error-${projectId}`} />
               )}
@@ -224,7 +224,7 @@ export function ThreadsAndBuilds({
 
         {!isCollapsed('threads') && (
           <>
-            {threadsState === 'loading' && <LoadingThread size="inline" label="Loading threads" />}
+            {threadsState === 'loading' && <RowsLoading label="Loading threads" />}
             {threadsState === 'error' && (
               <ListError what="threads" onRetry={() => onRetry(projectId, 'threads')} testId={`rail-threads-error-${projectId}`} />
             )}
@@ -402,6 +402,11 @@ function BuildRow({
       )}
     </div>
   )
+}
+
+/** The brand's loading thread, sized for a rail row; shown only after the loader delay. */
+function RowsLoading({ label }: { label: string }) {
+  return <LoadingThread size="inline" label={label} />
 }
 
 function ListError({ what, onRetry, testId }: { what: string; onRetry: () => void; testId: string }) {
