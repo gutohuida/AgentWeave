@@ -1055,7 +1055,7 @@ def save_dashboard(
 
     **A stacked bar's query pivots: one row per bar, one numeric column per part.** A query that
     groups by both labels gives long rows (`model, reason, count`), which do not stack; keep the
-    first label in `group by` and give each value of the second into its own column with
+    first label in `group by` and give each value of the second its own column with
     `sum(<column> = '<value>') as "<Value>"`, one per value (run a `select distinct` first to learn
     them): `select model as "Model", sum(reason = 'defect') as "Defect", sum(reason = 'flaky') as
     "Flaky" ... group by model`. Reshape the query this way rather than falling back to a table.

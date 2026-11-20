@@ -511,7 +511,7 @@ async def test_single_agent_project_gets_no_team_section(app, auth_headers, add_
     # The tools are still described — they are still callable, and `request_agent` is how a
     # single-agent project stops being one.
     assert "request_agent" in context
-    assert "You are the only agent in this project." in context
+    assert "You are the only profile in this project." in context
 
 
 @pytest.mark.asyncio
@@ -528,7 +528,7 @@ async def test_team_section_returns_as_soon_as_there_is_a_peer(app, auth_headers
     assert "### Team" in context
     assert "`solo`" in context and "`second`" in context
     assert "Address a peer by the exact name above" in context
-    assert "You are the only agent in this project." not in context
+    assert "You are the only profile in this project." not in context
 
 
 @pytest.mark.asyncio

@@ -9,7 +9,9 @@ renaming a tool or a parameter would break every agent's context and every saved
 before the wording changed (tool-names-unchanged).
 
 What is read is the served surface (`mcp.list_tools()`): each tool's description and each of its
-parameters' descriptions, as an agent receives them.
+parameters' descriptions, as an agent receives them. The same tools are described a second time in
+every run's context, in the "Your tools" section `agents._tool_surface_lines` renders; that is read
+too, in each form and for each runner, so the wording cannot be fixed in one and missed in the other.
 """
 
 import asyncio
@@ -17,6 +19,7 @@ import json
 import re
 from pathlib import Path
 
+from hub.api.v1 import agents
 from hub.mcp_server import mcp
 
 FIXTURE = Path(__file__).parent / "fixtures" / "tool_surface_names.json"
@@ -85,6 +88,27 @@ def test_no_served_description_says_agent_conversation_or_turn():
     )
 
 
+def test_no_rendered_tool_line_says_agent_conversation_or_turn():
+    # The run context's tool section: names there are written in backticks, as in the server's.
+    found = [
+        f"{runner}/{form}: {use}"
+        for runner in (None, "claude", "codex", "copilot")
+        for form in ("mcp", "shim", "http")
+        for has_peers in (True, False)
+        for number, line in enumerate(
+            agents._tool_surface_lines(
+                runner=runner, access_path=form, has_peers=has_peers, can_admin_specs=True
+            )
+        )
+        for use in vocabulary_uses(str(number), line)
+    ]
+    assert (
+        not found
+    ), "say profile, thread or run in the run context's tool lines (FR-11):\n" + "\n".join(
+        sorted(set(found))
+    )
+
+
 def test_the_check_finds_the_words_the_descriptions_used_to_say():
     # Lines as the descriptions read before FR-11, so the check is known to fail on them.
     assert vocabulary_uses(
@@ -94,6 +118,9 @@ def test_the_check_finds_the_words_the_descriptions_used_to_say():
         "read_shells", "Read the operator's shells in this conversation's Terminal tab"
     )
     assert vocabulary_uses("create_task.builder", "The open agent who builds it.")
+    # And as the run context's tool lines read before.
+    assert vocabulary_uses("read_model_record", "An unpriced turn is reported as unpriced.")
+    assert vocabulary_uses("send_message", "your reply is what they read in this conversation")
 
 
 def test_names_in_backticks_or_quoted_are_not_words():

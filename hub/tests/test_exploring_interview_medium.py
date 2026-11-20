@@ -96,7 +96,7 @@ def test_ask_user_is_described_as_a_decision_tool():
     text = "\n".join(_tool_surface_lines())
     entry = text.split("`ask_user(questions, blocking=True)`", 1)[1].split("\n- `", 1)[0]
     assert "decision" in entry.lower()
-    assert "blocks your turn" in entry
+    assert "blocks your run" in entry
     assert "belongs in your reply" in entry
 
 

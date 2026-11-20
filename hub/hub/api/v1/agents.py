@@ -1019,7 +1019,7 @@ _AGENT_ACTIONS_PREFIX = "/api/v1/agent-actions"
 # The allowance refusal, named on every job operation rather than cross-referenced: "same allowance"
 # was the sentence F376 made false, and an agent reading one operation must not need another's.
 _SCHEDULED_WORK_SETTING = (
-    "Needs the project setting `allow_agent_jobs`, which only the operator turns on. While it is "
+    "Needs the project setting `allow_agent_jobs`, which only the operator switches on. While it is "
     "off this is refused at once with `403` and `code` `project_setting_blocks_capability`, and the "
     "Hub asks the operator whether to enable it; the refusal names that question. That refusal is "
     "not a wait: do not poll and do not repeat the call. If they enable it, their answer reaches "
@@ -1137,7 +1137,7 @@ def _operations(*, can_admin_specs: bool = False) -> List[_Operation]:
             required=("recipient", "content"),
             text=(
                 f"message_type is one of {values(MessageType)}. The operator is not a message "
-                "recipient: your reply is what they read in this conversation; record a result "
+                "recipient: your reply is what they read in this thread; record a result "
                 "on a task with update_task's notes, or call ask_user if you need their answer "
                 "before you can continue."
             ),
@@ -1254,7 +1254,7 @@ def _operations(*, can_admin_specs: bool = False) -> List[_Operation]:
             text=(
                 "a build's lead only (others are refused): hand one of its tasks to `agent`, one "
                 "of its builders, or with `review` true hand completed work to one of its "
-                "reviewer pool; that agent's turn on the task starts."
+                "reviewer pool; that profile's run on the task starts."
             ),
         ),
         _Operation(
@@ -1267,7 +1267,7 @@ def _operations(*, can_admin_specs: bool = False) -> List[_Operation]:
             text=(
                 "put a **decision** to the operator and **wait** for it. This is for a genuine "
                 "fork: real alternatives, and you cannot sensibly continue until you know which. "
-                "It blocks your turn, and every question needs options, so it is a decision tool "
+                "It blocks your run, and every question needs options, so it is a decision tool "
                 "rather than the way you ask things generally — an open question, or one whose "
                 "answer you cannot enumerate, belongs in your reply, where the operator can tell "
                 "you something you did not think to ask about. Do not ask what the repository or "
@@ -1276,7 +1276,7 @@ def _operations(*, can_admin_specs: bool = False) -> List[_Operation]:
             detail=(
                 "`questions` is a list of 1 to 4. Ask everything you need in one call: the "
                 "operator steps through them in a single sitting, which interrupts them once "
-                "instead of once per question. Where your turn's instructions say how many "
+                "instead of once per question. Where your run's instructions say how many "
                 "questions to ask per call, follow them. Each entry needs `question`, `header`, `options` "
                 "and `multi_select`, all required. `header` is two or three words naming the "
                 'decision. `options` is 2 to 8 entries of `{"label", "description"}` — the label '
@@ -1285,7 +1285,7 @@ def _operations(*, can_admin_specs: bool = False) -> List[_Operation]:
                 "than restating the label. There is no way to ask without options — which is the "
                 "signal that a question with no real alternatives is not one for this tool. "
                 "Manufacturing plausible-looking options for an open question is how an interview "
-                "turns into a quiz; ask it in your reply instead. `multi_select` is true when "
+                "becomes a quiz; ask it in your reply instead. `multi_select` is true when "
                 "several can be chosen together, and that answer then arrives as a list. The "
                 "operator can always reply in their own words instead, so handle an answer that "
                 "is none of yours."
@@ -1293,7 +1293,7 @@ def _operations(*, can_admin_specs: bool = False) -> List[_Operation]:
             http_note=(
                 "This request returns as soon as the questions are recorded, and waiting is the "
                 "one part of this operation you have to do yourself — it is what the injected tool "
-                "does on an agent's behalf. The reply gives you each question's `id` and its "
+                "does on a profile's behalf. The reply gives you each question's `id` and its "
                 "`wait_expires_at`, which is the deadline the Hub itself will hold you to. Poll "
                 f"`GET {_AGENT_ACTIONS_PREFIX}/questions/{{question_id}}` for each id until it "
                 "comes back `answered` (the answer is in `answer`, and in `answer_labels` when "
@@ -1397,7 +1397,7 @@ def _operations(*, can_admin_specs: bool = False) -> List[_Operation]:
                 "a document is created before anyone knows what it is about, so it starts with a "
                 "meaningless placeholder name. `subject` is plain words describing what it turned "
                 "out to cover; the Hub derives the path. Returns the new path, which is the one "
-                "to use for the rest of the turn."
+                "to use for the rest of the run."
             ),
         ),
         _Operation(
@@ -1472,7 +1472,7 @@ def _operations(*, can_admin_specs: bool = False) -> List[_Operation]:
                 "record what demonstrates that a requirement is satisfied, as `FR-1`. **This is "
                 "what lets approved work merge**: approving a task integrates nothing until "
                 "evidence for its requirements has been accepted. It enters `awaiting` — a claim "
-                "until the agent reviewing the task decides it with its verdict. Give that "
+                "until the profile reviewing the task decides it with its verdict. Give that "
                 "reviewer what it needs to judge: `command` (what you ran), `output` (what it "
                 "printed, as it came) and `covers` (`full`, or `partial` with the missing part "
                 "named in the summary)."
@@ -1525,7 +1525,7 @@ def _operations(*, can_admin_specs: bool = False) -> List[_Operation]:
             text=(
                 "amend an approved document with what testing it found: `op` is `add_task`, "
                 "`add_criterion`, `change_criterion` or `remove_criterion`, within the document's "
-                "stated requirements. Only on a turn testing one of its tasks; recorded with you "
+                "stated requirements. Only on a run testing one of its tasks; recorded with you "
                 "and this run, not reviewed until the operator reviews it."
             ),
         ),
@@ -1652,7 +1652,7 @@ def _operations(*, can_admin_specs: bool = False) -> List[_Operation]:
             fields=("agent",),
             required=(),
             text=(
-                "the conversation summaries you may open: your own, and any peer's the operator "
+                "the thread summaries you may open: your own, and any peer's the operator "
                 "has granted you. Each row carries the id the next tool takes."
             ),
         ),
@@ -1664,7 +1664,7 @@ def _operations(*, can_admin_specs: bool = False) -> List[_Operation]:
             fields=(),
             required=(),
             text=(
-                "one of those in full, as an agent continuing that conversation would receive it. "
+                "one of those in full, as a profile continuing that thread would receive it. "
                 "Read a peer's before you review or continue their work rather than re-deriving "
                 "what they already decided."
             ),
@@ -1678,7 +1678,7 @@ def _operations(*, can_admin_specs: bool = False) -> List[_Operation]:
             required=(),
             text=(
                 "read back one observation by its identifier. Only if the operator has granted "
-                "you this; without it, an observation another agent recorded returns not-found "
+                "you this; without it, an observation another profile recorded returns not-found "
                 "whether or not it exists. Your own are always yours to read."
             ),
             http_note=(
@@ -1695,8 +1695,8 @@ def _operations(*, can_admin_specs: bool = False) -> List[_Operation]:
             required=(),
             text=(
                 "the project's knowledge vault: meeting transcripts, business rules, documents and "
-                "examples the operator gave the project, in areas ordered by how often agents have "
-                "read them, then newest first (fetches is how many times agents have read an "
+                "examples the operator gave the project, in areas ordered by how often profiles have "
+                "read them, then newest first (fetches is how many times profiles have read an "
                 "entry), each with its id, type, name and opening lines. Read it to find what the "
                 "business decided before you guess; an entry marked unavailable is private to "
                 "another machine."
@@ -1738,7 +1738,7 @@ def _operations(*, can_admin_specs: bool = False) -> List[_Operation]:
             text=(
                 "this project's work per model: tasks built, send-backs by reason class, "
                 "API-equivalent cost and sample sizes, each task under the model that ran it. "
-                "An unpriced turn is reported as unpriced, never as zero. Read it when judging "
+                "An unpriced run is reported as unpriced, never as zero. Read it when judging "
                 "which model suits a task."
             ),
         ),
@@ -1750,10 +1750,10 @@ def _operations(*, can_admin_specs: bool = False) -> List[_Operation]:
             fields=(),
             required=(),
             text=(
-                "the operator's shells in this conversation's Terminal tab: each one's name, "
+                "the operator's shells in this thread's Terminal tab: each one's name, "
                 "directory, whether it is still running (its exit code once it ended) and up to "
                 "its last 500 lines of output, as plain text. Read only: it cannot type into, "
-                "start or end a shell, and lists no other conversation's shells."
+                "start or end a shell, and lists no other thread's shells."
             ),
         ),
         _Operation(
@@ -1986,7 +1986,7 @@ def _operations(*, can_admin_specs: bool = False) -> List[_Operation]:
             fields=(),
             required=(),
             text=(
-                "archive a source: it and the facts citing only archived sources leave the map and the turn's vault line, and stay readable by id."
+                "archive a source: it and the facts citing only archived sources leave the map and the run's vault line, and stay readable by id."
             ),
         ),
         _Operation(
@@ -2006,8 +2006,8 @@ def _operations(*, can_admin_specs: bool = False) -> List[_Operation]:
             fields=("name", "template", "task"),
             required=("name", "template", "task"),
             text=(
-                "governed; subject to the project agent budget. `template` is the exact name "
-                "of an open agent of this project; the new agent takes that agent's bound "
+                "governed; subject to the project's profile budget. `template` is the exact name "
+                "of an open profile of this project; the new profile takes that profile's bound "
                 "runner, charter and runner configuration, and none of its grants, posture or "
                 "per-agent overrides."
             ),
@@ -2127,7 +2127,7 @@ def _operations(*, can_admin_specs: bool = False) -> List[_Operation]:
             text=(
                 "a loop that decomposes an approved specification document. Same row as "
                 "`create_loop`; what differs is the queue behaviour. Each firing "
-                "starts every task whose prerequisites are met and for which an agent is free, so "
+                "starts every task whose prerequisites are met and for which a profile is free, so "
                 "independent work runs in parallel, and a task somebody finished becomes "
                 "claimable by anybody except its author — which is how work is reviewed without "
                 "the author being asked to hand it over. `agent` is the default, not the mandate. "
@@ -2168,8 +2168,8 @@ def _operations(*, can_admin_specs: bool = False) -> List[_Operation]:
             fields=(),
             required=(),
             text=(
-                "the mender only: withdraw input waiting in another agent's queue whose delivery "
-                "was refused, so the next firing briefs that agent again."
+                "the mender only: withdraw input waiting in another profile's queue whose delivery "
+                "was refused, so the next firing briefs that profile again."
             ),
         ),
         _Operation(
@@ -2182,7 +2182,7 @@ def _operations(*, can_admin_specs: bool = False) -> List[_Operation]:
             text=(
                 "the mender only: hand a stuck task back, `status` `assigned` (to `assignee`) or "
                 "`pending`, along the edges any run may take; or `under_review` with `assignee` "
-                "a reviewer, which queues that agent's review turn on finished work."
+                "a reviewer, which queues that profile's review run on finished work."
             ),
         ),
         _Operation(
@@ -2347,7 +2347,7 @@ def _tool_surface_lines(
             "`aw-tool <tool> .agentweave/calls/<file>.json` from the workspace root, unquoted and "
             "with nothing chained to it: that form needs no approval in any posture. A tool with "
             "no required argument needs no file. Every AgentWeave operation named anywhere in "
-            "this turn by its short name — `create_task`, `submit_spec_document`, … — is called "
+            "this run by its short name — `create_task`, `submit_spec_document`, … — is called "
             "as `aw-tool <name> <args-file>`. The result is one JSON object on the last line of "
             'the output: `{"ok": true, "result": ...}`, or `{"ok": false, "error": {"kind": ..., '
             '"detail": ...}}`. `ask_user` waits up to '
@@ -2386,10 +2386,10 @@ def _tool_surface_lines(
     lines.append("")
     lines.append(
         "Address a peer by its exact name from the roster above. There is no inbox tool: "
-        "everything addressed to you already appears in this turn."
+        "everything addressed to you already appears in this run."
         if has_peers
-        else "You are the only agent in this project. There is no inbox tool: everything "
-        "addressed to you already appears in this turn."
+        else "You are the only profile in this project. There is no inbox tool: everything "
+        "addressed to you already appears in this run."
     )
     lines.append("")
     return lines

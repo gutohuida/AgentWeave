@@ -398,7 +398,7 @@ def test_the_copilot_rendering_names_every_tool_by_its_copilot_name():
     named = set(re.findall(r"`agentweave-(\w+)\(", text))
     assert named == _served() - set(UNDESCRIBED_TOOLS)
     assert "mcp__agentweave__" not in text
-    assert "only way to reach AgentWeave agents or the operator" in text
+    assert "only way to reach AgentWeave profiles or the operator" in text
 
     notice = access_path_notice("mcp", tool_prefix=get_adapter("copilot").mcp_tool_prefix)
     assert "agentweave-send_message" in notice and "agentweave-ask_user" in notice
