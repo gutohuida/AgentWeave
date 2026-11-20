@@ -29,6 +29,7 @@ export function AgentIdentitySettings({
   onUnarchive,
   archiving,
   archiveRefusal,
+  foldAction,
   descriptionMax = 256,
   notices,
   children,
@@ -45,6 +46,8 @@ export function AgentIdentitySettings({
   /** Why the Hub refused the last archive (a run in progress, undelivered messages), with what
    *  the operator can do about it. */
   archiveRefusal?: React.ReactNode
+  /** The Fold into… control, shown beside Archive. Absent where folding is not offered. */
+  foldAction?: React.ReactNode
   descriptionMax?: number
   /** A refused save, under the page heading. */
   notices?: React.ReactNode
@@ -126,7 +129,16 @@ export function AgentIdentitySettings({
       </SettingsGroup>
       {children}
 
-      {archived ? (
+      {agent.folded_into ? (
+        <section className="aw-danger" aria-label="Folded" data-tone="neutral" data-testid="agent-folded-notice">
+          <div className="min-w-0">
+            <h2 className="aw-danger-title">{agent.name} was folded into {agent.folded_into}</h2>
+            <p className="aw-danger-desc">
+              Its open work and runners moved to {agent.folded_into}, which keeps its own settings. Its conversations, runs and checkpoints stay readable under {agent.name}, but it accepts no new turn. A fold is one way: message {agent.folded_into} instead.
+            </p>
+          </div>
+        </section>
+      ) : archived ? (
         <section className="aw-danger" aria-label="Archived" data-tone="neutral">
           <div className="min-w-0">
             <h2 className="aw-danger-title">{agent.name} is archived</h2>
@@ -143,6 +155,8 @@ export function AgentIdentitySettings({
           <p className="aw-danger-desc">It leaves the sidebar, task assignment and peer messaging. Everything it did stays, under its name. An agent is never deleted: its name is the attribution on everything it produced.</p>
           {archiveRefusal ? <div className="aw-danger-refusal" role="alert">{archiveRefusal}</div> : null}
         </div>
+        <div className="flex shrink-0 items-center gap-2">
+        {foldAction}
         <Dialog>
           <DialogTrigger asChild>
             <Button variant="destructive" size="sm" data-testid="agent-archive-toggle" disabled={archiving}>
@@ -168,6 +182,7 @@ export function AgentIdentitySettings({
             }
           />
         </Dialog>
+        </div>
       </section>
       )}
     </SettingsPage>

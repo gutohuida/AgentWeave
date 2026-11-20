@@ -33,6 +33,7 @@ import { useCopy } from '@/hooks/useCopy'
 import { agentChangedSections } from '@/lib/settingsChanged'
 import { runnerModelPart } from '@/lib/runnerLabel'
 import { toast } from '@/lib/toast'
+import { FoldAgentDialog } from '@/components/agents/FoldAgentDialog'
 import { AgentIdentitySettings, type AgentPatch } from './settings/AgentSettingsSections'
 import {
   AgentCharterGroup,
@@ -205,6 +206,7 @@ function AgentSection({ agent }: { agent: AgentSummary }) {
       now={new Date()}
       descriptionMax={MAX_AGENT_DESCRIPTION_CHARS}
       archiving={archive.isPending}
+      foldAction={<FoldAgentDialog agent={agent.name} />}
       onChange={apply}
       onArchive={() => run(true)}
       onUnarchive={() => run(false)}

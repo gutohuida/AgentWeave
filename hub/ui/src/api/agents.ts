@@ -28,6 +28,9 @@ export interface AgentSummary {
   active_task_count: number
   /** "open" or "archived". Only ever "archived" for a caller that asked for archived agents. */
   lifecycle?: 'open' | 'archived'
+  /** The profile this agent was folded into; null/absent for one that was not. A folded agent is
+   *  archived for good: its history stays readable, and it accepts no new turn. */
+  folded_into?: string | null
   runner?: string  // The bound Runner's CLI; "native" when there is no binding
   display_model?: string  // e.g. "Claude", "Kimi", "Minimax" — derived from runner
   context_usage?: ContextUsage
@@ -290,6 +293,77 @@ export function useArchiveAgent() {
       })
       // The rail's agent list is the projects summary (open agents only), so an archive or an
       // unarchive moves a conversation between the tree and its Archived agents group (F193).
+      queryClient.invalidateQueries({ predicate: (query) => query.queryKey[0] === 'projects' })
+    },
+  })
+}
+
+/** One reason a fold cannot go ahead (`GET .../agents/{name}/fold`, `refusals`). */
+export interface FoldRefusal {
+  code: string
+  message: string
+  ids: string[]
+}
+
+/** A setting where the source differs from the profile; the profile's value is the one kept. The
+ *  values are whatever the setting is (a runner, a charter, a flag, a policy object). */
+export interface FoldSettingDifference {
+  setting: string
+  source: unknown
+  profile: unknown
+}
+
+/** One open reference to the source that the fold re-points to the profile. */
+export interface FoldOpenWork {
+  kind: string
+  id: string
+  field: string
+  title: string
+}
+
+/** What folding one agent into another would do, and every reason it cannot (read-only). */
+export interface FoldPreview {
+  source: string
+  profile: string
+  can_fold: boolean
+  refusals: FoldRefusal[]
+  setting_differences: FoldSettingDifference[]
+  pool_entries_added: AgentPoolEntry[]
+  open_work: FoldOpenWork[]
+  /** The one profile setting a fold can write (a pool-less profile takes the source's runner). */
+  profile_changes?: Array<{ setting: string; profile: unknown; after: unknown }>
+}
+
+/** The preview of folding `agent` into `into`; idle until a profile is chosen. */
+export function useFoldPreview(agent: string, into: string | null) {
+  const { isConfigured, selectedProjectId: projectId } = useConfigStore()
+  return useQuery<FoldPreview>({
+    queryKey: ['project', projectId, 'agent-fold-preview', agent, into],
+    queryFn: () =>
+      getJson<FoldPreview>(
+        `/api/v1/projects/${projectId}/agents/${agent}/fold?into=${encodeURIComponent(into ?? '')}`,
+      ),
+    enabled: isConfigured && !!projectId && !!into,
+    // A preview is an answer about now: never reuse one the operator did not just ask for.
+    staleTime: 0,
+    gcTime: 0,
+  })
+}
+
+/** Fold `agent` into `into`: one way. Refreshes every roster and the rail, as an archive does. */
+export function useFoldAgent() {
+  const queryClient = useQueryClient()
+  const { selectedProjectId: projectId } = useConfigStore()
+  return useMutation({
+    mutationFn: ({ agent, into }: { agent: string; into: string }) =>
+      postJson<{ name: string; folded_into: string }>(
+        `/api/v1/projects/${projectId}/agents/${agent}/fold`,
+        { into },
+      ),
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        predicate: (query) => query.queryKey[0] === 'project' && query.queryKey[1] === projectId,
+      })
       queryClient.invalidateQueries({ predicate: (query) => query.queryKey[0] === 'projects' })
     },
   })
