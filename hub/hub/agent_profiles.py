@@ -59,6 +59,41 @@ async def shared_profile(
     return profile if profile == folded.get(other, other) else None
 
 
+def folded_message(name: str, profile: str) -> str:
+    """The sentence every refusal of something addressed to a folded name carries (design D4)."""
+    return f"{name} was folded into {profile}; address {profile} instead."
+
+
+def folded_detail(name: str, profile: str) -> Dict[str, str]:
+    """The 409 detail for something newly addressed to a folded name (design D4)."""
+    return {
+        "code": "agent_folded",
+        "message": folded_message(name, profile),
+        "agent": name,
+        "folded_into": profile,
+    }
+
+
+async def folded_refusal(session: AsyncSession, project_id: str, name: str) -> Optional[str]:
+    """The D4 message when *name* is a folded agent, else None."""
+    profile = (await folded_map(session, project_id, [name])).get(name)
+    return folded_message(name, profile) if profile else None
+
+
+async def require_not_folded(session: AsyncSession, project_id: str, name: Optional[str]) -> None:
+    """409 `agent_folded` naming the profile when *name* is a folded agent; a no-op otherwise.
+
+    Raised for anything newly addressed to the name (FR-12) or launched under it (FR-5).
+    """
+    if not name:
+        return
+    profile = (await folded_map(session, project_id, [name])).get(name)
+    if profile:
+        from fastapi import HTTPException
+
+        raise HTTPException(status_code=409, detail=folded_detail(name, profile))
+
+
 def counts_as(name: str, other: str, profile: str) -> str:
     """The clause saying *name* and *other* are one profile, naming it: the words every refusal on
     a fold's account quotes, so each names the profile (FR-9)."""

@@ -31,6 +31,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ... import (
     agent_pool,
+    agent_profiles,
     already_built,
     blocking,
     builds,
@@ -4143,6 +4144,8 @@ async def _build_settings(
         raise _unprocessable("lead_missing", "a lead-driven build names its lead")
     people = [*chosen_builders, *chosen_reviewers, *([lead] if lead else [])]
     if people:
+        for name in people:
+            await agent_profiles.require_not_folded(session, project_id, name)
         known = await builds.open_agents(session, project_id)
         unknown = sorted({name for name in people if name not in known})
         if unknown:
@@ -5572,6 +5575,9 @@ async def _build_flow(
         return _not_created("The delivery names no agent, so no flow was started."), None
     agent_state = await delivery_agent_state(session, project_id, agent)
     if agent_state == "archived":
+        folded = await agent_profiles.folded_refusal(session, project_id, agent)
+        if folded:
+            return _not_created(f"{folded} No flow was started.", agent), None
         return _not_created(f"{agent} is archived, so no flow was started.", agent), None
     if agent_state == "unknown":
         return (

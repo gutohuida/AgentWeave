@@ -11,6 +11,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ... import (
+    agent_profiles,
     deletion,
     dependency_gate,
     loop_history,
@@ -967,6 +968,7 @@ async def check_task_create(
     await _check_prerequisites(session, project_id, body)
     # Only an open agent of the project holds a task (F642).
     if body.assignee:
+        await agent_profiles.require_not_folded(session, project_id, body.assignee)
         refusal = await assignee_refusal(session, project_id, body.assignee)
         if refusal is not None:
             raise HTTPException(status_code=422, detail=refusal)
@@ -976,6 +978,7 @@ async def check_task_create(
         raise HTTPException(status_code=422, detail=read_only_work_sentence(body.assignee, body.id))
     for person in (body.builder, body.checker):
         if person:
+            await agent_profiles.require_not_folded(session, project_id, person)
             refusal = await assignee_refusal(session, project_id, person)
             if refusal is not None:
                 raise HTTPException(status_code=422, detail=refusal)
@@ -2200,6 +2203,7 @@ async def update_task_for_actor(
         # Only an open agent takes a task (F642). Keeping the current holder is not a handover,
         # so a PATCH that repeats it is not refused for an agent archived since.
         if body.assignee and body.assignee != task.assignee:
+            await agent_profiles.require_not_folded(session, project_id, body.assignee)
             refusal = await assignee_refusal(session, project_id, body.assignee)
             if refusal is not None:
                 raise HTTPException(status_code=422, detail=refusal)
@@ -2541,6 +2545,7 @@ async def reassign_task(
                 "it. Stop that run, or wait for it to end."
             ),
         )
+    await agent_profiles.require_not_folded(session, project_id, agent)
     refusal = await assignee_refusal(session, project_id, agent)
     if refusal is not None:
         raise HTTPException(status_code=422, detail=refusal)

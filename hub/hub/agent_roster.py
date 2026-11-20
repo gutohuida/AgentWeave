@@ -19,7 +19,7 @@ from fastapi import HTTPException, status
 from sqlalchemy import exists, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from . import worktrees
+from . import agent_profiles, worktrees
 from .db.models import (
     Agent,
     AgentHeartbeat,
@@ -92,9 +92,16 @@ async def assignee_refusal(session: AsyncSession, project_id: str, assignee: str
     A task's holder is who its turns run as and who the roster counts it against; a name with no
     row was stored as given, and an archived agent is one nothing will run (F642).
     """
-    lifecycle = await session.scalar(
-        select(Agent.lifecycle).where(Agent.project_id == project_id, Agent.name == assignee)
-    )
+    row = (
+        await session.execute(
+            select(Agent.lifecycle, Agent.folded_into).where(
+                Agent.project_id == project_id, Agent.name == assignee
+            )
+        )
+    ).first()
+    lifecycle = row[0] if row else None
+    if row is not None and row[1]:
+        return agent_profiles.folded_message(assignee, row[1])
     if lifecycle is None:
         return (
             f"'{assignee}' is not an agent in this project, so it cannot hold a task. Assign one "

@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 
 from ... import (
+    agent_profiles,
     bound_address,
     project_workspace,
     route_words,
@@ -4053,13 +4054,7 @@ async def unarchive_agent(
 
 def agent_folded_detail(agent_row: Agent) -> Dict[str, Any]:
     """The one refusal for anything addressed to a folded agent (design D4)."""
-    profile = agent_row.folded_into
-    return {
-        "code": "agent_folded",
-        "message": f"{agent_row.name} was folded into {profile}; address {profile} instead.",
-        "agent": agent_row.name,
-        "folded_into": profile,
-    }
+    return agent_profiles.folded_detail(agent_row.name, agent_row.folded_into)
 
 
 class FoldRequest(RequestModel):

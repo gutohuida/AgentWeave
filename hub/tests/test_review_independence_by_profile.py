@@ -225,8 +225,8 @@ async def test_filing_a_task_whose_builder_and_checker_share_a_profile_is_refuse
         },
         headers=auth_headers,
     )
-    # Refused before the profile check: a folded name is archived and holds no new task.
-    assert filed.status_code == 422, filed.text
+    # Refused before the profile check, as D4 says: a folded name takes nothing newly addressed to it.
+    assert filed.status_code == 409, filed.text
     assert "DeveloperOpus" in filed.text
 
 
