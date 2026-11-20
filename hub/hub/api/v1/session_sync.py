@@ -29,6 +29,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ... import conversations, project_workspace, route_words, worktrees
 from ...agent_colors import next_color_index
+from ...agent_pool import delete_pool
 from ...auth import get_project
 from ...db.engine import get_session
 from ...db.models import Agent, Conversation, ProjectSession
@@ -150,8 +151,15 @@ async def sync_session(
         if twin is not None:
             raise HTTPException(status.HTTP_409_CONFLICT, twin)
 
+    # A folded agent's record is never deleted, by omission or otherwise: every stored name in
+    # its history resolves to its profile through it (`fold-duplicate-agents-into-one-profile-with-
+    # their-history-kept`, FR-4).
     removed_agent_names = (
-        [name for name in existing_agents if name not in current_agent_names]
+        [
+            name
+            for name, row in existing_agents.items()
+            if name not in current_agent_names and not row.folded_into
+        ]
         if roster_given
         else []
     )
@@ -179,6 +187,7 @@ async def sync_session(
             next_index += 1
 
     for agent_name in removed_agent_names:
+        await delete_pool(session, existing_agents[agent_name].id)
         await session.delete(existing_agents[agent_name])
     # F849: conversations, runs and the ledger are keyed by the agent's name, and deleting the row
     # frees the name. An open conversation left behind belongs to no agent, and an agent created

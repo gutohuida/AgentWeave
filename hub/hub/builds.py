@@ -520,6 +520,20 @@ def checker_of(build: Optional[Build], task: Task) -> Optional[Tuple[Optional[st
     return _person(build.people.get("checker")), "default"
 
 
+def chosen_entry(build: Optional[Build], task: Task, role: str) -> Optional[Dict[str, Any]]:
+    """The pool entry (`{runner_id, effort}`) the operator chose at Build for *task*'s *role*
+    (`builder` or `checker`), or None where they chose none (`a-profile-runs-each-task-on-a-runner-
+    and-model-chosen-from-its-pool`, FR-6). The first of FR-7's three sources; the launch path
+    falls back to the document's recommendation, then the profile's default."""
+    if build is None or not isinstance(build.people, dict):
+        return None
+    own = (build.people.get("tasks") or {}).get(task.spec_task_key or task.id) or {}
+    entry = own.get(f"{role}_entry")
+    if not isinstance(entry, dict) or not entry.get("runner_id"):
+        return None
+    return {"runner_id": entry["runner_id"], "effort": entry.get("effort") or None}
+
+
 def recorded_checkers(build: Optional[Build], tasks: Iterable[Task]) -> Optional[Set[str]]:
     """Everybody *build* names to check *tasks*, or None where it does not say for one of them or
     there are none, so the document's declaration still stands there (`checker_of`)."""
@@ -736,6 +750,11 @@ class Settings:
     checker: Optional[str] = None
     #: Each task's checker as the operator left it in the dialog, by task key; "" clears it.
     task_checkers: Dict[str, str] = field(default_factory=dict)
+    #: The pool entry (`{runner_id, effort}`) the operator chose for each task's builder and
+    #: checker, by task key (`a-profile-runs-each-task-on-a-runner-and-model-chosen-from-its-
+    #: pool`, FR-6), each already checked against its agent's pool.
+    task_builder_entries: Dict[str, Dict[str, Any]] = field(default_factory=dict)
+    task_checker_entries: Dict[str, Dict[str, Any]] = field(default_factory=dict)
 
 
 def new_build(project_id: str, document_id: str, settings: Settings) -> Build:
@@ -803,6 +822,8 @@ async def cover_tasks(
     default_builder: Optional[str] = None,
     default_checker: Optional[str] = None,
     preferred: Optional[Set[str]] = None,
+    builder_entries: Optional[Dict[str, Dict[str, Any]]] = None,
+    checker_entries: Optional[Dict[str, Dict[str, Any]]] = None,
 ) -> List[Dict[str, str]]:
     """Mark *tasks* as the build's, at its level, and apply each one's builder (FR-2, FR-3).
 
@@ -814,7 +835,9 @@ async def cover_tasks(
 
     Each task's checker is resolved the same way (*declared_checkers*, *chosen_checkers*), and the
     build records the people it was given (`Build.people`, `one-checker`): the defaults, and each
-    task's own builder and checker, empty where the task takes the default.
+    task's own builder and checker, empty where the task takes the default, and the pool entry the
+    operator chose for each (*builder_entries*, *checker_entries*; `builder_entry` and
+    `checker_entry`, absent where none was chosen), which a task's runs launch with (FR-6, FR-7).
     """
     agents = await open_agents(session, build.project_id)
     declared_checkers = declared_checkers or {}
@@ -845,6 +868,9 @@ async def cover_tasks(
             # choice in the dialog is not, so it stays required.
             if preferred and key in preferred and key not in chosen:
                 people[key]["preferred"] = True
+            for role, entries in (("builder", builder_entries), ("checker", checker_entries)):
+                if entries and key in entries:
+                    people[key][f"{role}_entry"] = dict(entries[key])
         task.builder = builder
         if builder is None:
             continue
@@ -928,8 +954,12 @@ async def own_checker_refusal(
     builder: Optional[str],
     assignee: Optional[str],
     checker: Optional[str],
+    project_id: Optional[str] = None,
 ) -> Optional[str]:
     """Why a task being filed would have its builder check its own work, or None.
+
+    Compared by profile (FR-9): a builder and checker that resolve to one profile -- one of them
+    folded into the other, or both into a third -- are the same checker of the same work.
 
     The check would never run: the reviewer ladder excludes the author and will not substitute for
     a named checker (`scheduler.resolve_reviewer`, rung 1b). The build's defaults count only where
@@ -949,8 +979,26 @@ async def own_checker_refusal(
             default_checker = _person(latest.people.get("checker"))
     who_builds = named_builder or default_builder
     who_checks = named_checker or default_checker
-    if not who_builds or who_builds != who_checks:
+    if not who_builds or not who_checks:
         return None
+    if who_builds != who_checks:
+        from .agent_profiles import counts_as, shared_profile
+
+        project_id = project_id or (document.project_id if document is not None else None)
+        profile = (
+            await shared_profile(session, project_id, who_builds, who_checks)
+            if project_id
+            else None
+        )
+        if profile is None:
+            return None
+        return (
+            f"This task would have profile {profile!r} both build it and check it, and nobody "
+            f"checks their own work: {counts_as(who_builds, who_checks, profile)}. Its builder "
+            f"{who_builds} is {'named' if named_builder else 'the build default'} and its checker "
+            f"{who_checks} is {'named' if named_checker else 'the build default'}. Name a builder "
+            f"and checker of different profiles."
+        )
     return (
         f"This task would have {who_builds} both build it and check it, and nobody checks their own "
         f"work: its builder is {'named' if named_builder else 'the build default'} and its checker "
@@ -1630,12 +1678,20 @@ async def hand_out(
     named = checker_of(build, task) if review else None
     own = (named[0] if named is not None else None) if review else task.builder
     if pool is not None and agent not in pool and agent != own:
+        from . import agent_profiles
+
+        folded = await agent_profiles.folded_refusal(session, project_id, agent)
+        if folded:
+            raise HandOutRefused(folded, 409)
         which = "reviewer pool" if review else "builders"
         raise HandOutRefused(
             f"{agent} is not among build {build.id}'s {which} ({', '.join(pool)}).", 409
         )
     if agent not in await open_agents(session, project_id):
-        raise HandOutRefused(f"{agent} is not an open agent of this project.", 409)
+        from . import agent_profiles
+
+        folded = await agent_profiles.folded_refusal(session, project_id, agent)
+        raise HandOutRefused(folded or f"{agent} is not an open agent of this project.", 409)
     if review:
         # The check follows the level and goes to the task's checker (`check-goes-to-its-checker`):
         # none at Fast, and only the checker the build names, where it names one.

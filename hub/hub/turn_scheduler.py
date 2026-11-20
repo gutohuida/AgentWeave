@@ -17,7 +17,7 @@ from sqlalchemy.orm.attributes import set_committed_value
 from . import traces
 from .conversations import get_conversation_by_id
 from .db.engine import async_session_factory
-from .db.models import Conversation, InboundQueueEntry, Run, Task
+from .db.models import Conversation, InboundQueueEntry, Project, Run, Task
 from .inbound_queue import (
     DELIVERY_ATTEMPT_LIMIT,
     can_start,
@@ -31,7 +31,13 @@ from .inbound_queue import (
     select_operator_turn,
     select_turn,
 )
-from .provider_allowance import hold_sentence, operator_would_probe, provider_hold
+from .provider_allowance import (
+    ProviderHold,
+    cli_readings,
+    hold_on,
+    hold_sentence,
+    operator_would_probe,
+)
 from .run_task_binding import decided_task_refusal
 from .sse import sse_manager
 from .task_workspace import takes_own_checkout
@@ -78,6 +84,16 @@ class ScheduleResult:
     #: and the entry therefore stays queued for the operator's repair to deliver (F96, F596). The
     #: turn did not begin, but nothing failed: the input is kept and will run.
     kept_for_repair: bool = False
+    #: Set only by a pass while the project's switch is on, which can start several turns: what
+    #: became of each conversation it tried, or set aside because its turn is running (`about`).
+    by_conversation: Optional[Dict[str, "ScheduleResult"]] = None
+
+    def about(self, conversation_id: str) -> "ScheduleResult":
+        """This pass's answer for *conversation_id*: the turn it started there or what that
+        conversation waits on, where the pass knows; otherwise the pass's own result."""
+        if self.by_conversation and conversation_id in self.by_conversation:
+            return self.by_conversation[conversation_id]
+        return self
 
 
 def no_turn_began(result: "ScheduleResult") -> bool:
@@ -90,6 +106,31 @@ def no_turn_began(result: "ScheduleResult") -> bool:
         and result.terminal_failure
         and getattr(result, "kept_for_repair", False) is not True
     )
+
+
+#: The waiting reason of input whose conversation's turn is running while the switch is on.
+CONVERSATION_TURN_RUNNING = "the conversation's turn is running"
+
+
+async def conversations_with_running_turn(
+    db: AsyncSession, project_id: str, agent: str
+) -> Set[str]:
+    """The conversations of *agent* with a running turn: input in them waits (step 1, FR-6)."""
+    return {
+        conversation_id
+        for conversation_id in (
+            await db.execute(
+                select(Run.conversation_id).where(
+                    Run.project_id == project_id,
+                    Run.agent == agent,
+                    Run.status == "running",
+                )
+            )
+        )
+        .scalars()
+        .all()
+        if conversation_id is not None
+    }
 
 
 def _lock_for(project_id: str, agent: str) -> asyncio.Lock:
@@ -271,6 +312,66 @@ def _tasks_this_entry_is_about(
     return named
 
 
+async def provider_held_conversations(
+    db: AsyncSession, project_id: str, agent: str, entries: Sequence[InboundQueueEntry]
+) -> Dict[str, ProviderHold]:
+    """The conversations among *entries* whose next turn a provider hold stops, with the hold.
+
+    A hold is the profile's on one CLI (FR-11 of `a-profile-runs-each-task-on-a-runner-and-model-
+    chosen-from-its-pool`), so each conversation's turn is asked which CLI it would launch on -- a
+    task's entry, a review's, a chat's choice, or the default -- and only one on a held CLI waits.
+    Operator input that arrived after the refusal is tried once (`operator_would_probe`, D4),
+    asked of the whole queue as before. Reads only; nothing is asked when nothing is held.
+    """
+    from .api.v1.agent_trigger import turn_launch_cli
+    from .db.models import Agent
+    from .provider_allowance import _utcnow
+
+    now = _utcnow()
+    holds = {
+        cli: (
+            hold
+            if hold is not None
+            and now < hold.hold_until
+            and not operator_would_probe(entries, hold)
+            else None
+        )
+        for cli, hold in (await cli_readings(db, project_id, agent)).items()
+    }
+    if not any(hold is not None for hold in holds.values()):
+        return {}
+    agent_row = (
+        (await db.execute(select(Agent).where(Agent.project_id == project_id, Agent.name == agent)))
+        .scalars()
+        .first()
+    )
+    by_conversation: Dict[str, List[InboundQueueEntry]] = {}
+    for entry in entries:
+        if entry.conversation_id:
+            by_conversation.setdefault(entry.conversation_id, []).append(entry)
+    held: Dict[str, ProviderHold] = {}
+    for conversation_id, own in by_conversation.items():
+        cli: Optional[str] = None
+        conversation = await get_conversation_by_id(db, conversation_id)
+        if agent_row is not None and conversation is not None:
+            cli = await turn_launch_cli(
+                db,
+                project_id=project_id,
+                agent_row=agent_row,
+                conversation=conversation,
+                queue_entry_ids=[entry.id for entry in own],
+                initiator=(
+                    "operator"
+                    if any(entry.origin_type == "operator" for entry in own)
+                    else "autonomous"
+                ),
+            )
+        hold = hold_on(holds, cli)
+        if hold is not None:
+            held[conversation_id] = hold
+    return held
+
+
 @dataclass(frozen=True)
 class _Attempt:
     """What one attempt of a pass did, for `schedule_agent` to decide whether the pass goes on.
@@ -286,6 +387,11 @@ class _Attempt:
     attempted: bool = False
     gave_up: Tuple[str, ...] = ()
     nothing_queued: bool = False
+    #: The conversation this attempt built its turn from, when it reached `trigger_agent_directly`:
+    #: while the switch is on the pass goes on without it (start algorithm, step 7).
+    conversation_id: Optional[str] = None
+    #: The refusal stops the agent running at all, so nothing behind it could start either.
+    agent_wide: bool = False
 
 
 @traces.traced_work("inbound_queue", quiet=True, attributes={"aw.agent": "agent"})
@@ -310,6 +416,8 @@ async def schedule_agent(project_id: str, agent: str) -> ScheduleResult:
         # running agent and this lock is held. So everything the pass gives up on was queued when
         # it began, and the attempts number at most that plus the one that finds nothing left.
         limit = len(await queued_entries(db, project_id, agent)) + 1
+        if await profiles_run_in_parallel(db, project_id):
+            return await _parallel_pass(db, project_id, agent, limit)
         # The ids counted in this pass. An entry that rides with a head that is given up on is
         # carried again by the next attempt; without this set R2 measured it counted three times
         # and withdrawn in one pass (design D4) -- F114's failure, reached through the loop.
@@ -329,6 +437,66 @@ async def schedule_agent(project_id: str, agent: str) -> ScheduleResult:
         if attempt.nothing_queued and after_give_up is not None:
             return after_give_up
         return attempt.result
+
+
+async def profiles_run_in_parallel(db: AsyncSession, project_id: str) -> bool:
+    """The project's "profiles run in parallel" switch, read at each pass so a change takes effect
+    for the next start (FR-15) and turning it off drains as FR-12 says."""
+    project = await db.get(Project, project_id)
+    return bool(project is not None and project.profiles_run_in_parallel)
+
+
+async def _parallel_pass(
+    db: AsyncSession, project_id: str, agent: str, limit: int
+) -> ScheduleResult:
+    """A pass while the project's switch is on: a turn for every conversation that can start one.
+
+    Start algorithm, step 7 (FR-5): an entry that cannot start -- its conversation's turn is
+    running, its task's checkout is held, the agent's shared worktree is in use -- does not stop the
+    same agent's later entries being tried. Each attempt that reached the trigger, started or
+    refused, takes its conversation out of the rest of the pass; an attempt that gave up on input is
+    repeated as the serial pass repeats it (F320). The pass ends at an early return (the whole
+    queue's reason: a provider hold, a spent budget, nothing left) or an agent-wide refusal.
+
+    Bounded the serial pass's way: every attempt either gives up on an entry, sets a conversation
+    aside, or ends the pass, so there are at most as many as entries queued when it began, plus one.
+
+    The result is the first started turn's; otherwise the first refusal's, which is what the input
+    at the head of the queue waits on; otherwise the last attempt's.
+    """
+    counted: Set[str] = set()
+    excluded: Set[str] = set()
+    by_conversation: Dict[str, ScheduleResult] = {}
+    started: Optional[ScheduleResult] = None
+    refused: Optional[ScheduleResult] = None
+    attempt = await _attempt_turn(db, project_id, agent, counted, excluded=excluded)
+    for _ in range(limit):
+        if attempt.gave_up:
+            if refused is None:
+                refused = attempt.result
+        elif not attempt.attempted:
+            break
+        else:
+            if attempt.result.response is not None:
+                if started is None:
+                    started = attempt.result
+            elif refused is None:
+                refused = attempt.result
+            if attempt.conversation_id is not None:
+                by_conversation.setdefault(attempt.conversation_id, attempt.result)
+            if attempt.agent_wide or attempt.conversation_id is None:
+                break
+            excluded.add(attempt.conversation_id)
+        attempt = await _attempt_turn(db, project_id, agent, counted, excluded=excluded)
+    result = started or refused or attempt.result
+    # A conversation whose turn is running waits on it; one this pass started keeps its turn.
+    for conversation_id in await conversations_with_running_turn(db, project_id, agent):
+        by_conversation.setdefault(
+            conversation_id,
+            ScheduleResult(waiting_reason=CONVERSATION_TURN_RUNNING, terminal_failure=False),
+        )
+    result.by_conversation = by_conversation
+    return result
 
 
 def is_transient(exc: BaseException) -> bool:
@@ -423,28 +591,61 @@ async def _retry(project_id: str, agent: str) -> None:
 
 
 async def _attempt_turn(
-    db: AsyncSession, project_id: str, agent: str, counted: Set[str]
+    db: AsyncSession,
+    project_id: str,
+    agent: str,
+    counted: Set[str],
+    *,
+    excluded: Optional[Set[str]] = None,
 ) -> _Attempt:
     """Start at most one turn for *agent* from its queue as it stands now; one attempt of a pass.
 
     *counted* is the pass's once-per-pass set (`schedule_agent`): an entry in it is not counted,
     and so not given up on, again.
+
+    *excluded* is given only while the project's switch is on (`_parallel_pass`): the conversations
+    this pass has already tried, left out. With it, a running run of the agent stops nothing by
+    itself, and a conversation whose own turn is running is left out instead (step 1, FR-6).
+    Without it, today's rule: the agent's running run holds its whole queue (step 5, FR-2).
     """
     from .api.v1.agent_trigger import TriggerAgentError, trigger_agent_directly
 
-    running = await db.execute(
-        select(Run.id)
-        .where(Run.project_id == project_id, Run.agent == agent, Run.status == "running")
-        .limit(1)
-    )
-    if running.scalar_one_or_none() is not None:
-        return _Attempt(
-            ScheduleResult(waiting_reason="agent is already running", terminal_failure=False)
+    if excluded is None:
+        running = await db.execute(
+            select(Run.id)
+            .where(Run.project_id == project_id, Run.agent == agent, Run.status == "running")
+            .limit(1)
         )
+        if running.scalar_one_or_none() is not None:
+            return _Attempt(
+                ScheduleResult(waiting_reason="agent is already running", terminal_failure=False)
+            )
 
     entries = await queued_entries(db, project_id, agent)
     if not entries:
         return _Attempt(ScheduleResult(waiting_reason="queue is empty"), nothing_queued=True)
+    if excluded is not None:
+        running_conversations = await conversations_with_running_turn(db, project_id, agent)
+        waiting = any(entry.conversation_id in running_conversations for entry in entries)
+        entries = [
+            entry
+            for entry in entries
+            if entry.conversation_id not in running_conversations
+            and entry.conversation_id not in excluded
+        ]
+        if not entries:
+            # Everything left waits on a turn already running, or was tried by this pass. Not a
+            # failure: the run-end re-drain tries it again.
+            return _Attempt(
+                ScheduleResult(
+                    waiting_reason=(
+                        CONVERSATION_TURN_RUNNING
+                        if waiting
+                        else "every conversation with input was tried by this pass"
+                    ),
+                    terminal_failure=False,
+                )
+            )
     # Input in a conversation no turn can start in is held, with its reason and repair, and left
     # out of the turn, so it waits for the operator's Unarchive or withdrawal without holding the
     # agent's other conversations behind it. As the queue's head it used to end every pass with
@@ -472,6 +673,28 @@ async def _attempt_turn(
     if not can_start([entry for entry in entries if entry.conversation_id not in held], hop_budget):
         return _Attempt(ScheduleResult(waiting_reason="hop budget exhausted"))
 
+    # The provider refused this agent's last turn on a CLI because its usage allowance is spent,
+    # so every turn started there before the reset would be refused the same way (`a-spent-
+    # allowance-holds-the-queue`, D4). That conversation's input waits, uncounted, for the wake at
+    # the reset. Not a terminal failure: a job firing that meets it leaves its `JobRun` in
+    # progress, because its entry will be delivered. A hold is on one CLI (FR-11), so input whose
+    # turn launches on another still starts; only when every conversation waits does the queue.
+    #
+    # Operator input that arrived after the refusal is tried once: only the operator can change
+    # the allowance, and a hold derived from the provider's last word cannot see that they did.
+    # Keyed on the whole queue, because their message can sit in a conversation behind an
+    # autonomous head. A refused probe renews the reading, whose `observed_at` is then later than
+    # every entry already queued, so the same input cannot probe twice.
+    provider_held = await provider_held_conversations(db, project_id, agent, entries)
+    if provider_held:
+        entries = [entry for entry in entries if entry.conversation_id not in provider_held]
+        if not entries:
+            return _Attempt(
+                ScheduleResult(
+                    waiting_reason=hold_sentence(agent, next(iter(provider_held.values()))),
+                    terminal_failure=False,
+                )
+            )
     controlling, turn = select_turn(entries, hop_budget, cap)
     # A spent token budget holds autonomous input only, so the turn that runs is the operator's even
     # when their message sits in another conversation behind an autonomous head (F814).
@@ -500,21 +723,6 @@ async def _attempt_turn(
         (entry for entry in selected if entry.origin_type == "operator"), None
     )
     initiator = "operator" if controlling_operator is not None else "autonomous"
-    # The provider refused this agent's last turn because its usage allowance is spent, so every
-    # turn started before the reset would be refused the same way (`a-spent-allowance-holds-the-
-    # queue`, D4). Input waits, uncounted, for the wake at the reset. Not a terminal failure: a job
-    # firing that meets it leaves its `JobRun` in progress, because its entry will be delivered.
-    #
-    # Operator input that arrived after the refusal is tried once: only the operator can change
-    # the allowance, and a hold derived from the provider's last word cannot see that they did.
-    # Keyed on the whole queue, not on `selected`, because their message can sit in a conversation
-    # behind an autonomous head. A refused probe renews the reading, whose `observed_at` is then
-    # later than every entry already queued, so the same input cannot probe twice.
-    hold = await provider_hold(db, project_id, agent)
-    if hold is not None and not operator_would_probe(entries, hold):
-        return _Attempt(
-            ScheduleResult(waiting_reason=hold_sentence(agent, hold), terminal_failure=False)
-        )
     if initiator == "autonomous" and budget["exhausted"]:
         # A hold, like the allowance's above: the input is kept, and raising the budget re-drains
         # it. Recorded on the entries so a job's press answers why it waits (F608, F596's shape);
@@ -830,8 +1038,14 @@ async def _attempt_turn(
             ),
             attempted=True,
             gave_up=tuple(entry.id for entry in abandoned),
+            conversation_id=conversation_id,
+            agent_wide=bool(getattr(exc, "agent_wide", False) or workspace_unavailable),
         )
-    return _Attempt(ScheduleResult(response=response, terminal_failure=False), attempted=True)
+    return _Attempt(
+        ScheduleResult(response=response, terminal_failure=False),
+        attempted=True,
+        conversation_id=conversation_id,
+    )
 
 
 async def redrain_queued_agents(project_id: str) -> None:

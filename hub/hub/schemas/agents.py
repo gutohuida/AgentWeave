@@ -61,6 +61,33 @@ _RETIRED = ("agent", "warning", "critical")
 LEGACY_CONTEXT_VOCABULARY = frozenset(_USED + _LIMIT + _RATIO + _WHEN + _CARRIED + _RETIRED)
 
 
+class AgentPoolEntryOut(BaseModel):
+    """One entry of a profile's pool, shaped as `hub/ui/src/api/agentPool.ts`'s `AgentPoolEntry`
+    (`a-profile-runs-each-task-on-a-runner-and-model-chosen-from-its-pool`, FR-1)."""
+
+    id: str = Field(max_length=64)
+    runner_id: str = Field(max_length=64)
+    # The runner's own name, as Settings -> Runners lists it.
+    runner_name: str = Field(max_length=256)
+    cli: str = Field(max_length=16)
+    # The runner's model; null runs the CLI's own default.
+    model: Optional[str] = Field(default=None, max_length=256)
+    # The catalog's effort value; null leaves it to the CLI.
+    effort: Optional[str] = Field(default=None, max_length=32)
+    default: bool = False
+
+
+class RunningRun(BaseModel):
+    """One of an agent's running runs, with what it is working on (FR-11). A profile running in
+    parallel can have several, and the roster lists every one rather than the newest."""
+
+    run_id: str = Field(max_length=64)
+    # Null for a run that belongs to no conversation, or works no task.
+    conversation_id: Optional[str] = Field(default=None, max_length=64)
+    task_id: Optional[str] = Field(default=None, max_length=64)
+    started_at: Optional[datetime] = None
+
+
 class AgentSummary(BaseModel):
     name: str = Field(max_length=64)
     # What this agent is for, in the operator's words. Absent, not empty, when unset — it is
@@ -78,6 +105,10 @@ class AgentSummary(BaseModel):
     # "open" or "archived". An agent is archived, never deleted; the default listing excludes
     # archived ones, so this is only ever "archived" for a caller that asked for them.
     lifecycle: str = Field(default="open", max_length=16)
+    # The profile this agent was folded into, or None (`fold-duplicate-agents-into-one-profile-
+    # with-their-history-kept`, FR-4). A folded agent is also archived, so it is listed only under
+    # `lifecycle=archived` and `all`.
+    folded_into: Optional[str] = Field(default=None, max_length=64)
     # The CLI this agent runs as. Free-form, not an enum: a Runner record supplies its own `cli`
     # and any value the registry accepts can appear here. "native" is the no-binding fallback.
     runner: str = Field(default="native", max_length=64)
@@ -92,6 +123,9 @@ class AgentSummary(BaseModel):
     # agent's, not a conversation's; a screen on another conversation reads this to tell the
     # turn is elsewhere (F844). Null with no run, or a run that belongs to no conversation.
     running_conversation_id: Optional[str] = Field(default=None, max_length=64)
+    # Every running run of this agent, oldest first: with profiles running in parallel there can
+    # be several, each in its own conversation (FR-11). `running_conversation_id` is the newest's.
+    running_runs: List[RunningRun] = Field(default_factory=list)
     # The posture this agent's next run gets when nobody chose one, and what clearing its default
     # would give (the same with `yolo` off). Null with no runner bound: there is no run to describe.
     permission_mode_at_rest: Optional[str] = Field(default=None, max_length=32)
@@ -103,6 +137,9 @@ class AgentSummary(BaseModel):
     )
     color_index: Optional[int] = None  # Stable palette index, assigned once at registration
     runner_id: Optional[str] = Field(default=None, max_length=64)  # Bound Runner record, if any
+    # The runners this profile may run on, in the operator's order; exactly one is the default,
+    # and `runner_id` names its runner. Empty for an agent with no runner.
+    pool: List[AgentPoolEntryOut] = Field(default_factory=list)
     charter_id: Optional[str] = Field(default=None, max_length=64)  # Bound Charter record, if any
     # How long this agent waits on the operator. None means the built-in default.
     permission_timeout_seconds: Optional[int] = None
@@ -208,8 +245,27 @@ class RunFacts(BaseModel):
     # reason: an invented value would be indistinguishable from a recorded one.
     harness_mcp_status: Optional[str] = Field(default=None, max_length=16)
     plane_surface: Optional[str] = Field(default=None, max_length=8)
+    # What the run launched with (`a-profile-runs-each-task-on-a-runner-and-model-chosen-from-its-
+    # pool`, FR-12), the row's own values: the runner record, the model it was given and the
+    # reasoning effort. None where the CLI chose, or for a run that predates the record.
+    runner_id: Optional[str] = Field(default=None, max_length=64)
+    model: Optional[str] = Field(default=None, max_length=256)
+    effort: Optional[str] = Field(default=None, max_length=32)
 
     model_config = {"from_attributes": True}
+
+
+class RunRead(RunFacts):
+    """One run as `GET /runs/{run_id}` answers it: its facts, and what it belongs to."""
+
+    id: str = Field(max_length=64)
+    agent: str = Field(max_length=64)
+    conversation_id: Optional[str] = Field(default=None, max_length=64)
+    task_id: Optional[str] = Field(default=None, max_length=64)
+    initiator: str = Field(max_length=16)
+    # The runner's CLI and name, read from the runner record now; None where it has been deleted.
+    cli: Optional[str] = Field(default=None, max_length=64)
+    runner_name: Optional[str] = Field(default=None, max_length=256)
 
 
 class AgentTimeline(BaseModel):
@@ -244,7 +300,7 @@ class ContextUsageCreate(RequestModel):
     context_tokens: Optional[int] = Field(default=None, ge=0)
     limit_tokens: Optional[int] = Field(default=None, gt=0)
     percent: Optional[float] = Field(default=None, ge=0, le=100)
-    model: Optional[str] = Field(default=None, max_length=128)
+    model: Optional[str] = Field(default=None, max_length=256)
     session_id: Optional[str] = Field(default=None, max_length=128)
     observed_at: float = Field(ge=0)
     breakdown: Optional[Dict[str, int]] = None

@@ -1,0 +1,62 @@
+/* A profile's pool (spec a-profile-runs-each-task-on-a-runner-and-model-chosen-from-its-pool): the
+   list and add row on the agent's Running page, the composer's pool picker, and the per-task entry
+   in the Build dialog. Tokens only. */
+
+.aw-pool-list { list-style: none; margin: 0; padding: 0; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+.aw-pool-entry {
+  display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; align-items: center; gap: 10px;
+  padding: 8px 10px 8px 12px; border-top: 1px solid var(--border);
+}
+.aw-pool-entry:first-child { border-top: 0; }
+.aw-pool-entry[data-default="true"] { background: var(--surface-2); }
+.aw-pool-entry-text { display: flex; flex-direction: column; min-width: 0; gap: 1px; }
+.aw-pool-entry-label { font-size: 13px; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.aw-pool-entry-detail { font-size: 11.5px; color: var(--text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.aw-pool-default {
+  display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 999px;
+  font-size: 11.5px; font-weight: 500; color: var(--text); border: 1px solid var(--border-hi);
+}
+.aw-pool-entry .aw-icon-button[aria-disabled="true"] { opacity: .4; cursor: not-allowed; }
+
+.aw-pool-empty { display: flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--amber); padding: 4px 0; }
+
+.aw-pool-block { display: flex; flex-direction: column; gap: 8px; width: 100%; }
+.aw-pool-add-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.aw-pool-note { font-size: 12px; line-height: 1.45; color: var(--text-2); }
+.aw-pool-refusal { display: flex; align-items: center; gap: 6px; font-size: 12px; line-height: 1.45; color: var(--amber); }
+.aw-pool-link { font-size: inherit; color: var(--ring); background: none; border: 0; padding: 0; cursor: pointer; }
+.aw-pool-link:hover { text-decoration: underline; }
+.aw-pool-link:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--ring); border-radius: 3px; }
+
+/* The composer's picker. */
+.aw-pool-popover {
+  position: absolute; left: 0; bottom: 100%; margin-bottom: 4px; z-index: 50; width: 300px;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, .18);
+  animation: aw-pool-pop var(--dur-pop) var(--ease-out);
+}
+@keyframes aw-pool-pop { from { opacity: 0; transform: translateY(4px); } }
+@media (prefers-reduced-motion: reduce) { .aw-pool-popover { animation: none; } }
+.aw-pool-options { max-height: 260px; overflow-y: auto; padding: 4px; outline: none; }
+.aw-pool-options:focus-visible { box-shadow: inset 0 0 0 2px var(--ring); border-radius: 8px; }
+.aw-pool-group-head {
+  display: flex; align-items: center; gap: 6px; padding: 6px 8px 3px;
+  font-size: 10.5px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--text-2);
+}
+.aw-pool-option {
+  display: grid; grid-template-columns: 16px minmax(0, 1fr) auto; align-items: center; gap: 6px;
+  padding: 6px 8px; border-radius: 6px; cursor: pointer; color: var(--text);
+}
+.aw-pool-option[data-highlighted="true"] { background: var(--row-hover); }
+.aw-pool-option[aria-disabled="true"] { cursor: not-allowed; }
+.aw-pool-option[aria-disabled="true"] .aw-pool-option-label { color: var(--text-2); }
+.aw-pool-option-check { display: inline-flex; color: var(--blue); }
+.aw-pool-option-text { display: flex; flex-direction: column; min-width: 0; }
+.aw-pool-option-label { font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.aw-pool-option-detail { font-size: 11px; line-height: 1.35; color: var(--text-2); }
+.aw-pool-option-tag { font-size: 11px; color: var(--text-2); }
+.aw-pool-popover-foot { padding: 7px 10px; border-top: 1px solid var(--border); font-size: 11px; line-height: 1.4; color: var(--text-2); }
+
+/* The Build dialog's per-task entry, under the agent. */
+.aw-bp-entry { display: flex; flex-direction: column; gap: 3px; }
+.aw-bp-entry-fact { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; color: var(--text-2); min-height: 24px; }

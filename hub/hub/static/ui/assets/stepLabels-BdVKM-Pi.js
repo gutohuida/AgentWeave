@@ -1,0 +1,1 @@
+const c={intake:"Intake",requirements:"Requirements","requirements-and-acceptance":"Requirements and acceptance",acceptance:"Acceptance criteria",approach:"Approach",tasks:"Tasks",build:"Build"};function t(e){return c[e]??e.replace(/-/g," ").replace(/^./,a=>a.toUpperCase())}export{t as s};

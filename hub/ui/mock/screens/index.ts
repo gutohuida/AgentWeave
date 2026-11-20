@@ -25,6 +25,7 @@ const Roadmap = React.lazy(() => import('./Roadmap'))
 const SpecHome = React.lazy(() => import('./SpecHome'))
 const BuildView = React.lazy(() => import('./BuildView'))
 const BuildSummaries = React.lazy(() => import('./BuildSummaries'))
+const ProfilePools = React.lazy(() => import('./ProfilePools'))
 
 export function screenFor(route: MockRoute): ScreenComponent {
   switch (route.kind) {
@@ -48,6 +49,8 @@ export function screenFor(route: MockRoute): ScreenComponent {
       return BuildView
     case 'build-summaries':
       return BuildSummaries
+    case 'profile-pools':
+      return ProfilePools
     case 'conversation':
       return Conversation
     case 'settings':
@@ -80,6 +83,8 @@ export const SCREENS: Array<{ id: string; label: string; route: MockRoute }> = [
   { id: 'traces', label: 'Traces', route: { kind: 'traces' } },
   { id: 'build', label: 'Build · One build, every task and run', route: { kind: 'build', buildId: null } },
   { id: 'build-summaries', label: 'Build · Its summaries on the spec page and in the panel', route: { kind: 'build-summaries' } },
+  { id: 'pool-build', label: 'Pools · Build chooses a model per task', route: { kind: 'profile-pools', view: 'build' } },
+  { id: 'pool-chat', label: 'Pools · The chat picker', route: { kind: 'profile-pools', view: 'chat' } },
   { id: 'conversation-trace', label: 'Conversation · Its trace', route: { kind: 'conversation-trace', conversationId: null } },
   { id: 'conversation', label: 'Conversation', route: { kind: 'conversation', agent: 'Builder', conversationId: 'conv-e3aba2c5956a' } },
   { id: 'conversation-spec', label: 'Conversation · Spec panel', route: { kind: 'conversation', agent: 'Architect', conversationId: 'conv-9cdda4865e0b', panel: 'spec' } },

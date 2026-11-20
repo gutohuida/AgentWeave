@@ -373,6 +373,15 @@ def apply(
         # Its declared builder (slice D), carried into the build it joins (`builds`).
         if isinstance(task.get("builder"), str) and task["builder"].strip():
             entry["builder"] = task["builder"].strip()
+        # And the pool entries it recommends (FR-5), as the document's own tasks carry them.
+        for name in ("builder_entry", "checker_entry"):
+            recommended = task.get(name)
+            if isinstance(recommended, dict) and isinstance(recommended.get("runner_id"), str):
+                entry[name] = {
+                    part: recommended[part]
+                    for part in ("runner_id", "effort", "reason")
+                    if isinstance(recommended.get(part), str) and recommended[part].strip()
+                }
         new["tasks"] = [*tasks, entry]
         detail["change"] = entry
         return new, key, names[0], detail

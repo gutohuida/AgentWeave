@@ -22,6 +22,7 @@ from hub.db.models import (
     AgentHeartbeat,
     AgentJobDeletion,
     AgentOutput,
+    AgentPoolEntry,
     AIJob,
     ApiKey,
     Base,
@@ -59,6 +60,7 @@ from hub.db.models import (
     RunDivergence,
     Runner,
     SetupDismissal,
+    SpecCriterionConfirmation,
     SpecDocument,
     SpecDocumentEvent,
     SpecDocumentMerge,
@@ -117,6 +119,7 @@ PROJECT_SCOPED_TABLE_NAMES = [
     "spec_requirements",
     "spec_document_events",
     "spec_gap_acknowledgements",
+    "spec_criterion_confirmations",
     "spec_document_merges",
     "runs",
     "run_divergences",
@@ -126,6 +129,8 @@ PROJECT_SCOPED_TABLE_NAMES = [
     "inbound_queue_entries",
     "checkpoints",
     "agents",
+    # A profile's pool (`a-profile-runs-each-task-on-a-runner-and-model-chosen-from-its-pool`).
+    "agent_pool_entries",
     "agent_outputs",
     "acronym_counters",
     "worker_invocations",
@@ -191,6 +196,15 @@ async def _seed_full_project(session, project_id: str, tag: str) -> None:
     session.add(Charter(id=f"charter-{tag}", project_id=project_id, name="Charter"))
     session.add(Runner(id=f"runner-{tag}", project_id=project_id, name="Runner", cli="claude"))
     session.add(Agent(id=f"agent-{tag}", project_id=project_id, name=f"agent-{tag}"))
+    session.add(
+        AgentPoolEntry(
+            id=f"pool-{tag}",
+            project_id=project_id,
+            agent_id=f"agent-{tag}",
+            runner_id=f"runner-{tag}",
+            is_default=True,
+        )
+    )
     session.add(Task(id=f"task-{tag}", project_id=project_id, title="Task"))
     session.add(AcronymCounter(project_id=project_id, acronym="TAG", high_water=1))
     session.add(
@@ -410,6 +424,17 @@ async def _seed_full_project(session, project_id: str, tag: str) -> None:
             place="FR-1",
             reason="left on purpose",
             actor_kind="operator",
+        )
+    )
+    session.add(
+        SpecCriterionConfirmation(
+            id=f"speccfm-{tag}",
+            document_id=f"specdoc-{tag}",
+            project_id=project_id,
+            criterion_key="c1",
+            kind="new",
+            criterion_digest="0" * 64,
+            actor="claude-1",
         )
     )
     session.add(

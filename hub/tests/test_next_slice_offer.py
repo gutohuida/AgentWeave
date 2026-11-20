@@ -15,6 +15,7 @@ from hub import slice_drafting, spec_lifecycle
 from hub.db.engine import async_session_factory
 from hub.db.models import Agent, Conversation, SpecDocument, Task, TaskLanding
 
+from ._spec_confirmations import confirm_criteria
 from .test_spec_roadmaps import (  # noqa: F401 -- fixtures
     BASE,
     CONVERSATION,
@@ -129,7 +130,12 @@ async def test_take_queues_once_in_a_new_conversation_with_the_outcomes(
     assert again.status_code == 409, again.text
     (entry,) = await _queued("architect")
     assert await _queued("planner") == []
-    assert entry.origin_type == "operator" and entry.spec_document == offer["roadmap"]
+    answered = taken.json()["document"]
+    assert set(answered) == {"path", "title", "phase", "step"}, answered
+    assert answered["phase"] == "exploring" and answered["step"] == "intake"
+    assert (
+        entry.origin_type == "operator" and entry.spec_document == taken.json()["document"]["path"]
+    )
     async with async_session_factory() as session:
         readable_id = (await session.get(Task, task_id)).readable_id
     assert readable_id and task_id not in entry.content
@@ -224,6 +230,7 @@ async def test_approval_refuses_the_request_and_an_old_request_is_an_offer(
     refused = await _approve(app, auth_headers, slice_path, draft_next_slice=True)
     assert refused.status_code == 400, refused.text
     assert "offer" in refused.json()["detail"]["message"]
+    await confirm_criteria(slice_path)
     refused_too = await app.post(
         f"{BASE}/documents/approve-and-build",
         params={"path": slice_path},

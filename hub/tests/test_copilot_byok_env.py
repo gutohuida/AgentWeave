@@ -34,6 +34,7 @@ from hub.db.models import (
 from hub.runner_events import text_event
 
 from ._background_runs import await_background_runs
+from ._pool import add_pool_entry
 
 PROJECT = "proj-test"
 HAIKU = "claude-haiku-4-5-20251001"
@@ -180,6 +181,8 @@ async def test_a_copilot_catalog_model_is_refused_too_and_the_stored_overrides_d
 @pytest.mark.asyncio
 async def test_other_controls_still_apply_on_a_provider_runner(app, auth_headers):
     await _provider_agent(app, auth_headers, "byok-3")
+    # A chat chooses an entry of its pool (FR-9 of the profile-pools change).
+    await add_pool_entry(app, auth_headers, "byok-3", effort="high")
     fake = _fake_turn()
     with patch("hub.copilot_acp.run_turn", fake):
         response = await _trigger(
@@ -198,6 +201,8 @@ async def test_other_controls_still_apply_on_a_provider_runner(app, auth_headers
 async def test_a_plain_copilot_runner_still_takes_a_model_override(app, auth_headers):
     await _agent(app, auth_headers, "plain-1")
     await _bind(app, auth_headers, "plain-1", await _runner(app, auth_headers, "plain-1-r"))
+    # The model is an entry of the pool, on a plain Copilot runner of that model (FR-9).
+    await add_pool_entry(app, auth_headers, "plain-1", cli="copilot", model=COPILOT_MODEL)
     fake = _fake_turn()
     with patch("hub.copilot_acp.run_turn", fake):
         response = await _trigger(
@@ -214,7 +219,14 @@ async def test_a_model_stored_before_the_rebind_is_not_applied_and_is_kept(app, 
     """R3: overrides are trusted at spawn, so a `model` stored while the agent was on a plain
     Copilot runner would reach the provider unless the spawn itself ignores it."""
     await _agent(app, auth_headers, "rebound")
-    await _bind(app, auth_headers, "rebound", await _runner(app, auth_headers, "rebound-plain"))
+    # The plain runner is of the model the chat names, so the choice is its default entry's and
+    # the conversation follows the binding (FR-9 of the profile-pools change).
+    await _bind(
+        app,
+        auth_headers,
+        "rebound",
+        await _runner(app, auth_headers, "rebound-plain", model=COPILOT_MODEL),
+    )
     fake = _fake_turn()
     with patch("hub.copilot_acp.run_turn", fake):
         first = await _trigger(

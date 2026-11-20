@@ -768,7 +768,8 @@ async def test_an_agent_with_queued_input_and_a_future_hold_is_armed(app, armed,
 
     await provider_allowance.arm_held_queues()
 
-    armed.assert_called_once_with(PROJECT, "rearm-future", hold.hold_until)
+    # A row naming no CLI arms the wake keyed by none (FR-11 of the profile-pools change).
+    armed.assert_called_once_with(PROJECT, "rearm-future", hold.hold_until, None)
     redrained.assert_not_called()
 
 

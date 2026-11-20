@@ -54,9 +54,10 @@ from .db.models import (
 )
 from .loop_ending import QUEUE_DRAINED_REASON, end_loop
 from .provider_allowance import (
-    agent_holds,
+    agent_cli_holds,
     hold_busy_reason,
     hold_coalesce_reason,
+    hold_on,
     provider_hold,
 )
 from .run_task_binding import (
@@ -80,6 +81,7 @@ from .utils import persist_accepted_event, persist_event, short_id
 
 if TYPE_CHECKING:
     from .requirement_gate import ApprovalHold
+    from .turn_scheduler import ScheduleResult
 
 logger = logging.getLogger(__name__)
 
@@ -405,6 +407,10 @@ async def _loop_flow_busy_refusal(
     busy_reason = await _loop_agent_busy_reason(session, loop.project_id, agent, facts)
     if busy_reason is None:
         return None
+    if loop.spec_document_id is not None and await _held_only_on_another_cli(
+        session, loop, agent, facts
+    ):
+        return None
     if not await _loop_has_open_task(session, loop, facts):
         return LoopBusyRefusal(busy_reason, BUSY_EMPTY_QUEUE)
     if await _agents_a_loop_may_staff(session, loop, facts):
@@ -421,6 +427,24 @@ async def _loop_flow_busy_refusal(
     # The same predicate `_agents_a_loop_may_staff` uses for its own empty answer.
     condition = BUSY_LOOP_SCOPE if loop.spec_document_id is None else BUSY_NO_FREE_AGENT
     return LoopBusyRefusal(busy_reason, condition)
+
+
+async def _held_only_on_another_cli(
+    session: AsyncSession, loop: Loop, agent: str, facts: "Optional[FiringFacts]"
+) -> bool:
+    """Whether *agent* is busy only by a provider hold, and an open task of the flow *loop* would
+    launch on a CLI it is not held on (`a-profile-runs-each-task-on-a-runner-and-model-chosen-from-
+    its-pool`, FR-11). The guard's hold is on the default entry's CLI; a task whose builder entry is
+    on another is still offered, and the walk asks each task (`FiringFacts.held_for`)."""
+    facts = facts or FiringFacts(session)
+    if agent in await facts.running_agents(loop.project_id):
+        return False
+    if agent not in await facts.holds(loop.project_id):
+        return False
+    for task in await facts.loop_candidates(loop):
+        if not await facts.held_for(loop.project_id, agent, task):
+            return True
+    return False
 
 
 #: Latest landing states of an approved task the Hub is still moving: checking or merging it, or a
@@ -1326,6 +1350,12 @@ class FiringFacts:
             ("project", project_id), lambda: self._session.get(Project, project_id)
         )
 
+    async def profiles_run_in_parallel(self, project_id: str) -> bool:
+        """The project's "profiles run in parallel" switch (`turn_scheduler.profiles_run_in_parallel`),
+        from the project row this holder already read."""
+        project = await self.project(project_id)
+        return bool(project is not None and project.profiles_run_in_parallel)
+
     async def loops(self, project_id: str) -> "list[Loop]":
         async def read() -> "list[Loop]":
             from .db.models import Build
@@ -1539,15 +1569,77 @@ class FiringFacts:
                 self._memo.setdefault(("evidence_authors", task_id), answer)
         return self._memo[key]
 
-    async def holds(self, project_id: str) -> "Dict[str, Any]":
-        """`provider_hold` for every held agent of the project, read at one `now`."""
+    async def cli_holds(self, project_id: str) -> "Dict[str, Any]":
+        """`agent_cli_holds`' answer: each held agent's readings by CLI, read at one `now`."""
         return await self._once(
-            ("holds", project_id), lambda: agent_holds(self._session, project_id)
+            ("cli_holds", project_id), lambda: agent_cli_holds(self._session, project_id)
         )
 
+    async def holds(self, project_id: str) -> "Dict[str, Any]":
+        """`agent_holds`' answer -- each agent held on its default entry's CLI -- from the readings
+        and the agents this holder already read, so it costs no statement of its own."""
+
+        async def read() -> "Dict[str, Any]":
+            by_agent = await self.cli_holds(project_id)
+            if not by_agent:
+                return {}
+            agents = await self.agents(project_id)
+            runners = self._memo.get(("runners", project_id), {})
+            defaults = {
+                agent.name: runners[agent.runner_id].cli
+                for agent in agents
+                if agent.runner_id in runners
+            }
+            held: Dict[str, Any] = {}
+            for agent, readings in by_agent.items():
+                hold = hold_on(readings, defaults.get(agent))
+                if hold is not None:
+                    held[agent] = hold
+            return held
+
+        return await self._once(("holds", project_id), read)
+
     async def held_agents(self, project_id: str) -> "Set[str]":
-        """`agents_held`'s answer."""
+        """`agents_held`'s answer: held on the default entry's CLI."""
         return set(await self.holds(project_id))
+
+    async def _pool_clis(self, project_id: str) -> "Dict[str, Set[str]]":
+        """The CLIs each agent's pool holds entries on, read with the agents (`agents`)."""
+        await self.agents(project_id)
+        return self._memo[("pool_clis", project_id)]
+
+    async def held_for(self, project_id: str, agent: str, task: Task) -> bool:
+        """Whether a provider hold stops *agent*'s work on *task* (FR-11 of `a-profile-runs-each-
+        task-on-a-runner-and-model-chosen-from-its-pool`): a hold is on one CLI, so the question is
+        which CLI the task's builder run would launch on, by start precedence. Nothing more is read
+        for an agent held nowhere, and the entry is resolved only for a pool on several CLIs."""
+        readings = (await self.cli_holds(project_id)).get(agent)
+        if not readings:
+            return False
+        key = ("held_for", agent, task.id)
+        if key not in self._memo:
+            clis = (await self._pool_clis(project_id)).get(agent, set())
+            cli: Optional[str]
+            if len(clis) == 1:
+                (cli,) = clis
+            elif not clis:
+                held = (await self.holds(project_id)).get(agent)
+                self._memo[key] = held is not None
+                return bool(self._memo[key])
+            else:
+                from . import launch_entry
+                from .db.models import Runner
+
+                row = next((a for a in await self.agents(project_id) if a.name == agent), None)
+                cli = None
+                if row is not None:
+                    entry = await launch_entry.resolve(
+                        self._session, row, task=task, fix=False, role=launch_entry.BUILDER
+                    )
+                    runner = await self._session.get(Runner, entry.runner_id) if entry else None
+                    cli = runner.cli if runner is not None else None
+            self._memo[key] = hold_on(readings, cli) is not None
+        return bool(self._memo[key])
 
     async def attendance(self, project_id: str) -> Any:
         async def read() -> Any:
@@ -1561,20 +1653,36 @@ class FiringFacts:
         """Every agent of the project, archived ones too, in name order, with their runners."""
 
         async def read() -> "list[Agent]":
-            from .db.models import Runner
+            from sqlalchemy.orm import aliased
 
-            pairs = (
+            from .db.models import AgentPoolEntry, Runner
+
+            # With the CLI of each pool entry's runner (`held_for`), in the same statement: one
+            # row per entry, so an agent repeats once per entry and is kept once.
+            pool_runner = aliased(Runner)
+            rows = (
                 await self._session.execute(
-                    select(Agent, Runner)
+                    select(Agent, Runner, pool_runner.cli)
                     .outerjoin(Runner, Runner.id == Agent.runner_id)
+                    .outerjoin(AgentPoolEntry, AgentPoolEntry.agent_id == Agent.id)
+                    .outerjoin(pool_runner, pool_runner.id == AgentPoolEntry.runner_id)
                     .where(Agent.project_id == project_id)
                     .order_by(Agent.name)
                 )
             ).all()
             self._memo[("runners", project_id)] = {
-                runner.id: runner for _, runner in pairs if runner is not None
+                runner.id: runner for _, runner, _ in rows if runner is not None
             }
-            return [agent for agent, _ in pairs]
+            pool_clis: Dict[str, Set[str]] = {}
+            agents: "list[Agent]" = []
+            for agent, _, cli in rows:
+                if agent.name not in pool_clis:
+                    pool_clis[agent.name] = set()
+                    agents.append(agent)
+                if cli is not None:
+                    pool_clis[agent.name].add(cli)
+            self._memo[("pool_clis", project_id)] = pool_clis
+            return agents
 
         return await self._once(("agents", project_id), read)
 
@@ -1846,10 +1954,31 @@ async def _agents_a_loop_may_staff(
     if loop.spec_document_id is None:
         return []
     facts = facts or FiringFacts(session)
-    free = await _agents_that_are_free(session, loop.project_id, facts)
+    free = (
+        await _agents_a_flow_may_offer_in_parallel(loop.project_id, facts)
+        if await facts.profiles_run_in_parallel(loop.project_id)
+        else await _agents_that_are_free(session, loop.project_id, facts)
+    )
     withheld = await _agents_withheld_from_fresh_work(session, loop, facts)
     build = await facts.build_of_loop(loop)
     return [name for name in free if _pool_admits(name, withheld, build)]
+
+
+async def _agents_a_flow_may_offer_in_parallel(
+    project_id: str, facts: "FiringFacts"
+) -> "list[str]":
+    """A flow's pool while the project's switch is on (`one-profile-runs-many-turns-at-once-on-
+    different-tasks`, FR-4): every agent with a runner that no provider hold stops, in name order.
+
+    `_agents_that_are_free`'s other two halves, running and holding work, are what one run at a
+    time needed: with the switch on a profile starts a turn per task beside the ones it is running
+    (FR-2), so neither stops an offer. A hold still does, because it stops every new start (D5).
+    """
+    return [
+        record.name
+        for record in await facts.roster(project_id)
+        if record.has_runner and not record.held
+    ]
 
 
 async def _loop_task_an_idle_assignee_could_resume(
@@ -2254,8 +2383,12 @@ async def resolve_reviewer(
     accounts of the same rung.
     """
     from . import review_turn
+    from .agent_profiles import widen_to_profiles
 
     unavailable = unavailable or set()
+    # Excluded by profile, not by name (FR-9): an author's profile and every name folded into it
+    # may not review it, each told which profile it shares with the author.
+    exclude = await widen_to_profiles(session, project_id, exclude)
 
     resolution = await build_checker_resolution(session, task, project_id, facts)
     if resolution is None:
@@ -2539,7 +2672,16 @@ async def decide_firing(
         for name in {*free, default_agent}
         if name and await facts.is_read_only(loop.project_id, name)
     }
-    running = await facts.running_agents(loop.project_id)
+    # **While the project's switch is on, a flow's running agent is not a busy one**
+    # (`one-profile-runs-many-turns-at-once-on-different-tasks`, FR-4): it starts a turn per task
+    # beside the ones it runs, so being mid-turn stops no offer, and one firing may give one agent
+    # several tasks -- `taken` defers nobody's work but a review's. What still stops an offer is a
+    # turn on that very task (`held`, `attendance`) and a provider hold (`held_agents`). A
+    # documentless loop is one agent's one queue and keeps one turn at a time.
+    parallel = loop.spec_document_id is not None and await facts.profiles_run_in_parallel(
+        loop.project_id
+    )
+    running = set() if parallel else await facts.running_agents(loop.project_id)
     # The per-task counterpart of `running`, for design D8's refusal. Asked once before the walk
     # for the same two reasons the line above is: a wide firing asks it about several candidates,
     # and asking it per candidate would make this a third place the question is asked.
@@ -2556,8 +2698,9 @@ async def decide_firing(
     # queue`, D6). `schedule_agent` will start nothing for them before the reset, so briefing them
     # again only piles up queued input. Kept apart from `running` on purpose: a held agent has no
     # run, so the running arm's agent-level exception (a run carrying no `task_id`) does not reach
-    # it, and its assigned task is in flight only where input naming it is queued for it.
-    held_agents = await facts.held_agents(loop.project_id)
+    # it, and its assigned task is in flight only where input naming it is queued for it. Asked
+    # per task (`facts.held_for`): a hold is on one CLI, and a task whose builder entry is on
+    # another is still offered (FR-11).
     # Design D7: the complement of the roster filter, which drops archived agents and so cannot
     # say which of a task's holders are among them.
     archived_agents = await facts.archived_agents(loop.project_id)
@@ -2787,7 +2930,7 @@ async def decide_firing(
                 # A preferred builder (F1112): work nobody has started goes to a free agent rather
                 # than waiting for a busy one, where the document said the name is a preference.
                 if (
-                    (agent in running or agent in held_agents)
+                    (agent in running or await facts.held_for(loop.project_id, agent, task))
                     and task.status in ("pending", "assigned")
                     and not attendance.attended(task.id)
                     and agent == task.builder
@@ -2836,7 +2979,7 @@ async def decide_firing(
                     surfaced_rows.add(task.id)
                     unstaffed.append((task.id, _abandoned_work_reason(task, agent, abandonment)))
                     continue
-                if agent in taken:
+                if agent in taken and not parallel:
                     deferred.append(
                         (
                             task.id,
@@ -2878,7 +3021,11 @@ async def decide_firing(
                     )
                     unstaffed.append((task.id, reason))
                     continue
-                if agent in running or agent in held_agents or attendance.attends(task.id, agent):
+                if (
+                    agent in running
+                    or await facts.held_for(loop.project_id, agent, task)
+                    or attendance.attends(task.id, agent)
+                ):
                     # Busy: the task waits for its builder (in flight, F23), and nobody else is
                     # given it in the meantime.
                     in_flight.append((task.id, agent))
@@ -2892,7 +3039,7 @@ async def decide_firing(
                         )
                     )
                     continue
-                if agent in taken:
+                if agent in taken and not parallel:
                     deferred.append(
                         (
                             task.id,
@@ -2906,9 +3053,9 @@ async def decide_firing(
                 and not default_withheld
                 and default_agent not in read_only
                 and default_agent not in running
-                and default_agent not in held_agents
                 and default_agent not in taken
                 and default_agent != judging_default
+                and not await facts.held_for(loop.project_id, default_agent, task)
             ):
                 # D2's default, still first in line for the first unstaffed task.
                 #
@@ -2931,6 +3078,12 @@ async def decide_firing(
                     ),
                     None,
                 )
+                if candidate is None and parallel:
+                    # Everybody free already has a selection; with the switch on one of them
+                    # takes another (FR-4), the first in the pool's order.
+                    candidate = next(
+                        (n for n in free if n not in read_only and n != judging_default), None
+                    )
                 if candidate is None:
                     # Width is bounded by available agents (design D5) and this is that bound
                     # being reached, not a fault. **For a documentless loop `free` is always empty**
@@ -4455,6 +4608,35 @@ async def _scheduled_job_runner(job_id: str) -> None:
         await scheduler._fire_job_by_id(job_id)
 
 
+async def _outcome_for_conversation(
+    project_id: str, result: "ScheduleResult", conversation_id: str
+) -> "ScheduleResult":
+    """What became of *conversation_id*'s input in the pass that answered *result*.
+
+    With the project's switch off a pass starts at most one turn and its answer is the firing's.
+    With it on (FR-4) one pass starts every conversation of the agent that can start, so a firing
+    giving one agent two tasks may find its second turn already started by the pass it ran for
+    the first, perhaps already finished, and its own pass then answering "queue is empty". The
+    pass's answer for the conversation stands where it has one; a conversation it does not name
+    whose input became a run began its turn in an earlier pass.
+    """
+    if result.by_conversation is None:
+        return result
+    if conversation_id in result.by_conversation:
+        return result.by_conversation[conversation_id]
+    async with async_session_factory() as session:
+        began = (
+            await session.execute(
+                select(Run.id)
+                .where(Run.project_id == project_id, Run.conversation_id == conversation_id)
+                .limit(1)
+            )
+        ).scalar_one_or_none()
+    if began is not None:
+        return type(result)(waiting_reason=None, terminal_failure=False)
+    return result
+
+
 class JobScheduler:
     """Wraps APScheduler for AI Job execution."""
 
@@ -5220,7 +5402,9 @@ class JobScheduler:
             # Never raises. A transient failure is retried by the Hub and comes back as a
             # non-terminal wait, which leaves the `JobRun` in progress: a firing that has not
             # started yet, not a failed one.
-            schedule_result = await schedule_accepted(project_id, acting_agent)
+            schedule_result = await _outcome_for_conversation(
+                project_id, await schedule_accepted(project_id, acting_agent), conversation_id
+            )
             turn_began = not no_turn_began(schedule_result)
             if not turn_began:
                 # This is the same terminal outcome startup reconciliation would eventually
@@ -5487,9 +5671,14 @@ class JobScheduler:
         from .turn_scheduler import no_turn_began, schedule_accepted
 
         for agent, run_id in staged:
+            async with async_session_factory() as session:
+                run = await session.get(JobRun, run_id)
+                conversation_id = run.conversation_id if run is not None else None
             # Never raises; a transient failure is retried by the Hub and leaves the selection's
             # `JobRun` in progress (F349, design D6).
             result = await schedule_accepted(project_id, agent)
+            if conversation_id is not None:
+                result = await _outcome_for_conversation(project_id, result, conversation_id)
             if no_turn_began(result):
                 async with async_session_factory() as session:
                     run = await session.get(JobRun, run_id)

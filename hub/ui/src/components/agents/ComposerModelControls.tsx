@@ -2,6 +2,9 @@ import { useEffect, useRef, useState } from 'react'
 import { Icon } from '@/components/common/Icon'
 import { Button } from '@/components/ui/button'
 import { ModelPicker } from './ModelPicker'
+import { PoolPicker } from './pool/PoolPicker'
+import { isEntryControl } from './pool/poolModel'
+import type { AgentPoolEntry } from '@/api/agentPool'
 import { useModelCatalog, providerForRunner, type ControlDescriptor } from '@/api/modelCatalog'
 import { providerRunnerModelLabel, withheldStoredModel } from '@/lib/runnerProvider'
 
@@ -37,6 +40,16 @@ interface ComposerModelControlsProps {
    * the bound CLI does not offer (`rebinding-an-agents-runner-starts-clean`, FR-10). Omitted, the
    * stored model is shown as it always was. */
   runnerModel?: string | null
+  /** The agent's pool (`a-profile-runs-each-task-on-a-runner-and-model-chosen-from-its-pool`,
+   *  FR-9). Given and not empty, the pool picker takes the model picker's and the Effort pill's
+   *  place: a chat chooses only among these entries, and an entry carries its effort. */
+  pool?: AgentPoolEntry[]
+  agentName?: string
+  /** The entry the next turn runs on (`chatEntry`). */
+  currentEntry?: AgentPoolEntry
+  /** The CLI the conversation started on; null before its first turn. */
+  poolStartedOn?: string | null
+  onChooseEntry?: (entry: AgentPoolEntry) => void
 }
 
 /** A compact "Label: Value ▾" trigger + popover listbox — the one interaction shape every
@@ -201,11 +214,44 @@ export function ComposerModelControls({
   modelIsRunners = false,
   modelPickerRequest = 0,
   runnerModel,
+  pool,
+  agentName,
+  currentEntry,
+  poolStartedOn = null,
+  onChooseEntry,
 }: ComposerModelControlsProps) {
   const { data: catalog } = useModelCatalog()
-  const providerId = providerForRunner(runner)
+  const providerId = providerForRunner(currentEntry?.cli ?? runner)
   const provider = catalog?.providers.find((p) => p.provider === providerId)
   if (!provider) return null
+
+  if (pool && pool.length > 0 && onChooseEntry) {
+    // The pool's entries replace the model list and the Effort pill; the CLI's other controls
+    // (the posture) stay, read from the entry's CLI.
+    return (
+      <>
+        <PoolPicker
+          agentName={agentName ?? 'This agent'}
+          pool={pool}
+          catalog={catalog}
+          current={currentEntry}
+          startedOn={poolStartedOn}
+          onChoose={onChooseEntry}
+          openRequest={modelPickerRequest}
+        />
+        {provider.controls
+          .filter((control) => control.kind === 'enum' && !isEntryControl(control.id))
+          .map((control) => (
+            <EnumControlPill
+              key={control.id}
+              control={control}
+              effectiveValue={effectiveControls[control.id]}
+              onChangeControl={onChangeControl}
+            />
+          ))}
+      </>
+    )
+  }
 
   // A model the conversation stores that this CLI does not offer is not what the next turn runs
   // (the Hub withholds it): the pill reads the runner's model, and a line names the stored one.

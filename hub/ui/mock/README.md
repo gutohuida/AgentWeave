@@ -255,3 +255,23 @@ http://localhost:5199/mock.html#conversation/Architect/conv-9cdda4865e0b/running
 ```
 
 Awaiting the operator's look.
+
+## A profile's pool of runners and models (mock, 2026-11-19)
+
+Spec `spec/changes/a-profile-runs-each-task-on-a-runner-and-model-chosen-from-its-pool`. The components
+are `src/components/agents/pool/` (`PoolEditor` for the agent's Running page, which takes the single
+Model choice's place through `AgentRunningSettings`' `pool` prop; `PoolPicker` for the composer, which
+replaces the model picker and the Effort pill; the pure rules in `poolModel.ts`) and the Build dialog's
+per-task model under each agent (`BuildPlanDialog`'s optional `pools`); `src/styles/profile-pool.css`
+styles them. The types the agents API is to return are in `src/api/agentPool.ts`; the Build payload
+and recommendation gain `task_builder_entries`/`task_checker_entries`. Every pool, runner and the
+catalog are hand-written in `mock/poolMock.ts` (`// mock state`): no Hub records a pool yet.
+
+```
+http://localhost:5199/mock.html#agent-settings/Builder/running              # five entries, Sonnet the default
+http://localhost:5199/mock.html#agent-settings/Builder/running?pool=empty   # empty | one | refused
+http://localhost:5199/mock.html#profile-pools/build                         # the slice's own seven tasks
+http://localhost:5199/mock.html#profile-pools/chat                          # new chat, started chat, one model
+```
+
+Approved by the operator on 2026-11-19 as it renders, including the author's choices: a started chat lists another coding agent's entries greyed out (a new chat is needed for them), an agent's menu detail is its default plus a count, and efforts use the catalog's labels.

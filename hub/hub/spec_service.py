@@ -23,6 +23,7 @@ from . import (
     spec_acknowledgements,
     spec_capability_links,
     spec_completeness,
+    spec_criterion_confirmations,
     spec_digest,
     spec_documents,
     spec_identity,
@@ -33,6 +34,7 @@ from . import (
     spec_tags,
     traces,
 )
+from . import spec_payload as spec_payload_module
 from .db.models import (
     Agent,
     InboundQueueEntry,
@@ -480,6 +482,9 @@ class Readiness:
     gaps: List[Dict[str, Any]]
     notes: List[Dict[str, Any]]
     acknowledged: List[Dict[str, Any]]
+    # Each criterion marked a guard, with its requirement's identifier: what approval shows the
+    # operator the drive will not need to fail (`existing-behaviour-is-caught-before-the-build` D6).
+    guards: List[Dict[str, Any]] = field(default_factory=list)
 
     @property
     def ready(self) -> bool:
@@ -515,6 +520,12 @@ async def readiness(
         if payload.kind == "change-spec" and not payload.tasks and payload.capabilities
         else frozenset()
     )
+    change = payload.kind == "change-spec"
+    confirmations = (
+        await spec_criterion_confirmations.digests(session, document)
+        if change and payload.acceptance_criteria
+        else {}
+    )
     findings = [
         *spec_completeness.check(
             payload,
@@ -522,6 +533,7 @@ async def readiness(
             approved_document_paths=approved_paths,
             roadmaps=roadmaps,
             proposed_capabilities=proposed,
+            confirmations=confirmations,
         ),
         *spec_completeness.approval_gaps(payload),
         # Same-file tasks with no order between them run in parallel and collide (F694).
@@ -532,6 +544,7 @@ async def readiness(
         *spec_completeness.reviewer_undeclared_warnings(payload),
         *spec_completeness.recommended_people_warnings(payload),
         *capability_link_notes(payload),
+        *await _pool_entry_warnings(session, document.project_id, payload),
         *_steps_skipped(workspace, document),
         *await _amendments_unreviewed(session, document),
         *await _vault_warnings(session, workspace, document),
@@ -562,7 +575,8 @@ async def readiness(
             open_gaps.append(gap.to_dict())
         else:
             acknowledged.append(spec_acknowledgements.entry(gap.to_dict(), row))
-    return Readiness([f.to_dict() for f in refusals], open_gaps, notes, acknowledged)
+    guards = await spec_criterion_confirmations.guards(session, document, payload) if change else []
+    return Readiness([f.to_dict() for f in refusals], open_gaps, notes, acknowledged, guards)
 
 
 async def merge_document(
@@ -1525,6 +1539,69 @@ async def _unclaimed_slices(
     return findings
 
 
+POOL_ENTRY_OUTSIDE_POOL = "pool_entry_outside_pool"
+
+
+async def _pool_entry_warnings(
+    session: AsyncSession, project_id: str, payload: SpecPayload
+) -> List[spec_completeness.Finding]:
+    """A task recommending a pool entry its builder's or checker's pool does not hold
+    (`a-profile-runs-each-task-on-a-runner-and-model-chosen-from-its-pool`, FR-5): kept, and told
+    naming the task and the entry. The profile is the task's own builder or checker, else the
+    document's default; one that names no open agent has no pool to judge by, and its name draws
+    its own warning."""
+    from .agent_pool import entry_label, pools_by_agent
+    from .db.models import Runner
+
+    local = [t for t in payload.tasks if t.from_ is None and (t.builder_entry or t.checker_entry)]
+    if not local:
+        return []
+    raw = payload_to_dict(payload)
+    default_builder = spec_payload_module.default_builder(raw)
+    default_checker = spec_payload_module.default_checker(raw)[0]
+    agents = {
+        agent.name: agent
+        for agent in (
+            await session.execute(
+                select(Agent).where(Agent.project_id == project_id, Agent.lifecycle != "archived")
+            )
+        )
+        .scalars()
+        .all()
+    }
+    pools = await pools_by_agent(session, project_id, [a.id for a in agents.values()])
+    findings: List[spec_completeness.Finding] = []
+    for task in local:
+        for role, profile, recommended in (
+            ("builder", task.builder or default_builder, task.builder_entry),
+            ("checker", task.checker or task.reviewer or default_checker, task.checker_entry),
+        ):
+            agent = agents.get(profile or "")
+            if recommended is None or agent is None:
+                continue
+            held = {(e.runner_id, e.effort) for e in pools.get(agent.id, [])}
+            if (recommended.runner_id, recommended.effort or None) in held:
+                continue
+            runner = await session.get(Runner, recommended.runner_id)
+            if runner is not None and runner.project_id != project_id:
+                runner = None
+            label = (
+                f"{entry_label(runner, recommended.effort)} on runner {runner.name}"
+                if runner is not None
+                else f"runner {recommended.runner_id!r}, which this project does not have"
+            )
+            findings.append(
+                spec_completeness.Finding(
+                    POOL_ENTRY_OUTSIDE_POOL,
+                    f"tasks.{task.key}.{role}_entry",
+                    f"task {task.key!r} recommends {label} for its {role}, which is not in "
+                    f"{agent.name}'s pool; Build will run it on {agent.name}'s default unless "
+                    "the entry is added to the pool first",
+                )
+            )
+    return findings
+
+
 #: Findings that are told and never gate (F704, "warn, don't gate"): neither a refusal nor a gap the
 #: operator must approve over. A proposal returns them among its warnings; an approval records them
 #: as the phase event's `notes` and answers them as `approval_notes`.
@@ -1541,6 +1618,9 @@ NOTE_CODES = frozenset(
         "test_only_task",
         "reviewer_undeclared",
         "recommended_people",
+        # A recommended pool entry the profile's pool lacks (FR-5): the pool may change before
+        # Build, and Build offers it only from the pool.
+        POOL_ENTRY_OUTSIDE_POOL,
     }
 )
 
@@ -1567,6 +1647,7 @@ class PhaseFindings:
     gaps: List[Dict[str, Any]]
     notes: List[Dict[str, Any]] = field(default_factory=list)
     acknowledged: List[Dict[str, Any]] = field(default_factory=list)
+    guards: List[Dict[str, Any]] = field(default_factory=list)
 
 
 def _stored_payload(workspace: ProjectWorkspace, document: SpecDocument) -> SpecPayload:
@@ -1680,7 +1761,9 @@ async def phase_findings(
     if to_phase != spec_lifecycle.APPROVED:
         return PhaseFindings([], [])
     report = await readiness(session, workspace, document, _stored_payload(workspace, document))
-    return PhaseFindings(report.refusals, report.gaps, report.notes, report.acknowledged)
+    return PhaseFindings(
+        report.refusals, report.gaps, report.notes, report.acknowledged, report.guards
+    )
 
 
 async def check(

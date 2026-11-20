@@ -21,6 +21,7 @@ from hub.db.models import Agent, AIJob, Loop, Run, SpecDocument, SpecDocumentEve
 from hub.scheduler import decide_firing
 from hub.spec_payload import SCHEMA_VERSION
 
+from ._spec_confirmations import confirm_criteria
 from .test_review_turn import _roster
 
 P = "proj-test"
@@ -98,7 +99,10 @@ async def _save(app, author_headers, document):
 
 
 async def _written(app, auth_headers, author_headers, document):
+    """Saved, its criteria confirmed, and saved again: what a confirmed document's save answers."""
     await _create(app, auth_headers)
+    await _save(app, author_headers, document)
+    await confirm_criteria(PATH)
     return await _save(app, author_headers, document)
 
 
@@ -110,6 +114,7 @@ async def _loaded(app, auth_headers):
 
 
 async def _approve(app, auth_headers, version, **body):
+    await confirm_criteria(PATH)
     return await app.post(
         f"{BASE}/documents/phase",
         params={"path": PATH, "to": "approved"},
@@ -338,6 +343,7 @@ async def test_a_stale_approval_names_no_version_is_refused(app, auth_headers, a
     """An approval that names no version is refused rather than accepted unseen."""
     await _written(app, auth_headers, author_headers, _document())
 
+    await confirm_criteria(PATH)
     response = await app.post(
         f"{BASE}/documents/phase",
         params={"path": PATH, "to": "approved"},
@@ -468,6 +474,7 @@ async def test_one_action_approves_and_builds(app, auth_headers, author_headers)
     await _written(app, auth_headers, author_headers, _document(delivery=FLOW))
     version = (await _loaded(app, auth_headers))["content_version"]
 
+    await confirm_criteria(PATH)
     response = await app.post(
         f"{BASE}/documents/approve-and-build",
         params={"path": PATH},
@@ -494,6 +501,7 @@ async def test_one_action_with_a_changed_document_is_refused_like_approving(
     seen = (await _loaded(app, auth_headers))["content_version"]
     await _save(app, author_headers, _document(delivery=FLOW, summary="Changed meanwhile."))
 
+    await confirm_criteria(PATH)
     response = await app.post(
         f"{BASE}/documents/approve-and-build",
         params={"path": PATH},

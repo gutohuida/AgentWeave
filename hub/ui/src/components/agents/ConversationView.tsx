@@ -587,6 +587,7 @@ export function ConversationView({
       specDocumentLabel={document ? documentNode?.title ?? document : null}
       onOpenSpecPicker={openPicker}
       onOpenExistingSpec={openPicker}
+      onOpenSpecDocument={onOpenDocument}
       onStartExploration={() => setExploreArmed(true)}
       createExploration={armedWithoutDocument ? createExploration : undefined}
       onExplorationStarted={(path) => {

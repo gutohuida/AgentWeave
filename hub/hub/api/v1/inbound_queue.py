@@ -29,13 +29,14 @@ from ...inbound_queue import (
     withdraw_entry,
 )
 from ...launchability import get_agent_config, probe_agent
-from ...provider_allowance import hold_sentence, operator_would_probe, provider_hold
+from ...provider_allowance import hold_sentence
 from ...run_task_binding import (
     checkout_held_sentence,
     resolve_bound_task,
     tasks_held_by_a_running_turn,
 )
 from ...sse import sse_manager
+from ...turn_scheduler import CONVERSATION_TURN_RUNNING, conversations_with_running_turn
 from ...usage_accounting import project_budget_state
 from ...utils import persist_accepted_event, persist_event
 
@@ -68,6 +69,9 @@ class QueueEntryResponse(BaseModel):
     #: Set when the Hub stopped trying. Present with `state == "withdrawn"`, which an operator
     #: withdrawal also produces — the reason is what distinguishes the two.
     abandoned_reason: Optional[str] = None
+    #: The spec document the entry's turn is bound to, or null. Always present, so a surface or a
+    #: drive can tell "bound to this document" from "bound to none".
+    spec_document: Optional[str] = None
 
     model_config = {"from_attributes": True}
 
@@ -151,7 +155,8 @@ async def _checkout_holder_reason(
         if not await asyncio.to_thread(worktrees.takes_task_workspace, repo_root, config, task_id):
             return None
         holder = (await tasks_held_by_a_running_turn(session, project_id)).get(task_id)
-        if holder is not None and holder != agent:
+        # Any holder, this agent included, as the trigger asks it (FR-7).
+        if holder is not None:
             return checkout_held_sentence(holder, task_id)
     except Exception:  # noqa: BLE001 - a diagnostic must not 500 on one failed check
         logger.warning("queue status: checkout holder check failed for %s", agent, exc_info=True)
@@ -221,6 +226,16 @@ async def queue_status(session: AsyncSession, project_id: str, agent: str) -> Qu
         .order_by(InboundQueueEntry.sequence)
     )
     entries = list(entries_result.scalars().all())
+    project_row = await session.get(Project, project_id)
+    parallel = bool(project_row is not None and project_row.profiles_run_in_parallel)
+    running_conversations = await conversations_with_running_turn(session, project_id, agent)
+    # While the switch is on a running run holds only its own conversation (start algorithm, steps
+    # 1 and 7), so the rest of the queue is explained as the scheduler would try it.
+    startable = (
+        [entry for entry in entries if entry.conversation_id not in running_conversations]
+        if parallel
+        else entries
+    )
     running = (
         await session.execute(
             select(func.count(Run.id)).where(
@@ -229,22 +244,28 @@ async def queue_status(session: AsyncSession, project_id: str, agent: str) -> Qu
         )
     ).scalar_one() > 0
     reason = None
-    if entries and running:
+    if entries and running and not parallel:
         reason = "agent is already running"
+    elif entries and not startable:
+        reason = CONVERSATION_TURN_RUNNING
     elif entries:
-        project_row = await session.get(Project, project_id)
+        entries = startable
         # Derived here and never stored on the entries (`a-spent-allowance-holds-the-queue`, D9),
         # so it names the hold exactly while the hold stands, for every entry, whenever it arrived.
         # Not while an operator entry would probe: the next turn will not wait for the reset.
-        hold = await provider_hold(session, project_id, agent)
+        # Per conversation (FR-11): a hold is on one CLI, so only input whose turn launches there
+        # waits on it, and the queue reads held only when all of it does.
+        from ...turn_scheduler import provider_held_conversations
+
+        provider_held = await provider_held_conversations(session, project_id, agent, entries)
         held = held_conversations(entries)
         if all(entry.conversation_id in held for entry in entries):
             # The scheduler's own answer (F598): nothing failed, the operator's Continue starts it.
             reason = continue_sentence(held)
         elif project_row and all(entry.hop_depth > project_row.hop_budget for entry in entries):
             reason = "hop budget exhausted"
-        elif hold is not None and not operator_would_probe(entries, hold):
-            reason = hold_sentence(agent, hold)
+        elif provider_held and all(entry.conversation_id in provider_held for entry in entries):
+            reason = hold_sentence(agent, next(iter(provider_held.values())))
         elif (
             # The turn the scheduler would build, not every queued entry (F133): an operator
             # message waiting in another conversation is not in that turn, and the scheduler

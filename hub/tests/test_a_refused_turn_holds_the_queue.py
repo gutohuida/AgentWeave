@@ -350,8 +350,9 @@ async def test_a_completed_turn_with_a_refusal_reading_arms_the_wake(
     [entry] = await _entries(agent)
     assert entry.state == "delivered"
     assert entry.allowance_refusals == 0
+    # The wake is the hold's on the CLI that refused (FR-11 of the profile-pools change).
     armed.assert_called_once_with(
-        "proj-test", agent, datetime.fromtimestamp(resets_at, tz=timezone.utc)
+        "proj-test", agent, datetime.fromtimestamp(resets_at, tz=timezone.utc), "claude"
     )
     [event] = await _held_events()
     assert event.data["entry_ids"] == []
@@ -591,7 +592,7 @@ async def test_the_wake_starts_the_turn_at_the_reset_with_no_other_call(
     try:
         run_id = await _operator_turn(app, auth_headers, agent, spawn)
         assert spawn.call_count == 1
-        assert scheduler.scheduler.get_job(f"allowance-wake:proj-test:{agent}") is not None
+        assert scheduler.scheduler.get_job(f"allowance-wake:proj-test:{agent}:claude") is not None
 
         with patch("hub.api.v1.agent_trigger.PtySession.spawn", spawn):  # noqa: SIM117
             with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):

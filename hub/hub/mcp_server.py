@@ -5456,7 +5456,10 @@ def create_spec_document(
     with `roadmap: {"document": <roadmap path>, "slice": <key>}`, and can be approved only once
     the operator has approved the roadmap.
 
-    Returns the minted `path` and the `phase` it starts in (`exploring`).
+    Returns the minted `path` and the `phase` it starts in (`exploring`). For a `change-spec` it
+    also returns the `step` the document starts at (`intake`), its `size` (not set yet), its
+    `journey` and the `instructions` for that step: follow them now, in this turn, exactly as you
+    would for a document you were handed. A roadmap has no journey and returns none of these.
     """
     body: Dict[str, Any] = {}
     if title is not None:
@@ -5902,6 +5905,38 @@ def acknowledge_spec_gap(path: str, code: str, where: str, reason: str) -> Dict[
         "POST",
         "/spec/documents/acknowledge",
         {"path": path, "code": code, "where": where, "reason": reason},
+    )
+
+
+@_tool()
+def confirm_acceptance_criteria(path: str, confirmations: List[Dict[str, str]]) -> Dict[str, Any]:
+    """Record that you checked acceptance criteria against the current code, each as new or a guard.
+
+    Do this for every criterion of a change document before it can be approved: until each has a
+    current confirmation, the save and the operator's Check show a `criteria_unconfirmed` refusal,
+    and approval is refused even with approve_anyway. Read the code each criterion is about first.
+    A criterion whose behaviour does not exist yet is `new`: the acceptance drive's check for it
+    must fail on today's code. One whose behaviour already holds must be marked `guard: true` in
+    the document (save it first) and confirmed as `guard`, or rewritten so that it fails until the
+    change is built.
+
+    A confirmation stops counting when the criterion is reworded or its guard flag changes; confirm
+    it again then. Any agent may confirm, only while the document is exploring; on an approved
+    document it is refused until the operator reopens it. All or none: one refused entry records
+    nothing.
+
+    Args:
+        path: The document, e.g. `spec/changes/<name>/spec.json`.
+        confirmations: `[{"criterion": <criterion key>, "kind": "new" | "guard"}, ...]`. A kind
+            must agree with the criterion's guard flag.
+
+    Returns `{path, confirmed: [{criterion, kind, by, at}], unconfirmed: [<key>, ...]}`, where
+    `confirmed` is every current confirmation of the document and `unconfirmed` what is left.
+    """
+    return _hub_request(
+        "POST",
+        "/spec/documents/confirm-criteria",
+        {"path": path, "confirmations": confirmations},
     )
 
 

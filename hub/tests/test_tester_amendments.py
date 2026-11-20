@@ -16,6 +16,7 @@ from hub.db.engine import async_session_factory
 from hub.db.models import Agent, InboundQueueEntry, Loop, Run, SpecDocument, Task
 from hub.spec_documents import parse_stored
 
+from ._spec_confirmations import confirm_criteria
 from ._spec_versions import content_version
 from .test_spec_documents_api import PATH, _document
 from .test_spec_documents_api import _submit as _submit_document
@@ -86,6 +87,7 @@ async def _approved(app, auth_headers, author_headers, **overrides):
         row = (await db.execute(select(SpecDocument).where(SpecDocument.path == PATH))).scalar_one()
         row.explore_closed_at = datetime.now(timezone.utc)
         await db.commit()
+    await confirm_criteria(PATH)
     approved = await app.post(
         f"{BASE}/documents/approve-and-build?path={PATH}",
         json={
@@ -471,6 +473,7 @@ async def test_a_reapproval_with_unreviewed_amendments_lists_the_gap(
         row.explore_closed_at = datetime.now(timezone.utc)
         await db.commit()
 
+    await confirm_criteria(PATH)
     response = await app.post(
         f"{BASE}/documents/phase?path={PATH}&to=approved",
         json={"content_version": await content_version(app, auth_headers, PATH), "reason": "t"},
@@ -536,6 +539,7 @@ async def test_a_named_tester_reviews_before_the_default_reviewer_and_after_the_
         row = (await db.execute(select(SpecDocument).where(SpecDocument.path == PATH))).scalar_one()
         row.explore_closed_at = datetime.now(timezone.utc)
         await db.commit()
+    await confirm_criteria(PATH)
     approved = await app.post(
         f"{BASE}/documents/phase?path={PATH}&to=approved",
         json={

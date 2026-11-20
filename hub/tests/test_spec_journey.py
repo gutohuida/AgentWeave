@@ -19,6 +19,7 @@ from hub.spec_payload import (
     validate_payload,
 )
 
+from ._spec_confirmations import confirm_criteria
 from ._spec_versions import content_version
 from .test_spec_documents_api import (
     BASE,
@@ -140,6 +141,7 @@ async def test_a_complete_document_is_approved_without_exploration_being_closed(
     submitted = await _submit(app, run_headers, _document())
     assert submitted.status_code == 200, submitted.text
 
+    await confirm_criteria(PATH)
     approved = await app.post(
         f"{BASE}/documents/phase",
         params={"path": PATH, "to": "approved"},
@@ -270,3 +272,14 @@ async def test_a_step_named_with_the_size_wins(app, auth_headers, tmp_path):
 
     assert both.status_code == 200, both.text
     assert both.json()["step"] == "intake"
+
+
+@pytest.mark.parametrize(
+    "step", [spec_journey.ACCEPTANCE, spec_journey.REQUIREMENTS_AND_ACCEPTANCE]
+)
+def test_acceptance_step_text_names_existing_behaviour(step):
+    text = spec_journey.STEP_DUTIES[step]
+    assert "against the current code" in text
+    assert "guard: true" in text
+    assert "fails until the change is built" in text
+    assert "confirm_acceptance_criteria" in text

@@ -10,6 +10,10 @@ import {
   type ModelChoice,
 } from '@/components/agents/settings/AgentSettingsPages'
 import { toast } from '@/lib/toast'
+import { PoolEditor } from '@/components/agents/pool/PoolEditor'
+import { entryLabel } from '@/components/agents/pool/poolModel'
+import type { AgentPoolEntry } from '@/api/agentPool'
+import { POOL_CATALOG, POOL_RUNNERS, POOLS, poolEntry } from '../poolMock'
 import type { AgentSummary } from '@/api/agents'
 import type { Charter } from '@/api/charters'
 import type { ProjectSettings } from '@/api/projects'
@@ -54,6 +58,17 @@ export default function AgentSettings({ route, go, now }: ScreenProps) {
   // mock state: the recorded roster carries no runner; Builder runs on Sonnet here.
   const [model, setModel] = React.useState<ModelChoice | null>({ provider: 'claude', model: 'claude-sonnet-5-5' })
 
+  // mock state: the pool (spec a-profile-runs-each-task-on-a-runner-and-model-chosen-from-its-pool).
+  // `?pool=empty|one|refused` presets the states the data lacks; Builder holds Developer's five.
+  const poolState = new URLSearchParams(window.location.hash.split('?')[1] ?? '').get('pool')
+  const [pool, setPool] = React.useState<AgentPoolEntry[]>(() =>
+    poolState === 'empty' ? [] : poolState === 'one' ? [POOLS.Developer![0]!] : POOLS.Developer!,
+  )
+  const [poolError, setPoolError] = React.useState<string | null>(
+    poolState === 'refused' ? 'Refused: Opus 5.5 is not offered max effort by this runner’s Claude Code version. Nothing was changed.' : null,
+  )
+  const label = (e: AgentPoolEntry) => entryLabel(POOL_CATALOG, e)
+
   const say = (said: string) => toast({ title: said, tone: 'success' })
   const apply = (patch: Partial<AgentSummary> | AgentPatch, said: string) => {
     setAgent((a) => ({ ...a, ...patch }))
@@ -85,6 +100,32 @@ export default function AgentSettings({ route, go, now }: ScreenProps) {
       body = (
         <AgentRunningSettings
           agent={agent}
+          pool={
+            <PoolEditor
+              agentName={agent.name}
+              pool={pool}
+              runners={POOL_RUNNERS}
+              catalog={POOL_CATALOG}
+              error={poolError}
+              onAdd={(choice) => {
+                const entry = poolEntry(choice.runner_id, choice.effort, pool.length === 0)
+                setPool((p) => [...p, entry])
+                setPoolError(null)
+                say(`${agent.name} may run on ${label(entry)}`)
+              }}
+              onRemove={(entry) => {
+                setPool((p) => p.filter((e) => e.id !== entry.id))
+                setPoolError(null)
+                say(`${agent.name} no longer runs on ${label(entry)}`)
+              }}
+              onMakeDefault={(entry) => {
+                setPool((p) => p.map((e) => ({ ...e, default: e.id === entry.id })))
+                setPoolError(null)
+                say(`${agent.name} runs on ${label(entry)} unless a task chooses another`)
+              }}
+              onOpenRunners={() => go({ kind: 'settings', section: 'runners' })}
+            />
+          }
           model={model}
           modelOptions={MODEL_OPTIONS}
           permissionFallback={PERMISSION_WAIT_FALLBACK_SECONDS}
@@ -137,7 +178,10 @@ export default function AgentSettings({ route, go, now }: ScreenProps) {
   return (
     <SettingsNavLayout
       title={`${agent.name} settings`}
-      subtitle={model ? MODEL_OPTIONS.find((o) => o.value === `${model.provider}:${model.model ?? ''}`)?.label : 'No model'}
+      subtitle={(() => {
+        const d = pool.find((e) => e.default)
+        return d ? (pool.length > 1 ? `${label(d)} and ${pool.length - 1} more` : label(d)) : 'No model'
+      })()}
       back={{ label: `Back to ${agent.name}`, onClick: () => go({ kind: 'conversation', agent: agent.name, conversationId: null }) }}
       items={SECTIONS}
       active={section}

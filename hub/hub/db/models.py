@@ -380,6 +380,10 @@ class Agent(Base):
         String(16), default="open", server_default="open", nullable=False
     )
     archived_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), nullable=True)
+    # The profile this agent was folded into (its name); group by coalesce(folded_into, name) for
+    # per-profile analysis. NULL for an agent never folded. Set once by the fold, which also
+    # archives the agent; never cleared (a fold is one way).
+    folded_into: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, nullable=False)
     updated: Mapped[datetime] = mapped_column(
         UTCDateTime(), default=_now, onupdate=_now, nullable=False
@@ -438,6 +442,37 @@ class Runner(Base):
             name="ck_runners_cli",
         ),
         Index("ix_runners_project_name", "project_id", "name"),
+    )
+
+
+class AgentPoolEntry(Base):
+    """One entry of a profile's pool: a project runner plus an optional reasoning effort
+    (`a-profile-runs-each-task-on-a-runner-and-model-chosen-from-its-pool`, FR-1, migration 0186).
+
+    A pool that is not empty has exactly one `is_default` entry, and `Agent.runner_id` always
+    names that entry's runner (FR-4), so every reader of `runner_id` keeps working. Both are
+    written only through `agent_pool`, which is what keeps them agreeing. `effort` is a value of
+    the runner's CLI's catalog `effort` control; NULL leaves it to the CLI. An entry is identified
+    by its runner and effort: "Opus high" and "Opus medium" are two entries.
+    """
+
+    __tablename__ = "agent_pool_entries"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    project_id: Mapped[str] = mapped_column(String(64), ForeignKey("projects.id"), nullable=False)
+    agent_id: Mapped[str] = mapped_column(String(64), ForeignKey("agents.id"), nullable=False)
+    runner_id: Mapped[str] = mapped_column(String(64), ForeignKey("runners.id"), nullable=False)
+    effort: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    is_default: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="0", nullable=False
+    )
+    # The order the operator listed the entries in; the settings page and Build show it.
+    position: Mapped[int] = mapped_column(Integer, default=0, server_default="0", nullable=False)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, nullable=False)
+
+    __table_args__ = (
+        Index("ix_agent_pool_entries_agent", "agent_id"),
+        Index("ix_agent_pool_entries_runner", "runner_id"),
     )
 
 
@@ -617,6 +652,16 @@ class Conversation(Base):
     # agent's `.agentweave/worktrees/<agent>`. A cutover successor inherits it with the lineage.
     own_worktree: Mapped[bool] = mapped_column(
         Boolean, default=False, server_default="0", nullable=False
+    )
+    # The document open in this conversation, which is the conversation's own (`every-spec-entry-
+    # point-leads-into-the-journey`, FR-11/FR-12, design D3): set when the operator opens one here
+    # or sends a message under one, cleared only by stopping exploring. The id rather than the
+    # path, so a rename keeps it. NULL for every conversation from before migration `0188`.
+    spec_document_id: Mapped[Optional[str]] = mapped_column(
+        String(32),
+        ForeignKey("spec_documents.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
     )
     created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
@@ -940,6 +985,12 @@ class Task(Base):
     # it when the next Build takes it in. Who checks a task in a build is the build's people
     # (`builds.checker_of`), which this seeds and does not replace.
     checker: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    # The pool entry this task's builder and checker runs launch with, fixed when the first run of
+    # each starts (`a-profile-runs-each-task-on-a-runner-and-model-chosen-from-its-pool`, FR-7,
+    # migration 0187): `{"agent", "runner_id", "effort"}`, written only by `launch_entry`. Null
+    # until that run starts; a later run by the same agent uses it, including every re-review.
+    builder_entry: Mapped[Optional[Any]] = mapped_column(JSON, nullable=True)
+    checker_entry: Mapped[Optional[Any]] = mapped_column(JSON, nullable=True)
 
     project: Mapped["Project"] = relationship(back_populates="tasks")
 
@@ -1637,6 +1688,14 @@ class Run(Base):
     # The CLI version the run's harness reported (Claude's `system/init` `claude_code_version`),
     # NULL when it reported none. F678: what a Claude result's totals mean changed at 2.1.277.
     runner_version: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    # What this run launched with (`a-profile-runs-each-task-on-a-runner-and-model-chosen-from-its-
+    # pool`, FR-12, migration 0187): the runner record, the model it was given (the runner's own,
+    # or a chat's override; null when the CLI chose), and the reasoning effort (null when left to
+    # the CLI). Written once, at spawn, from the same values the command is built from; null for
+    # runs that predate the columns.
+    runner_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    model: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)
+    effort: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
     # The directory this run *started* in, written at spawn from `effective_work_dir`
     # (`2026-08-27-work-is-isolated-per-task`, design D7).
     #
@@ -1738,7 +1797,7 @@ class TurnUsage(Base):
     agent: Mapped[str] = mapped_column(String(64), nullable=False)
     status: Mapped[str] = mapped_column(String(16), nullable=False)
     runner: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
-    model: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    model: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)
     input_tokens: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     output_tokens: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     total_tokens: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
@@ -2800,6 +2859,38 @@ class SpecGapAcknowledgement(Base):
     __table_args__ = (
         UniqueConstraint("document_id", "code", "place", name="uq_spec_gap_ack_gap"),
         Index("ix_spec_gap_acknowledgements_document", "document_id"),
+    )
+
+
+class SpecCriterionConfirmation(Base):
+    """An agent's word that one acceptance criterion was checked against the current code, and is
+    either new behaviour or a guard (`existing-behaviour-is-caught-before-the-build` D1, D2).
+
+    Beside the document, never in its payload, for the reason `SpecDocument.phase` is in the
+    database: a gate whose value lives where the gated party can write it is not a gate. One row
+    per (document, criterion key), replaced by a later confirmation. `criterion_digest` is the
+    criterion's `spec_digest.criterion_digest` when it was confirmed; the row counts only while it
+    equals the criterion's digest as the document now stands.
+    """
+
+    __tablename__ = "spec_criterion_confirmations"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    project_id: Mapped[str] = mapped_column(String(64), ForeignKey("projects.id"), nullable=False)
+    document_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("spec_documents.id"), nullable=False
+    )
+    criterion_key: Mapped[str] = mapped_column(String(128), nullable=False)
+    kind: Mapped[str] = mapped_column(String(16), nullable=False)  # "new" | "guard"
+    criterion_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    # The agent, from the run credential; never from a request body.
+    actor: Mapped[str] = mapped_column(String(128), nullable=False)
+    run_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint("document_id", "criterion_key", name="uq_spec_criterion_confirmation"),
+        Index("ix_spec_criterion_confirmations_document", "document_id"),
     )
 
 

@@ -54,6 +54,8 @@ const SSE_EVENT_TYPES = [
   'log_event',
   'context_warning',
   'spec_updated',
+  // A conversation's open document was set or cleared (`PUT .../spec-document`).
+  'conversation_updated',
   'journey_updated',
   'job_created',
   'job_updated',
@@ -532,8 +534,13 @@ function applyInvalidation(queryClient: QueryClient, event: SSEEvent): void {
           inv({ queryKey: ['project', pid, 'messages'] })
           inv({ queryKey: ['project', pid, 'status'] })
           break
+        case 'conversation_updated':
+          inv({ queryKey: ['project', pid, 'conversation'] })
+          break
         case 'task_created':
         case 'spec_updated':
+          // Offers and the held document's title and step come from the same read.
+          if (event.type === 'spec_updated') inv({ queryKey: ['project', pid, 'conversation'] })
           // Evidence recorded or decided, and a recording run's end, arrive here: each is part of a
           // task's story. The spec page's own listener (`useSpecEvents`) covers the spec queries.
           invalidateTaskStories(queryClient, pid)

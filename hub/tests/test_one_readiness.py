@@ -13,6 +13,7 @@ from hub import spec_completeness, spec_service
 from hub.db.engine import async_session_factory
 from hub.db.models import SpecGapAcknowledgement
 
+from ._spec_confirmations import submit_confirmed
 from .test_approval_warnings_routes import _check, _checked, _phase
 from .test_project_spec_steps import THREAT, _steps, _write
 from .test_spec_documents_api import (  # noqa: F401  (run_headers is a fixture)
@@ -21,10 +22,17 @@ from .test_spec_documents_api import (  # noqa: F401  (run_headers is a fixture)
     PATH,
     _create,
     _document,
-    _submit,
     run_headers,
 )
+from .test_spec_documents_api import (
+    _submit as _submit_once,
+)
 from .test_spec_journey_briefing import _place
+
+
+async def _submit(app, run_headers, document):  # noqa: F811
+    """Saved with its criteria confirmed, so readiness here is about everything else."""
+    return await submit_confirmed(_submit_once, app, run_headers, document, PATH)
 
 
 def _gaps(items):

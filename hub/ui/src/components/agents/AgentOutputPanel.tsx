@@ -26,6 +26,8 @@ import { useRunners } from '@/api/runners'
 import { overridesForRunner, runnerSetsModel } from '@/lib/runnerProvider'
 import { useWorkspacePaths } from '@/api/workspace'
 import { useSpecDocuments } from '@/api/spec'
+import { useAnswerSpecDocumentOffer, useConversationSpecDocuments } from '@/api/conversationSpec'
+import { ConversationSpecOffers } from '@/components/conversation/ConversationSpecOffers'
 import {
   continueConversation,
   cutOver,
@@ -33,7 +35,7 @@ import {
   useCheckpoints,
   useProjectCheckpoints,
 } from '@/api/checkpoints'
-import { ApiError, deleteJson, readableRefusal } from '@/api/client'
+import { ApiError, deleteJson, readableApiError, readableRefusal } from '@/api/client'
 import { useAccounting, useConversationAccounting } from '@/api/accounting'
 import { formatAiCredits } from '@/components/accounting/accountingDisplay'
 import { useConfigStore } from '@/store/configStore'
@@ -54,10 +56,12 @@ import { ConversationBar } from '@/components/conversation/ConversationBar'
 import { TraceDrawerPanel } from '@/components/traces/TraceDrawer'
 import { ConversationTraceDrawer } from '@/components/traces/ConversationTraceDrawer'
 import type { ComposerInsertRequest } from '@/components/agents/Composer'
+import { foldedComposerReason } from '@/lib/foldPresentation'
 import { ConversationComposerDock } from '@/components/conversation/ConversationComposerDock'
 import { useDiagnosticsHidden } from '@/lib/diagnosticsPreference'
 import { hubDate } from '@/lib/hubTime'
 import { toast } from '@/lib/toast'
+import { chatStartedOn } from './pool/poolModel'
 
 interface AgentOutputPanelProps {
   agent: AgentSummary
@@ -92,6 +96,8 @@ interface AgentOutputPanelProps {
   /** Reopen a document not currently attached to this conversation. See Composer's prop of the
    *  same name for why this is distinct from `onOpenSpecPicker`. */
   onOpenExistingSpec?: () => void
+  /** Open a document the operator chose from a notice: written to the conversation and shown. */
+  onOpenSpecDocument?: (path: string) => void
   specBusy?: boolean
   /** Forwarded to `Composer` verbatim — see its prop of the same name (task 5.4,
    *  `2026-08-18-one-shell-three-panels`). */
@@ -195,6 +201,7 @@ export function AgentOutputPanel({
   createExploration,
   onExplorationStarted,
   onOpenExistingSpec,
+  onOpenSpecDocument,
   specBusy = false,
   insertRequest = null,
   onTogglePanel,
@@ -336,9 +343,6 @@ export function AgentOutputPanel({
     // without depending on an identity that changes more often than its content does.
   }, [agent.name, conversationId, conversations.length])
 
-  useEffect(() => {
-    if (agent.status !== 'running') setIsStopping(false)
-  }, [agent.status])
 
   /* The effect that used to sit here is deleted, not replaced.
    *
@@ -401,10 +405,27 @@ export function AgentOutputPanel({
   // Stop (which would stop that other run), no "responding" placeholder. A message sent here
   // still queues behind it, which the placeholder says. An older Hub or a run with no
   // conversation leaves the id empty and reads as before.
-  const runningConversationId = agent.running_conversation_id ?? null
+  //
+  // FR-11 (`one-profile-runs-many-turns-at-once-on-different-tasks`): with profiles running in
+  // parallel the agent can have several runs, so this conversation is running exactly when one of
+  // `running_runs` is its own, whichever started last. A Hub that predates the list sends none,
+  // and the single `running_conversation_id` decides as before.
+  const runningRuns = agent.running_runs ?? []
+  const ownRun = conversationId
+    ? runningRuns.find((run) => run.conversation_id === conversationId)
+    : undefined
+  const elsewhereRun = [...runningRuns]
+    .reverse()
+    .find((run) => !!run.conversation_id && run.conversation_id !== conversationId)
+  const runningConversationId = runningRuns.length > 0
+    ? (ownRun ? null : elsewhereRun?.conversation_id ?? null)
+    : agent.running_conversation_id ?? null
   const busyElsewhere =
-    agentIsRunning && !!runningConversationId && runningConversationId !== conversationId
+    agentIsRunning && !ownRun && !!runningConversationId && runningConversationId !== conversationId
   const isRunning = agentIsRunning && !busyElsewhere
+  useEffect(() => {
+    if (!isRunning) setIsStopping(false)
+  }, [isRunning])
   const handoffUnavailable = agent.runner === 'manual'
   const interactionLocked =
     agentIsRunning || isSending || handoffState === 'preparing'
@@ -472,6 +493,9 @@ export function AgentOutputPanel({
   const { data: workspacePaths = [] } = useWorkspacePaths()
   // The project's documents: the composer's `@` menu lists them as specs.
   const { data: specDocumentList, isError: specDocumentsFailed } = useSpecDocuments()
+  // Change documents an agent created in this conversation, offered to the operator (FR-7).
+  const offeredDocuments = useConversationSpecDocuments(projectId, startingFresh ? null : (conversationId ?? null))
+  const answerOffer = useAnswerSpecDocumentOffer(projectId, startingFresh ? null : (conversationId ?? null))
   const conversationChat = useAgentChatHistory(agent.name, currentConversationId ?? null)
   const recentChat = useAgentRecentChat(agent.name)
   const chat = currentConversationId ? conversationChat : recentChat
@@ -1026,7 +1050,9 @@ export function AgentOutputPanel({
     if (!apiKey || !projectId || !isRunning || isStopping) return
     setIsStopping(true)
     try {
-      const response = await fetch(`/api/v1/projects/${projectId}/agent/${agent.name}/stop`, {
+      // FR-10: stop this conversation's own run, not whichever of the agent's runs is newest.
+      const target = ownRun ? `?run_id=${encodeURIComponent(ownRun.run_id)}` : ''
+      const response = await fetch(`/api/v1/projects/${projectId}/agent/${agent.name}/stop${target}`, {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${apiKey}` },
       })
@@ -1438,6 +1464,8 @@ export function AgentOutputPanel({
             ? `${agent.name} is busy in another conversation — a message here will queue`
             : undefined,
           onSubmit: handleComposerSubmit,
+          // A folded agent's history is read-only: the turn is refused naming the profile.
+          disabledReason: foldedComposerReason(agent),
           workspacePaths,
           specDocuments: specDocumentList?.documents,
           specDocumentsStatus: specDocumentList ? undefined : specDocumentsFailed ? 'error' : 'loading',
@@ -1450,6 +1478,13 @@ export function AgentOutputPanel({
           effectiveControls: agentDefaultControls,
           pendingOverrides,
           onPendingOverridesChange: setPendingOverrides,
+          pool: targetAgentRow?.pool,
+          poolStartedOn: startingFresh
+            ? null
+            : chatStartedOn(
+                targetAgentRow?.pool ?? [],
+                conversations.find((c) => c.id === currentConversationId),
+              ),
           onOpenSpecPicker,
           onStartExploration,
           onStopExploring,
@@ -1461,6 +1496,19 @@ export function AgentOutputPanel({
         }}
       >
           <BannerStack banners={banners} />
+
+          <ConversationSpecOffers
+            offers={(offeredDocuments.data?.offers ?? []).filter((offer) => offer.path !== specDocumentPath)}
+            busy={answerOffer.isPending}
+            readError={offeredDocuments.error ? readableApiError(offeredDocuments.error, 'the Hub did not answer.') : null}
+            answerError={answerOffer.error ? readableApiError(answerOffer.error, 'The Hub refused this.') : null}
+            onAnswer={(path, answer) =>
+              answerOffer.mutate(
+                { path, answer },
+                { onSuccess: () => (answer === 'open' ? onOpenSpecDocument?.(path) : undefined) },
+              )
+            }
+          />
 
           {/* A successor is handed its checkpoint as a queued entry and then waits. Without this
               the only way to start it was to type a message, which is a strange thing to invent

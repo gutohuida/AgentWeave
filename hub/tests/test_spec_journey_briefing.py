@@ -13,6 +13,7 @@ from hub.api.v1.agents import _render_hub_agent_context
 from hub.db.engine import async_session_factory
 from hub.db.models import SpecDocument, SpecDocumentEvent
 
+from ._spec_confirmations import confirm_criteria
 from ._spec_versions import content_version
 from .test_spec_documents_api import (
     PATH,
@@ -99,6 +100,7 @@ async def test_an_approved_document_is_briefed_by_its_phase_not_its_step(
 ):
     await _create(app, auth_headers)
     await _submit(app, run_headers, _document())
+    await confirm_criteria(PATH)
     approved = await app.post(
         "/api/v1/projects/proj-test/project/documents/phase",
         params={"path": PATH, "to": "approved"},

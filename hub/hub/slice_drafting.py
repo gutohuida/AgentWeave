@@ -9,10 +9,12 @@ list here and the roadmap's own read are the same rule). Answers (`next_slice_qu
 landing makes a slice offered, the operator is notified once (`next_slice_offered`). **Nothing is
 queued then.**
 
-Taking the offer (`take_offer`) queues one drafting turn, as the operator, to the agent the operator
-chooses (by default the roadmap's author), carrying the roadmap, the slice, each prior slice's
-document, tasks' outcomes (F501) and a link to its retrospective, or the fact that none has been
-written. It goes in the conversation where the roadmap was written while that is still open and the
+Taking the offer (`take_offer`) first creates the slice's change document, exploring at step intake
+with its roadmap link set, and makes it the drafting conversation's document
+(`every-spec-entry-point-leads-into-the-journey`, D1). It then queues one drafting turn bound to
+that document, as the operator, to the agent the operator chooses (by default the roadmap's author),
+carrying the roadmap, the slice, each prior slice's document, tasks' outcomes (F501) and a link to
+its retrospective, or the fact that none has been written. It goes in the conversation where the roadmap was written while that is still open and the
 chosen agent is its author; otherwise in a new one named for the slice (F1047). A second take
 queues nothing. Declining (`decline_offer`) hides the offer in every view.
 """
@@ -26,10 +28,17 @@ from typing import Any, Dict, List, Optional, Set
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from . import slice_progress, spec_documents, spec_lifecycle, spec_service
+from . import (
+    conversation_document,
+    slice_progress,
+    spec_documents,
+    spec_lifecycle,
+    spec_service,
+)
 from .conversations import get_open_conversation, name_conversation, new_conversation
 from .db.models import Run, SpecDocument, SpecDocumentEvent, Task
 from .inbound_queue import new_entry
+from .spec_payload import SCHEMA_VERSION
 from .sse import defer_broadcast
 from .task_transitions import TERMINAL_STATUSES
 
@@ -338,8 +347,9 @@ async def take_offer(
     *,
     agent: Optional[str],
 ) -> Dict[str, Any]:
-    """Queue the drafting turn the offer for *slice_key* stands for, to *agent* (the roadmap's
-    author by default). Returns the offer with the entry queued; the caller commits and then
+    """Create the slice's change document and queue the drafting turn the offer for *slice_key*
+    stands for, bound to it, to *agent* (the roadmap's author by default). Returns the offer with
+    the entry queued and the new `document`'s path; the caller commits and then
     schedules the agent. Raises `OfferRefused`: no offer (already taken, declined, claimed, or a
     slice it builds after is not built), no agent to ask, or an agent that is not open."""
     from .builds import open_agents
@@ -358,15 +368,22 @@ async def take_offer(
     if chosen not in await open_agents(session, roadmap.project_id):
         raise OfferRefused(f"{chosen} is not an open agent of this project", 422)
     tasks = await _tasks_by_id(session, offer["tasks"])
-    content = next_slice_message(offer, tasks=tasks, outcomes=await _task_outcomes(session, tasks))
+    document = await _create_slice_document(session, workspace, roadmap, offer["next_slice"])
+    content = next_slice_message(
+        offer,
+        tasks=tasks,
+        outcomes=await _task_outcomes(session, tasks),
+        document=document.path,
+    )
     conversation_id = offer["conversation_id"] if chosen == offer["agent"] else None
-    if (
-        conversation_id is None
-        or await get_open_conversation(
+    conversation = (
+        None
+        if conversation_id is None
+        else await get_open_conversation(
             session, project_id=roadmap.project_id, agent=chosen, conversation_id=conversation_id
         )
-        is None
-    ):
+    )
+    if conversation is None:
         # F1047: the conversation the roadmap was written in is archived (or is not the chosen
         # agent's): the turn opens a conversation of its own, named for the slice.
         conversation = new_conversation(
@@ -377,6 +394,8 @@ async def take_offer(
         )
         session.add(conversation)
         conversation_id = conversation.id
+    # The drafting conversation works the slice's document (D3): its own, from the take on.
+    await conversation_document.set_by_path(session, conversation, document.path)
     entry = new_entry(
         project_id=roadmap.project_id,
         agent=chosen,
@@ -384,7 +403,8 @@ async def take_offer(
         content=content,
         hop_depth=0,
         conversation_id=conversation_id,
-        spec_document=roadmap.path,
+        # Bound to the slice's document, so the turn carries its intake step (FR-2).
+        spec_document=document.path,
     )
     session.add(entry)
     await spec_lifecycle.record_event(
@@ -392,12 +412,63 @@ async def take_offer(
         roadmap,
         kind=QUEUED,
         actor=spec_lifecycle.Actor(kind="operator", name="operator"),
-        detail={"next_slice": slice_key, "agent": chosen, "tasks": [t.id for t in tasks]},
+        detail={
+            "next_slice": slice_key,
+            "agent": chosen,
+            "tasks": [t.id for t in tasks],
+            "document": document.path,
+        },
     )
     defer_broadcast(
         session, roadmap.project_id, ANSWERED_EVENT, {"document": roadmap.path, "taken": True}
     )
-    return {**offer, "agent": chosen, "conversation_id": conversation_id, "entry_id": entry.id}
+    defer_broadcast(
+        session,
+        roadmap.project_id,
+        "spec_updated",
+        {"path": document.path, "phase": document.phase},
+    )
+    return {
+        **offer,
+        "agent": chosen,
+        "conversation_id": conversation_id,
+        "entry_id": entry.id,
+        "document": {
+            "path": document.path,
+            "title": document.title,
+            "phase": document.phase,
+            "step": document.step,
+        },
+    }
+
+
+async def _create_slice_document(
+    session: AsyncSession, workspace, roadmap: SpecDocument, following: Dict[str, Any]
+) -> SpecDocument:
+    """The slice's change document, created by the take (`every-spec-entry-point-leads-into-the-
+    journey`, FR-1, D1): exploring at step intake, titled with the slice's title, its roadmap link
+    already set. Created as the operator, inside the take's transaction, so a take that fails
+    leaves no document behind and the drafting turn is bound to it from its first message."""
+    operator = spec_lifecycle.Actor(kind="operator", name="operator")
+    title = str(following.get("title") or following.get("key") or "").strip()
+    path = await spec_service.mint_document_path(session, roadmap.project_id, workspace)
+    document = await spec_lifecycle.create_document(
+        session, roadmap.project_id, path, actor=operator, title=title, kind="change-spec"
+    )
+    await spec_service.save_document(
+        session,
+        workspace,
+        document,
+        {
+            "schema_version": SCHEMA_VERSION,
+            "kind": "change-spec",
+            "title": title,
+            "roadmap": {"document": roadmap.path, "slice": str(following.get("key"))},
+        },
+        actor=operator,
+        via="create",
+    )
+    return document
 
 
 async def decline_offer(
@@ -489,12 +560,13 @@ def next_slice_message(
     *,
     tasks: List[Task],
     outcomes: Optional[Dict[str, List[str]]] = None,
+    document: Optional[str] = None,
 ) -> str:
     """The fixed Hub text of the drafting turn: the roadmap, the slice, what the slices it builds
-    after produced (F501: each task's outcomes) and where their retrospectives are."""
+    after produced (F501: each task's outcomes), where their retrospectives are, and the slice's
+    change document the take created (D2), which the turn works on its journey."""
     roadmap_path = detail["roadmap"]
     following = detail.get("next_slice") or {}
-    link = f'{{"document": "{roadmap_path}", "slice": "{following.get("key")}"}}'
     lines = [
         f"The operator has asked you to draft slice `{following.get('key')}` "
         f"({following.get('title') or ''}) of the roadmap {detail.get('roadmap_title')!r} "
@@ -530,8 +602,9 @@ def next_slice_message(
         "`get_task` and `list_evidence`. Work that did not reach the main branch is not done, "
         "whatever its status says, and a rejection's reason is something this slice must not "
         "repeat: what building those slices taught you belongs in this one.",
-        "Then create a change document with `create_spec_document` and submit it with "
-        f"`roadmap: {link}`. Keep it to about a dozen requirements or fewer, as a few tasks. Do "
-        "not implement anything.",
+        f"The slice's change document is `{document or '(not created)'}`: it already exists, "
+        "is linked to this slice of the roadmap, and is this conversation's document. Work it "
+        "step by step, as this turn's journey instructions say for its current step; keep the "
+        "roadmap link when you submit it. Do not implement anything.",
     ]
     return "\n".join(lines)

@@ -7,6 +7,15 @@ import { hubDate } from '@/lib/hubTime'
 import { BACKSTOP_MS } from '@/lib/backstopPoll'
 import { PERMISSION_MODE_CONTROL } from './modelCatalog'
 import type { ReachGrants } from './projects'
+import type { AgentPoolEntry, PoolEntryChoice } from './agentPool'
+
+/** One of an agent's running runs (`AgentSummary.running_runs`). */
+export interface RunningRun {
+  run_id: string
+  conversation_id: string | null
+  task_id: string | null
+  started_at: string | null
+}
 
 export interface AgentSummary {
   name: string
@@ -19,6 +28,9 @@ export interface AgentSummary {
   active_task_count: number
   /** "open" or "archived". Only ever "archived" for a caller that asked for archived agents. */
   lifecycle?: 'open' | 'archived'
+  /** The profile this agent was folded into; null/absent for one that was not. A folded agent is
+   *  archived for good: its history stays readable, and it accepts no new turn. */
+  folded_into?: string | null
   runner?: string  // The bound Runner's CLI; "native" when there is no binding
   display_model?: string  // e.g. "Claude", "Kimi", "Minimax" — derived from runner
   context_usage?: ContextUsage
@@ -27,6 +39,9 @@ export interface AgentSummary {
    *  conversation's: a screen on another of its conversations reads this to tell the turn is
    *  elsewhere (F844). Null/absent with no run, a run that has no conversation, or an older Hub. */
   running_conversation_id?: string | null
+  /** Every running run of this agent, oldest first, each with its conversation and task (FR-11):
+   *  with profiles running in parallel there can be several. Absent from an older Hub. */
+  running_runs?: RunningRun[]
   runner_options?: Record<string, unknown>  // Runner-specific options (e.g., memory for Codex)
   color_index?: number | null  // Stable palette index, assigned once at registration
   runner_id?: string | null  // Bound Runner record, if any (runner-agent-charter-separation)
@@ -63,6 +78,9 @@ export interface AgentSummary {
   /** The operator's switch for keeping the specification corpus true; off by default, and only the
    *  operator can change it (`an-agent-the-operator-trusts-can-tidy-the-specs`). */
   can_admin_specs?: boolean
+  /** The runners and efforts it may run on, one the default (`a-profile-runs-each-task-on-a-runner-
+   *  and-model-chosen-from-its-pool`, FR-1). Absent from an older Hub. */
+  pool?: AgentPoolEntry[]
   /** Only the keys `ROSTER_CONFIG_KEYS` (hub/hub/api/v1/agents.py) allows back (F244) — a
    *  credential stored under some other key never reaches this listing. */
   config?: {
@@ -280,6 +298,77 @@ export function useArchiveAgent() {
   })
 }
 
+/** One reason a fold cannot go ahead (`GET .../agents/{name}/fold`, `refusals`). */
+export interface FoldRefusal {
+  code: string
+  message: string
+  ids: string[]
+}
+
+/** A setting where the source differs from the profile; the profile's value is the one kept. The
+ *  values are whatever the setting is (a runner, a charter, a flag, a policy object). */
+export interface FoldSettingDifference {
+  setting: string
+  source: unknown
+  profile: unknown
+}
+
+/** One open reference to the source that the fold re-points to the profile. */
+export interface FoldOpenWork {
+  kind: string
+  id: string
+  field: string
+  title: string
+}
+
+/** What folding one agent into another would do, and every reason it cannot (read-only). */
+export interface FoldPreview {
+  source: string
+  profile: string
+  can_fold: boolean
+  refusals: FoldRefusal[]
+  setting_differences: FoldSettingDifference[]
+  pool_entries_added: AgentPoolEntry[]
+  open_work: FoldOpenWork[]
+  /** The one profile setting a fold can write (a pool-less profile takes the source's runner). */
+  profile_changes?: Array<{ setting: string; profile: unknown; after: unknown }>
+}
+
+/** The preview of folding `agent` into `into`; idle until a profile is chosen. */
+export function useFoldPreview(agent: string, into: string | null) {
+  const { isConfigured, selectedProjectId: projectId } = useConfigStore()
+  return useQuery<FoldPreview>({
+    queryKey: ['project', projectId, 'agent-fold-preview', agent, into],
+    queryFn: () =>
+      getJson<FoldPreview>(
+        `/api/v1/projects/${projectId}/agents/${agent}/fold?into=${encodeURIComponent(into ?? '')}`,
+      ),
+    enabled: isConfigured && !!projectId && !!into,
+    // A preview is an answer about now: never reuse one the operator did not just ask for.
+    staleTime: 0,
+    gcTime: 0,
+  })
+}
+
+/** Fold `agent` into `into`: one way. Refreshes every roster and the rail, as an archive does. */
+export function useFoldAgent() {
+  const queryClient = useQueryClient()
+  const { selectedProjectId: projectId } = useConfigStore()
+  return useMutation({
+    mutationFn: ({ agent, into }: { agent: string; into: string }) =>
+      postJson<{ name: string; folded_into: string }>(
+        `/api/v1/projects/${projectId}/agents/${agent}/fold`,
+        { into },
+      ),
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        predicate: (query) => query.queryKey[0] === 'project' && query.queryKey[1] === projectId,
+      })
+      queryClient.invalidateQueries({ predicate: (query) => query.queryKey[0] === 'projects' })
+    },
+  })
+}
+
 /** The description bound to `MAX_DESCRIPTION_CHARS` in hub/hub/api/v1/agents.py. The API is the
  *  real guard; the input's maxLength stops the operator typing past it rather than being the only
  *  thing that catches it. */
@@ -300,6 +389,23 @@ export function useUpdateAgentDescription() {
           query.queryKey[0] === 'project' &&
           query.queryKey[1] === projectId &&
           query.queryKey[2] === 'agents',
+      })
+    },
+  })
+}
+
+/** Replaces the agent's whole pool (FR-3); the Hub refuses an entry its model does not offer, or
+ *  a pool that drops the default without naming another, and changes nothing. */
+export function useUpdateAgentPool() {
+  const queryClient = useQueryClient()
+  const { selectedProjectId: projectId } = useConfigStore()
+  return useMutation({
+    mutationFn: ({ agent, pool }: { agent: string; pool: Array<PoolEntryChoice & { default?: boolean }> }) =>
+      patchJson(`/api/v1/projects/${projectId}/agents/${agent}`, { pool }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        predicate: (query) =>
+          query.queryKey[0] === 'project' && query.queryKey[1] === projectId && query.queryKey[2] === 'agents',
       })
     },
   })

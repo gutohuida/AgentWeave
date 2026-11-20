@@ -10,8 +10,8 @@ from sqlalchemy import and_, func, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ... import agent_profiles, loop_history, refused_capability, task_attribution
 from ... import builds as builds_service
-from ... import loop_history, refused_capability, task_attribution
 from ...auth import get_project
 from ...db.engine import get_session
 from ...db.models import (
@@ -261,6 +261,12 @@ async def _check_agent_exists(session: AsyncSession, project_id: str, agent: str
     rows = (
         (await session.execute(select(Agent).where(Agent.project_id == project_id))).scalars().all()
     )
+    folded = {row.name: row.folded_into for row in rows if row.folded_into}
+    if agent in folded:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=agent_profiles.folded_detail(agent, folded[agent]),
+        )
     archived = {row.name for row in rows if row.lifecycle == "archived"}
     known = {row.name for row in rows if row.lifecycle != "archived"}
 
@@ -1754,18 +1760,26 @@ async def _token_budget_holds(session: AsyncSession, project_id: str, agent: str
     The same two conditions `turn_scheduler._attempt_turn` refuses on: the budget is exhausted and
     the turn it would build carries no operator input, which a spent budget lets through.
     """
-    from ...db.models import Run
+    from ...db.models import Project, Run
     from ...inbound_queue import project_limits, queued_entries, select_turn
+    from ...turn_scheduler import conversations_with_running_turn
     from ...usage_accounting import project_budget_state
 
-    running = await session.execute(
-        select(Run.id)
-        .where(Run.project_id == project_id, Run.agent == agent, Run.status == "running")
-        .limit(1)
-    )
-    if running.scalar_one_or_none() is not None:
-        return False
     entries = await queued_entries(session, project_id, agent)
+    project = await session.get(Project, project_id)
+    if project is not None and project.profiles_run_in_parallel:
+        # A running run holds only its own conversation while the switch is on (start algorithm,
+        # step 1): the budget still holds whatever turn the rest of the queue would start.
+        running = await conversations_with_running_turn(session, project_id, agent)
+        entries = [entry for entry in entries if entry.conversation_id not in running]
+    else:
+        busy = await session.execute(
+            select(Run.id)
+            .where(Run.project_id == project_id, Run.agent == agent, Run.status == "running")
+            .limit(1)
+        )
+        if busy.scalar_one_or_none() is not None:
+            return False
     hop_budget, cap = await project_limits(session, project_id)
     _controlling, turn = select_turn(entries, hop_budget, cap)
     if not turn or any(entry.origin_type == "operator" for entry in turn):

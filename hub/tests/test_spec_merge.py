@@ -13,6 +13,7 @@ from hub.db.engine import async_session_factory
 from hub.db.models import Run, SpecDocumentEvent, SpecDocumentMerge
 from hub.spec_payload import SCHEMA_VERSION
 
+from ._spec_confirmations import confirm_criteria
 from ._spec_versions import content_version
 
 BASE = "/api/v1/projects/proj-test/project"
@@ -79,6 +80,7 @@ async def _approve(app, auth_headers, run_headers, path):
         f"{BASE}/documents/close-exploration", params={"path": path}, headers=auth_headers
     )
     await app.post(f"{BASE}/documents/check", params={"path": path}, headers=auth_headers)
+    await confirm_criteria(path)
     await app.post(
         f"{BASE}/documents/phase",
         params={"path": path, "to": "approved"},

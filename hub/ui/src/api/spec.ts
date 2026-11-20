@@ -1,3 +1,4 @@
+import type { PoolEntryChoice } from './agentPool'
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ApiError, deleteJson, getJson, patchJson, postJson, putJson } from './client'
 import { useConfigStore } from '@/store/configStore'
@@ -221,6 +222,10 @@ export interface BuildChoices {
   window_end?: string
   landing?: BuildLanding
   task_builders?: Record<string, string>
+  /** The pool entry each task's builder and checker run on, by task key (`a-profile-runs-each-task-
+   *  on-a-runner-and-model-chosen-from-its-pool`, FR-6). Absent, each runs on its profile's default. */
+  task_builder_entries?: Record<string, PoolEntryChoice>
+  task_checker_entries?: Record<string, PoolEntryChoice>
 }
 
 /** The build the document recommends, with a reason per choice (`recommend-a-build`): what Build
@@ -250,7 +255,11 @@ export interface SpecRecommendedBuild {
   task_checkers?: Record<string, string | null>
   /** Why each task's own builder and checker were recommended, by task key; absent from an older
    *  Hub, and a task giving none is listed with an empty object. */
-  task_reasons?: Record<string, { builder?: string; checker?: string }>
+  task_reasons?: Record<string, { builder?: string; checker?: string; builder_entry?: string; checker_entry?: string }>
+  /** The pool entry the document recommends for each task's builder and checker (FR-5); absent
+   *  from an older Hub, and a task naming none is absent or null. */
+  task_builder_entries?: Record<string, PoolEntryChoice | null>
+  task_checker_entries?: Record<string, PoolEntryChoice | null>
   reasons: Partial<
     Record<
       | 'mode'
@@ -416,6 +425,12 @@ export function useCloseAlreadyBuilt() {
       }
     },
   })
+}
+
+/** A criterion marked a guard, with its requirement's identifier: a check the drive need not fail. */
+export interface SpecGuard {
+  criterion: string
+  requirement: string
 }
 
 export interface SpecDocument {
@@ -1137,6 +1152,7 @@ export function useCheckSpecDocument() {
           warnings: SpecBlockingFinding[]
           notes?: SpecBlockingFinding[]
           acknowledged?: SpecAcknowledgedGap[]
+          guards?: SpecGuard[]
           ready: boolean
           content_version: string
         }
@@ -1233,6 +1249,7 @@ export function useApproveAndBuildSpecDocument() {
           build_outcome: SpecBuildOutcome
           approval_notes?: SpecBlockingFinding[]
           acknowledged?: SpecAcknowledgedGap[]
+          guards?: SpecGuard[]
         }
       >(
         `/api/v1/projects/${projectId}/project/documents/approve-and-build?path=${encodeURIComponent(path)}`,
@@ -1491,6 +1508,8 @@ export function useSetSpecPhase() {
           approval_notes?: SpecBlockingFinding[]
           /** The acknowledged gaps approval went over without stopping (FR-6). */
           acknowledged?: SpecAcknowledgedGap[]
+          /** The criteria approved as guards (EBCBB D6). */
+          guards?: SpecGuard[]
         }
       >(
         `/api/v1/projects/${projectId}/project/documents/phase?path=${encodeURIComponent(path)}&to=${encodeURIComponent(to)}`,

@@ -32,19 +32,22 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Awaitable, Callable, Dict, List, Optional, Sequence, Tuple
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import select
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ... import (
+    agent_profiles,
     blocking,
     bound_address,
     build_retrospective,
     claude_signin,
+    conversation_document,
     flow_advance,
     instance_identity,
+    launch_entry,
     mcp_announce,
     project_checks,
     project_workspace,
@@ -223,6 +226,32 @@ def context_file_for(work_dir: str, agent: str, run_id: str) -> Path:
     """The context file *run_id* was given in *work_dir*: its own when it has one."""
     own = run_context_file(work_dir, agent, run_id, shared=True)
     return own if own.exists() else run_context_file(work_dir, agent, run_id, shared=False)
+
+
+#: The longest prompt passed as a `-p` argument. Windows caps a whole command line at 32,767
+#: characters, and the rest of a Claude turn's argv (MCP config, flags, paths) takes a few thousand;
+#: a 36,537-character mender brief failed every spawn with "The filename or extension is too long".
+PROMPT_ARGV_LIMIT = 24_000
+
+
+def spill_long_prompt(cmd: List[str], prompt: str, context_file: Path) -> List[str]:
+    """*cmd* with an over-long trailing `-p <prompt>` replaced by a pointer to a file holding it.
+
+    A turn's prompt cannot go on stdin as a one-shot's does (F682): the turn runs in a
+    pseudo-terminal. So it is written beside the run's context file and the agent is told to read
+    it. A prompt that fits, or an argv that does not end in `-p <prompt>`, is returned unchanged.
+    """
+    if len(prompt) <= PROMPT_ARGV_LIMIT or len(cmd) < 2 or cmd[-2:] != ["-p", prompt]:
+        return cmd
+    input_file = context_file.with_name(f"{context_file.stem}.input.md")
+    input_file.parent.mkdir(parents=True, exist_ok=True)
+    input_file.write_text(prompt, encoding="utf-8")
+    pointer = (
+        f"This turn's input is {len(prompt):,} characters, too long to pass on the command line, "
+        f"so it is in the file {input_file}. Read that whole file first (in parts if it is large) "
+        "and act on it exactly as if it had been given to you here."
+    )
+    return cmd[:-1] + [pointer]
 
 
 def remove_run_context_file(work_dir: Optional[str], agent: str, run_id: str) -> None:
@@ -405,6 +434,56 @@ def work_dir_in_hub_directory(root: Path, resolved: Path) -> bool:
     hub_directory = os.path.normcase(str((root / ".agentweave").resolve(strict=False)))
     target = os.path.normcase(str(resolved))
     return target == hub_directory or target.startswith(hub_directory + os.sep)
+
+
+def conversation_turn_running_sentence(conversation_id: str) -> str:
+    """Why a start waits on its own conversation (FR-6): one turn at a time, whatever the switch."""
+    return (
+        f"conversation {conversation_id} already has a turn running; this input starts when that "
+        "turn ends"
+    )
+
+
+def shared_workspace_in_use_sentence(agent: str, workspace: Path) -> str:
+    """Why a start waits on a workspace another of the agent's runs stands in (FR-8, step 3)."""
+    return (
+        f"another run of {agent} is working in {workspace}; this input starts there when that "
+        "run ends"
+    )
+
+
+def same_directory(first: Optional[str], second: Path) -> bool:
+    """Whether a recorded `Run.workspace_dir` names *second*, compared case- and link-normalised."""
+    if not first:
+        return False
+    try:
+        return os.path.normcase(str(Path(first).resolve(strict=False))) == os.path.normcase(
+            str(second.resolve(strict=False))
+        )
+    except OSError:
+        return False
+
+
+def untasked_workspace(
+    repo_root: Path,
+    agent: str,
+    config: Dict[str, Any],
+    *,
+    thread: Optional[str],
+    project_is_repo: bool,
+) -> Optional[Path]:
+    """The worktree an untasked, non-review turn will work in, predicted before anything is
+    provisioned (start algorithm, step 3): a thread's own, else the agent's shared one -- the same
+    dispatch `worktrees.resolve_turn_workspace` makes for its agent arm.
+
+    `None` where the turn gets no worktree: a read-only agent, or a project that is not a
+    repository. Those runs stand in the project directory, as runs of several agents always have,
+    each with its own context file and calls directory (FR-8)."""
+    if not worktrees.is_writing_agent(config) or not project_is_repo:
+        return None
+    if thread is not None:
+        return worktrees.thread_worktree_path(repo_root, agent, thread)
+    return worktrees.worktree_path(repo_root, agent)
 
 
 def run_calls_dir(work_dir: str, run_id: str) -> Path:
@@ -874,6 +953,81 @@ async def _review_task_from_entries(
     return review_task_id
 
 
+async def _launch_subject(
+    session: AsyncSession,
+    *,
+    project_id: str,
+    conversation: Conversation,
+    queue_entry_ids: Optional[List[str]],
+    task_id: Optional[str],
+    review_task_id: Optional[str],
+) -> "tuple[Optional[Task], bool]":
+    """The task whose entry this run launches with, and whether it is a review of it (FR-7).
+
+    Reads only, and refuses nothing: the same questions are asked again further down, where their
+    refusals belong, so a turn that is going to be refused is refused by the same words in the
+    same order as before. A question that would refuse here answers "no task", which launches on
+    the default for the one run that never starts.
+    """
+    try:
+        review_id = review_task_id or await _review_task_from_entries(session, queue_entry_ids)
+    except TriggerAgentError:
+        return None, False
+    if review_id:
+        task = await session.get(Task, review_id)
+        if task is None or task.project_id != project_id:
+            return None, False
+        return task, True
+    try:
+        binding = await resolve_bound_task(
+            session,
+            project_id=project_id,
+            conversation=conversation,
+            queue_entry_ids=queue_entry_ids,
+            task_id=task_id,
+        )
+    except TaskBindingError:
+        return None, False
+    return binding.task, False
+
+
+async def turn_launch_cli(
+    session: AsyncSession,
+    *,
+    project_id: str,
+    agent_row: Agent,
+    conversation: Conversation,
+    queue_entry_ids: List[str],
+    initiator: str,
+) -> Optional[str]:
+    """The CLI a turn of *conversation* from these entries would launch on, staging nothing.
+
+    What the scheduler asks before it lets a provider hold stop the turn (FR-11): the hold is on
+    one CLI, and the turn's entry -- its task's, a review's, a chat's choice or the default -- is
+    what decides which CLI it meets. Answers the default's CLI where the entry cannot be read.
+    """
+    task, review = await _launch_subject(
+        session,
+        project_id=project_id,
+        conversation=conversation,
+        queue_entry_ids=queue_entry_ids,
+        task_id=None,
+        review_task_id=None,
+    )
+    entry = await launch_entry.resolve(
+        session,
+        agent_row,
+        task=task,
+        review=review,
+        conversation_id=conversation.id,
+        chat_runner_id=launch_entry.chat_runner(conversation, initiator=initiator),
+        fix=False,
+    )
+    runner_id = entry.runner_id if entry is not None else agent_row.runner_id
+    runner = await session.get(Runner, runner_id) if runner_id else None
+    return runner.cli if runner is not None else None
+
+
 async def _review_cause_from_entries(
     session: AsyncSession, queue_entry_ids: Optional[List[str]], review_task_id: str
 ) -> "tuple[str, Optional[str]]":
@@ -1208,6 +1362,12 @@ async def _trigger_agent_directly(
     except ValueError as exc:
         raise TriggerAgentError(status.HTTP_400_BAD_REQUEST, str(exc), request_level=True) from exc
 
+    # A folded name launches nothing, whichever path got here (FR-5); asked before the conversation
+    # so the refusal names the profile rather than a conversation that is archived or closed.
+    folded_refusal = await agent_profiles.folded_refusal(session, project_id, agent)
+    if folded_refusal:
+        raise TriggerAgentError(status.HTTP_409_CONFLICT, folded_refusal, request_level=True)
+
     conversation = await get_open_conversation(
         session,
         project_id=project_id,
@@ -1256,8 +1416,32 @@ async def _trigger_agent_directly(
             _archived_to_trigger(agent),
             request_level=True,
         )
-    runner_row = await session.get(Runner, agent_row.runner_id)
-    if runner_row is None:
+    # Which entry of the agent's pool this run launches with (`a-profile-runs-each-task-on-a-
+    # runner-and-model-chosen-from-its-pool`, FR-7, FR-8, FR-13): a task's builder or review run
+    # its task's entry, every other run the pool's default. Decided before anything reads the
+    # runner, because the runner is what the probe, the adapter and the command are built from. A
+    # first run of a task's role fixes its entry on the task, staged with this dispatch, so a
+    # refusal below rolls it back with everything else.
+    launch_task, launch_review = await _launch_subject(
+        session,
+        project_id=project_id,
+        conversation=conversation,
+        queue_entry_ids=queue_entry_ids,
+        task_id=task_id,
+        review_task_id=review_task_id,
+    )
+    entry = await launch_entry.resolve(
+        session,
+        agent_row,
+        task=launch_task,
+        review=launch_review,
+        conversation_id=conversation.id,
+        chat_runner_id=launch_entry.chat_runner(conversation, initiator=initiator),
+    )
+    runner_row = await session.get(
+        Runner, entry.runner_id if entry is not None else agent_row.runner_id
+    )
+    if runner_row is None or entry is None:
         raise TriggerAgentError(
             status.HTTP_409_CONFLICT,
             f"{agent}'s bound runner no longer exists.",
@@ -1296,19 +1480,53 @@ async def _trigger_agent_directly(
             agent_wide=True,
         )
 
-    existing = await session.execute(
+    # The start algorithm (`one-profile-runs-many-turns-at-once-on-different-tasks`). Step 5 first,
+    # so a project with the switch off is answered exactly as before this change: one running run
+    # per agent. The agent's running runs' directories are kept for step 3 further down.
+    gate_project = await session.get(Project, project_id)
+    parallel = bool(gate_project is not None and gate_project.profiles_run_in_parallel)
+    agent_running_dirs: List[Optional[str]] = list(
+        (
+            await session.execute(
+                select(Run.workspace_dir).where(
+                    Run.project_id == project_id, Run.agent == agent, Run.status == "running"
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    if agent_running_dirs and not parallel:
+        raise TriggerAgentError(status.HTTP_409_CONFLICT, f"{agent} already has a run in progress.")
+    # Step 1, whatever the switch: a conversation has one running turn at a time, so two processes
+    # never resume one provider session (FR-6). Asked of every run, not only this agent's: the
+    # conversation is the subject.
+    conversation_running = await session.execute(
         select(Run.id)
-        .where(Run.project_id == project_id, Run.agent == agent, Run.status == "running")
+        .where(
+            Run.project_id == project_id,
+            Run.conversation_id == conversation.id,
+            Run.status == "running",
+        )
         .limit(1)
     )
-    if existing.scalar() is not None:
-        raise TriggerAgentError(status.HTTP_409_CONFLICT, f"{agent} already has a run in progress.")
+    if conversation_running.scalar() is not None:
+        raise TriggerAgentError(
+            status.HTTP_409_CONFLICT,
+            conversation_turn_running_sentence(conversation.id),
+            # It clears when that turn ends, whose run-end re-drain starts this one.
+            transient=True,
+        )
 
     # Resolution order (design.md): conversation.runtime_overrides -> runner.model / runner
     # defaults -> catalog control defaults. Overrides were already validated against the
     # catalog when the operator set them (`trigger_agent`'s /trigger handler), so they are
     # trusted here rather than re-validated per turn.
-    conversation_overrides = dict(conversation.runtime_overrides or {})
+    # FR-10: a chat's own model and effort are the operator's choice in that chat, and travel no
+    # further: a task's run, a review, a job firing and a peer message launch with their entry's.
+    conversation_overrides = launch_entry.entry_overrides(
+        dict(conversation.runtime_overrides or {}), entry, chat=initiator == "operator"
+    )
     if has_provider(runner_row.provider_config):
         # A provider runner's model is the runner's, whatever the conversation stores: one stored
         # before the runner gained a provider, or before the agent was rebound to it, is a `copilot`
@@ -1664,7 +1882,9 @@ async def _trigger_agent_directly(
             holder = (await tasks_held_by_a_running_turn(session, project_id)).get(
                 turn_workspace.task_id
             )
-            if holder is not None and holder != agent:
+            # Step 2, whatever the switch (FR-7): by this agent too. While the switch is off a
+            # turn of this agent's was already refused above, so only the switch on reaches it.
+            if holder is not None:
                 raise TriggerAgentError(
                     status.HTTP_409_CONFLICT,
                     checkout_held_sentence(holder, turn_workspace.task_id),
@@ -1684,6 +1904,23 @@ async def _trigger_agent_directly(
         # FR-13: a chat the operator opened while the parallel switch was on works in its own
         # worktree on `thread/<agent>/<thread>`; every other untasked turn keeps the agent's own.
         thread = None if takes_task else thread_of(conversation)
+        # Step 3, whatever the switch (FR-8): a writing turn outside a task's checkout works in a
+        # directory of the agent's -- its shared worktree, a thread's own, or the project directory
+        # where there is no repository -- and waits while another run of the agent stands there.
+        # Before provisioning, which catches that worktree up with the main branch. A thread is
+        # asked too: a checkpoint's successor conversation carries on in its predecessor's tree.
+        if not takes_task:
+            shared = untasked_workspace(
+                repo_root, agent, config, thread=thread, project_is_repo=project_is_repo
+            )
+            if shared is not None and any(
+                same_directory(directory, shared) for directory in agent_running_dirs
+            ):
+                raise TriggerAgentError(
+                    status.HTTP_409_CONFLICT,
+                    shared_workspace_in_use_sentence(agent, shared),
+                    transient=True,
+                )
         # A task worktree about to be created asks GitHub, in the background, about the
         # project's open PRs (`a-build-lands-as-one-pull-request`, FR-9): the turn never waits.
         creating = takes_task and not await blocking.run(
@@ -2124,6 +2361,7 @@ async def _trigger_agent_directly(
                 described_access_path=described_path,
                 control_overrides=control_overrides,
             )
+            cmd = await blocking.run(spill_long_prompt, cmd, prompt, context_file)
         except UnsupportedRunnerError as exc:
             raise TriggerAgentError(
                 status.HTTP_501_NOT_IMPLEMENTED, str(exc), request_level=True
@@ -2247,6 +2485,11 @@ async def _trigger_agent_directly(
         # What this run was told it reaches the Hub with (`a-run-reaches-the-hub-without-mcp` D1),
         # the same value its notice and tool section were rendered from above.
         plane_surface=None if tests_first else described_path,
+        # What it launched with (FR-12): the same runner, model and effort the command was built
+        # from, so the record and the process cannot disagree.
+        runner_id=runner_row.id,
+        model=model,
+        effort=(control_overrides or {}).get("effort"),
     )
 
     # The binding, and the automatic move it causes, are staged here — before delivery, which is
@@ -2282,6 +2525,10 @@ async def _trigger_agent_directly(
             runner=runner,
             model=model,
             task_id=bound_task.id if bound_task is not None else None,
+            runner_name=runner_row.name,
+            launch_source=entry.source,
+            launch_role=entry.role,
+            events=entry.events,
         )
     except Exception:  # noqa: BLE001 -- a defect in the bookkeeping never refuses the turn
         logger.warning("starting the trace of run %s failed", run_id, exc_info=True)
@@ -2489,6 +2736,7 @@ async def trigger_agent(
     # Asked here, before a conversation is opened or an entry queued: the dispatch's own refusal
     # came after both, so a typo left an open conversation the rail filed as "agent archived"
     # and a withdrawn entry (F645).
+    await agent_profiles.require_not_folded(session, project_id, body.agent)
     lifecycle = (
         await session.execute(
             select(Agent.lifecycle).where(Agent.project_id == project_id, Agent.name == body.agent)
@@ -2682,29 +2930,60 @@ async def trigger_agent(
             raise HTTPException(
                 status_code=409, detail=f"{body.agent} has no runner bound; cannot set overrides."
             )
-        runner_row = await session.get(Runner, agent_row.runner_id)
+        stored_overrides = dict(conversation.runtime_overrides or {})
+        bound_runner = await session.get(Runner, agent_row.runner_id)
+        if bound_runner is not None and has_provider(bound_runner.provider_config):
+            # Before the pool and the catalog: on a provider runner the per-run model is refused
+            # outright, whatever the pool holds (design D7).
+            problem = provider_override_problem(body.overrides)
+            if problem is not None:
+                raise HTTPException(status_code=400, detail=problem)
+        # Bounded to the profile's pool (FR-9): a chat chooses one of its entries, and once
+        # it has a turn only one on the CLI it started on. The answer names the entry's runner,
+        # which is the one the rest is judged against.
+        try:
+            requested, runner_row = await launch_entry.bound_chat_overrides(
+                session,
+                agent_row,
+                dict(body.overrides),
+                stored=stored_overrides,
+                conversation_id=conversation.id,
+            )
+        except launch_entry.ChatChoiceRefusalError as refusal:
+            raise HTTPException(status_code=400, detail=refusal.message) from refusal
         if runner_row is None:
             raise HTTPException(
                 status_code=409, detail=f"{body.agent}'s bound runner no longer exists."
             )
+        chosen_runner = requested.pop(launch_entry.CHAT_RUNNER_KEY, None)
         if has_provider(runner_row.provider_config):
             # Before the catalog check: the per-run model is refused outright here, not judged
             # against the `copilot` catalog that would accept one (design D7).
-            problem = provider_override_problem(body.overrides)
+            problem = provider_override_problem(requested)
             if problem is not None:
                 raise HTTPException(status_code=400, detail=problem)
         accepted, rejection = validate_overrides(
             runner_row.cli,
-            body.overrides,
-            stored_model=(conversation.runtime_overrides or {}).get("model"),
-            stored_controls=dict(conversation.runtime_overrides or {}),
+            requested,
+            stored_model=stored_overrides.get("model"),
+            stored_controls=stored_overrides,
         )
         if rejection is not None:
             raise HTTPException(status_code=400, detail=rejection.reason)
+        if chosen_runner is not None:
+            accepted[launch_entry.CHAT_RUNNER_KEY] = chosen_runner
         # Overrides are stored per conversation, not per agent — the runner binding
         # this validated against is unchanged (design.md: "Rejected: overrides on the
         # agent").
         conversation.runtime_overrides = accepted
+
+    if body.spec_document:
+        # A message sent under a document makes it this conversation's own (FR-11, design D3),
+        # Explore's first message included. A message with none leaves the conversation's as it
+        # is: only stopping exploring clears it. A path no document row has attaches nothing, and
+        # the turn still goes, as it always has.
+        with contextlib.suppress(LookupError):
+            await conversation_document.set_by_path(session, conversation, body.spec_document)
 
     entry = new_entry(
         project_id=project_id,
@@ -2760,6 +3039,9 @@ async def trigger_agent(
                 session_id=conversation.provider_session_id,
                 queue_entry_id=entry.id,
             )
+    # While the switch is on one pass can start a turn in several conversations; this request's
+    # answer is about its own.
+    scheduled = scheduled.about(conversation.id)
     # The scheduler picks the conversation of the *oldest* eligible entry across this
     # agent's whole queue, which is not necessarily the conversation this request just
     # appended to (spec `agent-conversation-workspace`: "Different conversations never
@@ -2861,35 +3143,62 @@ class StopAgentResponse(BaseModel):
 @router.post("/{agent}/stop", response_model=StopAgentResponse)
 async def stop_agent_run(
     agent: str,
+    run_id: Optional[str] = Query(default=None, max_length=64),
+    conversation_id: Optional[str] = Query(default=None, max_length=64),
     project: Tuple[str, str] = Depends(get_project),
     session: AsyncSession = Depends(get_session),
 ):
-    """Interrupt the agent's in-progress direct-spawn run, if any.
+    """Interrupt one of the agent's in-progress direct-spawn runs.
 
     Force-terminates the owned PTY process. `_execute_run`'s own read/wait loop observes
     the exit and does the actual status/broadcast bookkeeping (see `_stop_requested` above)
     — this endpoint only signals intent and terminates the process, it does not itself mark
     the Run row, since that must happen only after the process has actually exited.
+
+    `run_id` or `conversation_id` names which run (`one-profile-runs-many-turns-at-once-on-
+    different-tasks`, FR-10): with profiles running in parallel an agent can have several, and
+    stopping "the newest" stopped whichever turn happened to start last, not the one the operator
+    pressed Stop in. With neither named, the agent's only running run is stopped; with more than
+    one, nothing is stopped and the answer says to name one.
     """
     from sqlalchemy import select
 
     project_id, _ = project
 
-    result = await session.execute(
-        select(Run)
-        .where(Run.project_id == project_id, Run.agent == agent, Run.status == "running")
-        .order_by(Run.started_at.desc())
-        .limit(1)
+    query = select(Run).where(
+        Run.project_id == project_id, Run.agent == agent, Run.status == "running"
     )
-    run = result.scalar_one_or_none()
-    if run is None:
+    if run_id is not None:
+        query = query.where(Run.id == run_id)
+    if conversation_id is not None:
+        query = query.where(Run.conversation_id == conversation_id)
+    running = list((await session.execute(query.order_by(Run.started_at.desc()))).scalars().all())
+    if not running:
         # F192: after the run lookup, so a removed agent's still-running turn can be stopped; a
         # name nothing is recorded under is a typo, not an idle agent.
         await require_known_agent(session, project_id, agent)
+        if run_id is not None or conversation_id is not None:
+            named = f"run {run_id}" if run_id is not None else f"conversation {conversation_id}"
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"{agent} has no run in progress in {named}.",
+            )
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"{agent} has no run in progress.",
         )
+    if len(running) > 1:
+        # Only reachable with no target named (a run id names one run, and a conversation has at
+        # most one running turn): guessing would stop a turn the operator did not choose.
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                f"{agent} has {len(running)} runs in progress "
+                f"({', '.join(r.id for r in running)}); name the one to stop with run_id "
+                "or conversation_id."
+            ),
+        )
+    run = running[0]
 
     pty = run_liveness.active_ptys.get(run.id)
     if pty is not None:
@@ -4178,7 +4487,7 @@ async def _execute_run(
             # any status: the hold is derived from the reading, so a `completed` run that ended
             # with a refusal holds the queue too, and without a wake nothing would come back.
             if held is not None:
-                arm_allowance_wake(project_id, agent, held.hold_until)
+                arm_allowance_wake(project_id, agent, held.hold_until, runner)
                 held_payload = {
                     "agent": agent,
                     "run_id": run_id,
@@ -5234,7 +5543,7 @@ async def _execute_rpc_run(
             review_on_completion.after_run(project_id, run_id)
             # The wake, immediately after the commit, for the reason `_execute_run` gives.
             if held is not None:
-                arm_allowance_wake(project_id, agent, held.hold_until)
+                arm_allowance_wake(project_id, agent, held.hold_until, runner)
                 held_payload = {
                     "agent": agent,
                     "run_id": run_id,

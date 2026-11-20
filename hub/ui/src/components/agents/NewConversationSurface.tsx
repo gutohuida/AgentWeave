@@ -289,6 +289,9 @@ export function NewConversationSurface({
           effectiveControls: posture,
           pendingOverrides,
           onPendingOverridesChange: setPendingOverrides,
+          // A new chat starts on the default and may choose any entry (FR-9).
+          pool: agentRow?.pool,
+          poolStartedOn: null,
           specDocumentLabel: null,
           specArmed: exploring,
           onOpenSpecPicker: () => setExploring(true),

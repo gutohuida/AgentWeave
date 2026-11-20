@@ -12,6 +12,7 @@ import pytest
 from hub import task_integration
 from hub.spec_payload import SCHEMA_VERSION
 
+from ._spec_confirmations import confirm_criteria
 from ._spec_versions import content_version
 from .test_task_integration import (
     AGENT_BRANCH,
@@ -51,6 +52,7 @@ async def _document(app, auth_headers, run_headers):
     assert created.status_code == 201, created.text
     saved = await app.post(SUBMIT, json={"path": PATH, "document": PAYLOAD}, headers=run_headers)
     assert saved.status_code == 200, saved.text
+    await confirm_criteria(PATH)
 
 
 async def _approve_document(app, auth_headers):

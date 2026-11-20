@@ -22,6 +22,7 @@ from hub.db.engine import async_session_factory
 from hub.db.models import Agent, Run
 from hub.spec_payload import SCHEMA_VERSION
 
+from ._spec_confirmations import confirm_criteria
 from ._spec_versions import content_version
 
 BASE = "/api/v1/projects/proj-test/project"
@@ -76,6 +77,7 @@ async def make_document(app, auth_headers, run_headers, *, tasks=None):
     )
     assert created.status_code == 201, created.text
     await submit(app, run_headers, tasks=tasks)
+    await confirm_criteria(PATH)
 
 
 async def close_and_propose(app, auth_headers):
@@ -154,6 +156,7 @@ async def test_approving_does_not_duplicate_a_requirement_a_hand_made_task_alrea
     assert proposed.status_code == 200, proposed.text
     assert proposed.json()["blocking"] == [], proposed.json()["blocking"]
 
+    await confirm_criteria(PATH)
     approved = await app.post(
         f"{BASE}/documents/phase",
         params={"path": PATH, "to": "approved"},

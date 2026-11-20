@@ -12,14 +12,25 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Annotated, Any, Dict, List, Optional, Sequence
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    HTTPException,
+    Query,
+    Request,
+    Security,
+    status,
+)
 from fastapi.responses import JSONResponse
+from fastapi.security import HTTPAuthorizationCredentials
 from pydantic import AliasChoices, BaseModel, Field, ValidationInfo, field_validator
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ... import mcp_announce, readable_ids, run_liveness, run_waits, spec_reading
 from ...agent_auth import AgentActor, get_agent_actor
+from ...auth import bearer_scheme
 from ...checkpoint_access import (
     AccessDeniedError,
     read_checkpoint,
@@ -2282,7 +2293,11 @@ async def read_spec_document(
         .scalars()
         .all()
     )
-    requirements, diagnostics = spec_reading.requirement_view(payload, list(rows))
+    from ... import spec_criterion_confirmations
+
+    requirements, diagnostics = spec_reading.requirement_view(
+        payload, list(rows), await spec_criterion_confirmations.rows_for(session, document)
+    )
 
     named = [name.strip() for name in identifiers.split(",") if name.strip()]
     if named:
@@ -2438,7 +2453,7 @@ async def create_spec_document(
     the system name where a write lands (design D2). The path arrives second, once
     `rename_spec_document` gives the document a name that means something.
     """
-    from ... import project_workspace, spec_lifecycle, spec_naming, spec_service
+    from ... import project_workspace, spec_journey, spec_lifecycle, spec_naming, spec_service
     from .spec import SCHEMA_VERSION, UNTITLED
 
     kind = body.kind or "change-spec"
@@ -2502,7 +2517,23 @@ async def create_spec_document(
     await sse_manager.broadcast(
         actor.project_id, "spec_updated", {"path": document.path, "phase": document.phase}
     )
-    return {"path": document.path, "phase": document.phase}
+    answer: Dict[str, Any] = {"path": document.path, "phase": document.phase}
+    if spec_journey.has_journey(document):
+        # The same text a turn bound to this document renders, so the agent starts the journey in
+        # the turn that created it rather than the next (FR-6).
+        steps = await spec_journey.project_steps(session, actor.project_id)
+        answer.update(
+            step=document.step,
+            size=document.size,
+            journey=spec_journey.journey(document.size, steps),
+            instructions=spec_journey.duty(
+                document.step,
+                steps,
+                size=document.size,
+                roster=await spec_journey.open_roster(session, actor.project_id),
+            ),
+        )
+    return answer
 
 
 @router.post("/spec/documents/rename")
@@ -3041,6 +3072,87 @@ async def acknowledge_spec_gap(
     return recorded
 
 
+class CriterionConfirmation(RequestModel):
+    """One criterion checked against the current code: new behaviour or a guard."""
+
+    criterion: str = Field(max_length=128)
+    kind: str = Field(max_length=16)
+
+
+class CriteriaConfirmation(RequestModel):
+    path: str = Field(max_length=255)
+    confirmations: List[CriterionConfirmation] = Field(max_length=500)
+
+
+async def _agent_not_operator(
+    credentials: Optional[HTTPAuthorizationCredentials] = Security(bearer_scheme),
+    session: AsyncSession = Depends(get_session),
+    request: Request = None,  # type: ignore[assignment]
+) -> AgentActor:
+    """The run's agent; an operator credential is refused 403 `agent_only` rather than 401, so
+    the operator is told the act is an agent's (`existing-behaviour-is-caught-before-the-build`
+    D3, D4). A credential that is neither stays 401."""
+    from ...auth import _operator_from_credential
+
+    if credentials is not None and credentials.credentials.startswith("aw_live_"):
+        await _operator_from_credential(credentials.credentials, session)
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "message": "confirming acceptance criteria is an agent's act: an agent checks "
+                "each criterion against the current code and records it",
+                "code": "agent_only",
+            },
+        )
+    return await get_agent_actor(credentials, session, request)
+
+
+@router.post("/spec/documents/confirm-criteria")
+async def confirm_acceptance_criteria(
+    body: CriteriaConfirmation,
+    actor: AgentActor = Depends(_agent_not_operator),
+    session: AsyncSession = Depends(get_session),
+):
+    """Record that each named criterion was checked against the current code and is new
+    behaviour or a guard (`existing-behaviour-is-caught-before-the-build` D4). All or none.
+
+    Answers `{path, confirmed: [{criterion, kind, by, at}], unconfirmed: [key, ...]}`. Refused,
+    writing nothing: 403 `agent_only` for the operator's credential, 404 for an unknown document,
+    422 `criterion_unknown`, `confirmation_kind_unknown` and `confirmation_kind_mismatch`, and 409
+    `document_not_exploring`, which the operator's reopening lifts.
+    """
+    from ... import spec_criterion_confirmations, spec_service
+
+    workspace, document = await _amendable_document(session, actor, body.path)
+    try:
+        payload = spec_service._stored_payload(workspace, document)
+        result = await spec_criterion_confirmations.confirm(
+            session,
+            document,
+            payload,
+            [entry.model_dump() for entry in body.confirmations],
+            actor=actor.agent,
+            run_id=actor.run_id,
+        )
+    except spec_service.SaveRefusedError as exc:
+        raise HTTPException(
+            status_code=422, detail={"message": str(exc), "code": exc.code}
+        ) from exc
+    except spec_criterion_confirmations.ConfirmationRefusedError as exc:
+        raise HTTPException(
+            status_code=exc.status, detail={"message": str(exc), "code": exc.code}
+        ) from exc
+    await session.commit()
+    # The list's cached ready_to_approve must not lag the confirmation (as acknowledging).
+    from .spec import _READY_VERDICTS
+
+    _READY_VERDICTS.clear()
+    await sse_manager.broadcast(
+        actor.project_id, "spec_updated", {"path": document.path, "phase": document.phase}
+    )
+    return result
+
+
 @router.post("/spec/documents")
 async def submit_spec_document(
     body: SpecDocumentSubmission,
@@ -3075,6 +3187,20 @@ async def submit_spec_document(
                 "then rename_spec_document once you know its subject, before submitting again."
             ),
         )
+
+    # FR-12: a task's builder or checker, or the delivery's agent, naming a folded agent is refused.
+    from ... import agent_profiles
+
+    submitted = body.document if isinstance(body.document, dict) else {}
+    delivery = submitted.get("delivery")
+    named = [
+        entry.get(field)
+        for entry in [*(submitted.get("tasks") or []), delivery]
+        if isinstance(entry, dict)
+        for field in ("builder", "checker", "agent")
+    ]
+    for name in dict.fromkeys(n for n in named if isinstance(n, str) and n.strip()):
+        await agent_profiles.require_not_folded(session, actor.project_id, name.strip())
 
     # FR-16: the save is based on the version this conversation last read or saved, and is
     # refused when somebody else saved the document since.
