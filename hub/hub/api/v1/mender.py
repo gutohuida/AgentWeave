@@ -21,6 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ... import readable_ids, stalls
 from ...agent_auth import AgentActor, get_agent_actor
+from ...agent_profiles import require_not_folded
 from ...auth import get_project
 from ...db.engine import get_session
 from ...db.models import Agent, Project, Stall, Task
@@ -395,6 +396,9 @@ async def mender_reset_task(
 
     task = await _task(session, actor, task_id)
     if body.assignee is not None:
+        # A folded name is closed (FR-12): refused naming its profile, ahead of the open-agent
+        # check that would otherwise answer it as a stranger.
+        await require_not_folded(session, actor.project_id, body.assignee)
         named = (
             await session.execute(
                 select(Agent).where(

@@ -293,3 +293,25 @@ async def test_a_hand_out_to_a_folded_agent_names_the_profile(folded):
                 db, caller="QA", project_id=P, task_id="t-folded", agent=FOLDED, review=False
             )
     assert WORDS in str(caught.value)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("status", ["assigned", "under_review"])
+async def test_a_mender_reset_to_a_folded_agent_names_the_profile(app, folded, status):
+    from .test_a_stalled_project_wakes_the_mender import mender_run
+
+    mender = await mender_run()
+    async with async_session_factory() as db:
+        db.add(Task(id="t-mend", project_id=P, title="t", status="completed", assignee="QA"))
+        await db.commit()
+    queued = await _count(InboundQueueEntry)
+    resp = await app.post(
+        "/api/v1/agent-actions/mender/tasks/t-mend/reset",
+        json={"status": status, "assignee": FOLDED},
+        headers=mender,
+    )
+    _refused(resp)
+    async with async_session_factory() as db:
+        task = await db.get(Task, "t-mend")
+        assert (task.status, task.assignee) == ("completed", "QA")
+    assert await _count(InboundQueueEntry) == queued
