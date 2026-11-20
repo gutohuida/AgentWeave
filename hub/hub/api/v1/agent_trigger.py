@@ -39,6 +39,7 @@ from sqlalchemy.exc import OperationalError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ... import (
+    agent_profiles,
     blocking,
     bound_address,
     build_retrospective,
@@ -1334,6 +1335,12 @@ async def _trigger_agent_directly(
         worktrees.validate_agent_name(agent)
     except ValueError as exc:
         raise TriggerAgentError(status.HTTP_400_BAD_REQUEST, str(exc), request_level=True) from exc
+
+    # A folded name launches nothing, whichever path got here (FR-5); asked before the conversation
+    # so the refusal names the profile rather than a conversation that is archived or closed.
+    folded_refusal = await agent_profiles.folded_refusal(session, project_id, agent)
+    if folded_refusal:
+        raise TriggerAgentError(status.HTTP_409_CONFLICT, folded_refusal, request_level=True)
 
     conversation = await get_open_conversation(
         session,
@@ -2702,6 +2709,7 @@ async def trigger_agent(
     # Asked here, before a conversation is opened or an entry queued: the dispatch's own refusal
     # came after both, so a typo left an open conversation the rail filed as "agent archived"
     # and a withdrawn entry (F645).
+    await agent_profiles.require_not_folded(session, project_id, body.agent)
     lifecycle = (
         await session.execute(
             select(Agent.lifecycle).where(Agent.project_id == project_id, Agent.name == body.agent)

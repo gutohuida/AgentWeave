@@ -10,8 +10,8 @@ from sqlalchemy import and_, func, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ... import agent_profiles, loop_history, refused_capability, task_attribution
 from ... import builds as builds_service
-from ... import loop_history, refused_capability, task_attribution
 from ...auth import get_project
 from ...db.engine import get_session
 from ...db.models import (
@@ -261,6 +261,12 @@ async def _check_agent_exists(session: AsyncSession, project_id: str, agent: str
     rows = (
         (await session.execute(select(Agent).where(Agent.project_id == project_id))).scalars().all()
     )
+    folded = {row.name: row.folded_into for row in rows if row.folded_into}
+    if agent in folded:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=agent_profiles.folded_detail(agent, folded[agent]),
+        )
     archived = {row.name for row in rows if row.lifecycle == "archived"}
     known = {row.name for row in rows if row.lifecycle != "archived"}
 

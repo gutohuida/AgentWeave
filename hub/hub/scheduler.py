@@ -2383,8 +2383,12 @@ async def resolve_reviewer(
     accounts of the same rung.
     """
     from . import review_turn
+    from .agent_profiles import widen_to_profiles
 
     unavailable = unavailable or set()
+    # Excluded by profile, not by name (FR-9): an author's profile and every name folded into it
+    # may not review it, each told which profile it shares with the author.
+    exclude = await widen_to_profiles(session, project_id, exclude)
 
     resolution = await build_checker_resolution(session, task, project_id, facts)
     if resolution is None:

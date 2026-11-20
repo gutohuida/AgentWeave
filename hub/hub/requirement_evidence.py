@@ -1392,6 +1392,43 @@ class Reproduction:
         return not any((self.command, self.output, self.commit, self.summary, self.covers))
 
 
+async def _shares_author_profile(
+    session: AsyncSession, evidence: RequirementEvidence, actor: Actor
+) -> Optional[str]:
+    """The profile an agent *actor* shares with the agent that recorded *evidence*, or None.
+
+    By profile, not name (FR-9): a folded name counts as its profile, so a profile authored every
+    piece recorded under a name folded into it, before the fold as well as after."""
+    from .agent_profiles import shared_profile
+
+    if actor.kind != "agent" or evidence.actor_kind != "agent" or not actor.name:
+        return None
+    return await shared_profile(session, evidence.project_id, actor.name, evidence.actor)
+
+
+async def _refuse_own_evidence(
+    session: AsyncSession, evidence: RequirementEvidence, actor: Actor
+) -> None:
+    """An agent decides no evidence its own profile recorded. Checked first, so the author is told
+    it is the author rather than which grant or review it lacks."""
+    profile = await _shares_author_profile(session, evidence, actor)
+    if profile is None:
+        return
+    if actor.name == evidence.actor:
+        raise EvidenceRefusedError(
+            "an agent cannot accept evidence it produced; another agent or the operator decides",
+            code="self_acceptance",
+        )
+    from .agent_profiles import counts_as
+
+    raise EvidenceRefusedError(
+        f"an agent cannot accept evidence its own profile produced: "
+        f"{counts_as(actor.name or '', evidence.actor, profile)}, and {evidence.actor!r} recorded "
+        f"{evidence.id}; another profile or the operator decides",
+        code="self_acceptance",
+    )
+
+
 async def _reviews_the_task(
     session: AsyncSession, actor: Actor, evidence: RequirementEvidence
 ) -> bool:
@@ -1619,6 +1656,8 @@ async def decide(
             http_status=422,
         )
 
+    await _refuse_own_evidence(session, evidence, actor)
+
     if reproduction is not None:
         if decision != ACCEPTED:
             raise EvidenceRefusedError(
@@ -1638,17 +1677,6 @@ async def decide(
             "accepting evidence is the operator's, or an agent the operator has granted it. "
             "A project that has granted no agent still has the operator.",
             code="acceptance_not_granted",
-        )
-
-    if (
-        actor.kind == "agent"
-        and evidence.actor_kind == "agent"
-        and actor.name
-        and actor.name == evidence.actor
-    ):
-        raise EvidenceRefusedError(
-            "an agent cannot accept evidence it produced; another agent or the operator decides",
-            code="self_acceptance",
         )
 
     previous = evidence.review_state
@@ -1877,12 +1905,7 @@ async def verdict_pieces(
     ).all()
     pieces: List[Tuple[RequirementEvidence, str]] = []
     for evidence, requirement in rows:
-        if (
-            not own_work
-            and actor.kind == "agent"
-            and evidence.actor_kind == "agent"
-            and actor.name == evidence.actor
-        ):
+        if not own_work and await _shares_author_profile(session, evidence, actor) is not None:
             continue
         if (
             evidence.run_id
