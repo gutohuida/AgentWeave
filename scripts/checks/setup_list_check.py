@@ -9,7 +9,7 @@ temporary database (the harness `long_values_check.py` uses), serves this checko
 server, proxied to that Hub), opens a scratch folder with no git as a project and, in a headless
 browser, checks:
 
-  * ac-fresh-folder  Overview lists the repository and agent items and nothing else (the
+  * ac-fresh-folder  Overview lists the repository and profiles items and nothing else (the
                      specification item is dismissed first: it is another spec's);
   * ac-three-places  the list is at the top of Overview and of Project settings sections, the rail
                      row shows "2" beside the name, naming both on hover, and no hover action
@@ -227,8 +227,8 @@ def drive(
     c.ok("ac-fresh-folder", "Overview shows a set-up list", has_list, "no [data-testid=setup-list] on Overview")
     c.ok(
         "ac-fresh-folder",
-        "the list holds the repository and agent items and nothing else",
-        keys(state) == ["agent", "repository"],
+        "the list holds the repository and profiles items and nothing else",
+        keys(state) == ["profiles", "repository"],
         f"items: {keys(state)}",
     )
 
@@ -266,22 +266,24 @@ def drive(
     c.ok(
         "ac-three-places",
         "hovering the count names both items",
-        "repository" in title.lower() and "agent" in title.lower(),
+        "repository" in title.lower() and "builder" in title.lower(),
         f"title: {title!r}",
     )
     c.ok("ac-three-places", "no hover action overlaps the count", rail.get("count") is not None and not rail.get("overlaps"), f"{rail}")
 
-    # ---- ac-links: no agent opens adding an agent; no repository opens the action ----------
+    # ---- ac-links: no agent opens the setup offer; no repository opens the action ----------
     open_url(page, overview)
     if wait_for_list(page):
-        page.locator('[data-testid="setup-list"] [data-key="agent"] button').last.click()
+        page.locator('[data-testid="setup-list"] [data-key="profiles"] button').last.click()
         try:
-            page.get_by_role("heading", name="Create agent").wait_for(state="visible", timeout=SHORT)
+            page.get_by_role("heading", name="Add a builder and a checker").wait_for(
+                state="visible", timeout=SHORT
+            )
             opened = True
         except Exception:  # noqa: BLE001
             opened = False
         c.shot(page, "4-link-agent")
-        c.ok("ac-links", "the agent item opens adding an agent", opened, "no 'Create agent' dialog")
+        c.ok("ac-links", "the profiles item opens the setup offer", opened, "no setup offer dialog")
         page.keyboard.press("Escape")
         page.wait_for_timeout(300)
         page.locator('[data-testid="setup-list"] [data-key="repository"] button').last.click()
@@ -294,12 +296,14 @@ def drive(
             f"url {page.url}",
         )
     else:
-        c.ok("ac-links", "the agent and repository items can be clicked", False, "no list to click")
+        c.ok("ac-links", "the profiles and repository items can be clicked", False, "no list to click")
 
     # ---- ac-dismiss (screen half): all three places, and back ------------------------------
     open_url(page, overview)
     if wait_for_list(page):
-        page.get_by_role("button", name="Not for this project").click()
+        page.locator('[data-testid="setup-item-repository"]').get_by_role(
+            "button", name="Not for this project"
+        ).click()
         gone = True
         try:  # the dismissal is a request: wait for the item to leave rather than read mid-flight
             page.locator('[data-testid="setup-item-repository"]').wait_for(state="detached", timeout=SHORT)
@@ -324,17 +328,19 @@ def drive(
             back = read_items(page)
             c.ok("ac-dismiss", "'Show it again' brings the repository item back", "repository" in keys(back), f"{keys(back)}")
         del gone
-        # Leave it dismissed for ac-live: the agent item is then the only thing left.
+        # Leave it dismissed for ac-live: the profiles item is then the only thing left.
         open_url(page, overview)
         wait_for_list(page)
-        page.get_by_role("button", name="Not for this project").click()
+        page.locator('[data-testid="setup-item-repository"]').get_by_role(
+            "button", name="Not for this project"
+        ).click()
     else:
         c.ok("ac-dismiss", "the repository item can be dismissed", False, "no list")
 
     # ---- ac-live: add an agent without reloading -------------------------------------------
     open_url(page, overview)
-    before = wait_for_list(page) and keys(read_items(page)) == ["agent"]
-    c.ok("ac-live", "Overview shows only the agent item before the agent is added", before, f"{keys(read_items(page))}")
+    before = wait_for_list(page) and keys(read_items(page)) == ["profiles"]
+    c.ok("ac-live", "Overview shows only the profiles item before the agent is added", before, f"{keys(read_items(page))}")
     runner = api.call(
         "POST", f"/projects/{pid}/runners", {"name": "Runs", "cli": runnable_cli}
     )["id"]

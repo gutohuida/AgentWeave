@@ -6,7 +6,7 @@ import logging
 import re
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Literal, NamedTuple, Optional, Tuple, get_args
+from typing import Any, Dict, List, Literal, NamedTuple, Optional, Sequence, Tuple, get_args
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field, model_validator
@@ -708,61 +708,99 @@ async def create_operator_agent(
 ):
     """Create a Hub-owned agent identity from existing project resources."""
     project_id, _ = project
-    # F415 review: this route, the Add-agent dialog's, checked only the name pattern, so `operator`
-    # and `user` were created here while every route that runs an agent refused them. A 400 with a
-    # sentence, not a validator's 422, because the dialog renders `detail` as text.
-    try:
-        worktrees.validate_agent_name(body.name)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    # F248: refused here and at the other doors that add an agent row, never at a use site.
-    route_refusal = route_words.agent_route_word(body.name)
-    if route_refusal is not None:
-        raise HTTPException(status_code=400, detail=route_refusal)
     try:
         await project_workspace.resolve_project_workspace(session, project_id)
     except project_workspace.ProjectWorkspaceError as exc:
         project_workspace.raise_workspace_http_error(exc)
+    agent = await add_operator_agent(
+        session,
+        project_id,
+        name=body.name,
+        runner_id=body.runner_id,
+        provider=body.provider,
+        model=body.model,
+        charter_id=body.charter_id,
+    )
+    await session.commit()
+    await session.refresh(agent)
+    await announce_agent_created(session, project_id, agent)
+    return OperatorAgentResponse(
+        id=agent.id,
+        name=agent.name,
+        runner_id=agent.runner_id,
+        charter_id=agent.charter_id,
+        color_index=agent.color_index,
+    )
+
+
+async def add_operator_agent(
+    session: AsyncSession,
+    project_id: str,
+    *,
+    name: str,
+    runner_id: Optional[str] = None,
+    provider: Optional[str] = None,
+    model: Optional[str] = None,
+    charter_id: Optional[str] = None,
+    taken: Sequence[str] = (),
+) -> Agent:
+    """Check one operator-created agent and add it to the session, not committed, so a caller
+    creating several (the setup offer's builder and checker, `profiles-threads-and-builds-
+    everywhere` D6) commits them together or not at all. Raises HTTPException naming the
+    refusal; `taken` is names already added in this session that are not flushed yet.
+    """
+    # F415 review: this route, the Add-agent dialog's, checked only the name pattern, so `operator`
+    # and `user` were created here while every route that runs an agent refused them. A 400 with a
+    # sentence, not a validator's 422, because the dialog renders `detail` as text.
+    try:
+        worktrees.validate_agent_name(name)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    # F248: refused here and at the other doors that add an agent row, never at a use site.
+    route_refusal = route_words.agent_route_word(name)
+    if route_refusal is not None:
+        raise HTTPException(status_code=400, detail=route_refusal)
 
     existing = await session.execute(
-        select(Agent.id).where(Agent.project_id == project_id, Agent.name == body.name)
+        select(Agent.id).where(Agent.project_id == project_id, Agent.name == name)
     )
     session_data = await _get_session_data(project_id, session)
     configured_names = (session_data or {}).get("agents", {})
-    if existing.scalar() is not None or body.name in configured_names:
+    if existing.scalar() is not None or name in configured_names or name in taken:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail=f"Agent name '{body.name}' already exists in this project",
+            detail=f"Agent name '{name}' already exists in this project",
         )
     # F811: archived rows count, as do names a synced session declares.
     twin = route_words.agent_case_twin(
-        body.name,
+        name,
         [
             *(
                 await session.execute(select(Agent.name).where(Agent.project_id == project_id))
             ).scalars(),
             *configured_names,
+            *taken,
         ],
     )
     if twin is not None:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=twin)
 
-    if body.runner_id is not None:
-        runner = await session.get(Runner, body.runner_id)
+    if runner_id is not None:
+        runner = await session.get(Runner, runner_id)
         if runner is None or runner.project_id != project_id:
-            raise HTTPException(status_code=404, detail=f"Runner '{body.runner_id}' not found")
+            raise HTTPException(status_code=404, detail=f"Runner '{runner_id}' not found")
     else:
         # provider + model: atomic find-or-create (design.md). A runner created here is added to
         # the session but not committed until the same commit as the agent below, so a failure
         # anywhere before that commit leaves neither record behind.
-        runner = await _plain_runner_for(session, project_id, body.provider, body.model)
+        runner = await _plain_runner_for(session, project_id, provider, model)
 
-    if body.charter_id is not None:
-        charter = await session.get(Charter, body.charter_id)
+    if charter_id is not None:
+        charter = await session.get(Charter, charter_id)
         if charter is None or charter.project_id != project_id:
-            raise HTTPException(status_code=404, detail=f"Charter '{body.charter_id}' not found")
+            raise HTTPException(status_code=404, detail=f"Charter '{charter_id}' not found")
 
-    probe = probe_agent(body.name, runner_probe_config(runner))
+    probe = probe_agent(name, runner_probe_config(runner))
     if not probe["runnable"]:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -772,17 +810,19 @@ async def create_operator_agent(
     agent = Agent(
         id=f"agent-{short_id()}",
         project_id=project_id,
-        name=body.name,
+        name=name,
         config={},
         color_index=await next_color_index(session, project_id),
         runner_id=runner.id,
-        charter_id=body.charter_id,
+        charter_id=charter_id,
     )
     session.add(agent)
     await bind_default(session, agent, runner.id)
-    await session.commit()
-    await session.refresh(agent)
+    return agent
 
+
+async def announce_agent_created(session: AsyncSession, project_id: str, agent: Agent) -> None:
+    """What follows a committed operator-created agent: its event, the app told, its home."""
     payload = {
         "agent": agent.name,
         "agent_id": agent.id,
@@ -795,13 +835,6 @@ async def create_operator_agent(
     await publish_setup_changed(project_id)
     # After the broadcast, so nothing this does can stop the UI learning of the agent (D4 (a)).
     await write_copilot_home_after_commit(session, project_id, agent)
-    return OperatorAgentResponse(
-        id=agent.id,
-        name=agent.name,
-        runner_id=agent.runner_id,
-        charter_id=agent.charter_id,
-        color_index=agent.color_index,
-    )
 
 
 def _run_lifecycle_summary(event_type: str, data: Optional[dict]) -> Optional[str]:

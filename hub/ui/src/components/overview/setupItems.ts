@@ -29,7 +29,7 @@ const WHY: Record<NonNullable<ProjectSetupItem['reason']>, string> = {
 export function describeSetupItem(
   item: ProjectSetupItem,
   projectId: string,
-  onAddAgent?: () => void,
+  onOfferProfiles?: () => void,
 ): SetupItem {
   const base = { id: item.id, key: item.key, dismissable: item.dismissable }
   switch (item.key) {
@@ -59,12 +59,12 @@ export function describeSetupItem(
           },
         },
       }
-    case 'agent':
+    case 'profiles':
       return {
         ...base,
-        title: 'Add an agent',
-        detail: 'A project with no agent has nobody to give work to.',
-        action: { label: 'Add an agent', onClick: () => onAddAgent?.() },
+        title: 'Add a builder and a checker',
+        detail: 'A build needs two profiles: one builds each task and the other checks it. Name them and choose what runs each.',
+        action: { label: 'Add both…', onClick: () => onOfferProfiles?.() },
       }
     case 'specification':
       return {

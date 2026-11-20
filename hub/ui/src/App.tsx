@@ -646,7 +646,6 @@ export default function App() {
           onSelectSection={(section) => navigateTo(environmentDestination(destination.projectId, section))}
           onNavigate={navigate}
           onOpenAppSettings={() => navigateTo(appSettingsDestination(destination.projectId))}
-          onAddAgent={() => setAgentCreateProjectId(destination.projectId)}
         />
       )
     }
