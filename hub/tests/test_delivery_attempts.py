@@ -406,3 +406,30 @@ async def test_the_retry_note_counts_a_refused_delivery(app):
     prompt = format_turn_prompt([entry])
     assert "delivery attempt 2" in prompt
     assert "an earlier attempt was cut off before it finished" in prompt
+
+
+@pytest.mark.asyncio
+async def test_the_entry_list_exposes_the_spec_document_or_null(app, auth_headers):
+    """The drives read an entry's document here: 'names it' and 'names no document'."""
+    async with async_session_factory() as db:
+        await make_conversation(db)
+        for conversation_id, document in (("conv-wedge", "spec/changes/x/spec.json"), (None, None)):
+            db.add(
+                new_entry(
+                    project_id="proj-test",
+                    agent=AGENT,
+                    origin_type="operator",
+                    content=f"bound to {document}",
+                    hop_depth=0,
+                    conversation_id=conversation_id,
+                    spec_document=document,
+                )
+            )
+        await db.commit()
+
+    listed = await app.get(f"/api/v1/projects/proj-test/queue/{AGENT}", headers=auth_headers)
+    assert listed.status_code == 200, listed.text
+    rows = {row["content"]: row for row in listed.json()}
+    assert rows["bound to spec/changes/x/spec.json"]["spec_document"] == "spec/changes/x/spec.json"
+    assert "spec_document" in rows["bound to None"]
+    assert rows["bound to None"]["spec_document"] is None
