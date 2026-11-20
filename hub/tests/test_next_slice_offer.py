@@ -133,7 +133,9 @@ async def test_take_queues_once_in_a_new_conversation_with_the_outcomes(
     answered = taken.json()["document"]
     assert set(answered) == {"path", "title", "phase", "step"}, answered
     assert answered["phase"] == "exploring" and answered["step"] == "intake"
-    assert entry.origin_type == "operator" and entry.spec_document == taken.json()["document"]["path"]
+    assert (
+        entry.origin_type == "operator" and entry.spec_document == taken.json()["document"]["path"]
+    )
     async with async_session_factory() as session:
         readable_id = (await session.get(Task, task_id)).readable_id
     assert readable_id and task_id not in entry.content
