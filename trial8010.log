@@ -1,0 +1,10 @@
+INFO:     Started server process [13980]
+INFO:     Waiting for application startup.
+This Hub was started inside an agent's run; dropped the run's variables it inherited, so its own runs are never handed them: AW_RUN_TOKEN, AW_RUN_ID, AW_AGENT_IDENTITY, AW_WORKSPACE_DIR, AW_TURN_DEPTH, HUB_URL
+Hub database: opening C:\Users\huida\.agentweave\hub\profiles\trial\agentweave.db (existed before this process opened it: True, pid 13980)
+INFO  [alembic.runtime.migration] Context impl SQLiteImpl.
+INFO  [alembic.runtime.migration] Will assume non-transactional DDL.
+WARNI [hub.main] Hub database: journal mode wal, synchronous full
+WARNI [hub.main] Tool server pinned at C:\Users\huida\.agentweave\hub\tool-server\da3854082e446753\mcp_server.py
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://127.0.0.1:8010 (Press CTRL+C to quit)
