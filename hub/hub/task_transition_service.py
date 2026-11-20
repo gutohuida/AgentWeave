@@ -410,8 +410,17 @@ async def assignee_produced_the_work(
     if authors is None:
         authors = await agents_that_recorded_evidence_for(session, task.id)
     if completer is not None:
-        return completer == task.assignee or task.assignee in authors
-    return task.assignee in (await agents_that_worked(session, task.id) | authors)
+        names = {completer} | authors
+    else:
+        names = await agents_that_worked(session, task.id) | authors
+    if task.assignee in names:
+        return True
+    # By profile (FR-9): a holder whose profile authored the work is its author too.
+    from .agent_profiles import folded_map
+
+    folded = await folded_map(session, task.project_id, [task.assignee, *names])
+    profile = folded.get(task.assignee, task.assignee)
+    return any(folded.get(name, name) == profile for name in names)
 
 
 async def agents_that_may_have_authored(session: AsyncSession, task: Task) -> "set[str]":
@@ -460,12 +469,51 @@ async def authorship_reason(
     including a mender that re-recorded some (F505). Read alone, never the union
     `agents_that_may_have_authored`, for the reason `agents_that_recorded_evidence_for` gives.
     """
+    found = await _authorship(session, task, agent)
+    return found[1] if found is not None else None
+
+
+async def _authorship(
+    session: AsyncSession, task: Task, agent: Optional[str]
+) -> "Optional[tuple[str, str]]":
+    """`authorship_reason` with which record made *agent* the author: `("completed", clause)` or
+    `("evidence", clause)`.
+
+    Compared by **profile**, not by name (`fold-duplicate-agents-into-one-profile-with-their-
+    history-kept`, FR-9): a folded name counts as its profile, so a profile authored everything done
+    under any name folded into it, before the fold as well as after, and the clause names it. With
+    nothing folded every name is its own profile and this is the name comparison it always was.
+    """
+    from .agent_profiles import counts_as, folded_map
+
     if not agent:
         return None
-    if await agent_that_completed(session, task.id) == agent:
-        return f"{agent!r} is the agent recorded as completing it"
-    if agent in await agents_that_recorded_evidence_for(session, task.id):
-        return f"{agent!r} recorded evidence for this task, which claims the work as its own"
+    completer = await agent_that_completed(session, task.id)
+    authors = await agents_that_recorded_evidence_for(session, task.id)
+    if completer == agent:
+        return "completed", f"{agent!r} is the agent recorded as completing it"
+    if agent in authors:
+        return (
+            "evidence",
+            f"{agent!r} recorded evidence for this task, which claims the work as its own",
+        )
+    folded = await folded_map(session, task.project_id, [agent, completer or "", *authors])
+    if not folded:
+        return None
+    profile = folded.get(agent, agent)
+    if completer and folded.get(completer, completer) == profile:
+        return (
+            "completed",
+            f"{counts_as(agent, completer, profile)}, and {completer!r} is the agent recorded as "
+            f"completing it",
+        )
+    for author in sorted(authors):
+        if folded.get(author, author) == profile:
+            return (
+                "evidence",
+                f"{counts_as(agent, author, profile)}, and {author!r} recorded evidence for this "
+                f"task, which claims the work as that profile's",
+            )
     return None
 
 
@@ -585,12 +633,13 @@ async def _guard_author_is_not_reviewer(
     """
     if actor.is_operator or to_status not in _REVIEW_OUTCOMES:
         return
-    reason = await authorship_reason(session, task, actor.agent)
-    if reason is not None:
+    found = await _authorship(session, task, actor.agent)
+    if found is not None:
+        via, reason = found
         completing_agent = await agent_that_completed(session, task.id)
         whose = (
             ""
-            if completing_agent == actor.agent
+            if via == "completed"
             else (
                 "No agent is recorded as completing it, so the evidence is the record of who "
                 "wrote it. "

@@ -380,6 +380,10 @@ class Agent(Base):
         String(16), default="open", server_default="open", nullable=False
     )
     archived_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), nullable=True)
+    # The profile this agent was folded into (its name); group by coalesce(folded_into, name) for
+    # per-profile analysis. NULL for an agent never folded. Set once by the fold, which also
+    # archives the agent; never cleared (a fold is one way).
+    folded_into: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, nullable=False)
     updated: Mapped[datetime] = mapped_column(
         UTCDateTime(), default=_now, onupdate=_now, nullable=False
@@ -648,6 +652,16 @@ class Conversation(Base):
     # agent's `.agentweave/worktrees/<agent>`. A cutover successor inherits it with the lineage.
     own_worktree: Mapped[bool] = mapped_column(
         Boolean, default=False, server_default="0", nullable=False
+    )
+    # The document open in this conversation, which is the conversation's own (`every-spec-entry-
+    # point-leads-into-the-journey`, FR-11/FR-12, design D3): set when the operator opens one here
+    # or sends a message under one, cleared only by stopping exploring. The id rather than the
+    # path, so a rename keeps it. NULL for every conversation from before migration `0188`.
+    spec_document_id: Mapped[Optional[str]] = mapped_column(
+        String(32),
+        ForeignKey("spec_documents.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
     )
     created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(

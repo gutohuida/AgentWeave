@@ -954,8 +954,12 @@ async def own_checker_refusal(
     builder: Optional[str],
     assignee: Optional[str],
     checker: Optional[str],
+    project_id: Optional[str] = None,
 ) -> Optional[str]:
     """Why a task being filed would have its builder check its own work, or None.
+
+    Compared by profile (FR-9): a builder and checker that resolve to one profile -- one of them
+    folded into the other, or both into a third -- are the same checker of the same work.
 
     The check would never run: the reviewer ladder excludes the author and will not substitute for
     a named checker (`scheduler.resolve_reviewer`, rung 1b). The build's defaults count only where
@@ -975,8 +979,26 @@ async def own_checker_refusal(
             default_checker = _person(latest.people.get("checker"))
     who_builds = named_builder or default_builder
     who_checks = named_checker or default_checker
-    if not who_builds or who_builds != who_checks:
+    if not who_builds or not who_checks:
         return None
+    if who_builds != who_checks:
+        from .agent_profiles import counts_as, shared_profile
+
+        project_id = project_id or (document.project_id if document is not None else None)
+        profile = (
+            await shared_profile(session, project_id, who_builds, who_checks)
+            if project_id
+            else None
+        )
+        if profile is None:
+            return None
+        return (
+            f"This task would have profile {profile!r} both build it and check it, and nobody "
+            f"checks their own work: {counts_as(who_builds, who_checks, profile)}. Its builder "
+            f"{who_builds} is {'named' if named_builder else 'the build default'} and its checker "
+            f"{who_checks} is {'named' if named_checker else 'the build default'}. Name a builder "
+            f"and checker of different profiles."
+        )
     return (
         f"This task would have {who_builds} both build it and check it, and nobody checks their own "
         f"work: its builder is {'named' if named_builder else 'the build default'} and its checker "

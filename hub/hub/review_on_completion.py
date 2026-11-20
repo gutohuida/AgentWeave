@@ -124,7 +124,9 @@ async def _review_queued(session: AsyncSession, task: Task) -> bool:
 
 
 async def _exclusions(session: AsyncSession, task: Task) -> Dict[str, str]:
-    """Who may not review it, and why: the flow's own derivation (`scheduler`'s staffing arm)."""
+    """Who may not review it, and why: the flow's own derivation (`scheduler`'s staffing arm),
+    widened to the authors' profiles (FR-9), so a named checker that shares one is refused here."""
+    from .agent_profiles import widen_to_profiles
     from .task_transition_service import (
         agents_that_may_have_authored,
         agents_that_recorded_evidence_for,
@@ -133,13 +135,14 @@ async def _exclusions(session: AsyncSession, task: Task) -> Dict[str, str]:
 
     attribution = await completion_attribution(session, task.id)
     if attribution.agent is None:
-        return dict.fromkeys(
+        exclude = dict.fromkeys(
             await agents_that_may_have_authored(session, task), "has worked on this task"
         )
-    exclude = {attribution.agent: "is the one that completed this task"}
-    for author in await agents_that_recorded_evidence_for(session, task.id):
-        exclude.setdefault(author, "recorded evidence for this task")
-    return exclude
+    else:
+        exclude = {attribution.agent: "is the one that completed this task"}
+        for author in await agents_that_recorded_evidence_for(session, task.id):
+            exclude.setdefault(author, "recorded evidence for this task")
+    return await widen_to_profiles(session, task.project_id, exclude)
 
 
 async def _choose(session: AsyncSession, task: Task) -> "tuple[Optional[str], bool, Optional[str]]":
