@@ -1,34 +1,48 @@
 """Acceptance drive for `every-spec-entry-point-leads-into-the-journey` (slice 2 of the journey).
 
-Drives the trial Hub (or a testbed project on it) and checks, each as its own named check:
+Drives a Hub (the trial Hub, or a throwaway one when the trial Hub cannot open a project) and checks,
+each as its own named check:
 
-  1. drive-draft-lands-on-intake
-       Draft on a roadmap slice (POST documents/next-slice/take) names a new change document that is
-       exploring at step intake with the roadmap link set; the queued drafting entry names that
-       document (not the roadmap), its message neither mentions create_spec_document nor asks for the
-       whole slice at once, and the briefing a turn on it gets holds '[step: intake]'.
+  1. drive-draft-lands-on-intake (and draft-entry-bound-to-new-document)
+       The drive seeds its own fixture: an approved roadmap with one not-drafted slice that builds
+       after nothing (so every slice it builds after is built). Draft on it (POST
+       documents/next-slice/take): the answer names a new change document; that document is exploring
+       at step intake with the roadmap link set; the queued drafting entry names that document (not the
+       roadmap), its message neither mentions create_spec_document nor asks for the slice to be
+       submitted whole, and the turn's own rendered context holds '[step: intake]'.
   2. drive-agent-create-is-offered-and-opened
        An agent asked to create_spec_document in a conversation with no open document: the
-       conversation's notices name the new document; Open makes it the conversation's document and
-       removes the notice; the next message's queued entry names it and its briefing carries its step.
+       conversation's offers name the new document; Open makes it the conversation's document and
+       removes the notice; the next message's queued entry names it and the next turn's rendered
+       context carries its step.
   3. drive-two-conversations-keep-their-own-documents
        Conversation A holds change document X, B none: B's attached document is null, a message sent in
-       B is queued with no spec_document, A still holds X.
+       B is queued with spec_document null, A still holds X.
 
-Contract it fixes for the build (none of it exists on today's tree, which is the point):
-  - GET  /conversations/{id}/spec-documents  -> {"document": <path|null>, "notices": [{"document": <path>, ...}]}
-  - PUT  /conversations/{id}/spec-document   {"path": <path>|null}   (Open; null stops exploring)
-  - GET  /queue/{agent} entries carry `spec_document`
-  - POST documents/next-slice/take answers `document` (the new change document's path)
+Contract it fixes for the build (none of it exists on today's tree, which is the point; design D3-D5):
+  - GET  /projects/{P}/conversations/{id}/spec-documents -> {"attached": {path,..}|null, "offers": [{path,..}]}
+  - PUT  /projects/{P}/conversations/{id}/spec-document  {"path": <path>|null}
+  - POST /projects/{P}/conversations/{id}/spec-documents/answer {"path", "answer": "open"|"not_now"}
+  - GET  /projects/{P}/queue/{agent} entries carry `spec_document` (null when none -- an absent key fails)
+  - POST documents/next-slice/take answers `document: {path, title, phase, step}`
 
-The briefing a turn receives is read the way d1009_step_journey.py reads it:
-GET /agents/agent-context?agent=&spec_document=<the entry's document>.
+What "the turn's context" is: the file the Hub writes for the run, `<work dir>/.agentweave/context/
+<agent>.md` (agent_trigger.run_context_file), found by searching AW_PROJECT_DIR for it. It is read after
+the run holding the entry has started, so it is what that turn was told, not what the context route
+renders for a document passed in by hand. No file found = the check is *not reached*, and says so.
+
+Output: one PASS/FAIL line per check as it runs, then a baseline block, one line per check in the form
+the drive-baseline gate reads: `check <key>: reached=<yes|no> failed_at_assertion=<yes|no> -- <detail>`.
+A 404 on a conversation route this slice adds is reported reached=yes (the conversation itself was
+found in the project's conversation list first) and failed_at_assertion=yes: the route's absence is the
+assertion, the contract above being what the build adds.
 
 Not part of the project's checks: it lands red on purpose until the slice is built. Real turns bind
 Haiku (the agent is checked, never changed). Environment, nothing defaulted (aw.py):
 
-    AW_HUB=http://127.0.0.1:8010  AW_KEY=...  AW_PROJECT=<trial or testbed project id>
+    AW_HUB=http://127.0.0.1:8010  AW_KEY=...  AW_PROJECT=<testbed project id>
     AW_AGENT=<an open agent bound to a Haiku runner>
+    AW_PROJECT_DIR=<the testbed project's directory>
 
     py -3.11 scripts/drive/spec_entry_points_drive.py
 
@@ -37,37 +51,39 @@ Every check runs, a failure does not stop the rest, so one red run lists every g
 
 import json
 import os
+import pathlib
 import sys
 import time
-import urllib.parse
 
 from aw import P, api, require_hub, require_key  # noqa: E402
 
 sys.stdout.reconfigure(encoding="utf-8")
 
 AGENT = os.environ.get("AW_AGENT", "")
+PROJECT_DIR = os.environ.get("AW_PROJECT_DIR", "")
 BASE = f"/projects/{P}"
+SPEC = f"{BASE}/project"
 STAMP = time.strftime("%H%M%S")
 results = []
+baseline = []
 
 
-def check(name, ok, detail=""):
-    results.append((name, bool(ok)))
-    print(("PASS " if ok else "FAIL ") + name + (f" -- {detail}" if detail else ""), flush=True)
-    return bool(ok)
-
-
-def poll(fn, secs=20.0):
-    end = time.time() + secs
-    while time.time() < end:
-        try:
-            got = fn()
-        except Exception:  # noqa: BLE001 -- try again
-            got = None
-        if got:
-            return got
-        time.sleep(1)
-    return None
+def check(key, ok, detail="", reached=True):
+    """One named check. `reached` False: the assertion was never evaluated (a precondition failed)."""
+    ok = bool(ok)
+    results.append((key, ok))
+    print(("PASS " if ok else "FAIL ") + key + (f" -- {detail}" if detail else ""), flush=True)
+    failed = (not ok) and reached
+    if "-fixture" in key or key.startswith("draft-take-queues"):
+        # Setup, not a criterion: shown in the baseline only when it stops the drive short.
+        if not ok:
+            baseline.append(f"check {key}: reached=no failed_at_assertion=no -- setup failed: {detail}")
+        return ok
+    baseline.append(
+        f"check {key}: reached={'yes' if reached else 'no'} "
+        f"failed_at_assertion={'yes' if failed else 'no'} -- {detail or ('passes today' if ok else '')}"
+    )
+    return ok
 
 
 def as_dict(body):
@@ -80,22 +96,34 @@ def entry(entry_id):
     return next((r for r in rows if r.get("id") == entry_id), None) if isinstance(rows, list) else None
 
 
-def briefing(path):
-    query = urllib.parse.urlencode({"agent": AGENT, "spec_document": path})
-    code, body = api("GET", f"{BASE}/agents/agent-context?{query}")
-    return body.get("context", "") if code == 200 and isinstance(body, dict) else f"{code} {body}"
+def documents():
+    _, listed = api("GET", f"{SPEC}/documents")
+    return as_dict(listed).get("documents", [])
 
 
 def document(path):
-    _, listed = api("GET", f"{BASE}/project/documents")
-    return next((d for d in as_dict(listed).get("documents", []) if d.get("path") == path), {})
+    return next((d for d in documents() if d.get("path") == path), {})
+
+
+def conversation_known(conversation_id):
+    _, body = api("GET", f"{BASE}/conversations?lifecycle=all")
+    rows = as_dict(body).get("conversations") or []
+    return any(r.get("id") == conversation_id for r in rows)
 
 
 def attached(conversation_id):
-    """(status, the conversation's open document or None, its notices)."""
-    code, body = api("GET", f"/conversations/{conversation_id}/spec-documents")
+    """(status, the conversation's open document path or None, the offered paths)."""
+    code, body = api("GET", f"{BASE}/conversations/{conversation_id}/spec-documents")
     body = as_dict(body)
-    return code, body.get("document"), body.get("notices") or []
+    open_doc = body.get("attached")
+    paths = [o.get("path") for o in (body.get("offers") or []) if isinstance(o, dict)]
+    return code, (open_doc or {}).get("path") if isinstance(open_doc, dict) else None, paths
+
+
+def route_note(code, extra=""):
+    if code == 200:
+        return extra
+    return f"GET spec-documents answered {code}: the route is what this slice adds. {extra}".strip()
 
 
 def send(message, conversation_id=None, spec_document=None):
@@ -118,12 +146,42 @@ def finished(run_id, minutes=8):
     return False
 
 
+def entry_run(entry_id, secs=90):
+    """The run that took the entry, once there is one."""
+    end = time.time() + secs
+    while time.time() < end:
+        row = entry(entry_id) or {}
+        if row.get("delivered_in_run_id"):
+            return row["delivered_in_run_id"]
+        time.sleep(2)
+    return None
+
+
+def turn_context(entry_id, since):
+    """What the turn that took *entry_id* was told: the context file its run wrote, or None."""
+    run_id = entry_run(entry_id)
+    if not run_id or not PROJECT_DIR:
+        return None, f"no run took the entry (run={run_id!r}) or AW_PROJECT_DIR unset"
+    end = time.time() + 60
+    while time.time() < end:
+        files = [
+            f
+            for f in pathlib.Path(PROJECT_DIR).rglob(f"{AGENT}*.md")
+            if f.parent.name == "context" and f.stat().st_mtime >= since - 2
+        ]
+        if files:
+            newest = max(files, key=lambda f: f.stat().st_mtime)
+            return newest.read_text(encoding="utf-8", errors="replace"), str(newest)
+        time.sleep(2)
+    return None, f"no context file for {AGENT} under {PROJECT_DIR} after the run {run_id} started"
+
+
 def setup():
-    if not (P and AGENT):
-        raise SystemExit("set AW_PROJECT and AW_AGENT (an open agent bound to Haiku)")
+    if not (P and AGENT and PROJECT_DIR):
+        raise SystemExit("set AW_PROJECT, AW_AGENT (an open agent bound to Haiku) and AW_PROJECT_DIR")
     require_hub()
     require_key()
-    code, agents = api("GET", f"{BASE}/agents")
+    _, agents = api("GET", f"{BASE}/agents")
     row = next((a for a in agents if a.get("name") == AGENT), None) if isinstance(agents, list) else None
     runner = row.get("runner_id") if row else None
     _, runners = api("GET", f"{BASE}/runners")
@@ -132,99 +190,163 @@ def setup():
         raise SystemExit(f"agent {AGENT!r} is not bound to Haiku (runner model {model!r}); real turns bind Haiku")
 
 
+def write_document(payload, title):
+    code, doc = api("POST", f"{SPEC}/documents", {"title": title, "kind": payload["kind"]})
+    doc = as_dict(doc)
+    if code not in (200, 201) or not doc.get("path"):
+        return None, f"create {code} {str(doc)[:200]}"
+    code, body = api("PUT", f"{SPEC}/documents/{doc['path']}/content", {"document": payload})
+    if code != 200:
+        return None, f"write {code} {str(body)[:300]}"
+    return doc["path"], ""
+
+
+def seed_roadmap():
+    """An approved roadmap with one slice that builds after nothing, so it is offered for drafting."""
+    payload = {
+        "schema_version": 1, "kind": "roadmap", "title": f"Drive roadmap {STAMP}",
+        "summary": "One slice.", "problem": "Drive fixture roadmap for the draft entry point.",
+        "scope": {"in_scope": ["one slice"], "non_goals": ["more"]},
+        "slices": [{"key": "only", "title": f"Drive slice {STAMP}", "intent": "Build one thing.",
+                    "done": "It exists."}],
+        "design": "", "evidence": {"checked": [], "limits": []}, "lifecycle": "one-off",
+        "open_questions": [],
+    }
+    path, why = write_document(payload, payload["title"])
+    if not path:
+        return None, why
+    api("POST", f"{SPEC}/documents/close-exploration?path={path}")
+    api("POST", f"{SPEC}/documents/propose?path={path}")
+    _, spec = api("GET", f"{SPEC}/spec?path={path}")
+    code, body = api("POST", f"{SPEC}/documents/phase?path={path}&to=approved",
+                     {"reason": "drive", "approve_anyway": True,
+                      "content_version": as_dict(spec).get("content_version")})
+    return (path, "") if code == 200 else (None, f"approve {code} {str(body)[:200]}")
+
+
 def scenario_draft():
-    _, offers = api("GET", f"{BASE}/project/next-slice-offers")
-    offer = next(iter(as_dict(offers).get("offers") or []), None)
-    if not check("draft: an offered slice exists on the trial project (built builds-after slices)",
-                 offer is not None, f"offers={offers!r}"[:300]):
+    roadmap, why = seed_roadmap()
+    _, offers = api("GET", f"{SPEC}/next-slice-offers")
+    offered = [o for o in as_dict(offers).get("offers") or [] if o.get("roadmap") == roadmap]
+    if not check("draft-fixture: the seeded roadmap's slice is offered", roadmap and offered,
+                 why or f"offers={str(offers)[:200]}"):
         return
-    roadmap = offer.get("roadmap") or offer.get("path")
-    slice_key = (offer.get("next_slice") or {}).get("key") or offer.get("slice")
-    code, taken = api("POST", f"{BASE}/project/documents/next-slice/take",
-                      {"agent": AGENT, "path": roadmap, "slice": slice_key})
+    before = {d.get("path") for d in documents()}
+    t0 = time.time()
+    code, taken = api("POST", f"{SPEC}/documents/next-slice/take", {"agent": AGENT, "path": roadmap, "slice": "only"})
     taken = as_dict(taken)
-    new_path = taken.get("document")
+    if not check("draft-take-queues-a-turn: the take answered 200 with an entry", code == 200 and taken.get("entry_id"),
+                 f"{code} {json.dumps(taken)[:200]}"):
+        return
+    answer = taken.get("document")
+    new_path = answer.get("path") if isinstance(answer, dict) else None
     check("drive-draft-lands-on-intake: the take's answer names a new change document",
-          code == 200 and new_path and new_path != roadmap, f"{code} {json.dumps(taken)[:300]}")
-    row = document(new_path) if new_path else {}
+          bool(new_path) and new_path != roadmap, f"answer.document={answer!r}")
+    # The new document is also read from the project, independent of the answer's shape.
+    made = [d for d in documents() if d.get("path") not in before and d.get("kind") == "change-spec"]
+    row = made[0] if made else {}
     check("drive-draft-lands-on-intake: the document is exploring at step intake",
           row.get("phase") == "exploring" and row.get("step") == "intake",
-          f"phase={row.get('phase')!r} step={row.get('step')!r}")
+          f"new change documents={len(made)} phase={row.get('phase')!r} step={row.get('step')!r}")
     link = row.get("roadmap") or {}
     check("drive-draft-lands-on-intake: the document's roadmap link is set",
-          link.get("document") == roadmap and link.get("slice") == slice_key, f"roadmap={link!r}")
-    queued = entry(taken.get("entry_id")) or {}
+          link.get("document") == roadmap and link.get("slice") == "only", f"roadmap={link!r}")
+    queued = entry(taken["entry_id"]) or {}
+    bound = queued.get("spec_document", "<field absent>")
     check("drive-draft-lands-on-intake: the queued drafting entry names the new document",
-          bool(new_path) and queued.get("spec_document") == new_path,
-          f"entry.spec_document={queued.get('spec_document')!r}")
+          bool(row.get("path")) and bound == row.get("path"),
+          f"entry.spec_document={bound!r} new document={row.get('path')!r}")
     check("draft-entry-bound-to-new-document: the entry is not bound to the roadmap",
-          queued.get("spec_document") not in (None, roadmap), f"{queued.get('spec_document')!r}")
+          bound not in (roadmap, "<field absent>", None) and bound == row.get("path"),
+          f"entry.spec_document={bound!r} roadmap={roadmap!r}")
     content = queued.get("content") or ""
     check("draft-entry-bound-to-new-document: the message does not tell the agent to create a document",
-          bool(content) and "create_spec_document" not in content, "")
-    check("drive-draft-lands-on-intake: the turn's briefing contains '[step: intake]'",
-          bool(new_path) and "[step: intake]" in briefing(new_path), "")
+          bool(content) and "create_spec_document" not in content,
+          "message still says create_spec_document" if "create_spec_document" in content else "")
+    check("draft-entry-bound-to-new-document: the message does not tell the agent to submit the slice whole",
+          bool(content) and "submit it with" not in content,
+          "message still says 'submit it with roadmap: ...'" if "submit it with" in content else "")
+    text, where = turn_context(taken["entry_id"], t0)
+    check("drive-draft-lands-on-intake: the turn's rendered context contains '[step: intake]'",
+          bool(text) and "[step: intake]" in (text or ""),
+          f"context {where} {'lacks' if text is not None and '[step: intake]' not in text else 'has'} '[step: intake]'",
+          reached=text is not None)
+    run_id = (entry(taken["entry_id"]) or {}).get("delivered_in_run_id")
+    if run_id:
+        finished(run_id)
 
 
 def scenario_agent_create():
     first = send("Reply with the single word ready.")
     conv = first.get("conversation_id")
-    if not check("create: a conversation with no open document starts", bool(conv), str(first)[:200]):
+    if not check("create-fixture: a conversation with no open document starts", bool(conv), str(first)[:200]):
         return
     finished(first["run_id"])
+    known = conversation_known(conv)
     code, open_doc, _ = attached(conv)
     check("drive-agent-create-is-offered-and-opened: the conversation starts with no open document",
-          code == 200 and open_doc is None, f"{code} document={open_doc!r}")
-    before = {d.get("path") for d in as_dict(api("GET", f"{BASE}/project/documents")[1]).get("documents", [])}
+          code == 200 and open_doc is None, route_note(code, f"attached={open_doc!r}"), reached=known)
+    before = {d.get("path") for d in documents()}
     turn = send(f"Call create_spec_document once with title 'Drive probe {STAMP}', kind change-spec. "
                 "Then reply done and do nothing else.", conversation_id=conv)
     if turn.get("run_id"):
         finished(turn["run_id"])
-    after = as_dict(api("GET", f"{BASE}/project/documents")[1]).get("documents", [])
-    made = next((d.get("path") for d in after if d.get("path") not in before), None)
-    code, _, notices = attached(conv)
-    named = [n for n in notices if made and made in json.dumps(n)]
+    made_rows = [d for d in documents() if d.get("path") not in before and d.get("kind") == "change-spec"]
+    made = made_rows[0]["path"] if made_rows else None
+    if not check("create-fixture: the agent created a change document", bool(made), f"new={made!r}"):
+        return
+    code, _, offered = attached(conv)
     check("drive-agent-create-is-offered-and-opened: the notice names the new document",
-          bool(named), f"made={made!r} {code} notices={json.dumps(notices)[:300]}")
-    code, out = api("PUT", f"/conversations/{conv}/spec-document", {"path": made})
-    code, open_doc, notices = attached(conv)
-    seen = code == 200
+          made in offered, route_note(code, f"made={made!r} offers={offered!r}"), reached=known)
+    code, out = api("POST", f"{BASE}/conversations/{conv}/spec-documents/answer", {"path": made, "answer": "open"})
+    answered = code == 200
+    code, open_doc, offered = attached(conv)
     check("drive-agent-create-is-offered-and-opened: after Open the conversation's document is the new one",
-          bool(made) and open_doc == made, f"document={open_doc!r}")
+          open_doc == made, route_note(code, f"answer={'ok' if answered else out!r} attached={open_doc!r}"), reached=known)
     check("drive-agent-create-is-offered-and-opened: after Open the notice is gone",
-          seen and not [n for n in notices if made and made in json.dumps(n)], f"{code} notices={json.dumps(notices)[:300]}")
+          code == 200 and answered and made not in offered,
+          route_note(code, f"offers={offered!r}"), reached=known)
+    t1 = time.time()
     nxt = send("Reply with the single word ok.", conversation_id=conv)
     queued = entry(nxt.get("queue_entry_id")) or {}
+    bound = queued.get("spec_document", "<field absent>")
     check("drive-agent-create-is-offered-and-opened: the next entry names the document",
-          bool(made) and queued.get("spec_document") == made, f"entry.spec_document={queued.get('spec_document')!r}")
-    check("drive-agent-create-is-offered-and-opened: its briefing carries the document's current step",
-          bool(made) and "[step: intake]" in briefing(made), "")
+          bound == made, f"entry.spec_document={bound!r} made={made!r}", reached=bool(queued))
+    step = document(made).get("step") or "intake"
+    text, where = (turn_context(nxt["queue_entry_id"], t1) if queued else (None, "no entry was queued"))
+    check("drive-agent-create-is-offered-and-opened: the next turn's rendered context carries the document's current step",
+          bool(text) and f"[step: {step}]" in (text or ""),
+          f"context {where} {'lacks' if text is not None and f'[step: {step}]' not in text else 'has'} '[step: {step}]'",
+          reached=text is not None)
     if nxt.get("run_id"):
         finished(nxt["run_id"])
 
 
 def scenario_two_conversations():
-    code, out = api("POST", f"{BASE}/project/documents",
-                    {"title": f"Drive X {STAMP}", "kind": "change-spec"})
-    doc_x = as_dict(out).get("path")
-    if not check("two: change document X exists", code in (200, 201) and doc_x, f"{code} {str(out)[:200]}"):
+    path, why = write_document(
+        {"schema_version": 1, "kind": "change-spec", "title": f"Drive X {STAMP}"}, f"Drive X {STAMP}")
+    if not check("two-fixture: change document X exists", bool(path), why):
         return
-    a = send("Reply with the single word a.", spec_document=doc_x)
+    a = send("Reply with the single word a.", spec_document=path)
     b = send("Reply with the single word b.")
     conv_a, conv_b = a.get("conversation_id"), b.get("conversation_id")
-    if not check("two: conversations A (X) and B (none) exist",
+    if not check("two-fixture: conversations A (X) and B (none) exist",
                  bool(conv_a and conv_b and conv_a != conv_b), f"A={a} B={b}"[:300]):
         return
+    known = conversation_known(conv_a) and conversation_known(conv_b)
     code, doc_b, _ = attached(conv_b)
     check("drive-two-conversations-keep-their-own-documents: B's attached document is null",
-          code == 200 and doc_b is None, f"{code} document={doc_b!r}")
+          code == 200 and doc_b is None, route_note(code, f"attached={doc_b!r}"), reached=known)
     again = send("Reply with the single word b2.", conversation_id=conv_b)
     queued = entry(again.get("queue_entry_id")) or {}
+    bound = queued.get("spec_document", "<field absent>")
     check("drive-two-conversations-keep-their-own-documents: B's queued entry names no document",
-          bool(queued) and not queued.get("spec_document"), f"entry.spec_document={queued.get('spec_document')!r}")
+          bool(queued) and bound is None,
+          f"entry.spec_document={bound!r} (an absent key is a failure: the entry must carry the field)",
+          reached=bool(queued))
     code, doc_a, _ = attached(conv_a)
     check("drive-two-conversations-keep-their-own-documents: A's attached document is still X",
-          code == 200 and doc_a == doc_x, f"{code} document={doc_a!r}")
+          code == 200 and doc_a == path, route_note(code, f"attached={doc_a!r}"), reached=known)
     for run in (a, b, again):
         if run.get("run_id"):
             finished(run["run_id"])
@@ -237,9 +359,10 @@ def main():
         try:
             scenario()
         except Exception as exc:  # noqa: BLE001 -- a crash is a red check, not a silent skip
-            check(f"{scenario.__name__} ran to its end", False, f"{type(exc).__name__}: {exc}")
+            check(f"{scenario.__name__}-ran-to-its-end", False, f"{type(exc).__name__}: {exc}", reached=False)
     bad = [name for name, ok in results if not ok]
-    print(f"\n{len(results) - len(bad)} passed, {len(bad)} failed")
+    print(f"\n{len(results) - len(bad)} passed, {len(bad)} failed\n\n== baseline")
+    print("\n".join(baseline))
     sys.exit(1 if bad else 0)
 
 
