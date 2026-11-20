@@ -9,9 +9,9 @@ from the last:
 
 | | What it is | Ends |
 |---|---|---|
-| **Job** | A message sent to one agent on a cron schedule. | When you pause or archive it. |
+| **Job** | A message sent to one profile on a cron schedule. | When you pause or archive it. |
 | **Loop** | A job with a **purpose** and a **stop condition**, working through a queue of tasks one firing at a time. | When its queue empties or its stop time passes, or when you stop it. |
-| **Flow** | A loop bound to an **approved specification**. Each firing picks the tasks *and* the agents, and has every finished task reviewed by a different agent. | When the specification's tasks are done. |
+| **Flow** | A loop bound to an **approved specification**. Each firing picks the tasks *and* the profiles, and has every finished task reviewed by a different profile. | When the specification's tasks are done. |
 
 <figure class="aw-shot" markdown>
 ![The Jobs tab: an active and a paused job, with their schedules in plain English](../assets/screenshots/jobs-light.webp#only-light)
@@ -20,7 +20,7 @@ from the last:
 
 ## Jobs
 
-**New job** on the Jobs tab asks for a name, the agent, the message, and a cron schedule (presets
+**New job** on the Jobs tab asks for a name, the profile, the message, and a cron schedule (presets
 include *Weekdays at 9am* and *Every 6 hours*). **Session mode** chooses between a fresh session
 each run and resuming the last one. Times are UTC.
 
@@ -28,7 +28,9 @@ Each row shows the schedule in plain English, when it last ran and runs next, an
 its recent runs. You can pause or resume it, **Run now**, or **Archive** it. Jobs are archived, not
 deleted, so the record of what ran survives.
 
-Every firing opens a new conversation, marked with the job that started it.
+Every firing is a run in a new thread, marked with the job that started it. Firings are not listed
+in the sidebar unless you write in one; each is on its job's page and in its profile's
+[runs](agents.md#a-profiles-runs).
 
 ## Loops
 
@@ -39,23 +41,23 @@ Open **Make this a loop** in the job form and give it:
 - optionally, **Require accepted evidence before merging**.
 
 A loop's **queue** is the set of tasks assigned to it. Each firing claims the oldest task that can
-start, and briefs the agent with the purpose, that task, and the previous firing's checkpoint. A
+start, and briefs the profile with the purpose, that task, and the previous firing's checkpoint. A
 loop never resumes an old session. Every firing records truthfully what it did.
 
 A loop ends as *completed* (its queue drained) or *stopped* (by you). Its tab, from the side
-panel's **Loops** launcher or the conversation's *Fired by the loop* link, shows:
+panel's **Loops** launcher or a thread's *Fired by the loop* link, shows:
 
 - the purpose and the stop condition;
 - the queue by status, and the item claimed right now;
 - open questions, and the firing history;
 - a live indicator while a firing runs.
 
-**Editing a running loop is safe.** A change to its purpose, stop condition or agent is *staged*.
+**Editing a running loop is safe.** A change to its purpose, stop condition or profile is *staged*.
 The loop tab shows it beside the value still in force (*In force now* and *From the next firing*),
 and a firing already running keeps the brief it started with.
 
 **Who adds to the queue.** After the first firing, new tasks join the queue only if you add them,
-unless you hand that decision to the loop's agent (*Let … decide*).
+unless you hand that decision to the loop's profile (*Let … decide*).
 
 A loop that is still running cannot be archived. Stop it first.
 
@@ -63,34 +65,43 @@ A loop that is still running cannot be archived. Stop it first.
 
 A flow is how an approved specification gets built without you dispatching each task. Start one
 from the document's **Start a flow…** button, or have the specification name a flow as its
-delivery so that approving the document starts it. A flow has a name, a default agent, a message,
+delivery so that approving the document starts it. A flow has a name, a default profile, a message,
 a schedule (every five minutes by default) and a stop condition. Nothing runs when you press
 **Start flow**. The first firing is on the next tick.
 
 On each firing the flow:
 
 1. picks the tasks that can start (prerequisites approved), possibly several at once, and the
-   agents to do them;
-2. has each finished task **reviewed by a different agent**: the specification's named reviewer,
-   or the first free agent that did not write it;
+   profiles to do them; with [parallel runs](agents.md#parallel-runs) on, one profile may build
+   several of them at the same time;
+2. has each finished task **reviewed by a different profile**: the specification's named reviewer,
+   or the first free profile that did not write it;
 3. carries on until every task is decided.
 
 Reviews can run in **tester** mode, where the reviewer drives the built product and may
 [amend the specification](specifications.md#testers-amend-you-review) with what it finds.
 
+### A flow's runs
+
+A flow's page on the **Jobs** tab has a **Runs** section: every run the flow started, newest
+first, with its profile, its task, when it started and how it ended. Each opens its trace and its
+thread. The list is read from the runs themselves, so it stays after the flow has stopped or been
+archived. A flow started as part of a build has its runs in the build's view as well; a flow an
+agent created with `create_flow` belongs to no build, and this is where its runs are found.
+
 ## Letting agents schedule work
 
 By default only you create jobs, loops and flows. Turn on **Agents may start jobs, flows and loops**
-under **Project settings → General** to let agents create them with their tools. Archiving a job
+under **Project settings → Collaboration** to let agents create them with their tools. Archiving a job
 still needs your say-so.
 
 ## Limits that keep scheduled work honest
 
-- **Hop budget** (default 6). Agents messaging agents can chain. Input more than six hops deep is
+- **Hop budget** (default 6). Profiles messaging profiles can chain. Input more than six hops deep is
   held for you to release or discard, instead of running away.
 - **Deliveries per turn** (default 10). The most queued inputs one turn will take.
 - **Token budget** (optional, **Project settings → Budgets**). When it is reached, autonomous turns
   pause. Your own messages still run.
 - **Provider allowance holds.** When a provider refuses a turn because a plan's allowance is spent,
-  the Hub holds that agent's queue until the stated reset, then retries by itself. The refused
+  the Hub holds that profile's queue until the stated reset, then retries by itself. The refused
   input goes back without counting as a failure, and a job firing shows as in progress, not failed.

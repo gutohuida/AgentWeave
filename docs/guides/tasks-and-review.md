@@ -38,19 +38,36 @@ The **Dependencies** view groups tasks by document and shows each chain: *Starts
 
 ## Starting work
 
-Hover over a card and choose **Start *agent* on this**, or ask an agent in a conversation to take a
+Hover over a card and choose **Start *profile* on this**, or ask a profile in a thread to take a
 task. The run is **bound** to the task:
 
-- the task moves to *in progress*, and takes that agent as assignee if it had none;
-- in a git project the agent works in the task's **own worktree**,
+- the task moves to *in progress*, and takes that profile as assignee if it had none;
+- in a git project the run works in the task's **own worktree**,
   `.agentweave/tasks/<task-id>`, on branch `agentweave/task/<task-id>`, cut from your main branch
   with its approved prerequisites already merged in;
-- an agent cannot claim another agent's assigned task, and a run can complete only the task it
+- a profile cannot claim another profile's assigned task, and a run can complete only the task it
   holds.
 
 If a bound run ends without moving its task, that is recorded as a **divergence**. The task's
 setting *If a run ends without moving this* decides what happens next: **Tell me**, **Try again
 once**, or **Hand to another agent**.
+
+## Builds
+
+**Build** on an approved document starts its tasks for you: you choose the profile that builds
+them and a different profile that checks them, and a flow hands each task out as its prerequisites
+are approved. With [parallel runs](agents.md#parallel-runs) on, one builder profile builds several
+independent tasks at the same time.
+
+A build's view lists its tasks, and on each task every run with its profile, runner, model, cost,
+duration and outcome, its send-backs and its evidence. Any run opens its trace and its thread, while
+the build runs and after it has finished or stopped. Those runs are not in the sidebar's threads:
+the build is how you reach them.
+
+The sidebar lists a build while it is running, and while it **needs you**: stopped before it
+finished, or with a task that stalled, that the mender gave up on, or that has a question for you.
+The build view's **Needs you** count reads the same rule. See
+[Threads](conversations.md#builds).
 
 ## Evidence
 
@@ -88,14 +105,14 @@ too is marked as pre-existing, and comes to you rather than back to the author.
 
 A finished task is reviewed by someone who did not write it:
 
-- **An agent reviewer.** Ask a reviewer agent to review the task. A review turn gets a clean,
+- **A reviewing profile.** Ask another profile to review the task. A review run gets a clean,
   detached checkout of exactly the commit the evidence names. It runs what it needs, decides the
   evidence, and moves the task to *approved* or *revision needed*, with its reasons.
 - **You.** Open the task. Its **Story** shows the runs, the evidence and the checks. Move it to
   approved, or send it back. **Land it** takes a completed task through review and approval in one
   step.
 
-**An agent cannot approve, reject or send back work it produced**, including work it recorded
+**A profile cannot approve, reject or send back work it produced**, including work it recorded
 evidence for. A task cannot enter review while it is still assigned to its author.
 
 ## Approval merges
@@ -129,7 +146,7 @@ When a task is approved or rejected, its worktree is released and its branch is 
 
 ## Worktrees and conflicts
 
-**Project settings → Worktrees** lists every agent and task checkout, and any conflicts between
+**Project settings → Worktrees** lists every profile, thread and task checkout, and any conflicts between
 them and your main branch, without touching any of them. Agent checkouts live at
 `.agentweave/worktrees/<agent>`, task checkouts at `.agentweave/tasks/<task-id>`, and review
 checkouts at `.agentweave/reviews/<agent>`. The Hub keeps all of them out of `git status` through
