@@ -74,7 +74,7 @@ describe('the notice for a document an agent created', () => {
     expect(offer.getAttribute('data-path')).toBe(NEW.path)
     expect(within(offer).getByText('A new change')).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Open A new change' })).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Not now' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Not now: A new change' })).toBeTruthy()
   })
 
   it('renders nothing with no offers, and says a failed read', () => {
@@ -88,7 +88,7 @@ describe('the notice for a document an agent created', () => {
   it('Not now hides it, opens nothing, and stays gone after a reload', async () => {
     const onOpen = vi.fn()
     const first = mount(<Wired onOpen={onOpen} />)
-    await userEvent.click(await screen.findByRole('button', { name: 'Not now' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Not now: A new change' }))
     await waitFor(() => expect(screen.queryByTestId('conversation-spec-offer')).toBeNull())
     expect(calls.find((c) => c.url.endsWith('/answer'))?.body).toEqual({ path: NEW.path, answer: 'not_now' })
     expect(onOpen).not.toHaveBeenCalled()

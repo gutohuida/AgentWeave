@@ -1,4 +1,5 @@
 import { Button } from '@/components/ui/button'
+import { stepKeyLabel } from '@/components/settings/stepLabels'
 import type { SpecDocumentOffer } from '@/api/conversationSpec'
 
 /** The notice for a change document an agent created in this conversation
@@ -32,7 +33,7 @@ export function ConversationSpecOffers({
         <div key={offer.path} className="aw-spec-message" data-testid="conversation-spec-offer" data-path={offer.path}>
           <span className="aw-spec-message-text">
             {offer.created_by ? `${offer.created_by} started` : 'Started'} <strong>{offer.title}</strong>
-            {offer.step ? ` (${offer.step})` : ''}. Work on it in this conversation?
+            {offer.step ? ` (${stepKeyLabel(offer.step)})` : ''}. Work on it in this conversation?
           </span>
           <Button
             variant="primary"
@@ -48,7 +49,7 @@ export function ConversationSpecOffers({
             variant="ghost"
             size="xs"
             disabled={busy}
-            aria-label="Not now"
+            aria-label={`Not now: ${offer.title}`}
             data-testid="conversation-spec-offer-dismiss"
             onClick={() => onAnswer(offer.path, 'not_now')}
           >
