@@ -3188,6 +3188,20 @@ async def submit_spec_document(
             ),
         )
 
+    # FR-12: a task's builder or checker, or the delivery's agent, naming a folded agent is refused.
+    from ... import agent_profiles
+
+    submitted = body.document if isinstance(body.document, dict) else {}
+    delivery = submitted.get("delivery")
+    named = [
+        entry.get(field)
+        for entry in [*(submitted.get("tasks") or []), delivery]
+        if isinstance(entry, dict)
+        for field in ("builder", "checker", "agent")
+    ]
+    for name in dict.fromkeys(n for n in named if isinstance(n, str) and n.strip()):
+        await agent_profiles.require_not_folded(session, actor.project_id, name.strip())
+
     # FR-16: the save is based on the version this conversation last read or saved, and is
     # refused when somebody else saved the document since.
     from ... import spec_basis

@@ -202,3 +202,94 @@ async def test_a_fold_gives_the_profile_no_read_of_the_folded_agents_checkpoints
         assert not may_read_checkpoint(profile, checkpoint)
         with pytest.raises(AccessDeniedError):
             await read_checkpoint(db, PROFILE, P, checkpoint.id)
+
+
+# ----------------------------------------------------------------- builds and spec submit (FR-12)
+
+
+@pytest.mark.asyncio
+async def test_a_builds_people_and_per_task_choices_naming_a_folded_agent_are_refused(folded):
+    from fastapi import HTTPException
+
+    from hub.api.v1.spec import _build_settings, _BuildChoices
+
+    attempts = (
+        {"builder": FOLDED},
+        {"checker": FOLDED},
+        {"task_builders": {"t": FOLDED}},
+        {"task_checkers": {"t": FOLDED}},
+    )
+    async with async_session_factory() as db:
+        for choice in attempts:
+            with pytest.raises(HTTPException) as caught:
+                await _build_settings(db, P, None, None, _BuildChoices(**choice))
+            assert caught.value.status_code == 409 and WORDS in caught.value.detail["message"]
+        declared = {"tasks": [{"key": "t", "builder": FOLDED}]}
+        with pytest.raises(HTTPException) as caught:
+            await _build_settings(db, P, None, declared, _BuildChoices())
+        assert caught.value.detail["code"] == "agent_folded"
+        declared = {"delivery": {"mode": "flow", "checker": FOLDED}}
+        with pytest.raises(HTTPException) as caught:
+            await _build_settings(db, P, None, declared, _BuildChoices())
+        assert caught.value.detail["code"] == "agent_folded"
+
+
+@pytest.mark.asyncio
+async def test_spec_submit_naming_a_folded_agent_is_refused(app, auth_headers, folded):
+    token = "aw_run_folded-submitter-secret"
+    async with async_session_factory() as db:
+        db.add(
+            Run(
+                id="run-submitter",
+                project_id=P,
+                agent="QA",
+                status="running",
+                turn_depth=0,
+                capability_token_hash=hash_run_token(token),
+            )
+        )
+        await db.commit()
+    path = "spec/changes/folded-names/spec.json"
+    created = await app.post(
+        f"{BASE}/project/documents", json={"path": path, "title": "x"}, headers=auth_headers
+    )
+    assert created.status_code == 201, created.text
+    agent = {"Authorization": f"Bearer {token}"}
+    for document in (
+        {"title": "x", "kind": "change-spec", "tasks": [{"key": "t", "builder": FOLDED}]},
+        {"title": "x", "kind": "change-spec", "tasks": [{"key": "t", "checker": FOLDED}]},
+        {"title": "x", "kind": "change-spec", "delivery": {"mode": "flow", "agent": FOLDED}},
+    ):
+        resp = await app.post(
+            "/api/v1/agent-actions/spec/documents",
+            json={"path": path, "document": document},
+            headers=agent,
+        )
+        _refused(resp)
+
+
+@pytest.mark.asyncio
+async def test_a_hand_out_to_a_folded_agent_names_the_profile(folded):
+    from hub.db.models import Build
+
+    async with async_session_factory() as db:
+        db.add(
+            Build(
+                id="b-folded",
+                project_id=P,
+                document_id="doc-x",
+                state="running",
+                driver=builds.DRIVER_LEAD,
+                level=builds.REVIEWED,
+                builders=[],
+                reviewers=[],
+                lead="QA",
+            )
+        )
+        db.add(Task(id="t-folded", project_id=P, title="t", build_id="b-folded"))
+        await db.commit()
+        with pytest.raises(builds.HandOutRefused) as caught:
+            await builds.hand_out(
+                db, caller="QA", project_id=P, task_id="t-folded", agent=FOLDED, review=False
+            )
+    assert WORDS in str(caught.value)

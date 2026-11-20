@@ -4172,6 +4172,20 @@ async def _build_settings(
         if body.checker is not None
         else spec_payload_module.default_checker(payload)[0]
     )
+    for name in [
+        builder,
+        checker,
+        *(body.task_builders or {}).values(),
+        *(body.task_checkers or {}).values(),
+        *(
+            entry.get(field)
+            for entry in (payload or {}).get("tasks") or []
+            if isinstance(entry, dict)
+            for field in ("builder", "checker")
+        ),
+    ]:
+        if isinstance(name, str) and name.strip():
+            await agent_profiles.require_not_folded(session, project_id, name.strip())
     builder_entries, checker_entries = await _chosen_entries(
         session,
         project_id,

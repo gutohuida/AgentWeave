@@ -1678,12 +1678,20 @@ async def hand_out(
     named = checker_of(build, task) if review else None
     own = (named[0] if named is not None else None) if review else task.builder
     if pool is not None and agent not in pool and agent != own:
+        from . import agent_profiles
+
+        folded = await agent_profiles.folded_refusal(session, project_id, agent)
+        if folded:
+            raise HandOutRefused(folded, 409)
         which = "reviewer pool" if review else "builders"
         raise HandOutRefused(
             f"{agent} is not among build {build.id}'s {which} ({', '.join(pool)}).", 409
         )
     if agent not in await open_agents(session, project_id):
-        raise HandOutRefused(f"{agent} is not an open agent of this project.", 409)
+        from . import agent_profiles
+
+        folded = await agent_profiles.folded_refusal(session, project_id, agent)
+        raise HandOutRefused(folded or f"{agent} is not an open agent of this project.", 409)
     if review:
         # The check follows the level and goes to the task's checker (`check-goes-to-its-checker`):
         # none at Fast, and only the checker the build names, where it names one.
