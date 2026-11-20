@@ -27,6 +27,24 @@ vi.mock('@/api/agents', () => ({
     isLoading: false,
   }),
 }))
+// The rail lists the operator's threads (profiles-threads-and-builds-everywhere FR-1): one for
+// claude, so a thread row opens its profile's conversation.
+vi.mock('@/api/agentChat', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/api/agentChat')>()
+  const thread = (id: string, agent: string) => ({
+    id, agent, provider_session_id: null, lifecycle: 'open', title: `Thread ${id}`,
+    title_set_by_operator: false, origin: 'operator', attention: 'idle',
+    created_at: '2026-11-20T08:00:00Z', updated_at: '2026-11-20T08:00:00Z', operator_thread: true,
+  })
+  const page = { conversations: [thread('conv-1', 'claude')], archived_count: 0 }
+  return {
+    ...actual,
+    useOperatorThreads: (_projectId: string, lifecycle = 'open') => ({
+      data: lifecycle === 'open' ? page : undefined, isError: false, refetch: () => {},
+    }),
+  }
+})
+
 vi.mock('@/api/projects', () => ({
   useProjects: () => ({
     data: [{
@@ -115,11 +133,10 @@ describe('phase 1 conversation-first shell', () => {
   it('keeps project-name navigation separate from expansion', () => {
     render(withClient(<App />))
     expect(screen.getByTestId('project-overview')).toBeInTheDocument()
-    // The dot takes the agent's colour from its row (`--agent-accent`, shell.css).
-    const row = screen.getByTestId('rail-agent-color-proj-test-claude').closest('.aw-rail-agent-row') as HTMLElement
-    expect(row.style.getPropertyValue('--agent-accent')).toBe('var(--agent-3)')
+    // The thread's edge takes its profile's colour (claude's color_index is 2).
+    expect(screen.getByTestId('rail-thread-conv-1-edge').style.background).toBe('var(--agent-3)')
     fireEvent.click(screen.getByTestId('project-expander-proj-test'))
-    expect(screen.queryByTestId('rail-agent-proj-test-claude')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('rail-thread-conv-1')).not.toBeInTheDocument()
     expect(screen.getByTestId('project-overview')).toBeInTheDocument()
     fireEvent.click(screen.getByTestId('project-name-proj-test'))
     expect(screen.getByTestId('project-overview')).toBeInTheDocument()
@@ -128,7 +145,7 @@ describe('phase 1 conversation-first shell', () => {
   it.each(['rail', 'overview'])('opens claude directly from the %s', (source) => {
     render(withClient(<App />))
     fireEvent.click(source === 'rail'
-      ? screen.getByTestId('rail-agent-proj-test-claude')
+      ? screen.getByTestId('rail-thread-conv-1')
       : screen.getByText('Open claude from overview'))
     expect(screen.getByTestId('agent-conversation')).toBeInTheDocument()
     expect(screen.queryByTestId('project-overview')).not.toBeInTheDocument()
@@ -138,7 +155,7 @@ describe('phase 1 conversation-first shell', () => {
 
   it('returns to the containing project in one action', () => {
     render(withClient(<App />))
-    fireEvent.click(screen.getByTestId('rail-agent-proj-test-claude'))
+    fireEvent.click(screen.getByTestId('rail-thread-conv-1'))
     fireEvent.click(screen.getByText('Back to project'))
     expect(screen.getByTestId('project-overview')).toBeInTheDocument()
   })

@@ -65,7 +65,7 @@ function task(id: string, over: Partial<BuildTaskRead> = {}): BuildTaskRead {
 
 function read(over: Partial<BuildTaskRead> = {}): BuildRead {
   return {
-    build: { id: 'build-1', document_id: 'doc-1', document_title: 'A build', document_path: null, state: 'running', level: 'reviewed', created_at: '2026-11-17T08:00:00Z', stopped_at: null, stop_reason: null },
+    build: { id: 'build-1', document_id: 'doc-1', document_title: 'A build', document_path: null, state: 'running', level: 'reviewed', created_at: '2026-11-17T08:00:00Z', stopped_at: null, stop_reason: null, needs_operator: null, attention_dismissed: false },
     tasks: [task('a-1'), task('b-2', { runs: [run('r1'), run('r2')], ...over })],
     build_runs: [],
     as_of: '2026-11-17T12:00:00Z',

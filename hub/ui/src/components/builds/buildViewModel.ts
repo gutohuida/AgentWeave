@@ -39,6 +39,11 @@ export interface BuildHeaderRead {
   created_at: string
   stopped_at: string | null
   stop_reason: string | null
+  /** What the build needs from the operator (`hub/hub/build_needs.py`, the build list's own):
+   *  "stopped" when it stopped before its work was done, otherwise its first task's need. */
+  needs_operator: BuildNeedsRead | null
+  /** The operator dismissed it from the sidebar and its needs are still the ones dismissed. */
+  attention_dismissed: boolean
 }
 
 export interface BuildTaskRead {
@@ -67,6 +72,12 @@ export interface NeedsOperatorRead {
   /** `stalled`: an open stall; `gave-up`: the mender gave up on it; `question`: a blocking question. */
   kind: 'stalled' | 'gave-up' | 'question'
   /** The stall's reason or the question, in the Hub's words. */
+  text: string
+}
+
+/** A build's need: a task's, or `stopped`, the build's own when it stopped before its work was done. */
+export interface BuildNeedsRead {
+  kind: 'stopped' | NeedsOperatorRead['kind']
   text: string
 }
 
@@ -592,10 +603,17 @@ export function checkerOf(task: BuildTaskRead): { name: string | null; named: bo
 /** One sentence on what of the build waits on the operator ("PNSOS-3 is stalled"), or null. */
 export function needsLine(read: BuildRead): string | null {
   const waiting = read.tasks.filter((t) => t.needs_operator)
+  if (read.build.needs_operator?.kind === 'stopped') return stoppedLine(read)
   if (!waiting.length) return null
   const first = waiting[0]!
   const what = { stalled: 'is stalled', 'gave-up': 'was given up on by the mender', question: 'has a question for you' }[first.needs_operator!.kind]
   return waiting.length === 1 ? `${taskName(first)} ${what}` : `${waiting.length} tasks need you, ${taskName(first)} first`
+}
+
+/** The build stopped before its work was done: what it says ("Stopped with 2 tasks not done"). */
+export function stoppedLine(read: BuildRead): string {
+  const open = read.tasks.filter((t) => t.status !== 'approved' && t.status !== 'rejected').length
+  return open ? `Stopped with ${open} ${open === 1 ? 'task' : 'tasks'} not done` : 'Stopped before its work was done'
 }
 
 export function taskKey(task: Pick<BuildTaskRead, 'id' | 'ref'>): string {

@@ -11,7 +11,7 @@ import { PROJECT_ID } from './fixtures'
  *  is mock state throughout, modelled on this repository's own roster, threads and builds, and
  *  shaped exactly as `AgentConversation` and the D2 build row, so the app's data plugs in. */
 
-export type SidebarMockState = 'mixed' | 'quiet' | 'empty' | 'many40' | 'many300' | 'loading' | 'error' | 'today'
+export type SidebarMockState = 'mixed' | 'quiet' | 'empty' | 'many40' | 'many300' | 'loading' | 'error'
 
 export const SIDEBAR_MOCK_STATES: Array<{ value: SidebarMockState; label: string }> = [
   { value: 'mixed', label: 'Sidebar: builds running and needing you' },
@@ -21,7 +21,6 @@ export const SIDEBAR_MOCK_STATES: Array<{ value: SidebarMockState; label: string
   { value: 'many300', label: 'Sidebar: 300 threads' },
   { value: 'loading', label: 'Sidebar: loading' },
   { value: 'error', label: 'Sidebar: could not load' },
-  { value: 'today', label: 'Sidebar: today’s agent tree' },
 ]
 
 const query = new URLSearchParams(window.location.hash.split('?')[1] ?? '')
@@ -163,9 +162,8 @@ export function useSidebarProjectBody(go: {
   openBuild: (buildId: string) => void
   activeConversation: string | null
   activeBuild: string | null
-}): ((project: ProjectSummary, activeProject: boolean) => React.ReactNode) | undefined {
+}): (project: ProjectSummary, activeProject: boolean) => React.ReactNode {
   const mock = useSidebarMock()
-  if (mock.state === 'today') return undefined
   return (project, activeProject) => {
     const main = project.id === PROJECT_ID
     const listState: ListState = main && mock.state === 'loading' ? 'loading' : main && mock.state === 'error' ? 'error' : 'ready'
@@ -210,9 +208,8 @@ export function useSidebarProjectBody(go: {
 }
 
 /** The collapsed rail's mark: the titles of the builds that need the operator, per project. */
-export function useBuildsNeedingYou(): ((projectId: string) => string[]) | undefined {
+export function useBuildsNeedingYou(): (projectId: string) => string[] {
   const mock = useSidebarMock()
-  if (mock.state === 'today') return undefined
   return (projectId) =>
     projectId === PROJECT_ID && (mock.state === 'mixed' || mock.state === 'many40' || mock.state === 'many300')
       ? BUILDS.filter((b) => b.needs_operator && !mock.dismissed.has(b.id)).map((b) => b.document_title)

@@ -105,7 +105,10 @@ export function ConversationRow({
   // Computed at render, not on a timer: every surface that changes `updated_at` also invalidates
   // this list over SSE, so the row re-renders with a fresh reading anyway and a ticking clock per
   // row would be a cost with no reader.
-  const age = relativeShort(conversation.updated_at)
+  // The threads list is ordered by `last_activity_at` (its newest message or run), so its tooltip
+  // reads the same moment; a Hub without the field falls back to `updated_at`.
+  const activityAt = (showProfile ? conversation.last_activity_at : null) ?? conversation.updated_at
+  const age = relativeShort(activityAt)
   // Held as a const so the null check below narrows inside the click handler too.
   const loop = (showLoopMarker ? conversation.loop : null) ?? null
 
@@ -222,7 +225,7 @@ export function ConversationRow({
             onClick={onOpen}
             title={
               showProfile && agentName && age
-                ? `${label} — ${agentName}, last activity ${formatDistanceToNow(hubDate(conversation.updated_at), { addSuffix: true })}`
+                ? `${label} — ${agentName}, last activity ${formatDistanceToNow(hubDate(activityAt), { addSuffix: true })}`
                 : agentName
                   ? `${label} — ${agentName}`
                   : label

@@ -42,14 +42,29 @@ export function buildAccessibleName(build: SidebarBuild): string {
   return `Build: ${build.document_title}, ${progress}, ${state}`
 }
 
+/** What the sidebar lists of `GET /builds` (D2): a running build, or one that needs the operator
+ *  and was not dismissed since it began needing them. A finished build needing nothing is not. */
+export function sidebarBuilds<T extends SidebarBuild & { attention_dismissed: boolean }>(rows: T[]): T[] {
+  return rows.filter((row) => row.state === 'running' || (row.needs_operator !== null && !row.attention_dismissed))
+}
+
 /** Builds that need the operator first, then running ones; each group keeps the route's order. */
 export function orderBuilds(builds: SidebarBuild[]): SidebarBuild[] {
   return [...builds.filter((b) => b.needs_operator), ...builds.filter((b) => !b.needs_operator)]
 }
 
-/** Threads waiting on the operator rise; the rest keep the route's order (newest activity first). */
+/** When a thread last saw activity, for ordering: its newest message or run, else its last update. */
+function activityOf(thread: AgentConversation): number {
+  const at = Date.parse(thread.last_activity_at ?? thread.updated_at ?? '')
+  return Number.isNaN(at) ? 0 : at
+}
+
+/** Threads waiting on the operator rise; within each group, most recent activity first. Sorted
+ *  here rather than trusted to the route's order, so the list reads the same whichever order the
+ *  rows arrive in; ties keep the route's order. */
 export function orderThreads(threads: AgentConversation[]): AgentConversation[] {
-  return [...threads.filter((t) => t.attention === 'waiting'), ...threads.filter((t) => t.attention !== 'waiting')]
+  const byActivity = [...threads].sort((a, b) => activityOf(b) - activityOf(a))
+  return [...byActivity.filter((t) => t.attention === 'waiting'), ...byActivity.filter((t) => t.attention !== 'waiting')]
 }
 
 /** Case-insensitive match on a thread's title or its profile's name. */

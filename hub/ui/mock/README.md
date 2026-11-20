@@ -279,12 +279,12 @@ Approved by the operator on 2026-11-19 as it renders, including the author's cho
 ## The sidebar's threads and builds (profiles-threads-and-builds-everywhere)
 
 `src/components/layout/ThreadsAndBuilds.tsx` (rules in `threadsAndBuildsModel.ts`, tested in
-`src/__tests__/threadsAndBuildsModel.test.ts`) replaces the agent tree and the recency view under
-each project. The mock passes it to the real `Sidebar` through `projectBody`, and the collapsed
-rail's marks through `buildsNeedingYou`; the app passes neither yet, so the app is unchanged. The
-data is mock state (`mock/sidebarMock.tsx`): neither `operator_threads` nor `needs_operator` exists
-on a route yet. Review it at `#tab/jobs?sidebar=<state>` (mixed, quiet, empty, many40, many300,
-loading, error, today); the Jobs screen renders on the stub fixtures, Overview does not.
+`src/__tests__/threadsAndBuildsModel.test.ts`) replaced the agent tree and the recency view under
+each project. The app feeds it from the Hub (`ProjectThreadsAndBuilds.tsx`: `operator_threads=true`
+and `GET /builds`); the mock passes its own state to the real `Sidebar` through `projectBody`, and
+the collapsed rail's marks through `buildsNeedingYou` (`mock/sidebarMock.tsx`). Review it at
+`#tab/jobs?sidebar=<state>` (mixed, quiet, empty, many40, many300, loading, error); the Jobs screen
+renders on the stub fixtures, Overview does not.
 
 Decided with the operator, 2026-11-20, against the vault UI note (src-0b85ea5a1d1d):
 - Two sections, Builds then Threads. No Profiles section; no "All builds" link (the side panel's

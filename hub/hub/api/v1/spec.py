@@ -5350,6 +5350,45 @@ async def list_builds(
     return {"builds": await builds.project_rows(session, project_id, workspace)}
 
 
+@router.post("/builds/{build_id}/attention/dismiss")
+async def dismiss_build_attention(
+    build_id: str,
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    """The operator dismisses a build that needs them from the sidebar
+    (`profiles-threads-and-builds-everywhere`, D3). It stays dismissed while its needs are the ones
+    dismissed; a new stall, question or stop brings it back. Answers the build's row as `GET
+    /builds` lists it. 409 `build_running` while it runs, `nothing_needed` when it needs nothing."""
+    from ... import build_needs
+
+    project_id, _ = project
+    build = await _project_build(session, project_id, build_id)
+    if build.state == builds.RUNNING:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "build_running",
+                "message": f"build {build.id} is running; only a build that is not can be dismissed",
+            },
+        )
+    needs = (await build_needs.needs_of_builds(session, project_id, [build]))[build.id]
+    if needs.build is None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"code": "nothing_needed", "message": f"build {build.id} needs nothing of you"},
+        )
+    build_needs.dismiss(build, needs)
+    defer_broadcast(session, project_id, "build_updated", {"id": build.id, "state": build.state})
+    await session.commit()
+    try:
+        workspace = await _workspace(session, project_id)
+    except HTTPException:
+        workspace = None
+    rows = await builds.project_rows(session, project_id, workspace, build_id=build.id)
+    return rows[0]
+
+
 @router.get("/reopening-warnings")
 async def reopening_warnings(
     project: Tuple[str, str] = Depends(get_project),
