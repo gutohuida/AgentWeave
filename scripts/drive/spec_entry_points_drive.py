@@ -242,8 +242,7 @@ def scenario_draft():
                  f"{code} {json.dumps(taken)[:200]}"):
         return
     answer = taken.get("document")
-    # The built take answers the document's path as a string (the UI's TakenOffer and the Hub tests
-    # read it so); the design's {path, ...} object is accepted too.
+    # The take answers the document as {path, title, phase, step}; a bare path string is accepted too.
     new_path = answer.get("path") if isinstance(answer, dict) else answer
     check("drive-draft-lands-on-intake: the take's answer names a new change document",
           bool(new_path) and new_path != roadmap, f"answer.document={answer!r}")
