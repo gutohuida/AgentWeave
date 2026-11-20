@@ -242,7 +242,9 @@ def scenario_draft():
                  f"{code} {json.dumps(taken)[:200]}"):
         return
     answer = taken.get("document")
-    new_path = answer.get("path") if isinstance(answer, dict) else None
+    # The built take answers the document's path as a string (the UI's TakenOffer and the Hub tests
+    # read it so); the design's {path, ...} object is accepted too.
+    new_path = answer.get("path") if isinstance(answer, dict) else answer
     check("drive-draft-lands-on-intake: the take's answer names a new change document",
           bool(new_path) and new_path != roadmap, f"answer.document={answer!r}")
     # The new document is also read from the project, independent of the answer's shape.
@@ -311,7 +313,8 @@ def scenario_agent_create():
           code == 200 and answered and made not in offered,
           route_note(code, f"offers={offered!r}"), reached=known)
     t1 = time.time()
-    nxt = send("Reply with the single word ok.", conversation_id=conv)
+    # Like the composer: it sends the conversation's open document (what the GET above attached).
+    nxt = send("Reply with the single word ok.", conversation_id=conv, spec_document=open_doc)
     queued = entry(nxt.get("queue_entry_id")) or {}
     bound = queued.get("spec_document", "<field absent>")
     check("drive-agent-create-is-offered-and-opened: the next entry names the document",

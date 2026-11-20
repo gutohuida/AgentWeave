@@ -8,3 +8,107 @@ WARNI [hub.main] Hub database: journal mode wal, synchronous full
 WARNI [hub.main] Tool server pinned at C:\Users\huida\.agentweave\hub\tool-server\da3854082e446753\mcp_server.py
 INFO:     Application startup complete.
 INFO:     Uvicorn running on http://127.0.0.1:8010 (Press CTRL+C to quit)
+INFO:     127.0.0.1:57444 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58959 - "GET /api/v1/projects HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58961 - "GET /api/v1/projects/proj-d85a82bf4216/agents HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58963 - "GET /api/v1/projects/proj-d85a82bf4216/runners HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55290 - "POST /api/v1/projects HTTP/1.1" 405 Method Not Allowed
+INFO:     127.0.0.1:57322 - "POST /api/v1/projects/open HTTP/1.1" 422 Unprocessable Entity
+INFO:     127.0.0.1:55451 - "POST /api/v1/projects/open HTTP/1.1" 409 Conflict
+INFO:     127.0.0.1:55452 - "GET /api/v1/projects//runners HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:50184 - "POST /api/v1/projects/open HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61201 - "GET /api/v1/projects/proj-93fe90fd3e78/runners HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61202 - "GET /api/v1/projects/proj-93fe90fd3e78/agents HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61203 - "POST /api/v1/projects/proj-93fe90fd3e78/runners HTTP/1.1" 201 Created
+INFO:     127.0.0.1:61204 - "POST /api/v1/projects/proj-93fe90fd3e78/agents HTTP/1.1" 201 Created
+INFO:     127.0.0.1:61205 - "GET /api/v1/projects/proj-93fe90fd3e78/agents HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61206 - "GET /api/v1/projects/proj-93fe90fd3e78/runners HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61207 - "POST /api/v1/projects/proj-93fe90fd3e78/project/documents HTTP/1.1" 201 Created
+INFO:     127.0.0.1:61208 - "PUT /api/v1/projects/proj-93fe90fd3e78/project/documents/spec/changes/ivory-griffin/spec.json/content HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61209 - "POST /api/v1/projects/proj-93fe90fd3e78/project/documents/close-exploration?path=spec/changes/ivory-griffin/spec.json HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61210 - "POST /api/v1/projects/proj-93fe90fd3e78/project/documents/propose?path=spec/changes/ivory-griffin/spec.json HTTP/1.1" 405 Method Not Allowed
+INFO:     127.0.0.1:61211 - "GET /api/v1/projects/proj-93fe90fd3e78/project/spec?path=spec/changes/ivory-griffin/spec.json HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61212 - "POST /api/v1/projects/proj-93fe90fd3e78/project/documents/phase?path=spec/changes/ivory-griffin/spec.json&to=approved HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63416 - "GET /api/v1/projects/proj-93fe90fd3e78/project/next-slice-offers HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63417 - "GET /api/v1/projects/proj-93fe90fd3e78/project/documents HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63418 - "POST /api/v1/projects/proj-93fe90fd3e78/project/documents/next-slice/take HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63419 - "GET /api/v1/projects/proj-93fe90fd3e78/project/documents HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63422 - "GET /api/v1/projects/proj-93fe90fd3e78/queue/hk HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63423 - "GET /api/v1/projects/proj-93fe90fd3e78/queue/hk HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63424 - "GET /api/v1/projects/proj-93fe90fd3e78/queue/hk HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63425 - "GET /api/v1/projects/proj-93fe90fd3e78/runs/run-cb7398c82786 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63426 - "GET /api/v1/projects/proj-93fe90fd3e78/runs/run-cb7398c82786 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57517 - "POST /api/v1/agent-actions/mcp-adapter-online HTTP/1.1" 204 No Content
+INFO:     127.0.0.1:57521 - "GET /api/v1/projects/proj-93fe90fd3e78/runs/run-cb7398c82786 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57525 - "GET /api/v1/projects/proj-93fe90fd3e78/runs/run-cb7398c82786 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51760 - "GET /api/v1/projects/proj-93fe90fd3e78/runs/run-cb7398c82786 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51761 - "POST /api/v1/agent-actions/permission-decisions HTTP/1.1" 202 Accepted
+INFO:     127.0.0.1:51763 - "GET /api/v1/agent-actions/spec/documents?path=spec%2Fchanges%2Fivory-griffin%2Fspec.json&include=full HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51764 - "GET /api/v1/projects/proj-93fe90fd3e78/runs/run-cb7398c82786 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52685 - "GET /api/v1/agent-actions/vault/map HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52686 - "GET /api/v1/projects/proj-93fe90fd3e78/runs/run-cb7398c82786 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52687 - "GET /api/v1/projects/proj-93fe90fd3e78/runs/run-cb7398c82786 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52688 - "GET /api/v1/agent-actions/tasks HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58877 - "GET /api/v1/projects/proj-93fe90fd3e78/runs/run-cb7398c82786 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59914 - "POST /api/v1/agent-actions/permission-decisions HTTP/1.1" 202 Accepted
+INFO:     127.0.0.1:59967 - "GET /api/v1/projects/proj-93fe90fd3e78/runs/run-cb7398c82786 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60188 - "POST /api/v1/agent-actions/permission-decisions HTTP/1.1" 202 Accepted
+INFO:     127.0.0.1:63597 - "GET /api/v1/projects/proj-93fe90fd3e78/runs/run-cb7398c82786 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64064 - "GET /api/v1/projects/proj-93fe90fd3e78/runs/run-cb7398c82786 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63659 - "GET /api/v1/projects/proj-93fe90fd3e78/runs/run-cb7398c82786 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64293 - "POST /api/v1/agent-actions/permission-decisions HTTP/1.1" 202 Accepted
+INFO:     127.0.0.1:64599 - "GET /api/v1/projects/proj-93fe90fd3e78/runs/run-cb7398c82786 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64756 - "GET /api/v1/agent-actions/spec/documents?path=spec%2Fchanges%2Fopal-chimera%2Fspec.json&include=full HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49557 - "GET /api/v1/projects/proj-93fe90fd3e78/runs/run-cb7398c82786 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49800 - "GET /api/v1/projects/proj-93fe90fd3e78/runs/run-cb7398c82786 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57800 - "GET /api/v1/projects/proj-93fe90fd3e78/runs/run-cb7398c82786 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58238 - "GET /api/v1/projects/proj-93fe90fd3e78/runs/run-cb7398c82786 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58241 - "POST /api/v1/projects/proj-93fe90fd3e78/agent/trigger HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58298 - "GET /api/v1/projects/proj-93fe90fd3e78/runs/run-cb777c7106dd HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64860 - "GET /api/v1/projects/proj-93fe90fd3e78/runs/run-cb777c7106dd HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65190 - "POST /api/v1/agent-actions/mcp-adapter-online HTTP/1.1" 204 No Content
+INFO:     127.0.0.1:65235 - "GET /api/v1/projects/proj-93fe90fd3e78/runs/run-cb777c7106dd HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50303 - "GET /api/v1/projects/proj-93fe90fd3e78/runs/run-cb777c7106dd HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50684 - "GET /api/v1/projects/proj-93fe90fd3e78/runs/run-cb777c7106dd HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50685 - "GET /api/v1/projects/proj-93fe90fd3e78/conversations?lifecycle=all HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50686 - "GET /api/v1/projects/proj-93fe90fd3e78/conversations/conv-d1d44be70365/spec-documents HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50737 - "GET /api/v1/projects/proj-93fe90fd3e78/project/documents HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50746 - "POST /api/v1/projects/proj-93fe90fd3e78/agent/trigger HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50775 - "GET /api/v1/projects/proj-93fe90fd3e78/runs/run-48cde44dd365 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63308 - "GET /api/v1/projects/proj-93fe90fd3e78/runs/run-48cde44dd365 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63482 - "POST /api/v1/agent-actions/mcp-adapter-online HTTP/1.1" 204 No Content
+INFO:     127.0.0.1:63506 - "GET /api/v1/projects/proj-93fe90fd3e78/runs/run-48cde44dd365 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63831 - "POST /api/v1/agent-actions/spec/documents/create HTTP/1.1" 201 Created
+INFO:     127.0.0.1:65357 - "GET /api/v1/projects/proj-93fe90fd3e78/runs/run-48cde44dd365 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49340 - "GET /api/v1/projects/proj-93fe90fd3e78/runs/run-48cde44dd365 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49343 - "GET /api/v1/projects/proj-93fe90fd3e78/project/documents HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49348 - "GET /api/v1/projects/proj-93fe90fd3e78/conversations/conv-d1d44be70365/spec-documents HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49353 - "POST /api/v1/projects/proj-93fe90fd3e78/conversations/conv-d1d44be70365/spec-documents/answer HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49358 - "GET /api/v1/projects/proj-93fe90fd3e78/conversations/conv-d1d44be70365/spec-documents HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49359 - "POST /api/v1/projects/proj-93fe90fd3e78/agent/trigger HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49410 - "GET /api/v1/projects/proj-93fe90fd3e78/queue/hk HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49411 - "GET /api/v1/projects/proj-93fe90fd3e78/project/documents HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49416 - "GET /api/v1/projects/proj-93fe90fd3e78/queue/hk HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49417 - "GET /api/v1/projects/proj-93fe90fd3e78/runs/run-a3d19949e0ef HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53226 - "GET /api/v1/projects/proj-93fe90fd3e78/runs/run-a3d19949e0ef HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53554 - "POST /api/v1/agent-actions/mcp-adapter-online HTTP/1.1" 204 No Content
+INFO:     127.0.0.1:53616 - "GET /api/v1/projects/proj-93fe90fd3e78/runs/run-a3d19949e0ef HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57325 - "GET /api/v1/projects/proj-93fe90fd3e78/runs/run-a3d19949e0ef HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57329 - "POST /api/v1/projects/proj-93fe90fd3e78/project/documents HTTP/1.1" 201 Created
+INFO:     127.0.0.1:57334 - "PUT /api/v1/projects/proj-93fe90fd3e78/project/documents/spec/changes/coral-kraken/spec.json/content HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57335 - "POST /api/v1/projects/proj-93fe90fd3e78/agent/trigger HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57352 - "POST /api/v1/projects/proj-93fe90fd3e78/agent/trigger HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57361 - "GET /api/v1/projects/proj-93fe90fd3e78/conversations?lifecycle=all HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57366 - "GET /api/v1/projects/proj-93fe90fd3e78/conversations?lifecycle=all HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57369 - "GET /api/v1/projects/proj-93fe90fd3e78/conversations/conv-20234f62a514/spec-documents HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57372 - "POST /api/v1/projects/proj-93fe90fd3e78/agent/trigger HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57379 - "GET /api/v1/projects/proj-93fe90fd3e78/queue/hk HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57380 - "GET /api/v1/projects/proj-93fe90fd3e78/conversations/conv-63734b21854c/spec-documents HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57382 - "GET /api/v1/projects/proj-93fe90fd3e78/runs/run-407de7621dce HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57708 - "GET /api/v1/projects/proj-93fe90fd3e78/runs/run-407de7621dce HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51467 - "POST /api/v1/agent-actions/mcp-adapter-online HTTP/1.1" 204 No Content
+INFO:     127.0.0.1:51516 - "GET /api/v1/projects/proj-93fe90fd3e78/runs/run-407de7621dce HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51704 - "GET /api/v1/projects/proj-93fe90fd3e78/runs/run-407de7621dce HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61513 - "GET /api/v1/projects/proj-93fe90fd3e78/runs/run-407de7621dce HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61700 - "GET /api/v1/projects/proj-93fe90fd3e78/runs/run-407de7621dce HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50377 - "POST /api/v1/agent-actions/mcp-adapter-online HTTP/1.1" 204 No Content
