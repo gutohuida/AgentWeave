@@ -75,7 +75,7 @@ describe('what an agent is for', () => {
   it('is empty until written, and says what it is for', () => {
     renderIdentity(agent())
     expect(field()).toHaveValue('')
-    expect(field()).toHaveAttribute('placeholder', 'What this agent is for.')
+    expect(field()).toHaveAttribute('placeholder', 'What this profile is for.')
   })
 
   it('shows what is stored', () => {

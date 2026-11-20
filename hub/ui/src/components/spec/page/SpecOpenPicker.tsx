@@ -82,7 +82,7 @@ export function SpecOpenPicker(props: SpecOpenPickerProps) {
       {!searching && (attached || building.length || recent.length) ? (
         <div className="aw-sp-open-quick">
           {attached ? (
-            <QuickGroup label="This conversation">
+            <QuickGroup label="This thread">
               <QuickCard entry={attached} now={now} onOpen={props.onOpen} open={props.openPath === attached.path} icon="link" progress={props.progress?.[attached.path]} />
             </QuickGroup>
           ) : null}

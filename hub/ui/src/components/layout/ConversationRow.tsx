@@ -261,9 +261,9 @@ export function ConversationRow({
                 data-testid={`${testId}-agent-archived`}
                 className="shrink-0 text-[11px]"
                 style={{ color: 'var(--amber)' }}
-                title={agentName ? `${agentName} is archived; open this to unarchive it` : 'Its agent is archived'}
+                title={agentName ? `${agentName} is archived; open this to unarchive it` : 'Its profile is archived'}
               >
-                agent archived
+                profile archived
               </span>
             )}
             {showProfile && agentName && (
@@ -276,7 +276,7 @@ export function ConversationRow({
                 data-testid={`${testId}-origin`}
                 className="shrink-0 text-[11px]"
                 style={{ color: 'var(--text-3)' }}
-                title="Started by another agent"
+                title="Started by another profile"
               >
                 peer
               </span>

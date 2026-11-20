@@ -244,7 +244,7 @@ export function LogsView() {
             <Icon name="search" size={16} className="absolute left-2.5 pointer-events-none" style={{ color: 'var(--text-3)' }} />
             <input
               type="text"
-              placeholder="Search event type, agent, data…"
+              placeholder="Search event type, profile, data…"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="control-field w-full h-8 pl-9 pr-3 text-xs bg-transparent"
@@ -267,14 +267,14 @@ export function LogsView() {
               maxWidth: 180,
             }}
           >
-            <option value="">All agents</option>
+            <option value="">All profiles</option>
             {logAgentsError && logAgents.length === 0 && (
-              <option disabled value="__unavailable">Could not read the agent list</option>
+              <option disabled value="__unavailable">Could not read the profile list</option>
             )}
             {roster && !rosterError ? (
               <>
                 {onRoster.length > 0 && (
-                  <optgroup label="Agents">
+                  <optgroup label="Profiles">
                     {onRoster.map((a) => <option key={a} value={a}>{a}</option>)}
                   </optgroup>
                 )}
@@ -287,7 +287,7 @@ export function LogsView() {
             ) : (
               // Without the roster there is nothing to tell them apart by, and saying so beats a
               // grouping that would be a guess.
-              <optgroup label={rosterError ? 'Agents and log names (roster not read)' : 'Agents and log names'}>
+              <optgroup label={rosterError ? 'Profiles and log names (roster not read)' : 'Profiles and log names'}>
                 {logAgents.map((a) => <option key={a} value={a}>{a}</option>)}
               </optgroup>
             )}
@@ -415,7 +415,7 @@ export function LogsView() {
               <span className="shrink-0 w-[156px]">TIMESTAMP</span>
               <span className="shrink-0 w-12 text-center">SEV</span>
               <span className="shrink-0 w-44">EVENT TYPE</span>
-              <span className="shrink-0 w-20">AGENT</span>
+              <span className="shrink-0 w-20">PROFILE</span>
               <span className="flex-1">MESSAGE</span>
             </div>
             {/* F252: the screen opens on the newest page; older entries are a page back. */}

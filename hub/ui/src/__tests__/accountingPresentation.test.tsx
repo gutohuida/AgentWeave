@@ -51,7 +51,7 @@ vi.mock('@/api/agents', async (importOriginal) => ({
 
 vi.mock('@/api/projects', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/api/projects')>()),
-  // The agent budget row reads the project's settings; these tests are about the usage above it.
+  // The profile budget row reads the project's settings; these tests are about the usage above it.
   useProjectSettings: () => ({ data: undefined }),
   useUpdateProjectSettings: () => ({ mutate: vi.fn() }),
 }))
@@ -212,10 +212,10 @@ describe('accounting presentation', () => {
     expect([...lines].map((line) => line.getAttribute('data-testid'))).toEqual(['budget-worker-checkpoint', 'budget-worker-conversation_title'])
     expect(screen.getByTestId('budget-worker-checkpoint')).toHaveTextContent('Checkpoints')
     expect(screen.getByTestId('budget-worker-checkpoint')).toHaveTextContent('500 tokens')
-    expect(screen.getByTestId('budget-worker-conversation_title')).toHaveTextContent('Conversation titles')
+    expect(screen.getByTestId('budget-worker-conversation_title')).toHaveTextContent('Thread titles')
     expect(screen.getByTestId('budget-worker-conversation_title')).toHaveTextContent('1 unavailable')
     // After the agents, never ahead of them.
-    const agents = screen.getByLabelText('Usage by agent')
+    const agents = screen.getByLabelText('Usage by profile')
     expect(agents.compareDocumentPosition(screen.getByLabelText('Usage by worker')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 
@@ -268,7 +268,7 @@ describe('accounting presentation', () => {
     commitLimit('12.5')
     expect(mutate).toHaveBeenCalledWith(12_500_000, expect.anything())
 
-    fireEvent.click(screen.getByRole('switch', { name: 'Pause agents working on their own' }))
+    fireEvent.click(screen.getByRole('switch', { name: 'Pause profiles working on their own' }))
     expect(mutate).toHaveBeenLastCalledWith(null, expect.anything())
   })
 
@@ -276,7 +276,7 @@ describe('accounting presentation', () => {
     snapshot.budget = { limit_tokens: null, used_tokens: 1234, remaining_tokens: null, exhausted: false }
     render(<BudgetsSection />)
     expect(screen.queryByLabelText('After')).toBeNull()
-    fireEvent.click(screen.getByRole('switch', { name: 'Pause agents working on their own' }))
+    fireEvent.click(screen.getByRole('switch', { name: 'Pause profiles working on their own' }))
     expect(mutate).toHaveBeenCalledWith(1_000_000, expect.anything())
   })
 
@@ -316,14 +316,14 @@ describe('accounting presentation', () => {
       render(<BudgetsSection />)
       commitLimit('50')
       mutate.mock.calls[0][1].onSuccess()
-      expect(toastTitles()).toContain('Agents pause after 50M tokens')
+      expect(toastTitles()).toContain('Profiles pause after 50M tokens')
     })
 
     it('says a removal was a removal, not a save', () => {
       render(<BudgetsSection />)
-      fireEvent.click(screen.getByRole('switch', { name: 'Pause agents working on their own' }))
+      fireEvent.click(screen.getByRole('switch', { name: 'Pause profiles working on their own' }))
       mutate.mock.calls[0][1].onSuccess()
-      expect(toastTitles()).toContain('Token limit off: agents are no longer paused')
+      expect(toastTitles()).toContain('Token limit off: profiles are no longer paused')
     })
 
     it('reports a server failure in the section', () => {
@@ -340,7 +340,7 @@ describe('accounting presentation', () => {
     it('does not offer the controls while a save is in flight', () => {
       mutationState = { ...mutationState, isPending: true }
       render(<BudgetsSection />)
-      expect(screen.getByRole('switch', { name: 'Pause agents working on their own' })).toBeDisabled()
+      expect(screen.getByRole('switch', { name: 'Pause profiles working on their own' })).toBeDisabled()
       expect(screen.getByLabelText('After')).toBeDisabled()
     })
   })

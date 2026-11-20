@@ -380,7 +380,7 @@ describe('ThreadScreen: the loom', () => {
       </QueryClientProvider>,
     )
     expect(
-      await screen.findByText('The agents could not be read, so they are shown without their colours.'),
+      await screen.findByText('The profiles could not be read, so they are shown without their colours.'),
     ).toBeTruthy()
     expect(screen.getAllByText(loose.title).length).toBeGreaterThan(0)
     expect(screen.queryByRole('alert')).toBeNull()
@@ -419,7 +419,7 @@ describe('ThreadScreen: the loom', () => {
     await act(async () => {
       fireEvent.click(bead('conversation:c1-2')!)
     })
-    fireEvent.click(screen.getByRole('button', { name: /Open the conversation/ }))
+    fireEvent.click(screen.getByRole('button', { name: /Open the thread/ }))
     expect(onOpenLink).toHaveBeenCalledWith({ object: 'conversation', id: 'c1-2', agent: 'Builder' })
     expect(linkTarget(onOpenLink.mock.calls[0]![0])).toEqual({ to: 'conversation', agent: 'Builder', conversation: 'c1-2' })
   })

@@ -27,10 +27,10 @@ beforeEach(() => {
 afterEach(cleanup)
 
 describe('the first-run panel', () => {
-  it('with no agent offers Add an agent and the quickstart', () => {
+  it('with no agent offers Add a profile and the quickstart', () => {
     const onAddAgent = vi.fn()
     render(<FirstRunPanel agent={null} onAddAgent={onAddAgent} />)
-    fireEvent.click(screen.getByRole('button', { name: 'Add an agent' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Add a profile' }))
     expect(onAddAgent).toHaveBeenCalledTimes(1)
     expect(screen.getByRole('link', { name: /quickstart/i })).toHaveAttribute('href', QUICKSTART_URL)
   })
@@ -38,7 +38,7 @@ describe('the first-run panel', () => {
   it('with an agent offers to ask that agent for a change', () => {
     const onAskForChange = vi.fn()
     render(<FirstRunPanel agent="planner" onAskForChange={onAskForChange} />)
-    expect(screen.queryByRole('button', { name: 'Add an agent' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Add a profile' })).not.toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Ask planner for a change' }))
     expect(onAskForChange).toHaveBeenCalledWith('planner')
   })

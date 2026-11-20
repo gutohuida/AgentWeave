@@ -103,7 +103,7 @@ describe('the tasks screen', () => {
   it('says the agents could not be read, so the filter and Start work are not taken as "nobody"', () => {
     agentsError = new Error('500')
     renderScreen()
-    expect(screen.getByTestId('query-error-notice')).toHaveTextContent('Couldn’t read the agents from the Hub')
+    expect(screen.getByTestId('query-error-notice')).toHaveTextContent('Couldn’t read the profiles from the Hub')
   })
 
   it('says a keyboard move was not made because the allowed moves are unread, not that none exist', () => {

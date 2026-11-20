@@ -50,7 +50,7 @@ export function NextSliceOfferNotice({ path }: { path: string }) {
           size="xs"
           onClick={() => openConversationAt(projectId, taken.agent, taken.conversation_id!, taken.document.path)}
         >
-          Open the conversation
+          Open the thread
         </Button>
       </div>
     ) : null
@@ -66,7 +66,7 @@ export function NextSliceOfferNotice({ path }: { path: string }) {
         {offerTitle(offer)} Its tasks are closed and no document claims the next slice yet.
       </span>
       <select
-        aria-label="Agent that drafts the next slice"
+        aria-label="Profile that drafts the next slice"
         value={agent}
         disabled={busy}
         onChange={(event) => setChosen(event.target.value)}
@@ -90,7 +90,7 @@ export function NextSliceOfferNotice({ path }: { path: string }) {
       </Button>
       {agentsError && (
         <span className="w-full" style={{ color: 'var(--text-3)' }}>
-          Could not load the agents ({readableApiError(agentsError, 'the Hub did not answer')}); Draft asks the
+          Could not load the profiles ({readableApiError(agentsError, 'the Hub did not answer')}); Draft asks the
           document's author.
         </span>
       )}

@@ -107,7 +107,7 @@ describe('reconcile before fold', () => {
     await userEvent.click(screen.getByTestId('fold-open'))
 
     const none = within(screen.getByRole('dialog')).getByTestId('reconcile-none')
-    await userEvent.selectOptions(within(none).getByLabelText('Agent to reconcile'), 'rex')
+    await userEvent.selectOptions(within(none).getByLabelText('Profile to reconcile'), 'rex')
     await userEvent.click(within(none).getByTestId('reconcile-ask'))
 
     expect(ask).toHaveBeenCalledWith({ path: CHANGE, agent: 'rex' }, expect.anything())

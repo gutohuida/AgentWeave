@@ -153,7 +153,7 @@ export function TerminalTabContainer({ agent, projectId, conversationId, onSendT
     if (shell && text !== undefined) onSendToComposer(terminalBlock(shell, text))
   }
 
-  if (!conversationId) return <p className="aw-ptab-note">Start a conversation to open a terminal in its worktree.</p>
+  if (!conversationId) return <p className="aw-ptab-note">Start a thread to open a terminal in its worktree.</p>
   if (!menuData) return <p className="aw-ptab-note">{menu.isError ? 'The terminal could not be reached.' : 'Loading terminal'}</p>
 
   return (

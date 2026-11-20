@@ -57,7 +57,7 @@ function buildOutcomeMessages(outcome: SpecBuildOutcome | undefined): string[] {
   const messages = [...(outcome?.flow?.messages ?? [])]
   for (const entry of outcome?.build?.unresolved_builders ?? []) {
     messages.push(
-      `${entry.task}'s builder @${entry.builder} is not an open agent here; the task waits for the driver.`,
+      `${entry.task}'s builder @${entry.builder} is not an open profile here; the task waits for the driver.`,
     )
   }
   if (outcome?.build?.message) messages.push(outcome.build.message)
@@ -564,7 +564,7 @@ export function useSpecPhaseControls(
           size="sm"
           data-testid="spec-check"
           disabled={busy}
-          title="Show what still blocks approval, as the agent's save reports it. Nothing moves."
+          title="Show what still blocks approval, as the last save reports it. Nothing moves."
           onClick={() => void onCheck()}
         >
           Check
@@ -601,7 +601,7 @@ export function useSpecPhaseControls(
             })
             return
           }
-          const note = window.prompt('Hold this document so an agent cannot tidy it. A note (optional):')
+          const note = window.prompt('Hold this document so a profile cannot tidy it. A note (optional):')
           if (note === null) return
           holdDocument.mutate(
             { path, note: note.trim() },
@@ -716,15 +716,15 @@ export function useSpecPhaseControls(
   // only; the document is never rewritten.
   const staleSummary =
     deliveryStatus?.state === 'stale'
-      ? `The recommended build names ${deliveryStatus.agent || 'no agent'}, which is ${
-          deliveryStatus.reason === 'archived' ? 'archived' : 'not an agent on this project'
+      ? `The recommended build names ${deliveryStatus.agent || 'no profile'}, which is ${
+          deliveryStatus.reason === 'archived' ? 'archived' : 'not a profile on this project'
         }.`
       : null
   const deliveryStale = staleSummary ? (
     <div className="aw-spec-message" data-tone="warn" data-testid="delivery-stale-strip">
       <Icon name="warning" size={13} />
       <span className="aw-spec-message-text">
-        {staleSummary} Building will not start a flow unless you choose another agent in the Build dialog.
+        {staleSummary} Building will not start a flow unless you choose another profile in the Build dialog.
       </span>
     </div>
   ) : null
@@ -1035,7 +1035,7 @@ export function useSpecPhaseControls(
   const facts =
     reviewerStatus && !reviewerStale ? (
       <span className="aw-sp-meta-fact" data-testid="delivery-reviewer">
-        {reviewerStatus.reviewer ? `Reviewed by @${reviewerStatus.reviewer}` : 'Reviewed by any free agent'}
+        {reviewerStatus.reviewer ? `Reviewed by @${reviewerStatus.reviewer}` : 'Reviewed by any free profile'}
       </span>
     ) : null
 

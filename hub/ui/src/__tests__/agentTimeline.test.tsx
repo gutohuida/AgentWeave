@@ -44,7 +44,7 @@ describe('AgentTimeline', () => {
     render(
       <AgentTimeline agent={agent} entries={[]} roster={[]} runs={{}} isRunning={false} />,
     )
-    expect(screen.getByText('No conversation yet')).toBeInTheDocument()
+    expect(screen.getByText('No thread yet')).toBeInTheDocument()
   })
 
   it('labels an inbound peer message with the sender name (colour never carries identity alone)', () => {
@@ -386,7 +386,7 @@ describe('AgentTimeline', () => {
         queueStatus={{ agent: 'claude', waiting_count: 1, running: false, waiting_reason: 'hop budget exhausted' }}
       />,
     )
-    expect(screen.getByText(/1 waiting in another conversation — hop budget exhausted/)).toBeInTheDocument()
+    expect(screen.getByText(/1 waiting in another thread — hop budget exhausted/)).toBeInTheDocument()
   })
 
   it('offers Continue and Discard on a held entry, and calls back with its id', () => {

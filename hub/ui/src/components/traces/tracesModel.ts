@@ -101,7 +101,7 @@ export function subjectOf(trace: TraceSummary): TraceSubject {
     return { kind: 'missing-task' }
   }
   if (trace.conversation_id) {
-    return { kind: 'conversation', title: trace.conversation_title?.trim() || 'New conversation' }
+    return { kind: 'conversation', title: trace.conversation_title?.trim() || 'New thread' }
   }
   return { kind: 'none' }
 }
@@ -124,10 +124,10 @@ export function costOf(trace: TraceSummary): CostCell {
 /** The grouping switch, in the order it is offered. `none` lists the runs ungrouped. */
 export const GROUPINGS: ReadonlyArray<{ value: TraceGrouping | 'none'; label: string }> = [
   { value: 'none', label: 'None' },
-  { value: 'agent', label: 'Agent' },
+  { value: 'agent', label: 'Profile' },
   { value: 'model', label: 'Model' },
   { value: 'task', label: 'Task' },
-  { value: 'conversation', label: 'Conversation' },
+  { value: 'conversation', label: 'Thread' },
   { value: 'kind', label: 'Kind' },
   { value: 'day', label: 'Day' },
 ]

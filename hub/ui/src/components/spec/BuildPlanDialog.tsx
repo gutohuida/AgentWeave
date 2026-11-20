@@ -53,7 +53,7 @@ export interface BuildPlanTask {
 
 const DRIVER: Record<BuildDriver, { label: string; icon: string; meaning: string }> = {
   flow: { label: 'Flow', icon: 'sync', meaning: 'The Hub hands out each task as its prerequisites clear.' },
-  lead: { label: 'Lead', icon: 'compass', meaning: 'A lead agent hands out the work and is briefed as it moves.' },
+  lead: { label: 'Lead', icon: 'compass', meaning: 'A lead profile hands out the work and is briefed as it moves.' },
   hand: { label: 'By hand', icon: 'hand', meaning: 'Nothing starts: the tasks wait on the board for you.' },
 }
 
@@ -164,7 +164,7 @@ export function BuildPlanDialog({
       : capInvalid
         ? 'The cap is a positive number of dollars.'
         : ownWork.length
-          ? `${ownWork.length === 1 ? 'One task has' : `${ownWork.length} tasks have`} the same agent building and checking.`
+          ? `${ownWork.length === 1 ? 'One task has' : `${ownWork.length} tasks have`} the same profile building and checking.`
           : null
   /** The entry a task's builder or checker runs on: an explicit pick for the agent it now names,
    *  else the recommendation when that agent's pool holds it, else the agent's default (FR-6). */
@@ -218,7 +218,7 @@ export function BuildPlanDialog({
 
   const agentOptions = (blank: string, current: string, recommendedName: string): SelectOption<string>[] => [
     { value: '', label: blank },
-    ...(current && !names.includes(current) ? [{ value: current, label: current, detail: 'Not an open agent', disabled: true }] : []),
+    ...(current && !names.includes(current) ? [{ value: current, label: current, detail: 'Not an open profile', disabled: true }] : []),
     ...agents.map((a) => ({
       value: a.name,
       label: a.name,
@@ -364,7 +364,7 @@ export function BuildPlanDialog({
             </h3>
             <div className="aw-bp-defaults">
               <Setting label="Default builder" why={reasons.builders ?? reasons.agent}>
-                <MenuSelect<string> label="Default builder" value={plan.builder} onChange={(builder) => set({ builder, agent: builder })} options={agentOptions('Any free agent', plan.builder, recommended?.builder ?? '')} />
+                <MenuSelect<string> label="Default builder" value={plan.builder} onChange={(builder) => set({ builder, agent: builder })} options={agentOptions('Any free profile', plan.builder, recommended?.builder ?? '')} />
               </Setting>
               {plan.level !== 'fast' ? (
                 <Setting label="Default checker" why={reasons.checker ?? reasons.reviewer}>
@@ -436,7 +436,7 @@ function Setting({ label, why, children }: { label: string; why?: string; childr
 function EntryChoice({ label, pools, resolved, onPick }: { label: string; pools: BuildPlanPools; resolved: ResolvedEntry; onPick: (key: string) => void }) {
   const { agent, pool, entry, recommendedMissing, recommendedChoice } = resolved
   const { catalog } = pools
-  if (!agent) return <p className="aw-bp-why">Runs on that agent’s default model.</p>
+  if (!agent) return <p className="aw-bp-why">Runs on that profile’s default model.</p>
   if (pool.length === 0) return <p className="aw-bp-warn">{agent} has no models, so it cannot run.</p>
   const recommendedEntry = findEntry(pool, recommendedChoice)
   const runner = recommendedChoice ? pools.runners.find((r) => r.id === recommendedChoice.runner_id) : undefined
@@ -537,11 +537,11 @@ function TaskRow({
           value={value}
           onChange={onChange}
           maxWidth={220}
-          options={agentOptions(fallback ? `Default (${fallback})` : role === 'builder' ? 'Any free agent' : 'Anyone but the builder', value, rec)}
+          options={agentOptions(fallback ? `Default (${fallback})` : role === 'builder' ? 'Any free profile' : 'Anyone but the builder', value, rec)}
         />
         {entry ? entry(role) : null}
         {rec && !isOpen(rec) ? (
-          <p className="aw-bp-warn">Recommended {rec} is not an open agent here.</p>
+          <p className="aw-bp-warn">Recommended {rec} is not an open profile here.</p>
         ) : differs && rec ? (
           <p className="aw-bp-differs">
             Recommended {rec}

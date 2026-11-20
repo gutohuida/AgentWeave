@@ -129,7 +129,7 @@ describe('profile-runs-listed', () => {
     const detail = await screen.findByTestId('trace-detail')
     expect(detail).toHaveAttribute('data-run-id', 'run-old')
     await waitFor(() => expect(urls.some((u) => u.includes('/traces/by-run/run-old'))).toBe(true))
-    await user.click(screen.getByRole('button', { name: /Open the conversation/ }))
+    await user.click(screen.getByRole('button', { name: /Open the thread/ }))
     expect(window.location.search).toContain('conv-run-old')
     expect(window.location.search).toContain('old-alpha')
   })
@@ -200,7 +200,7 @@ describe('flow-runs-listed', () => {
 
     await user.click(within(first).getByRole('button'))
     expect(await screen.findByTestId('trace-detail')).toHaveAttribute('data-run-id', 'run-fr-b')
-    await user.click(screen.getByRole('button', { name: /Open the conversation/ }))
+    await user.click(screen.getByRole('button', { name: /Open the thread/ }))
     expect(window.location.search).toContain('conv-run-fr-b')
   })
 })

@@ -20,7 +20,7 @@ import { CommittedInput } from './CommittedInput'
 const WORKER_LABELS: Record<string, string> = {
   checkpoint: 'Checkpoints',
   checkpoint_probe: 'Checkpoint probes',
-  conversation_title: 'Conversation titles',
+  conversation_title: 'Thread titles',
   'vault-distillation': 'Vault distillation',
   'vault-reports': 'Vault reports',
   'spec-vault-check': 'Spec checks',
@@ -84,7 +84,7 @@ export function BudgetsSettings({
   const projectEstimate = estimate(project.estimated_input_tokens)
 
   return (
-    <SettingsPage icon="bar_chart" title="Budgets" description="What this project has used, and the limit that pauses agents working on their own.">
+    <SettingsPage icon="bar_chart" title="Budgets" description="What this project has used, and the limit that pauses profiles working on their own.">
       {notices}
       <div className="aw-usage">
         <div className="aw-usage-tiles">
@@ -107,7 +107,7 @@ export function BudgetsSettings({
           <div className="aw-usage-tile">
             <span className="aw-usage-label">Limit</span>
             <span className="aw-usage-value tabular">{limited ? formatCount(limit) : 'None'}</span>
-            <span className="aw-usage-sub">{limited ? `${formatPercent(Math.min(1, (total ?? accounting.budget.used_tokens) / limit))} used` : 'Agents are never paused'}</span>
+            <span className="aw-usage-sub">{limited ? `${formatPercent(Math.min(1, (total ?? accounting.budget.used_tokens) / limit))} used` : 'Profiles are never paused'}</span>
           </div>
         </div>
         <div className="aw-usage-notes">
@@ -116,7 +116,7 @@ export function BudgetsSettings({
           {projectEstimate ? <p className="aw-row-note" data-testid="budgets-estimate">{projectEstimate}, not counted against the limit</p> : null}
         </div>
         <BudgetExhaustionNotice exhausted={accounting.budget.exhausted} />
-        <ul className="aw-usage-bars" aria-label="Usage by agent">
+        <ul className="aw-usage-bars" aria-label="Usage by profile">
           {agents.map((a) => {
             const tokens = a.total_tokens ?? 0
             const color = agentColorVars(agentColor(a.agent))
@@ -167,15 +167,15 @@ export function BudgetsSettings({
 
       <SettingsGroup title="Limit">
         <SettingsRow
-          label="Pause agents working on their own"
+          label="Pause profiles working on their own"
           description="Once the project has used this many tokens, turns you did not ask for wait. Your own messages still run."
           control={
             <Switch
-              aria-label="Pause agents working on their own"
+              aria-label="Pause profiles working on their own"
               checked={limited}
               disabled={saving}
               onCheckedChange={(v) =>
-                onSetLimit(v ? Math.max(1_000_000, Math.ceil(((total ?? 0) * 1.25) / 1_000_000) * 1_000_000) : null, v ? 'Token limit on' : 'Token limit off: agents are no longer paused')
+                onSetLimit(v ? Math.max(1_000_000, Math.ceil(((total ?? 0) * 1.25) / 1_000_000) * 1_000_000) : null, v ? 'Token limit on' : 'Token limit off: profiles are no longer paused')
               }
             />
           }
@@ -194,13 +194,13 @@ export function BudgetsSettings({
                 disabled={saving}
                 value={String(Math.round((limit / 1_000_000) * 10) / 10)}
                 validate={(d) => (/^\d+(\.\d)?$/.test(d) && Number(d) > 0 ? null : 'Millions of tokens, like 40 or 12.5.')}
-                onCommit={(v) => onSetLimit(Math.round(Number(v) * 1_000_000), `Agents pause after ${v}M tokens`)}
+                onCommit={(v) => onSetLimit(Math.round(Number(v) * 1_000_000), `Profiles pause after ${v}M tokens`)}
               />
             }
           />
         ) : null}
       </SettingsGroup>
-      {agentBudget ? <SettingsGroup title="Agents">{agentBudget}</SettingsGroup> : null}
+      {agentBudget ? <SettingsGroup title="Profiles">{agentBudget}</SettingsGroup> : null}
     </SettingsPage>
   )
 }

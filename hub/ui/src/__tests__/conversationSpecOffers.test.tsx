@@ -132,7 +132,7 @@ describe('Draft from the spec page notice', () => {
     })
     mount(<NextSliceOfferNotice path="spec/changes/one/spec.json" />)
     await userEvent.click(await screen.findByRole('button', { name: 'Draft' }))
-    await userEvent.click(await screen.findByRole('button', { name: 'Open the conversation' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Open the thread' }))
     expect(window.location.pathname + window.location.search + window.location.hash).toContain('conv-9')
     expect(decodeURIComponent(window.location.href)).toContain('spec/changes/two/spec.json')
   })

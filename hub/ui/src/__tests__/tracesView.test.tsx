@@ -196,7 +196,7 @@ describe('TracesPage statistics', () => {
     await waitFor(() => expect(screen.getByTestId('traces-total-cost')).toHaveTextContent('$1.00'))
     expect(screen.getByTestId('traces-unpriced-note')).toHaveTextContent('1 unpriced run left out')
 
-    fireEvent.click(screen.getByRole('radio', { name: 'Conversation' }))
+    fireEvent.click(screen.getByRole('radio', { name: 'Thread' }))
     const groups = await screen.findAllByTestId('traces-group')
     expect(within(groups[0]!).getByTestId('traces-group-cost')).toHaveTextContent('$1.00')
     const unmeasured = within(groups[1]!).getByTestId('traces-group-cost')
@@ -226,10 +226,10 @@ describe('TracesPage statistics', () => {
     await screen.findByTestId('traces-totals')
     const switcher = screen.getByRole('radiogroup', { name: 'Group by' })
     expect(within(switcher).getAllByRole('radio').map((r) => r.textContent)).toEqual([
-      'None', 'Agent', 'Model', 'Task', 'Conversation', 'Kind', 'Day',
+      'None', 'Profile', 'Model', 'Task', 'Thread', 'Kind', 'Day',
     ])
     for (const [label, key] of [
-      ['Agent', 'agent'], ['Model', 'model'], ['Task', 'task'], ['Conversation', 'conversation'], ['Kind', 'kind'], ['Day', 'day'],
+      ['Profile', 'agent'], ['Model', 'model'], ['Task', 'task'], ['Thread', 'conversation'], ['Kind', 'kind'], ['Day', 'day'],
     ] as const) {
       fireEvent.click(within(switcher).getByRole('radio', { name: label }))
       await waitFor(() => expect(screen.getByTestId('traces-groups')).toHaveAttribute('data-grouping', key))
@@ -264,7 +264,7 @@ describe('TracesPage statistics', () => {
     })
     render(<TracesPage />, { wrapper })
     await screen.findByTestId('traces-totals')
-    fireEvent.click(screen.getByRole('radio', { name: 'Agent' }))
+    fireEvent.click(screen.getByRole('radio', { name: 'Profile' }))
     const beta = (await screen.findAllByTestId('traces-group'))[1]!
     fireEvent.click(within(beta).getByRole('button', { name: 'Only this' }))
     await waitFor(() => expect(totalsUrls().slice(-1)[0]!.searchParams.get('agent')).toBe('beta'))

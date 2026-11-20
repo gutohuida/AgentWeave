@@ -3,7 +3,7 @@
 /** Why a folded agent's composer refuses a turn, naming the profile; undefined for any other. */
 export function foldedComposerReason(agent: { name: string; folded_into?: string | null }): string | undefined {
   return agent.folded_into
-    ? `${agent.name} was folded into ${agent.folded_into}. This conversation is read-only; message ${agent.folded_into} instead.`
+    ? `${agent.name} was folded into ${agent.folded_into}. This thread is read-only; message ${agent.folded_into} instead.`
     : undefined
 }
 

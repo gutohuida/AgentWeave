@@ -207,7 +207,7 @@ describe('summaryForEvent', () => {
         task_id: 'task-7',
         reason: 'no eligible reviewer',
       })
-    ).toBe('no agent could review task-7: no eligible reviewer')
+    ).toBe('no profile could review task-7: no eligible reviewer')
   })
 
   it('says why a loop stopped', () => {

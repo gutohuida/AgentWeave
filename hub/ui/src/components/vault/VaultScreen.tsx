@@ -207,7 +207,7 @@ export function VaultScreen() {
     try {
       await archiveSource.mutateAsync(id)
       setSelectedId(null)
-      toast({ title: 'Archived', description: 'Agents no longer see it. Restore it from the archived list.', tone: 'success' })
+      toast({ title: 'Archived', description: 'Profiles no longer see it. Restore it from the archived list.', tone: 'success' })
     } catch (error) {
       return { error: readableApiError(error, 'Could not archive that source.') }
     }
@@ -234,7 +234,7 @@ export function VaultScreen() {
         })
         open(entry.id)
         watch()
-        toast({ title: `Added “${entry.name}”`, tone: 'success', description: 'Agents see it in their next turn.' })
+        toast({ title: `Added “${entry.name}”`, tone: 'success', description: 'Profiles see it in their next run.' })
       } catch (error) {
         return { error: readableApiError(error, 'Could not add that source.') }
       }
@@ -277,7 +277,7 @@ export function VaultScreen() {
       toast({
         title: added.length === 1 ? `Added “${added[0]!.name}”` : `Added ${added.length} files`,
         tone: 'success',
-        description: 'Agents see them in their next turn.',
+        description: 'Profiles see them in their next run.',
       })
     }
     if (refused.length) {

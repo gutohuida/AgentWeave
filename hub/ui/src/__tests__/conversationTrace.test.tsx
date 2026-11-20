@@ -356,7 +356,7 @@ describe('ConversationTraceDrawer', () => {
     fireEvent.change(screen.getByTestId('conversation-trace-from'), { target: { value: '1' } })
     fireEvent.change(screen.getByTestId('conversation-trace-to'), { target: { value: '24' } })
     fireEvent.change(screen.getByTestId('conversation-trace-since'), { target: { value: '1h' } })
-    expect(await screen.findByTestId('conversation-trace-empty')).toHaveTextContent('No turn')
+    expect(await screen.findByTestId('conversation-trace-empty')).toHaveTextContent('No run')
     fireEvent.click(screen.getByTestId('conversation-trace-show-all'))
     await waitFor(() => expect(screen.getAllByTestId('conversation-turn')).toHaveLength(24))
     expect(screen.queryByTestId('conversation-trace-empty')).toBeNull()

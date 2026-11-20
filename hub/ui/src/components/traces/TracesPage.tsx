@@ -115,10 +115,10 @@ function Subject({ trace, onNarrow }: { trace: TraceSummary; onNarrow: (patch: P
     return (
       <span className="aw-traces-subject" data-testid="trace-subject">
         <span className="aw-traces-subject-text">
-          <i>Conversation turn</i> · {subject.title}
+          <i>Thread</i> · {subject.title}
         </span>
         <Narrow
-          label={`Only turns of ${subject.title}`}
+          label={`Only runs of ${subject.title}`}
           onClick={() => onNarrow({ conversation: trace.conversation_id ?? '' })}
         />
       </span>
@@ -351,13 +351,13 @@ export function TracesPage({ request = null }: { request?: TracesRequest | null 
     <div className="aw-traces" data-testid="traces-view">
       <div className="aw-traces-filters" role="group" aria-label="Trace filters">
         <select
-          aria-label="Agent"
+          aria-label="Profile"
           data-testid="traces-filter-agent"
           value={filter.agent}
           onChange={(event) => change({ agent: event.target.value })}
           className="control-field"
         >
-          <option value="">All agents</option>
+          <option value="">All profiles</option>
           {agents.map((agent) => (
             <option key={agent.name} value={agent.name}>
               {agent.name}
@@ -394,9 +394,9 @@ export function TracesPage({ request = null }: { request?: TracesRequest | null 
           className="control-field"
         />
         <input
-          aria-label="Conversation"
+          aria-label="Thread"
           data-testid="traces-filter-conversation"
-          placeholder="Conversation"
+          placeholder="Thread"
           value={filter.conversation}
           onChange={(event) => change({ conversation: event.target.value })}
           className="control-field"
@@ -433,7 +433,7 @@ export function TracesPage({ request = null }: { request?: TracesRequest | null 
 
       {agentsError ? (
         <p role="alert" className="aw-traces-error">
-          {readableApiError(agentsError, 'The agents could not be listed, so the agent filter has no choices.')}
+          {readableApiError(agentsError, 'The profiles could not be listed, so the profile filter has no choices.')}
         </p>
       ) : null}
 
@@ -451,7 +451,7 @@ export function TracesPage({ request = null }: { request?: TracesRequest | null 
 
       {conversationRun ? (
         <p className="aw-traces-internal-note" data-testid="traces-conversation-note">
-          Showing one conversation’s runs.{' '}
+          Showing one thread’s runs.{' '}
           <button type="button" className="aw-link" data-testid="traces-open-conversation-trace" onClick={() => setConversationOpen(true)}>
             Open as one trace
           </button>
@@ -460,9 +460,9 @@ export function TracesPage({ request = null }: { request?: TracesRequest | null 
 
       {internal ? (
         <p className="aw-traces-internal-note" data-testid="traces-internal-note">
-          Showing the Hub’s own {internal.label.toLowerCase()}, not agents’ runs.{' '}
+          Showing the Hub’s own {internal.label.toLowerCase()}, not profiles’ runs.{' '}
           <button type="button" className="aw-link" onClick={() => change({ kind: null })}>
-            Back to agent runs
+            Back to profile runs
           </button>
         </p>
       ) : null}
@@ -533,7 +533,7 @@ export function TracesPage({ request = null }: { request?: TracesRequest | null 
       {conversationRun ? (
         <ConversationTraceDrawer
           conversationId={filter.conversation}
-          title={conversationRun.conversation_title?.trim() || 'New conversation'}
+          title={conversationRun.conversation_title?.trim() || 'New thread'}
           agent={conversationRun.agent ?? ''}
           open={conversationOpen}
           onOpenChange={setConversationOpen}

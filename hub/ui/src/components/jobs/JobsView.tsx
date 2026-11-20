@@ -242,7 +242,7 @@ export function JobRow({
             {job.session_mode === 'resume' ? (
               <>
                 <span aria-hidden="true">·</span>
-                <span>continues one conversation</span>
+                <span>continues one thread</span>
               </>
             ) : null}
           </div>
@@ -463,7 +463,7 @@ function JobsEmpty({ filter, onNew }: { filter: JobFilter; onNew: () => void }) 
       </span>
       <p className="aw-jobs-empty-title">{filter === 'all' ? 'No jobs yet' : filter === 'active' ? 'Nothing is running on a schedule' : 'Nothing paused or finished'}</p>
       <p className="aw-jobs-empty-text">
-        A job gives an agent a message on a schedule. A loop works through a document's tasks until they are done.
+        A job gives a profile a message on a schedule. A loop works through a document's tasks until they are done.
       </p>
       {filter === 'all' ? (
         <Button variant="outline" size="sm" onClick={onNew}>

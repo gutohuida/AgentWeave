@@ -224,7 +224,7 @@ describe('conversation workspace — proportions', () => {
     renderView()
     reportWidth(1600)
 
-    expect(resizer()).toHaveAttribute('aria-label', 'Resize conversation')
+    expect(resizer()).toHaveAttribute('aria-label', 'Resize thread')
     expect(resizer()).toHaveAttribute('aria-valuenow', String(CONVERSATION_DEFAULT_WIDTH))
 
     // The conversation is the left pane, so ArrowRight makes it wider.

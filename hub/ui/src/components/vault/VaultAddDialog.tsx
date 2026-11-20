@@ -131,7 +131,7 @@ export function VaultAddDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         title="Add to the vault"
-        description="Agents see the vault listed in every turn and read an entry when their work needs it."
+        description="Profiles see the vault listed in every run and read an entry when their work needs it."
         width={560}
         footer={
           <div className="flex w-full items-center gap-3">
@@ -240,8 +240,8 @@ export function VaultAddDialog({
                 onChange={setVisibility}
                 maxWidth={520}
                 options={[
-                  { value: 'tracked', label: 'In the repository', detail: 'Committed with the project, so teammates and their agents see it.', icon: 'call_split' },
-                  { value: 'private', label: 'Private, this machine', detail: 'Kept outside the repository. Only agents on this machine read it.', icon: 'lock' },
+                  { value: 'tracked', label: 'In the repository', detail: 'Committed with the project, so teammates and their profiles see it.', icon: 'call_split' },
+                  { value: 'private', label: 'Private, this machine', detail: 'Kept outside the repository. Only profiles on this machine read it.', icon: 'lock' },
                 ]}
               />
             </Field>

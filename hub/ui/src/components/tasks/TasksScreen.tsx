@@ -328,7 +328,7 @@ export function TasksScreen({
     <>
       {/* The agent filter and Start work's agent menu are built from the roster; unread, both would
           offer nobody. */}
-      <QueryErrorNotice failures={[['the agents', agentsError], ['the spec counts', boardsError]]} className="aw-board-notice" />
+      <QueryErrorNotice failures={[['the profiles', agentsError], ['the spec counts', boardsError]]} className="aw-board-notice" />
       {taskPage?.has_more ? (
         <div className="aw-board-notice" data-testid="tasks-truncated-banner">
           <Icon name="info" size={14} />
@@ -398,7 +398,7 @@ export function TasksScreen({
     // (and its scope picker) must stay then, so the operator can reach them.
     body = (
       <div className="aw-board-empty">
-        <EmptyState icon="task_alt" title="No tasks yet" description="Tasks an approved specification creates, or an agent adds, appear here." />
+        <EmptyState icon="task_alt" title="No tasks yet" description="Tasks an approved specification creates, or a profile adds, appear here." />
       </div>
     )
   }

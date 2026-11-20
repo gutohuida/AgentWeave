@@ -163,7 +163,7 @@ export function QuestionsPanel() {
             {readableApiError(error, 'The Hub did not return the pending questions.')}
           </p>
           <p className="mx-auto mt-2 text-xs" style={{ maxWidth: 320, color: 'var(--text-3)' }}>
-            An agent may be blocked on an answer this list cannot show. An empty screen here does
+            A run may be blocked on an answer this list cannot show. An empty screen here does
             not mean nothing is waiting on you.
           </p>
         </div>
@@ -203,7 +203,7 @@ export function QuestionsPanel() {
       {blocking.length > 0 && (
         <section className="rounded-[var(--radius-xl)] p-4" aria-labelledby="blocking-questions" style={{ background: 'color-mix(in srgb, var(--red) 6%, transparent)', border: '1px solid color-mix(in srgb, var(--red) 20%, transparent)' }}>
           <h2 id="blocking-questions" className="mb-3 flex items-center gap-2 text-[13px] font-medium" style={{ color: 'var(--red)' }}>
-            <Icon name="warning" size={17} /> Blocking — agents are waiting for your answer
+            <Icon name="warning" size={17} /> Blocking — runs are waiting for your answer
           </h2>
           <div className="space-y-3">
             {blocking.map((question) => (
@@ -224,7 +224,7 @@ export function QuestionsPanel() {
         </section>
       )}
 
-      {unanswered?.length === 0 && <EmptyState icon="help" title="No pending questions" description="Agent questions will appear here." />}
+      {unanswered?.length === 0 && <EmptyState icon="help" title="No pending questions" description="Questions from profiles will appear here." />}
 
       <PermissionDecisions />
 

@@ -454,7 +454,7 @@ export default function App() {
         <ArchivedAgentNotice agentName={agentName} />
       ) : (
         <div className="flex h-full items-center justify-center" style={{ color: 'var(--text-3)' }}>
-          {allAgentsError ? 'Agent unavailable: the full roster could not be read.' : 'Agent unavailable.'}
+          {allAgentsError ? 'Profile unavailable: the full roster could not be read.' : 'Profile unavailable.'}
         </div>
       )
     )

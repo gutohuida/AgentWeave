@@ -306,22 +306,22 @@ def send_message(
     """Send an attributable message through the recipient's durable inbound queue.
 
     The operator is not a message recipient: what you write in your reply is what they read in
-    this conversation. Record a result on a task with update_task's notes; if you need their
+    this thread. Record a result on a task with update_task's notes; if you need their
     answer before you can continue, call ask_user.
 
     Args:
-        to_agent: Exact name of a registered agent in this project, as listed in your context.
+        to_agent: Exact name of a registered profile in this project, as listed in your context.
         subject: Short summary line.
         content: The message body.
         message_type: One of "message", "delegation", "review", "discussion",
             "direct_trigger". Leave unset for an ordinary message.
         task_id: Optional task this message relates to.
-        conversation_id: Which of the recipient's conversations to send into. Leave unset to
+        conversation_id: Which of the recipient's threads to send into. Leave unset to
             continue the thread already bound between you and them, or to start one if none is
-            bound yet. A checkpoint cutover, yours or theirs, closes the conversation it ends
+            bound yet. A checkpoint cutover, yours or theirs, closes the thread it ends
             and opens a successor that keeps the binding: your next message reaches the
             successor, which begins from the checkpoint and not from the old transcript, under
-            a new conversation id. Sending to an archived conversation fails and returns your
+            a new thread's id. Sending to an archived thread fails and returns your
             content back, so you can retry without it.
         start_new_thread: Bypass the bound thread and start a fresh one with this recipient,
             which becomes the new bound thread for later messages. Refused together with an
@@ -368,7 +368,7 @@ def create_task(
     builder: Optional[str] = None,
     checker: Optional[str] = None,
 ) -> Dict[str, Any]:
-    """Create a task attributed to the bound agent.
+    """Create a task attributed to the bound profile.
 
     A task against a spec joins its build and goes to that build's people, unless it names its own.
     If the spec's latest build had finished, this reopens it and the operator is warned; if it was
@@ -378,7 +378,7 @@ def create_task(
     Args:
         title: Short task title.
         description: What the task involves.
-        assignee: Exact name of a registered agent, or unset to leave it unassigned.
+        assignee: Exact name of a registered profile, or unset to leave it unassigned.
         priority: One of "low", "medium", "high", "critical".
         requirements: Free text describing what the task must satisfy. Not a reference — use
             requirement_ids to say which specification requirements this task serves.
@@ -388,12 +388,12 @@ def create_task(
         spec_document: The document path whose identifiers to resolve against. Only needed when
             more than one document in the project declares the same identifier.
         acceptance_criteria: Optional list of acceptance criteria.
-        loop_id: Add this task directly to a loop's queue. Only the loop's own agent, before it
-            has fired, may do this — send_message to the loop's agent otherwise.
+        loop_id: Add this task directly to a loop's queue. Only the loop's own profile, before it
+            has fired, may do this — send_message to the loop's profile otherwise.
         depends_on: Ids of the tasks this one waits on, like ["task-1a2b3c4d"]. Each must be a
             task in this project; an unknown id is refused, naming it, and no task is created.
-        builder: The open agent who builds it, where it differs from its build's default.
-        checker: The open agent who checks it, where it differs from its build's default.
+        builder: The open profile that builds it, where it differs from its build's default.
+        checker: The open profile that checks it, where it differs from its build's default.
     """
     return _hub_request(
         "POST",
@@ -431,7 +431,7 @@ def list_tasks(
     (no `tasks`), and you open the file with your file-reading tool.
 
     Args:
-        agent: Only tasks assigned to this agent.
+        agent: Only tasks assigned to this profile.
         limit: How many to return, 1 to 1000. Default 100.
         offset: How many to skip, for the next page. Default 0.
     """
@@ -449,7 +449,7 @@ def task_history(task_id: str) -> Dict[str, Any]:
     """Who moved this task, when, and from what status to what.
 
     Answers `{"transitions": [...]}`, oldest first. Each entry carries `from_status`, `to_status`,
-    whether the operator or a run asked (`actor_kind`), which agent's run it was (`actor_agent`),
+    whether the operator or a run asked (`actor_kind`), which profile's run it was (`actor_agent`),
     whether the Hub moved it on that run's behalf (`origin: "runtime"`) or a scheduled loop or flow
     did (`origin: "job"`, with `job_id`, `job_name` and `job_kind`), and the digest of the policy
     that governed it. The task's own fields cannot answer this: they hold only the latest
@@ -488,7 +488,7 @@ def update_task(
             "rejected".
         notes: Why, in your own words - required reading for whoever looks at this task next.
             Moving a task to "revision_needed" or "rejected" without notes leaves the author with
-            only a status change and no reason; a message to another agent does not appear on the
+            only a status change and no reason; a message to another profile does not appear on the
             task record itself. Overwrites the task's existing notes, so restate anything from a
             prior round that still matters.
         requirement_ids: Requirement IDs this task serves, added to whatever it already serves.
@@ -526,14 +526,14 @@ def update_task(
 
 @_tool()
 def hand_out_task(task_id: str, agent: str, review: bool = False) -> Dict[str, Any]:
-    """A build's lead only: hand one of its tasks to an agent, and start that agent's turn on it.
+    """A build's lead only: hand one of its tasks to a profile, and start that profile's run on it.
 
     Answered only for the lead of the task's running lead-driven build; any other caller gets 403.
 
     Args:
         task_id: The task, from your brief.
         agent: One of the build's builders (to build it), or of its reviewer pool (to review it);
-            any open agent where the build names none.
+            any open profile where the build names none.
         review: True to hand completed work to `agent` for review rather than to build.
     """
     return _hub_request("POST", f"/tasks/{task_id}/hand-out", {"agent": agent, "review": review})
@@ -567,8 +567,8 @@ def mend_task_branch(task_id: str, commit: str = "") -> Dict[str, Any]:
 
 @_tool()
 def mend_withdraw_input(entry_id: str) -> Dict[str, Any]:
-    """The mender only: withdraw input waiting in another agent's queue (a delivery that was
-    refused), so the next firing briefs that agent again."""
+    """The mender only: withdraw input waiting in another profile's queue (a delivery that was
+    refused), so the next firing briefs that profile again."""
     return _hub_request("POST", f"/mender/queue/{entry_id}/withdraw", {})
 
 
@@ -579,8 +579,8 @@ def mend_reset_task(task_id: str, status: str, assignee: str = "") -> Dict[str, 
     Args:
         task_id: The task.
         status: "assigned" (to `assignee`), "pending" (back to the queue), or "under_review"
-            (finished work: queues `assignee`'s review turn on it).
-        assignee: The open agent to give it to, with status "assigned"; the reviewer, with
+            (finished work: queues `assignee`'s review run on it).
+        assignee: The open profile to give it to, with status "assigned"; the reviewer, with
             "under_review".
     """
     return _hub_request(
@@ -594,7 +594,7 @@ def mend_end_stall(stall_id: str, outcome: str, summary: str) -> Dict[str, Any]:
 
     Args:
         stall_id: The stall your brief names.
-        outcome: "fixed" once the agents can move again, or "gave_up".
+        outcome: "fixed" once the profiles can move again, or "gave_up".
         summary: Two or three plain sentences for the operator: what was wrong, what you did, and
             anything they still need to do.
     """
@@ -611,8 +611,8 @@ def ask_user(
     """Ask the operator one or more questions and wait for the answers.
 
     Ask everything you need in a single call. The operator steps through them in one sitting,
-    which is one interruption instead of several, and your turn waits once instead of once per
-    question. Where your turn's instructions say how many questions to ask per call, follow them.
+    which is one interruption instead of several, and your run waits once instead of once per
+    question. Where your run's instructions say how many questions to ask per call, follow them.
 
     Args:
         questions: Between 1 and 4 questions, each a dict with:
@@ -630,7 +630,7 @@ def ask_user(
         blocking: Leave this alone to wait for the answers, which is almost always what you
             want. Set it False only to ask something you genuinely do not need answered before
             continuing. The questions stay with the operator as a note and the call returns at
-            once; the answer arrives later as a message in this conversation, so there is no need
+            once; the answer arrives later as a message in this thread, so there is no need
             to poll `get_answer` (though you may). The Hub can also record your questions as a
             note whatever you pass, and the result then says so.
 
@@ -816,13 +816,13 @@ def submit_checkpoint_notes(
     suspicions: Optional[List[str]] = None,
     warnings: Optional[List[str]] = None,
 ) -> Dict[str, Any]:
-    """Record what you know that this conversation's record does not, for its next checkpoint.
+    """Record what you know that this thread's record does not, for its next checkpoint.
 
-    The Hub writes the checkpoint itself from the conversation record, and already knows which
+    The Hub writes the checkpoint itself from the thread's record, and already knows which
     files changed, which tasks are assigned, what is unanswered, and when everything happened.
     Do not restate any of that here.
 
-    Write for somebody else. The checkpoint these notes feed is read by whichever agent the
+    Write for somebody else. The checkpoint these notes feed is read by whichever profile the
     Hub picks up the work next, which may not be you and may not even be working your task —
     a reviewer of what you just finished reads it too. Anything you would only understand
     yourself is lost at that handover, so name the file, the task and the decision in full
@@ -831,7 +831,7 @@ def submit_checkpoint_notes(
     Give only what cannot be read back from the transcript:
       intent     — what was in the middle of being done, and what comes next.
       suspicions — what is believed but unverified, and what would confirm or refute it.
-      warnings   — what the next agent should not repeat, assume, or waste time re-deriving.
+      warnings   — what the next run should not repeat, assume, or waste time re-deriving.
 
     Keep it brief; a few hundred words in total is right. The Hub refuses more than: intent,
     1500 characters; suspicions and warnings, each a list of at most 8 strings of at most 400
@@ -854,7 +854,7 @@ def submit_checkpoint_notes(
 def list_checkpoints(agent: Optional[str] = None) -> List[Dict[str, Any]]:
     """The checkpoints you may open, newest first — yours, and any peer's you are granted.
 
-    A checkpoint is the summary the Hub writes when a conversation is cut over: what its agent
+    A checkpoint is the summary the Hub writes when a thread is cut over: what its profile
     was doing, what it decided, what it ruled out and what it left unfinished. Reading a peer's
     before you review or continue their work is cheaper and more reliable than re-deriving it,
     and `agent` narrows the list to one of them.
@@ -869,7 +869,7 @@ def list_checkpoints(agent: Optional[str] = None) -> List[Dict[str, Any]]:
 
 @_tool()
 def read_checkpoint(checkpoint_id: str) -> Dict[str, Any]:
-    """One checkpoint in full, exactly as an agent continuing that conversation receives it.
+    """One checkpoint in full, exactly as a run continuing that thread receives it.
 
     Use `list_checkpoints` to find the id. A checkpoint you may not read answers not-found,
     whether or not it exists, so treat not-found on an id you were given as that boundary rather
@@ -898,8 +898,8 @@ def vault_map() -> Dict[str, Any]:
 
     Meeting transcripts, business rules, documents and examples the operator uploaded. The map is
     in areas, a source followed by the facts that cite it, and the areas are ordered by how often
-    agents have read them, then newest first; `fetches` is how many times agents have read an
-    entry, so what comes first is what agents have needed most. Each entry has its `id`, `type`,
+    profiles have read them, then newest first; `fetches` is how many times profiles have read an
+    entry, so what comes first is what profiles have needed most. Each entry has its `id`, `type`,
     `name`, `fetches` and `opening` lines; read one in full with `vault_read`. **Check
     here before guessing at what the business decided.** An entry with `available: false` is
     private to another machine (`holder` names it): its text is not here, so ask the operator.
@@ -1039,8 +1039,8 @@ def save_dashboard(
 
     **Choose the kind from the question.** One figure ("this week's cost", "open tasks"): `number`.
     A ranking or comparison, "X per Y" with one value per label ("cost per spec", "tasks per
-    agent"): `bar`, never a table, even when it reads as a breakdown. A breakdown by two labels,
-    "X per Y by Z" ("send-backs per model by reason", "runs per agent by status"): `stacked_bar`,
+    profile"): `bar`, never a table, even when it reads as a breakdown. A breakdown by two labels,
+    "X per Y by Z" ("send-backs per model by reason", "runs per profile by status"): `stacked_bar`,
     never a table -- one bar per Y, one stacked part per Z. Change over time, "X per day" ("runs
     per day"): `line`, even though it says "per". Detail rows to read one by one ("the latest
     failed runs"): `table`, the only question a table answers. The app draws the chart and
@@ -1050,12 +1050,12 @@ def save_dashboard(
 
     **Every value column stays a number.** The app formats the figures, so a query returns them
     raw: `round(sum(api_equivalent_usd_micros) / 1e6, 2) as "Cost (USD)"`, never
-    `printf('$%.2f', ...)` or `'$' || ...`, which turn the value into text that a number, bar,
+    `printf('$%.2f', ...)` or `'$' || ...`, which make the value text that a number, bar,
     stacked bar or line cannot draw. Put the unit in the column's alias instead.
 
     **A stacked bar's query pivots: one row per bar, one numeric column per part.** A query that
     groups by both labels gives long rows (`model, reason, count`), which do not stack; keep the
-    first label in `group by` and turn each value of the second into its own column with
+    first label in `group by` and give each value of the second into its own column with
     `sum(<column> = '<value>') as "<Value>"`, one per value (run a `select distinct` first to learn
     them): `select model as "Model", sum(reason = 'defect') as "Defect", sum(reason = 'flaky') as
     "Flaky" ... group by model`. Reshape the query this way rather than falling back to a table.
@@ -1074,7 +1074,7 @@ def save_dashboard(
     **Saving is this call; nothing is saved until you make it.** Once every query has run, call
     `save_dashboard` with all the panels at once. Do not write the panels out in your reply in its
     place, or say you are about to call it and stop: a dashboard you only described does not exist.
-    Your turn is done when this call has answered with the dashboard's `id`.
+    Your run is done when this call has answered with the dashboard's `id`.
 
     **To change a dashboard that already exists, use `edit_dashboard`**, which changes only what
     you name. `dashboard_id` replaces that dashboard whole (keep each panel's `id` from
@@ -1099,7 +1099,7 @@ def list_dashboards() -> Dict[str, Any]:
     the `dash-...` id the message gives: that is the one. Two or more that fit (asked for "team
     health" with "Team health North" and "Team health South" listed), none, or no name at all:
     ask the operator which, naming the candidates, and change nothing -- also when the question
-    is declined or goes unanswered: end your turn without writing rather than pick one."""
+    is declined or goes unanswered: end your run without writing rather than pick one."""
     return _hub_request("GET", "/dashboards")
 
 
@@ -1123,7 +1123,7 @@ def edit_dashboard(
     North" and "Team health South" -- or none does, or the request names none, do not pick one:
     ask the operator which (`ask_user`, or ask in your reply, naming the candidates), and call
     nothing that writes -- no edit, and never `save_dashboard` to make a second one. A question
-    declined or left unanswered is not permission to guess: end your turn without writing (the
+    declined or left unanswered is not permission to guess: end your run without writing (the
     Hub refuses this run's dashboard writes after it, 409 `question_unanswered`). The Hub also
     refuses an edit, replace or undo of a dashboard your request did not name by its `dash-` id
     or its whole name, 409 `dashboard_not_named` (an answer to your `ask_user` counts as part of
@@ -1271,11 +1271,11 @@ def vault_add(
 
 @_tool()
 def request_agent(name: str, template: str, task: str) -> Dict[str, Any]:
-    """Request a new agent, modelled on an existing open agent of this project.
+    """Request a new profile, modelled on an existing open profile of this project.
 
-    `template` is that agent's exact name; the new agent takes its bound runner, charter and
-    runner configuration, under the project agent budget. It inherits no grant, no permission
-    posture, and no per-agent override — those stay the operator's to set on the new agent.
+    `template` is that profile's exact name; the new profile takes its bound runner, charter and
+    runner configuration, under the project profile budget. It inherits no grant, no permission
+    posture, and no per-profile override — those stay the operator's to set on the new profile.
     """
     return _hub_request(
         "POST", "/agents/request", {"name": name, "template": template, "task": task}
@@ -1297,24 +1297,24 @@ def create_job(
 ) -> Dict[str, Any]:
     """Create recurring work.
 
-    Needs the project setting `allow_agent_jobs`, which only the operator turns on. While it is
+    Needs the project setting `allow_agent_jobs`, which only the operator switches on. While it is
     off, this is refused at once (403) and the Hub asks the operator whether to enable it, on their
     Questions destination; the refusal names that question. It is a refusal, not a wait: do not poll
     and do not repeat the call. If they enable it, their answer reaches you as a message.
 
     Args:
         name: Job name.
-        agent: Exact name of the registered agent the job triggers.
-        message: The message delivered to that agent on each run.
+        agent: Exact name of the registered profile the job triggers.
+        message: The message delivered to that profile on each run.
         cron: Cron expression for the schedule. Defaults to every five minutes, which is cheap:
-            a firing whose agent is already running is refused before it claims or queues
+            a firing whose profile is already running is refused before it claims or queues
             anything and records nothing at all, and a firing against a stalled queue counts on
             the existing record rather than adding another. So a frequent schedule costs a query
             and no rows, and it bounds how long a finished step waits before the next one starts.
             Choose a slower one only when the work itself is periodic — nightly, weekly — rather
             than to avoid waste.
-        session_mode: "new" to start a fresh conversation each run, "resume" to continue.
-        enabled: False creates the job switched off, so it never fires until toggle_job turns
+        session_mode: "new" to start a fresh thread each run, "resume" to continue.
+        enabled: False creates the job switched off, so it never fires until toggle_job switches
             it on. Ask for that here rather than creating it on and toggling it after: the
             schedule could fire in between.
     """
@@ -1347,23 +1347,23 @@ def create_loop(
 ) -> Dict[str, Any]:
     """Create a loop: recurring work with a stated purpose and a stop condition.
 
-    One agent, one task at a time. Use create_flow instead when the work comes from an approved
-    specification document and should be decomposed across several agents, with finished work
+    One profile, one task at a time. Use create_flow instead when the work comes from an approved
+    specification document and should be decomposed across several profiles, with finished work
     reviewed by somebody other than whoever did it.
 
     Continuity across firings is by checkpoint (see submit_checkpoint_notes), never by a
     resumed session — every firing starts fresh. Refused outright with no stop condition: a
     loop that cannot stop is not created, and refused with a document: that is a flow.
 
-    Needs the project setting `allow_agent_jobs`, which only the operator turns on. While it is
+    Needs the project setting `allow_agent_jobs`, which only the operator switches on. While it is
     off, this is refused at once (403) and the Hub asks the operator whether to enable it, on their
     Questions destination; the refusal names that question. It is a refusal, not a wait: do not poll
     and do not repeat the call. If they enable it, their answer reaches you as a message.
 
     Args:
         name: Job name.
-        agent: Exact name of the registered agent the loop triggers.
-        message: The message delivered to that agent on each firing.
+        agent: Exact name of the registered profile the loop triggers.
+        message: The message delivered to that profile on each firing.
         cron: Cron expression for the schedule.
         purpose: What this loop exists to do — carried into every firing's briefing.
         stop_at: ISO-8601 timestamp after which the loop stops firing. At least one of
@@ -1433,28 +1433,28 @@ def create_flow(
     """Create a flow: a loop that decomposes an approved specification document.
 
     A flow differs from a loop in what it does with its queue, not in what it is. Each firing
-    starts every task whose prerequisites are met and for which an agent is available, so
+    starts every task whose prerequisites are met and for which a profile is available, so
     independent work runs in parallel; and a task somebody finished becomes claimable by anybody
     except its author, which is how work gets reviewed without anyone being asked to hand it over.
 
-    `agent` is the default, not the mandate — the agent a firing uses when nothing else has said
+    `agent` is the default, not the mandate — the profile a firing uses when nothing else has said
     otherwise. Reviewers are resolved per task: the task's `reviewer`, else its document's
     `delivery.reviewer`; a named reviewer that does not resolve is surfaced, never replaced; with
-    no name, any agent that is idle and holding no work. A step nobody can review is surfaced to
+    no name, any profile that is idle and holding no work. A step nobody can review is surfaced to
     the operator; the rest of the queue carries on.
 
     Everything else is a loop's: one stop condition is required, continuity across firings is by
     checkpoint rather than a resumed session, and the checkpoint is the flow's rather than any one
-    agent's — so a reviewer starts from what the implementer recorded.
+    profile's — so a reviewer starts from what the implementer recorded.
 
-    Needs the project setting `allow_agent_jobs`, which only the operator turns on. While it is
+    Needs the project setting `allow_agent_jobs`, which only the operator switches on. While it is
     off, this is refused at once (403) and the Hub asks the operator whether to enable it, on their
     Questions destination; the refusal names that question. It is a refusal, not a wait: do not poll
     and do not repeat the call. If they enable it, their answer reaches you as a message.
 
     Args:
         name: Job name.
-        agent: Exact name of the registered agent this flow fires by default.
+        agent: Exact name of the registered profile this flow fires by default.
         message: The message delivered on each firing, after the briefing.
         spec_document_id: The specification document this flow decomposes. Required — a flow
             without one is a loop. Tasks materialised from the document, once it is approved, are
@@ -1535,7 +1535,7 @@ def archive_job(job_id: str) -> Dict[str, Any]:
     "explicit direction from the operator" means. This is the first tool on this surface with
     an always-confirm rule — do not treat it as a precedent for any other tool.
 
-    Refused if the job has a loop: a loop is archived by the operator only, never an agent
+    Refused if the job has a loop: a loop is archived by the operator only, never a profile
     (mirrors `create_loop`'s "continuity is by checkpoint, not resume" rule).
 
     Refused before any of that if the project setting `allow_agent_jobs` is off: that refusal is
@@ -1544,8 +1544,8 @@ def archive_job(job_id: str) -> Dict[str, Any]:
 
     **The rule above is the Hub's, not this tool's** (§3.2 of
     `2026-09-07-an-agent-without-mcp-is-not-told-it-has-nothing`, 2026-09-09). This function used to
-    ask the operator itself and only then call the route; the route asked nothing, so an agent on the
-    HTTP access path was governed by the allowance alone. Now the route refuses with
+    ask the operator itself and only then call the route; the route asked nothing, so a profile on
+    the HTTP access path was governed by the allowance alone. Now the route refuses with
     `operator_direction_required` and opens the request, and this waits on it — which is why the
     first call below is the archive and not a question. Do **not** reinstate an ask here: two
     independent confirmations for one archive is a worse product than none, and the second copy is
@@ -1578,7 +1578,7 @@ def archive_job(job_id: str) -> Dict[str, Any]:
 def toggle_job(job_id: str, enabled: bool) -> Dict[str, Any]:
     """Enable or disable recurring work.
 
-    Needs the project setting `allow_agent_jobs`, which only the operator turns on. While it is
+    Needs the project setting `allow_agent_jobs`, which only the operator switches on. While it is
     off, this is refused at once (403) and the Hub asks the operator whether to enable it, on their
     Questions destination; the refusal names that question. It is a refusal, not a wait: do not poll
     and do not repeat the call. If they enable it, their answer reaches you as a message.
@@ -1590,7 +1590,7 @@ def toggle_job(job_id: str, enabled: bool) -> Dict[str, Any]:
 def run_job(job_id: str) -> Dict[str, Any]:
     """Trigger recurring work immediately.
 
-    Needs the project setting `allow_agent_jobs`, which only the operator turns on. While it is
+    Needs the project setting `allow_agent_jobs`, which only the operator switches on. While it is
     off, this is refused at once (403) and the Hub asks the operator whether to enable it, on their
     Questions destination; the refusal names that question. It is a refusal, not a wait: do not poll
     and do not repeat the call. If they enable it, their answer reaches you as a message.
@@ -5371,7 +5371,7 @@ def approve_tool_call(
     input: Dict[str, Any],  # noqa: A002 - Claude sends this key; the name is not ours to choose
     tool_use_id: str = "",
 ):
-    """Runtime approval endpoint. Not an agent capability — the harness calls this, not you."""
+    """Runtime approval endpoint. Not a profile's tool — the harness calls this, not you."""
     tool_input = input or {}
     if os.environ.get("AW_PERMISSION_POSTURE", "").strip() == OPERATOR_POSTURE:
         # The Hub's own tools are still decided here rather than put to the operator: asking a
@@ -5432,7 +5432,7 @@ def create_spec_document(
 
     Use this the moment you have something worth writing up: a finding, a proposal, a design
     worth recording. It creates the document and returns immediately so you keep working in the
-    same turn — there is nothing to wait for and nobody to ask.
+    same run — there is nothing to wait for and nobody to ask.
 
     This is step one of a three-call flow: `create_spec_document` → work out the subject →
     `rename_spec_document` → `submit_spec_document`. The `path` this returns is a placeholder —
@@ -5458,7 +5458,7 @@ def create_spec_document(
 
     Returns the minted `path` and the `phase` it starts in (`exploring`). For a `change-spec` it
     also returns the `step` the document starts at (`intake`), its `size` (not set yet), its
-    `journey` and the `instructions` for that step: follow them now, in this turn, exactly as you
+    `journey` and the `instructions` for that step: follow them now, in this run, exactly as you
     would for a document you were handed. A roadmap has no journey and returns none of these.
     """
     body: Dict[str, Any] = {}
@@ -5524,8 +5524,8 @@ def submit_spec_document(
     saving an incomplete one is not an error. The response lists what still blocks its approval,
     exactly as the operator's Check shows it; the operator may check while you keep writing.
 
-    **A save is based on the copy your conversation last read or saved.** If somebody else saved
-    the document since (another thread, another agent, the operator), the save is refused with
+    **A save is based on the copy your thread last read or saved.** If somebody else saved
+    the document since (another thread, another profile, the operator), the save is refused with
     `document_changed`, naming the document, and nothing is written: call `read_spec_document`
     again, make your change to what it holds now, and submit that. A document read back and
     submitted as it is stays accepted.
@@ -5554,7 +5554,7 @@ def submit_spec_document(
       and `checked_by` (who checks it, e.g. "agent" or "operator"). One per behaviour, binary
       pass or fail. A criterion without `how_to_check` or `checked_by` draws a
       `criterion_without_check` warning, and approval lists it. A requirement's criteria
-      become the standard rendered into the implementer's and the reviewer's turn once a task
+      become the standard rendered into the implementer's and the reviewer's run once a task
       satisfying it is materialised.
 
     `tasks` — objects with `key`, `description` (one concrete unit of work, not "build the whole
@@ -5562,7 +5562,7 @@ def submit_spec_document(
       asked for), and optionally `title`. Approving the document creates these as real tasks, and
       `title` is the name the board shows — a few words, not the sentence. Without one a name is
       derived from the description, which reads as prose because that is what it is. A task may
-      name its `builder` and its `checker` (one agent each, by name; the checker both tests the
+      name its `builder` and its `checker` (one profile each, by name; the checker both tests the
       work and records its verdict), where they differ from the delivery's defaults. A task may
       also name sibling task keys in `depends_on`; it is not started until they are done. Tasks
       expected to edit the same file are chained with `depends_on`, so same-file tasks are built
@@ -5591,10 +5591,10 @@ def submit_spec_document(
       when they build it, and Build opens with it filled in. Either
       `{"mode": "flow", "agent": "<name>", "builder": "<name>", "checker": "<name>",
       "stop_when_queue_empties": true, "stop_at": None, "cron": "*/5 * * * *"}` (a flow: at least
-      one of `stop_when_queue_empties`/`stop_at` must be set, `agent` is the default agent's name
+      one of `stop_when_queue_empties`/`stop_at` must be set, `agent` is the default profile's name
       from the open roster, `builder` builds every task that names no `builder` (empty: `agent`),
-      `checker` checks every task whose own `checker` is empty -- one agent tests the work and
-      records its verdict; leave it out and any free agent checks. An older document's `reviewer`
+      `checker` checks every task whose own `checker` is empty -- one profile tests the work and
+      records its verdict; leave it out and any free profile checks. An older document's `reviewer`
       and `tester` are still read as checkers, the tester first -- and `stop_at` is an ISO-8601
       timestamp carrying a timezone) or `{"mode": "none"}` (no flow: the tasks go on the board and
       are started by hand). Add `reasons`, one sentence per choice keyed `mode`, `agent`,
@@ -5682,12 +5682,12 @@ def rename_spec_document(path: str, subject: str) -> Dict[str, Any]:
     the document actually covers, call this.
 
     Args:
-        path: The document's current path, as given in your turn context.
+        path: The document's current path, as given in your run's context.
         subject: What the document is about, in plain words — "Personal houseplant watering
             tracker". Not a path and not a slug: the Hub derives the path from this.
 
     Returns the new `path` and the `previous_path`. **Use the new path for anything else you do
-    with this document in this turn**, including `submit_spec_document` — the old one no longer
+    with this document in this run**, including `submit_spec_document` — the old one no longer
     resolves.
 
     Refused when the document is approved, when the subject contains no usable words, or when
@@ -5715,11 +5715,11 @@ def set_spec_size(path: str, size: SpecSize, reason: str) -> Dict[str, Any]:
 @_tool()
 def advance_spec_step(path: str, to: str = "") -> Dict[str, Any]:
     """Move a change document to its next step, or to the step named in `to`. Call it only after
-    the operator chose to continue (here, or in a fresh conversation) through `ask_user`.
+    the operator chose to continue (here, or in a fresh thread) through `ask_user`.
 
     Never refused for something the step left unwritten: the answer's `missing` lists it, so say
     so to the operator. The answer's `instructions` are the new step's: follow them now if the
-    operator chose to continue here, otherwise end your turn.
+    operator chose to continue here, otherwise end your run.
     """
     body: Dict[str, Any] = {"path": path}
     if to:
@@ -5752,15 +5752,15 @@ def read_spec_document(
 
     **Use this before writing code against a document.** The document lives in the project
     directory, not in your working copy, so you almost certainly cannot open it as a file. Working
-    from a summary, or from another agent's description of it, is how an implementation quietly
+    from a summary, or from another profile's description of it, is how an implementation quietly
     stops matching what was approved.
 
     Args:
-        path: The document's path, as given in your turn context, or its id (`spdoc-…`).
+        path: The document's path, as given in your run's context, or its id (`spdoc-…`).
         include: `requirements` (the default) returns the problem, scope and the requirements.
             `outline` returns each requirement's identifier, key, modal, statement and state only.
             `full` adds the design, declared tasks, algorithms, evidence and delivery (the flow,
-            agent, reviewer and schedule) sections where they fit; read `delivery` before you submit
+            `agent`, reviewer and schedule) sections where they fit; read `delivery` before you submit
             a document back, because a submit without it removes it. A section's name (`design`, `problem`, …) reads that one section on its own.
             `waiting`, on a capability, reads its `waiting_changes`: the changes naming it that
             are not folded or archived, each `{path, title, phase, built, first_approved_at}`,
@@ -5826,8 +5826,8 @@ def record_evidence(
     evidence for its requirements has been accepted — without it the operator is told there is
     nothing to merge, and you are the one who could have prevented that.
 
-    Evidence enters `awaiting`, never `accepted`. A careful agent and a careless one report success
-    in the same words with the same authority, so what you record is a claim until the agent
+    Evidence enters `awaiting`, never `accepted`. A careful run and a careless one report success
+    in the same words with the same authority, so what you record is a claim until the profile
     reviewing the task decides on it: its verdict accepts your evidence when it approves the task
     and rejects it when it sends the task back. Give it what it needs to judge: the command you
     ran, what it printed, and whether the piece covers the whole requirement.
@@ -5854,13 +5854,13 @@ def record_evidence(
             (say which part in the summary). Leave it empty only if you cannot tell. A requirement
             whose accepted evidence is all `partial` reads in progress, not verified.
 
-    Recording the same requirement again in the same turn, on the same task, **revises** your
+    Recording the same requirement again in the same run, on the same task, **revises** your
     undecided row rather than adding a second: the answer carries the same `id` and
     `revised: true`.
 
     Returns the evidence `id`, its `identifier`, its `review_state` and the `footprint` captured for
     it — the branch and commit your evidence has been attached to. Read it. If its
-    `outside_workspace_writes` is a non-empty list, your turn wrote into a directory that footprint
+    `outside_workspace_writes` is a non-empty list, your run wrote into a directory that footprint
     does not describe, so the tree your evidence names is missing part of your own work; say so in
     the summary while somebody can still act on it.
     """
@@ -5921,7 +5921,7 @@ def confirm_acceptance_criteria(path: str, confirmations: List[Dict[str, str]]) 
     change is built.
 
     A confirmation stops counting when the criterion is reworded or its guard flag changes; confirm
-    it again then. Any agent may confirm, only while the document is exploring; on an approved
+    it again then. Any profile may confirm, only while the document is exploring; on an approved
     document it is refused until the operator reopens it. All or none: one refused entry records
     nothing.
 
@@ -5953,9 +5953,9 @@ def amend_spec_document(
 ) -> Dict[str, Any]:
     """Amend an approved specification document: a tester at once, an author or the lead by proposal.
 
-    A turn testing a task of this document amends it at once: recorded with you as its author and
+    A run testing a task of this document amends it at once: recorded with you as its author and
     this run, **not reviewed** until the operator reviews it. The builder never amends.
-    An agent that wrote the document before approval, or the lead of its running build, makes a
+    A profile that wrote the document before approval, or the lead of its running build, makes a
     **proposal** instead: nothing changes until the operator accepts (applied then, or refused as
     stale) or declines it with a reason, and you are told either way. Anyone else is refused.
 
@@ -5975,7 +5975,7 @@ def amend_spec_document(
               `criterion` its new key, `change` is `{given, when, then, how_to_check?, checked_by?}`.
             `change_criterion` — `criterion` and the fields to change in `change`.
             `remove_criterion` — `criterion`.
-            `add_slice` — on an approved roadmap, only in a conversation the operator opened
+            `add_slice` — on an approved roadmap, only in a thread the operator opened
               with you (Add a slice): one slice, `change` is `{title, intent?, done?,
               builds_after?: [slice keys], position?: 1-based, key?}`. It shows on the roadmap
               at once, marked added after approval with your name, and is listed unreviewed.
@@ -6214,9 +6214,9 @@ def read_model_record() -> Dict[str, Any]:
     Use it when judging which model suits a task. Answers `{"models": [...], "sample": {...}}`;
     each model carries `tasks_built`, `tasks_approved`, `send_backs` (a `total` and a count per
     reason class), `turns`, `priced_turns`, `unpriced_turns` and `cost_usd_micros` (API-equivalent,
-    millionths of a dollar, over priced turns only), with the tasks behind them. A task counts under
-    the model that ran its build turns, not under the agent it was assigned to, since an agent can
-    be rebound to another model. An unpriced turn is reported as unpriced, never as zero cost.
+    millionths of a dollar, over priced runs only), with the tasks behind them. A task counts under
+    the model that ran its build runs, not under the profile it was assigned to, since a profile can
+    be rebound to another model. An unpriced run is reported as unpriced, never as zero cost.
     Each task also carries `evidence_only_send_backs` and `reviewer_verified_acceptances` (evidence
     its reviewer accepted with its own reproduction), and each model the latter's total.
     Small samples are small: read `tasks_built` before trusting a ratio.
@@ -6226,13 +6226,13 @@ def read_model_record() -> Dict[str, Any]:
 
 @_tool()
 def read_shells() -> Dict[str, Any]:
-    """Read the operator's shells in this conversation's Terminal tab: what they show now.
+    """Read the operator's shells in this thread's Terminal tab: what they show now.
 
     Answers `{"conversation_id", "shells": [...], "max_lines"}`; each shell carries its `name`
     (the shell, e.g. `PowerShell 7` or a WSL distribution), `directory` (as the shell names it),
     `location` (`worktree` or `root`), whether it is still `running`, its `exit_code` once it
     ended, and `lines`: up to its last 500 lines of output, as plain text. Only this
-    conversation's shells are listed, and an empty list means the operator has none open.
+    thread's shells are listed, and an empty list means the operator has none open.
 
     This is read only: nothing here types into, starts or ends a shell. Run your own commands
     with your own tools, under your own permission level.
@@ -6260,7 +6260,7 @@ def decide_evidence(
     Refused unless the operator has granted you this. It is authority over what ships, not a
     reading permission, so it is conferred deliberately or not at all.
 
-    **You cannot decide evidence you produced yourself.** Another agent, or the operator, decides
+    **You cannot decide evidence you produced yourself.** Another profile, or the operator, decides
     on yours.
 
     **Only evidence still `awaiting`.** A piece already accepted or rejected is refused with
@@ -6270,7 +6270,7 @@ def decide_evidence(
 
     **A decision waits for the run that recorded the evidence.** While that run is still running its
     commit is about to be replaced, so the Hub refuses with `recording_run_live` (HTTP 409). Decide
-    after the run has ended; the Hub sends you a note in this conversation when it does.
+    after the run has ended; the Hub sends you a note in this thread when it does.
 
     **Reviewing a task, you may accept its evidence with your own reproduction**, without the grant:
     re-run the author's demonstration and pass `command`, `output` and `commit` (the commit you ran

@@ -19,11 +19,11 @@ describe('F808 — the Overview with no agents', () => {
       />,
     )
 
-  it('names no CLI command and offers Add agent', () => {
+  it('names no CLI command and offers Add profile', () => {
     const onAddAgent = vi.fn()
     const { container } = view(onAddAgent)
     expect(container.textContent).not.toContain('agentweave start')
-    fireEvent.click(screen.getByRole('button', { name: /add agent/i }))
+    fireEvent.click(screen.getByRole('button', { name: /add profile/i }))
     expect(onAddAgent).toHaveBeenCalledTimes(1)
   })
 })

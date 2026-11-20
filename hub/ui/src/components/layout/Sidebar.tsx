@@ -245,7 +245,7 @@ export function Sidebar({
                           <Icon name="warning" size={12} />
                         </span>
                       ) : live ? (
-                        <span className="aw-live-dot aw-pulse" title="An agent is working" />
+                        <span className="aw-live-dot aw-pulse" title="A profile is working" />
                       ) : null}
                     </button>
                     <span className="aw-rail-row-end">
@@ -255,8 +255,8 @@ export function Sidebar({
                           type="button"
                           className="aw-icon-button"
                           data-testid={`rail-add-agent-${project.id}`}
-                          aria-label={`Add agent to ${project.name}`}
-                          title="Add agent"
+                          aria-label={`Add profile to ${project.name}`}
+                          title="Add profile"
                           onClick={() => onAddAgent?.(project.id)}
                         >
                           <Icon name="person_add" size={13} />

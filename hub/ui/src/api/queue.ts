@@ -100,7 +100,7 @@ const readQueueStatus = coalescedReadsByGroup<QueueStatus>((projectId) =>
       return { found: body.statuses, missing: body.missing }
     },
     (agent) =>
-      `${agent} is not an agent in this project: nothing here is recorded under that name. Correct the name, or create the agent in the Hub UI.`,
+      `${agent} is not a profile in this project: nothing here is recorded under that name. Correct the name, or create the profile in the Hub UI.`,
   ),
 )
 

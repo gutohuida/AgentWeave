@@ -82,7 +82,7 @@ describe('Overview Collaboration block', () => {
     expect(row('checks')).toHaveTextContent('2 checks')
     expect(row('checks').querySelector('[data-flag="true"]')).toBeNull()
     expect(row('limits')).toHaveTextContent('10 per turn')
-    expect(row('limits')).toHaveTextContent('2 of 8 agents')
+    expect(row('limits')).toHaveTextContent('2 of 8 profiles')
   })
 
   it('says what agent budget caps, and not that it limits agents running at once (FR-8)', () => {
@@ -135,7 +135,7 @@ describe('Overview Collaboration block', () => {
       { agent: 'beta', waiting_count: 3, running: false, waiting_reason: 'hop budget exhausted' },
     ]
     render(<CollaborationSummary onNavigate={vi.fn()} />)
-    expect(row('hop')).toHaveTextContent('1 agent held')
+    expect(row('hop')).toHaveTextContent('1 profile held')
     expect(row('hop').querySelector('[data-flag="true"]')).not.toBeNull()
   })
 
@@ -160,8 +160,8 @@ describe('Overview Collaboration block', () => {
   it('does not read zero agents or zero held when the agent list failed', () => {
     agentsError = new Error('boom')
     render(<CollaborationSummary onNavigate={vi.fn()} />)
-    expect(row('limits')).not.toHaveTextContent('0 of 8 agents')
-    expect(row('limits')).toHaveTextContent(/agents could not be read/i)
+    expect(row('limits')).not.toHaveTextContent('0 of 8 profiles')
+    expect(row('limits')).toHaveTextContent(/profiles could not be read/i)
     expect(row('hop')).toHaveTextContent(/queues could not be read/i)
   })
 

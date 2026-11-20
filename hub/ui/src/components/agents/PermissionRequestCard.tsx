@@ -113,7 +113,7 @@ export function PermissionRequestCard({ requests, agent, conversationId }: Permi
               {expired && (
                 <span
                   data-testid={`permission-expired-${request.id}`}
-                  title="Nobody answered in time, so the agent was refused and carried on without this."
+                  title="Nobody answered in time, so the run was refused and carried on without this."
                   style={{ fontSize: 10, color: 'var(--text-3)' }}
                 >
                   no longer waiting
@@ -125,7 +125,7 @@ export function PermissionRequestCard({ requests, agent, conversationId }: Permi
                 <button
                   type="button"
                   aria-label="Dismiss this expired request"
-                  title="Clear this from view. The agent has already moved on."
+                  title="Clear this from view. The run has already moved on."
                   data-testid={`permission-dismiss-${request.id}`}
                   disabled={dismiss.isPending}
                   onClick={() => dismiss.mutate({ id: request.id })}
@@ -173,8 +173,7 @@ export function PermissionRequestCard({ requests, agent, conversationId }: Permi
             )}
             {expired ? (
               <p style={{ fontSize: 11, color: 'var(--text-3)' }}>
-                The agent stopped waiting and was refused. Give yourself longer to answer by
-                raising this agent's permission timeout.
+                The run stopped waiting and was refused. Give yourself longer to answer by raising this profile's permission timeout.
               </p>
             ) : (
               <div className="permission-actions">
@@ -204,7 +203,7 @@ export function PermissionRequestCard({ requests, agent, conversationId }: Permi
                   <Icon name="schedule" size={12} />
                   {heldTurn
                     ? 'The turn waits for your answer. Allow starts it with these files; Deny keeps it held.'
-                    : 'The agent is waiting, and will be refused if nobody answers.'}
+                    : 'The run is waiting, and will be refused if nobody answers.'}
                 </span>
               </div>
             )}

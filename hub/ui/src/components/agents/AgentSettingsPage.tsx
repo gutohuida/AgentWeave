@@ -62,13 +62,18 @@ interface AgentSettingsPageProps {
 }
 
 const SECTIONS: ReadonlyArray<{ id: AgentSettingsSection; label: string; icon: string }> = [
-  { id: 'agent', label: 'Agent', icon: 'badge' },
+  { id: 'agent', label: 'Profile', icon: 'badge' },
   { id: 'running', label: 'Running', icon: 'terminal' },
   { id: 'permissions', label: 'Permissions', icon: 'lock' },
   { id: 'checkpoints', label: 'Checkpoints', icon: 'book_marked' },
   { id: 'workspace', label: 'Workspace', icon: 'folder' },
   { id: 'runs', label: 'Runs', icon: 'timeline' },
 ]
+
+/** The screen is titled Profiles (FR-10); the profile it shows, and its model, sit under the title. */
+function profileSubtitle(agent: string, model: string | undefined): string {
+  return model ? `${agent} · ${model}` : agent
+}
 
 /**
  * An agent's configuration, as a destination rather than a dialog: its own section list and a way
@@ -89,12 +94,12 @@ export function AgentSettingsPage({ agent, section, onSelectSection, onBack, onO
   let body: React.ReactNode
   if (isLoading) {
     body = (
-      <div className="aw-settings-page" aria-label="Loading agent settings">
-        <SettingsLoading label="Loading agent settings" rows={3} />
+      <div className="aw-settings-page" aria-label="Loading profile settings">
+        <SettingsLoading label="Loading profile settings" rows={3} />
       </div>
     )
   } else if (!summary) {
-    body = <Shell>This agent is no longer in the roster.</Shell>
+    body = <Shell>This profile is no longer in the roster.</Shell>
   } else {
     body = (
       <div className="min-w-0" data-testid={`agent-settings-${section}`}>
@@ -106,8 +111,8 @@ export function AgentSettingsPage({ agent, section, onSelectSection, onBack, onO
   return (
     <div className="h-full min-h-0">
       <SettingsNavLayout
-        title={`${agent} settings`}
-        subtitle={summary ? (runnerName ?? (summary.runner_id ? undefined : 'No model')) : undefined}
+        title="Profiles"
+        subtitle={profileSubtitle(agent, summary ? (runnerName ?? (summary.runner_id ? undefined : 'No model')) : undefined)}
         back={{ label: `Back to ${agent}`, onClick: onBack }}
         items={SECTIONS}
         active={section}
@@ -277,18 +282,18 @@ function RunningSection({ agent }: { agent: AgentSummary }) {
 
   const notes = (
     <>
-      {!agent.runner_id && !verdict ? <span className="aw-control-warning" role="status">This agent cannot run until it has a model.</span> : null}
+      {!agent.runner_id && !verdict ? <span className="aw-control-warning" role="status">This profile cannot run until it has a model.</span> : null}
       {cannotRun ? (
         <span className="aw-control-warning" role="status">
-          This agent cannot run: {verdict.reason ?? 'the Hub reports it as not runnable.'}
+          This profile cannot run: {verdict.reason ?? 'the Hub reports it as not runnable.'}
         </span>
       ) : null}
       {cannotCollaborate ? (
         <span className="aw-control-warning" role="status">
-          This agent will run, but cannot collaborate: {verdict.collaboration_reason ?? 'the Hub reports its tool calls would be refused.'}
+          This profile will run, but cannot collaborate: {verdict.collaboration_reason ?? 'the Hub reports its tool calls would be refused.'}
         </span>
       ) : null}
-      {!verdict && launchabilityError ? <span className="aw-row-note" role="status">Could not check whether this agent can run.</span> : null}
+      {!verdict && launchabilityError ? <span className="aw-row-note" role="status">Could not check whether this profile can run.</span> : null}
       {providerLaunchError ? <span className="aw-row-note" role="status">Could not check which coding agents are installed; every provider is listed.</span> : null}
       {catalogError ? <span className="aw-row-note" role="status">Could not load the model catalog; the list of models is incomplete.</span> : null}
       {/* An empty list here would read as "no model is bound". */}
@@ -405,7 +410,7 @@ function PermissionsSection({ agent }: { agent: AgentSummary }) {
       permissionModes={options}
       permissionUnset={{
         label: `${agent.permission_mode_from_project ? 'Project default' : 'Built-in default'} (${builtInLabel})`,
-        detail: 'What a run gets when neither its conversation nor this agent has chosen.',
+        detail: 'What a run gets when neither its thread nor this profile has chosen.',
       }}
       projectGrants={agent.project_reach_grants ?? null}
       permissionNote={
@@ -452,7 +457,7 @@ function CheckpointsSection({ agent }: { agent: AgentSummary }) {
       note={
         ceiling ??
         (!hasOwn && projectSettingsFailed
-          ? 'The project’s threshold could not be read, so where this agent’s checkpoint fires is not shown.'
+          ? 'The project’s threshold could not be read, so where this profile’s checkpoint fires is not shown.'
           : null)
       }
       notices={notices}

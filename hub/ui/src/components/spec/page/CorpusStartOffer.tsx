@@ -18,13 +18,13 @@ const STARTS: Record<CorpusStartKind, { title: string; detail: string; icon: str
   'existing-code': {
     title: 'Write down what the existing code does',
     detail:
-      'An agent reads the code and writes a system map: its areas and the capabilities it proposes, with one capability draft each. You review every draft; only approving and folding one makes it a capability.',
+      'A profile reads the code and writes a system map: its areas and the capabilities it proposes, with one capability draft each. You review every draft; only approving and folding one makes it a capability.',
     icon: 'file_code',
   },
   greenfield: {
     title: 'Plan a new project',
     detail:
-      'An agent interviews you about the problem, its users, the scope and the non-goals, then writes a roadmap of slices.',
+      'A profile interviews you about the problem, its users, the scope and the non-goals, then writes a roadmap of slices.',
     icon: 'route',
   },
 }
@@ -62,14 +62,14 @@ export function CorpusStartOffer({
       <header className="aw-corpus-start-head">
         <h2 id="corpus-start-title" className="aw-corpus-start-title">Start your specifications</h2>
         <p className="aw-corpus-start-lede">
-          This project has no specification documents yet. An agent can write down what its code does, or interview you to plan it.
+          This project has no specification documents yet. A profile can write down what its code does, or interview you to plan it.
         </p>
       </header>
       {hasAgent ? null : (
         <p className="aw-corpus-start-noagent">
-          This project has no agent to do it.{' '}
+          This project has no profile to do it.{' '}
           <button type="button" data-slot="link" className="aw-link aw-link-inline" data-testid="corpus-start-add-agent" onClick={() => onAddAgent?.()}>
-            Add an agent
+            Add a profile
           </button>{' '}
           and the starts become available here.
         </p>
@@ -99,7 +99,7 @@ export function CorpusStartOffer({
                 {open ? (
                   <div className="aw-corpus-start-pick">
                     <label className="aw-corpus-start-pick-label" htmlFor={`corpus-start-agent-${start}`}>
-                      Which agent does it?
+                      Which profile does it?
                     </label>
                     <select
                       id={`corpus-start-agent-${start}`}

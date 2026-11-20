@@ -1,0 +1,13 @@
+# Text scripts/checks/ui_vocabulary_check.py allows to say agent or conversation (FR-10).
+#
+# One line each: `<repo-relative path>: <the text as the check prints it>`, then ` # why`. Only
+# data identifiers and fixed phrases that are not this app's own words belong here; anything that
+# names a configured agent, a conversation or a turn says profile, thread or run instead. A line
+# whose text is no longer found fails the check, so this list cannot outlive what it allows.
+
+hub/ui/src/components/agents/settings/AgentSettingsPages.tsx: Review agents # Copilot's own built-in review agents (config key copilot_review_agents), Copilot's term, not a profile
+hub/ui/src/components/agents/settings/AgentSettingsPages.tsx: Copilot's own built-in review agents this profile may consult before recording a review verdict. It does not see this repository's instructions, and their findings are not the verdict: the verdict is still recorded only by update_task. On a provider runner, Copilot's review agents may not run. # Copilot's own review agents, Copilot's term
+hub/ui/src/lib/settingsIndex.ts: Review agents # the search entry for the Copilot setting above
+hub/ui/src/lib/settingsIndex.ts: Copilot's own built-in review agents this profile may consult before recording a review verdict. # the search entry for the Copilot setting above
+hub/ui/src/lib/closePrompt.ts: agent turn # the same words as the launcher's native fallback (desktop_window.describe_work), which this change does not reword
+hub/ui/src/lib/closePrompt.ts: agent turns # as above

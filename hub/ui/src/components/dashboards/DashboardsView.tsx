@@ -58,7 +58,7 @@ export function DashboardsView({ dashboards, selectedId, run, refreshing, error,
         {dashboards.length === 0 && !error ? (
           <div className="rounded-lg p-8 text-center text-sm" style={{ border: '1px dashed var(--border-hi)', color: 'var(--text-3)' }}>
             <Icon name="insights" size={18} />
-            <p className="mt-2">No dashboards yet. Ask any agent for one and it will appear here.</p>
+            <p className="mt-2">No dashboards yet. Ask any profile for one and it will appear here.</p>
           </div>
         ) : (
           <ul className="flex flex-col" style={{ border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)' }}>
@@ -170,7 +170,7 @@ export function DashboardsView({ dashboards, selectedId, run, refreshing, error,
               >
                 {agents.length === 0 && (
                   <li className="px-3 py-1.5" style={{ color: 'var(--text-3)' }}>
-                    {agentsError ?? 'No agents in this project.'}
+                    {agentsError ?? 'No profiles in this project.'}
                   </li>
                 )}
                 {agents.map((name) => (

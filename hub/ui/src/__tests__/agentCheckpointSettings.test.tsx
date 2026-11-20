@@ -170,7 +170,7 @@ describe('per-agent access grants', () => {
 
   it('shows both grants closed by default', () => {
     render(<QueryClientProvider client={new QueryClient()}><AgentSettingsPage agent="claude-1" section="permissions" onSelectSection={vi.fn()} onBack={vi.fn()} /></QueryClientProvider>)
-    expect(screen.getByLabelText(/Read other agents’ checkpoints for claude-1/)).not.toBeChecked()
+    expect(screen.getByLabelText(/Read other profiles’ checkpoints for claude-1/)).not.toBeChecked()
     expect(screen.getByLabelText(/Recall what a checkpoint cites for claude-1/)).not.toBeChecked()
     // Recall only reaches what a checkpoint it can read cites, so it waits for that grant.
     expect(screen.getByLabelText(/Recall what a checkpoint cites for claude-1/)).toBeDisabled()
@@ -180,7 +180,7 @@ describe('per-agent access grants', () => {
     // The whole reason there are two: a peer allowed to see what was concluded is not thereby
     // allowed to read everything that agent's tools ever printed.
     render(<QueryClientProvider client={new QueryClient()}><AgentSettingsPage agent="claude-1" section="permissions" onSelectSection={vi.fn()} onBack={vi.fn()} /></QueryClientProvider>)
-    fireEvent.click(screen.getByLabelText(/Read other agents’ checkpoints for claude-1/))
+    fireEvent.click(screen.getByLabelText(/Read other profiles’ checkpoints for claude-1/))
 
     expect(grantMutate).toHaveBeenCalledWith(
       { agent: 'claude-1', grant: 'can_read_checkpoints', enabled: true },
@@ -192,7 +192,7 @@ describe('per-agent access grants', () => {
   it('reflects a grant that is already open', () => {
     roster = [agent({ can_read_checkpoints: true })]
     render(<QueryClientProvider client={new QueryClient()}><AgentSettingsPage agent="claude-1" section="permissions" onSelectSection={vi.fn()} onBack={vi.fn()} /></QueryClientProvider>)
-    expect(screen.getByLabelText(/Read other agents’ checkpoints for claude-1/)).toBeChecked()
+    expect(screen.getByLabelText(/Read other profiles’ checkpoints for claude-1/)).toBeChecked()
     expect(screen.getByLabelText(/Recall what a checkpoint cites for claude-1/)).not.toBeChecked()
     expect(screen.getByLabelText(/Recall what a checkpoint cites for claude-1/)).toBeEnabled()
   })
@@ -200,7 +200,7 @@ describe('per-agent access grants', () => {
   it('closes recall with the read grant it depends on', () => {
     roster = [agent({ can_read_checkpoints: true, can_recall: true })]
     render(<QueryClientProvider client={new QueryClient()}><AgentSettingsPage agent="claude-1" section="permissions" onSelectSection={vi.fn()} onBack={vi.fn()} /></QueryClientProvider>)
-    fireEvent.click(screen.getByLabelText(/Read other agents’ checkpoints for claude-1/))
+    fireEvent.click(screen.getByLabelText(/Read other profiles’ checkpoints for claude-1/))
     expect(grantMutate).toHaveBeenCalledWith({ agent: 'claude-1', grant: 'can_read_checkpoints', enabled: false }, expect.anything())
     expect(grantMutate).toHaveBeenCalledWith({ agent: 'claude-1', grant: 'can_recall', enabled: false }, expect.anything())
   })
@@ -209,7 +209,7 @@ describe('per-agent access grants', () => {
     // F235: the grant is all-or-nothing across the project. Nothing can restrict a checkpoint's
     // own visibility, so the hint must not suggest one exists.
     render(<QueryClientProvider client={new QueryClient()}><AgentSettingsPage agent="claude-1" section="permissions" onSelectSection={vi.fn()} onBack={vi.fn()} /></QueryClientProvider>)
-    expect(screen.getByText(/every conversation in this project/)).toBeInTheDocument()
+    expect(screen.getByText(/every thread in this project/)).toBeInTheDocument()
     expect(screen.queryByText(/visibility/)).not.toBeInTheDocument()
   })
 })

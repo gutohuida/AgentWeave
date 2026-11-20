@@ -30,7 +30,7 @@ function firingSubject(
   if (subject.document) parts.push(`document ${subject.document}`)
   if (subject.report) parts.push(`report ${subject.report}`)
   if (subject.entry) parts.push(`on ${entry(subject.entry)}`)
-  if (subject.conversation_id) parts.push(conversationTitles.get(subject.conversation_id) ?? `conversation ${subject.conversation_id}`)
+  if (subject.conversation_id) parts.push(conversationTitles.get(subject.conversation_id) ?? `thread ${subject.conversation_id}`)
   return parts.length ? parts.join(' ') : null
 }
 

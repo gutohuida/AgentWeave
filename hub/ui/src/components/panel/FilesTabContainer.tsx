@@ -52,7 +52,7 @@ export function FilesTabContainer({
   const listing = useConversationFiles(conversationId, chosen)
   const data = listing.data
 
-  if (!conversationId) return <p className="aw-ptab-note">Start a conversation to browse its files.</p>
+  if (!conversationId) return <p className="aw-ptab-note">Start a thread to browse its files.</p>
   if (!data) {
     return listing.isError ? (
       <p className="aw-ptab-note">The files could not be listed. Try again in a moment.</p>

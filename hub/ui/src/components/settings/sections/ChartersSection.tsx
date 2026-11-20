@@ -28,7 +28,7 @@ export function ChartersSection() {
   // coming, and never rows that could be saved over settings that were never read.
   if (error && !charters) {
     return (
-      <SettingsPage icon="menu_book" title="Charters" description="What an agent is accountable for and where its authority ends.">
+      <SettingsPage icon="menu_book" title="Charters" description="What a profile is accountable for and where its authority ends.">
         <SettingsNotice tone="error" title="The charters could not be read." action={{ label: 'Retry', onClick: () => void refetch() }}>
           <p>{readableApiError(error, 'The Hub did not return a reason.')}</p>
         </SettingsNotice>
@@ -37,7 +37,7 @@ export function ChartersSection() {
   }
   if (isLoading || !charters) {
     return (
-      <SettingsPage icon="menu_book" title="Charters" description="What an agent is accountable for and where its authority ends.">
+      <SettingsPage icon="menu_book" title="Charters" description="What a profile is accountable for and where its authority ends.">
         <SettingsLoading label="Loading charters" rows={3} />
       </SettingsPage>
     )
@@ -54,8 +54,8 @@ export function ChartersSection() {
             {/* Which agents hold each charter is read from the roster; unread, every charter would
                 look unbound. */}
             {agentsError ? (
-              <SettingsNotice tone="warning" title="Which agents hold each charter could not be read." testId="charters-bound-error">
-                <p>A charter shown with no agents may still be bound.</p>
+              <SettingsNotice tone="warning" title="Which profiles hold each charter could not be read." testId="charters-bound-error">
+                <p>A charter shown with no profiles may still be bound.</p>
               </SettingsNotice>
             ) : null}
             {deleteError ? (

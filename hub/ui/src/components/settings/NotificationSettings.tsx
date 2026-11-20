@@ -10,9 +10,9 @@ import { WINDOWS_NOTIFY_DEFAULTS } from '@/lib/settingsChanged'
 import { playSound } from '@/lib/sound/player'
 
 const KINDS: Array<{ kind: NotifyKind; label: string; description: string }> = [
-  { kind: 'ask', label: 'An agent needs you', description: 'A question, or a permission to decide.' },
+  { kind: 'ask', label: 'A profile needs you', description: 'A question, or a permission to decide.' },
   { kind: 'fail', label: 'Work stalled or failed', description: 'A stall, a failed run, a suspended message chain, a loop stopped short.' },
-  { kind: 'reply', label: 'An agent replied to you', description: 'A turn you started in a conversation finished. Silent while you are watching that conversation.' },
+  { kind: 'reply', label: 'A profile replied to you', description: 'A run you started in a thread finished. Silent while you are watching that thread.' },
   { kind: 'done', label: 'Work finished', description: 'A loop that worked through its whole queue.' },
 ]
 
@@ -107,10 +107,10 @@ export function NotificationSettings() {
 const WINDOWS_DEFAULTS: WindowsNotifyKinds = WINDOWS_NOTIFY_DEFAULTS
 
 const WINDOWS_KINDS: Array<{ kind: NotifyKind; label: string; description: string }> = [
-  { kind: 'ask', label: 'Question', description: 'An agent asked you something, or needs a permission decided.' },
+  { kind: 'ask', label: 'Question', description: 'A profile asked you something, or needs a permission decided.' },
   { kind: 'fail', label: 'Failure', description: 'Work stalled or failed.' },
   { kind: 'done', label: 'Done', description: 'Something finished, such as a loop that emptied its queue.' },
-  { kind: 'reply', label: 'Reply', description: 'An agent replied to a turn you started in a conversation.' },
+  { kind: 'reply', label: 'Reply', description: 'A profile replied to a run you started in a thread.' },
 ]
 
 /** Which kinds reach Windows, held by the Hub so they apply with no window open and survive a

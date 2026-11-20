@@ -106,7 +106,7 @@ export function cardStatus(task: Task, working?: boolean): CardStatus | null {
   }
   if (!staged) {
     if (task.status === 'revision_needed') return { tone: 'revision', reason: 'revision', text: 'Sent back for changes' }
-    if (working) return { tone: 'working', reason: 'working', text: `${task.assignee ?? 'An agent'} is working on it` }
+    if (working) return { tone: 'working', reason: 'working', text: `${task.assignee ?? 'A profile'} is working on it` }
     if (task.status === 'under_review') return { tone: 'review', reason: 'review', text: 'Waiting for a review' }
   }
   if (proceeded) {

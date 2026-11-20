@@ -37,7 +37,7 @@ export function InstructionsSettings({
     <SettingsPage
       icon="description"
       title="Instructions"
-      description="Rules every agent in this project reads at the start of a session, before its own charter."
+      description="Rules every profile in this project reads at the start of a session, before its own charter."
       actions={
         <>
           {dirty ? (
@@ -69,8 +69,8 @@ export function InstructionsSettings({
         <div className="aw-instructions-foot" data-testid="instructions-size" role={over ? 'alert' : undefined}>
           <span>
             {over
-              ? 'Too long to save: these are sent with every agent turn, so shorten them or point to reference material in the project instead.'
-              : 'Sent with every agent turn, so each character is paid for on each one. New sessions pick up a change; running ones keep what they started with.'}
+              ? 'Too long to save: these are sent with every run, so shorten them or point to reference material in the project instead.'
+              : 'Sent with every run, so each character is paid for on each one. New sessions pick up a change; running ones keep what they started with.'}
           </span>
           {maxChars !== undefined ? (
             <span className="tabular" data-over={over ? 'true' : 'false'}>
@@ -96,7 +96,7 @@ function WorktreesEmpty({ title, description, testId }: { title: string; descrip
 }
 
 function describeWorkspace(workspace: ConflictWorkspace): string {
-  if (workspace.kind === 'agent') return `agent ${workspace.name}`
+  if (workspace.kind === 'agent') return `profile ${workspace.name}`
   if (workspace.kind === 'task') return `task ${workspace.name}`
   if (workspace.kind === 'main') return `the main branch (${workspace.branch})`
   return `${workspace.kind} ${workspace.name}`
@@ -134,18 +134,18 @@ export function WorktreesSettings({
       <WorktreesEmpty
         testId="worktrees-not-a-repository"
         title="This folder is not a git repository"
-        description={listing.unavailable_reason ?? 'Agents work in the folder itself, and approved work has nowhere to merge.'}
+        description={listing.unavailable_reason ?? 'Profiles work in the folder itself, and approved work has nowhere to merge.'}
       />
     )
   } else if (listing.worktrees.length === 0) {
-    body = <WorktreesEmpty title="No checkouts right now" description="One appears here when an agent starts work that needs its own copy, and when a task is picked up." />
+    body = <WorktreesEmpty title="No checkouts right now" description="One appears here when a profile starts work that needs its own copy, and when a task is picked up." />
   } else {
     const agents = listing.worktrees.filter((w) => w.kind === 'agent')
     const tasks = listing.worktrees.filter((w) => w.kind === 'task')
     const others = listing.worktrees.filter((w) => w.kind !== 'agent' && w.kind !== 'task')
     body = (
       <div data-testid="worktrees-list">
-        <WorkspaceGroup title="Agent checkouts" note="Where an agent works when its turn is not bound to a task." workspaces={agents} />
+        <WorkspaceGroup title="Profile checkouts" note="Where a profile works when its run is not bound to a task." workspaces={agents} />
         <WorkspaceGroup title="Task checkouts" note="One per task being worked. Released when the task is approved or rejected; the branch is kept." workspaces={tasks} />
         <WorkspaceGroup title="Other checkouts" workspaces={others} />
       </div>
@@ -207,7 +207,7 @@ export function WorktreesSettings({
   }
 
   return (
-    <SettingsPage icon="call_split" title="Worktrees" description="The separate checkouts agents work in: one per writing agent, and one per task being worked.">
+    <SettingsPage icon="call_split" title="Worktrees" description="The separate checkouts profiles work in: one per writing profile, and one per task being worked.">
       {body}
       {conflictBody}
     </SettingsPage>

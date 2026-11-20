@@ -356,7 +356,7 @@ describe('the wired Overview', () => {
     const note = screen.getByText('Touch the operator’s notes.txt?').closest('li') as HTMLElement
     expect(note).toHaveTextContent('Dirty checkout')
     expect(note).not.toHaveTextContent(/nobody is waiting/)
-    fireEvent.click(within(note).getByRole('button', { name: 'Open conversation' }))
+    fireEvent.click(within(note).getByRole('button', { name: 'Open thread' }))
     expect(onOpenConversation).toHaveBeenCalledWith('mender', 'conv-stall-1')
 
     const gone = screen.getByText('Dead ask?').closest('li') as HTMLElement
@@ -429,7 +429,7 @@ describe('a stalled project under Needs you', () => {
     openStalls = [stall()]
     const onNavigate = vi.fn()
     render(<OverviewScreen onNavigate={onNavigate} />)
-    const row = screen.getByText('An agent’s turn was refused').closest('li') as HTMLElement
+    const row = screen.getByText('A profile’s run was refused').closest('li') as HTMLElement
     expect(row).toHaveTextContent('No firing will retry it.')
     fireEvent.click(within(row).getByRole('button', { name: 'Open task' }))
     expect(useTaskFilterStore.getState().pendingOpenTaskId).toBe('task-4')
@@ -441,7 +441,7 @@ describe('a stalled project under Needs you', () => {
     openStalls = [stall({ conversation_id: 'conv-m' })]
     const onOpenConversation = vi.fn()
     render(<OverviewScreen onNavigate={vi.fn()} onOpenConversation={onOpenConversation} />)
-    const row = screen.getByText('An agent’s turn was refused').closest('li') as HTMLElement
+    const row = screen.getByText('A profile’s run was refused').closest('li') as HTMLElement
     expect(row).toHaveTextContent('The mender is on it.')
     fireEvent.click(within(row).getByRole('button', { name: 'Open the mender’s thread' }))
     expect(onOpenConversation).toHaveBeenCalledWith('mender', 'conv-m')

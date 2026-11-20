@@ -558,7 +558,7 @@ export function AgentOutputPanel({
     archiveConversation(target).then(
       () =>
         toast({
-          title: 'Conversation archived',
+          title: 'Thread archived',
           action: {
             label: 'Undo',
             onClick: () =>
@@ -819,7 +819,7 @@ export function AgentOutputPanel({
     try {
       const result = await cutOver(projectId, offeredCheckpoint.id)
       moveTo(result.successor_conversation_id)
-      setSessionNotice('Continuing in a new conversation')
+      setSessionNotice('Continuing in a new thread')
     } catch (err) {
       console.error('Failed to cut over:', err)
       setSessionNotice(
@@ -914,7 +914,7 @@ export function AgentOutputPanel({
           id: 'checkpoint-due',
           tone: 'offer' as const,
           message:
-            'This conversation has reached its checkpoint threshold. Nothing has been written '
+            'This thread has reached its checkpoint threshold. Nothing has been written '
             + 'yet — checkpoint now, or dismiss this and keep working.',
           // Called through a closure: `handleCheckpoint` is declared below, and referencing it
           // directly here would read it before its binding is initialised.
@@ -932,7 +932,7 @@ export function AgentOutputPanel({
           // A problem, not an offer: what happens next if nothing is done is the loss itself.
           tone: 'problem' as const,
           message:
-            'This conversation is nearly out of context. If nothing is written now it will be '
+            'This thread is nearly out of context. If nothing is written now it will be '
             + 'compacted by the CLI, and what survives will be a summary nobody wrote.',
           action: {
             label: 'Checkpoint now',
@@ -947,7 +947,7 @@ export function AgentOutputPanel({
           id: 'checkpoint-failed',
           tone: 'problem' as const,
           message:
-            `The automatic checkpoint for this conversation failed: ${failedCheckpointReason}. `
+            `The automatic checkpoint for this thread failed: ${failedCheckpointReason}. `
             + 'Nothing was handed over — try again, or keep working.',
           action: {
             label: 'Retry checkpoint',
@@ -962,7 +962,7 @@ export function AgentOutputPanel({
           id: 'checkpoint-offered',
           tone: 'offer' as const,
           message:
-            'A checkpoint is ready for this conversation. Cutting over continues in a new one '
+            'A checkpoint is ready for this thread. Cutting over continues in a new one '
             + 'and archives this.',
           action: { label: 'Cut over', onClick: handleCutOver, pending: isSending },
           secondaryAction: { label: 'View checkpoint', onClick: () => openCheckpoint(offeredCheckpoint.id) },
@@ -972,7 +972,7 @@ export function AgentOutputPanel({
       ? {
           id: 'checkpoint-started-from',
           tone: 'info' as const,
-          message: `This conversation started from the checkpoint “${startedFrom.title?.trim() || 'an earlier checkpoint'}”.`,
+          message: `This thread started from the checkpoint “${startedFrom.title?.trim() || 'an earlier checkpoint'}”.`,
           secondaryAction: { label: 'View checkpoint', onClick: () => openCheckpoint(startedFrom.checkpoint_id) },
         }
       : null,
@@ -980,12 +980,12 @@ export function AgentOutputPanel({
       ? {
           id: 'checkpoint-carried-into',
           tone: 'info' as const,
-          message: 'This conversation was carried over into a new one.',
+          message: 'This thread was carried over into a new one.',
           secondaryAction: { label: 'View checkpoint', onClick: () => openCheckpoint(carriedInto.checkpoint_id) },
         }
       : null,
     lineageError
-      ? { id: 'checkpoint-lineage-unread', message: 'Couldn’t read where this conversation came from or went. Checkpoints may be missing here.' }
+      ? { id: 'checkpoint-lineage-unread', message: 'Couldn’t read where this thread came from or went. Checkpoints may be missing here.' }
       : null,
     submissionError ? { id: 'run-failure', message: submissionError } : null,
     sseConnectionState === 'reconnecting'
@@ -1117,7 +1117,7 @@ export function AgentOutputPanel({
         )
         setSessionNotice(
           `Not started — ${result.waiting_reason ?? 'unknown'}. ` +
-            `${started ? conversationLabel(started) : 'Another conversation'} started instead.`,
+            `${started ? conversationLabel(started) : 'Another thread'} started instead.`,
         )
       } else {
         setSessionNotice(`Not started — ${result.waiting_reason ?? 'unknown'}`)
@@ -1154,7 +1154,7 @@ export function AgentOutputPanel({
       }
       setHandoffState('idle')
       moveTo(result.successor_conversation_id)
-      setSessionNotice('Checkpoint written — continuing in a new conversation')
+      setSessionNotice('Checkpoint written — continuing in a new thread')
     } catch (err) {
       console.error('Failed to checkpoint:', err)
       setHandoffState('idle')
@@ -1234,7 +1234,7 @@ export function AgentOutputPanel({
     // queue, so the operator's message is only their message — where it used to be prepended
     // with instructions to go and find two files that were never written.
     const outgoingMessage = typedMessage
-    if (startsFresh) setSessionNotice('Starting new conversation…')
+    if (startsFresh) setSessionNotice('Starting new thread…')
     // fix-D15 (F652): an armed Explore creates its document now, before the turn, so the first
     // message reaches the agent with the document attached. A failed create still sends: losing
     // the operator's message is the worse loss.
@@ -1318,7 +1318,7 @@ export function AgentOutputPanel({
       {currentConversationId && latestRunId ? (
         <ConversationTraceDrawer
           conversationId={currentConversationId}
-          title={currentConversation ? conversationLabel(currentConversation) : 'This conversation'}
+          title={currentConversation ? conversationLabel(currentConversation) : 'This thread'}
           agent={agent.name}
           open={conversationTraceOpen}
           onOpenChange={setConversationTraceOpen}
@@ -1328,7 +1328,7 @@ export function AgentOutputPanel({
         barRef={headerRef}
         agent={agent}
         conversation={currentConversation ?? null}
-        title={currentConversation ? conversationLabel(currentConversation) : 'New conversation'}
+        title={currentConversation ? conversationLabel(currentConversation) : 'New thread'}
         onRename={conversationTarget ? handleRename : undefined}
         isRunning={isRunning}
         busyElsewhere={busyElsewhereNote}
@@ -1461,7 +1461,7 @@ export function AgentOutputPanel({
           conversationId: currentConversationId ?? null,
           isRunning,
           placeholder: busyElsewhere
-            ? `${agent.name} is busy in another conversation — a message here will queue`
+            ? `${agent.name} is busy in another thread — a message here will queue`
             : undefined,
           onSubmit: handleComposerSubmit,
           // A folded agent's history is read-only: the turn is refused naming the profile.
@@ -1551,10 +1551,10 @@ export function AgentOutputPanel({
               this used to print is not a label (spec: "Conversations are labelled by title"). */}
           {sessionNotice
             || (startsFresh
-              ? 'Next message starts a fresh conversation'
+              ? 'Next message starts a fresh thread'
               : currentConversation
                 ? `Continuing ${continuityLabel(currentConversation)}`
-                : 'Continuing this conversation')}
+                : 'Continuing this thread')}
           </span>
 
           {/* Too little conversation for a floating tray to show the question: it sits here

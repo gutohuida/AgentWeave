@@ -693,7 +693,7 @@ export function ConversationView({
             defaultWidth={CONVERSATION_DEFAULT_WIDTH}
             min={CONVERSATION_MIN_WIDTH}
             max={conversationMax}
-            label="Resize conversation"
+            label="Resize thread"
             containerRef={containerRef}
           />
           <div

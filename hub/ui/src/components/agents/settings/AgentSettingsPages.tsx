@@ -86,10 +86,10 @@ export function AgentCopilotGroup({
 }) {
   const stored = agent.config?.copilot_review_agents ?? []
   return (
-    <SettingsGroup title="Copilot" description="Settings only a Copilot agent has.">
+    <SettingsGroup title="Copilot" description="Settings only a profile on Copilot has.">
       <SettingsRow
         label="Review agents"
-        description="Copilot's own built-in agents this agent may consult before recording a review verdict. It does not see this repository's instructions, and their findings are not the verdict: the verdict is still recorded only by update_task. On a provider runner, Copilot's review agents may not run."
+        description="Copilot's own built-in review agents this profile may consult before recording a review verdict. It does not see this repository's instructions, and their findings are not the verdict: the verdict is still recorded only by update_task. On a provider runner, Copilot's review agents may not run."
         stacked
         control={
           <span className="flex flex-col gap-2">
@@ -110,7 +110,7 @@ export function AgentCopilotGroup({
       />
       <SettingsRow
         label="GitHub server"
-        description="Gives this agent Copilot's built-in GitHub tools, read-only. Copilot runs them without asking you, in every posture, Ask me included. Tools that write to GitHub can be added only on a runner with Full access, where they run without asking too. This setting does not govern the gh command, which a shell call runs and the Hub decides like any other command."
+        description="Gives this profile Copilot's built-in GitHub tools, read-only. Copilot runs them without asking you, in every posture, Ask me included. Tools that write to GitHub can be added only on a runner with Full access, where they run without asking too. This setting does not govern the gh command, which a shell call runs and the Hub decides like any other command."
         control={
           <Switch
             aria-label={`Enable the GitHub MCP server for ${agent.name}`}
@@ -160,7 +160,7 @@ export function AgentRunningSettings({
       <SettingsGroup title="Model">
         <SettingsRow
           label="Model"
-          description="The coding agent and model each of its turns launches with. A conversation can still pick another for itself."
+          description="The coding CLI and model each of its runs launches with. A thread can still pick another for itself."
           control={
             <span className="aw-control-stack">
               <MenuSelect
@@ -289,12 +289,12 @@ export function AgentCheckpointsSettings({
   const own = agent.checkpoint_threshold_value != null
   const entry = own ? String(unit === 'tokens' ? Math.round(agent.checkpoint_threshold_value! / 1000) : agent.checkpoint_threshold_value) : ''
   return (
-    <SettingsPage icon="book_marked" title="Checkpoints" description={`When ${agent.name}'s conversations are checkpointed. Unset, it follows the project's Checkpoints.`}>
+    <SettingsPage icon="book_marked" title="Checkpoints" description={`When ${agent.name}'s threads are checkpointed. Unset, it follows the project's Checkpoints.`}>
       {notices}
       <SettingsGroup title="When">
         <SettingsRow
           label="Checkpoints"
-          description="Whether its conversations are checkpointed at all."
+          description="Whether its threads are checkpointed at all."
           changed={agent.checkpoint_mode != null}
           origin={{ kind: agent.checkpoint_mode != null ? 'own' : 'project', other: MODE_WORDS[project.mode] }}
           onReset={() => onChange({ checkpoint_mode: null }, 'Checkpoints follow the project again')}
@@ -306,8 +306,8 @@ export function AgentCheckpointsSettings({
               options={[
                 { value: '', label: `The project’s (${MODE_WORDS[project.mode]})` },
                 { value: 'offered', label: 'Offer me one', detail: 'At the threshold the Hub writes one and tells you.' },
-                { value: 'automatic', label: 'Automatic', detail: 'At the threshold the Hub writes one and continues in a new conversation.' },
-                { value: 'off', label: 'Off', detail: 'None are written by themselves for this agent.' },
+                { value: 'automatic', label: 'Automatic', detail: 'At the threshold the Hub writes one and continues in a new thread.' },
+                { value: 'off', label: 'Off', detail: 'None are written by themselves for this profile.' },
               ]}
             />
           }
@@ -358,7 +358,7 @@ export function AgentCheckpointsSettings({
       <SettingsGroup title="Taken">
         <SettingsRow
           label="Its checkpoints"
-          description="Every checkpoint written from its conversations."
+          description="Every checkpoint written from its threads."
           control={
             <Button variant="outline" size="sm" data-testid="agent-checkpoints-link" onClick={onShowCheckpoints}>
               {taken != null ? `Show ${taken}` : 'Show them'} <Icon name="arrow_forward" size={12} />
@@ -428,7 +428,7 @@ export function AgentWorkspaceSettings({
           description={
             <span data-testid="agent-worktree">
               {isolated
-                ? `Its own git worktree. On ${branch ?? 'its own branch'}, ${provisioned ? 'checked out and ready' : 'created the first time this agent runs'}. Its changes are merged deliberately.`
+                ? `Its own git worktree. On ${branch ?? 'its own branch'}, ${provisioned ? 'checked out and ready' : 'created the first time this profile runs'}. Its changes are merged deliberately.`
                 : `Shares the project checkout, so a second writer overwrites rather than conflicts.${note ? ` ${note}` : ''}`}
             </span>
           }
@@ -455,7 +455,7 @@ export function AgentWorkspaceSettings({
                       {c.branch}
                       {' — '}
                       {c.grandfathered
-                        ? "worked in this agent's own checkout, because this task started before per-task checkouts"
+                        ? "worked in this profile's own checkout, because this task started before per-task checkouts"
                         : c.provisioned
                           ? 'checked out and ready'
                           : 'created the first time this task runs'}
@@ -467,7 +467,7 @@ export function AgentWorkspaceSettings({
           </div>
         </SettingsGroup>
       ) : null}
-      <SettingsGroup title="Provider sessions" description="Diagnostic: the sessions each coding agent recorded, and where they ran. AgentWeave addresses conversations by its own id.">
+      <SettingsGroup title="Provider sessions" description="Diagnostic: the sessions each coding CLI recorded, and where they ran. AgentWeave addresses threads by its own id.">
         {sessions.length === 0 ? <p className="aw-row-note">No sessions yet.</p> : null}
         {sessions.map((s) => (
           <SettingsRow

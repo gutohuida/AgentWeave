@@ -223,7 +223,7 @@ describe('main moving outside the Hub, and a next slice offered', () => {
     render(<OverviewScreen onNavigate={vi.fn()} />)
 
     const row = rowOf('Slice s1 is built: draft Slice two?')
-    const picker = within(row).getByLabelText('Agent that drafts the next slice') as HTMLSelectElement
+    const picker = within(row).getByLabelText('Profile that drafts the next slice') as HTMLSelectElement
     expect(picker.value).toBe('architect')
     fireEvent.change(picker, { target: { value: 'builder' } })
     fireEvent.click(within(row).getByRole('button', { name: 'Draft' }))
@@ -247,7 +247,7 @@ describe('main moving outside the Hub, and a next slice offered', () => {
     render(<OverviewScreen onNavigate={vi.fn()} onOpenConversation={open} />)
     fireEvent.click(within(rowOf('Slice s1 is built: draft Slice two?')).getByRole('button', { name: 'Draft' }))
     const action = (toastSpy.mock.lastCall?.[0] as { action?: { label: string; onClick: () => void } }).action
-    expect(action?.label).toBe('Open the conversation')
+    expect(action?.label).toBe('Open the thread')
     action?.onClick()
     expect(open).toHaveBeenCalledWith('builder', 'conv-7')
   })

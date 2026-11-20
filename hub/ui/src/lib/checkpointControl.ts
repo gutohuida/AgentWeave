@@ -14,9 +14,9 @@ export function handoffReason(
   handoffState: HandoffState,
 ): string | null {
   if (handoffUnavailable) return 'Requires an automatically managed runner'
-  if (!currentConversationId) return 'Start a conversation first'
+  if (!currentConversationId) return 'Start a thread first'
   if (handoffState === 'preparing') return 'Already writing one'
-  if (interactionLocked) return 'Unavailable while the agent is busy'
+  if (interactionLocked) return 'Unavailable while the profile is busy'
   return null
 }
 

@@ -82,7 +82,7 @@ export function ComposerSpecControl({
           title={
             armed
               ? 'Exploring — the document is created with your first message'
-              : 'Start an exploration — creates a specification document for this conversation'
+              : 'Start an exploration — creates a specification document for this thread'
           }
           aria-label={armed ? 'Stop exploring' : 'Start an exploration'}
           aria-pressed={armed}

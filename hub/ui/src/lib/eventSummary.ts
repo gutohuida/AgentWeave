@@ -30,7 +30,7 @@ export function summaryForEvent(type: string, data: Record<string, unknown>): st
     }
     // F850: the event is bare otherwise; a sync is the only thing that deletes an agent.
     case 'agent_removed':
-      return `${data.agent ?? 'An agent'} was removed from the roster${data.by === 'session_sync' ? ' by a session sync' : ''}`
+      return `${data.agent ?? 'A profile'} was removed from the roster${data.by === 'session_sync' ? ' by a session sync' : ''}`
     case 'task_deleted': {
       const released = Array.isArray(data.released_dependents)
         ? (data.released_dependents as Array<{ id?: string; title?: string }>)
@@ -53,16 +53,16 @@ export function summaryForEvent(type: string, data: Record<string, unknown>): st
     // own event name and nothing else — the same failure `permission_denied` above is a case for.
     // `queue_entry_abandoned` is the one that costs something: it is the durable record that an
     // operator's or an agent's input was dropped, and it was the only record.
-    case 'queue_entry_abandoned': return `${data.agent ?? 'an agent'} never received a message — ${String(data.reason ?? `delivery failed ${data.attempts ?? 'several'} times`)}`
-    case 'queue_agent_paused': return `${data.agent ?? 'an agent'} is paused: ${String(data.reason ?? 'the workspace is unavailable')}`
-    case 'queue_entry_released': return `${data.agent ?? 'an agent'}'s held message was continued from hop ${data.released_from_depth}`
+    case 'queue_entry_abandoned': return `${data.agent ?? 'a profile'} never received a message — ${String(data.reason ?? `delivery failed ${data.attempts ?? 'several'} times`)}`
+    case 'queue_agent_paused': return `${data.agent ?? 'a profile'} is paused: ${String(data.reason ?? 'the workspace is unavailable')}`
+    case 'queue_entry_released': return `${data.agent ?? 'a profile'}'s held message was continued from hop ${data.released_from_depth}`
     // A context reading carries its whole meaning in `percent`/`context_tokens`/`limit_tokens`,
     // and the default branch looks at none of them — so the most frequent row in a live timeline
     // rendered as the bare string `context_warning`, with the measurement nowhere. Nothing is
     // invented here either: a sample whose model the catalog does not declare keeps a null
     // `percent` (see `resolve_usage_limit`), and reports the raw count it does have.
     case 'context_warning': {
-      const who = String(data.agent ?? 'an agent')
+      const who = String(data.agent ?? 'a profile')
       const model = typeof data.model === 'string' && data.model ? ` (${data.model})` : ''
       if (typeof data.percent === 'number') {
         const of = typeof data.context_tokens === 'number' && typeof data.limit_tokens === 'number'
@@ -105,10 +105,10 @@ export function summaryForEvent(type: string, data: Record<string, unknown>): st
     case 'turn_produced_nothing': {
       const status = data.run_exit_status ? ` (${data.run_exit_status})` : ''
       const doc = data.spec_document ? ` ${data.spec_document}` : ' anything'
-      return `${data.agent ?? 'an agent'} ended${status} without changing${doc}`
+      return `${data.agent ?? 'a profile'} ended${status} without changing${doc}`
     }
     case 'review_unstaffed':
-      return `no agent could review ${data.task_id ?? 'a task'}${data.reason ? `: ${data.reason}` : ''}`
+      return `no profile could review ${data.task_id ?? 'a task'}${data.reason ? `: ${data.reason}` : ''}`
     case 'loop_stopped':
       return `loop ${data.loop_id ?? data.job_id} stopped${data.reason ? `: ${data.reason}` : ''}`
     case 'loop_queue_exhausted':
@@ -118,10 +118,10 @@ export function summaryForEvent(type: string, data: Record<string, unknown>): st
     case 'run_interrupted': {
       const requeued = Array.isArray(data.returned_entry_ids) ? data.returned_entry_ids.length : 0
       const dropped = Array.isArray(data.abandoned_entry_ids) ? data.abandoned_entry_ids.length : 0
-      return `${data.agent ?? 'an agent'}'s run was interrupted — ${requeued} message${requeued === 1 ? '' : 's'} requeued, ${dropped} dropped`
+      return `${data.agent ?? 'a profile'}'s run was interrupted — ${requeued} message${requeued === 1 ? '' : 's'} requeued, ${dropped} dropped`
     }
     case 'queue_chain_suspended':
-      return `${data.agent ?? 'an agent'}: chain suspended at hop ${data.hop_depth} of a ${data.hop_budget}-hop budget`
+      return `${data.agent ?? 'a profile'}: chain suspended at hop ${data.hop_depth} of a ${data.hop_budget}-hop budget`
     case 'task_worktree_release_failed':
       return `${data.task_id ?? 'a task'}: worktree not released${data.reason ? ` — ${data.reason}` : ''}`
     case 'agent_heartbeat': return `${data.agent} [${data.status}]${data.message ? ` — ${data.message}` : ''}`
@@ -138,7 +138,7 @@ export function summaryForEvent(type: string, data: Record<string, unknown>): st
         : kind === 'project' ? 'the project directory'
         : kind === 'hub' ? "the Hub's own directory"
         : 'outside its workspace'
-      return `${data.agent ?? 'an agent'} wrote ${where === 'outside its workspace' ? where : `outside its workspace, into ${where}`}${data.path ? `: ${data.tool ?? 'a tool'} → ${data.path}` : ''}`
+      return `${data.agent ?? 'a profile'} wrote ${where === 'outside its workspace' ? where : `outside its workspace, into ${where}`}${data.path ? `: ${data.tool ?? 'a tool'} → ${data.path}` : ''}`
     }
     // Both of these carry the only detail worth reading in a field the default branch does not
     // look at, so without a case they render as their own event name twice over.
@@ -148,7 +148,7 @@ export function summaryForEvent(type: string, data: Record<string, unknown>): st
     case 'permission_denied': {
       const detail = typeof data.detail === 'string' ? data.detail.trim() : ''
       const shown = detail.length > 120 ? `${detail.slice(0, 119)}…` : detail
-      return `${data.agent ?? 'an agent'} was refused ${data.tool_name ?? 'an action'}${data.reason ? `: ${data.reason}` : ''}${shown ? ` — ${shown}` : ''}`
+      return `${data.agent ?? 'a profile'} was refused ${data.tool_name ?? 'an action'}${data.reason ? `: ${data.reason}` : ''}${shown ? ` — ${shown}` : ''}`
     }
     // Retired: nothing emits `question_not_asked` any more (the unasked-question backstop was
     // removed and its table dropped in 0082). Kept because `event_logs` rows written before then

@@ -277,11 +277,11 @@ function BuildViewLoaded({ read, now, address, onAddressChange, refreshError, on
               </span>
               {openedRun.conversation_id ? (
                 <button type="button" data-slot="link-button" className="aw-bv-link" onClick={() => onOpenConversation(openedRun)}>
-                  Open the conversation
+                  Open the thread
                   <Icon name="arrow_forward" size={12} />
                 </button>
               ) : (
-                <span className="aw-bv-drawer-sub">No conversation recorded</span>
+                <span className="aw-bv-drawer-sub">No thread recorded</span>
               )}
             </div>
           ) : null
@@ -418,7 +418,7 @@ function BuildHeader({
               {totals.runs}
             </strong>
             <small className="tabular">
-              {formatDuration(totals.seconds)} of agent work{totals.live ? ` · ${totals.live} running now` : ''}
+              {formatDuration(totals.seconds)} of profile work{totals.live ? ` · ${totals.live} running now` : ''}
             </small>
           </dd>
         </div>

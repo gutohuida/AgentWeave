@@ -74,7 +74,7 @@ function renderSurface(agent: string | null, onStarted = vi.fn()) {
 describe('considered new-conversation state', () => {
   it('offers recent agents as real pressed-state controls, not decorative suggestions', () => {
     renderSurface('claude')
-    expect(screen.getByText('Start with a recent agent, or choose another before you send.')).toBeInTheDocument()
+    expect(screen.getByText('Start with a recent profile, or choose another before you send.')).toBeInTheDocument()
     expect(screen.getByTestId('new-conversation-agent-claude')).toHaveAttribute('aria-pressed', 'true')
     expect(screen.getByTestId('new-conversation-agent-codex')).toHaveAttribute('aria-pressed', 'false')
   })
@@ -124,7 +124,7 @@ describe('starting a conversation', () => {
   it('names the bound agent it is about to talk to', () => {
     renderSurface('claude')
     expect(screen.getByTestId('new-conversation-headline')).toHaveTextContent(
-      'New conversation with claude',
+      'New thread with claude',
     )
   })
 
@@ -138,7 +138,7 @@ describe('starting a conversation', () => {
     fireEvent.click(screen.getByTestId('new-conversation-agent-codex'))
     await waitFor(() =>
       expect(screen.getByTestId('new-conversation-headline')).toHaveTextContent(
-        'New conversation with codex',
+        'New thread with codex',
       ),
     )
   })
@@ -161,7 +161,7 @@ describe('starting a conversation', () => {
   it('requires an agent when started from the recency view, and says so', async () => {
     renderSurface(null)
     expect(screen.getByTestId('composer-disabled-reason')).toHaveTextContent(
-      'Choose an agent to start',
+      'Choose a profile to start',
     )
 
     setComposerText(screen.getByRole('textbox'), 'Who is listening?')
@@ -203,7 +203,7 @@ describe('starting a conversation', () => {
     )
     expect(screen.getByTestId('new-conversation-agent-codex')).toHaveAttribute('aria-pressed', 'false')
     expect(screen.getByTestId('new-conversation-headline')).toHaveTextContent(
-      'New conversation with claude',
+      'New thread with claude',
     )
 
     // And the message actually goes where the operator redirected it.
@@ -472,7 +472,7 @@ describe('a refused first message (F108)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Send message' }))
 
     await waitFor(() =>
-      expect(screen.getByRole('alert')).toHaveTextContent('Could not start the conversation'),
+      expect(screen.getByRole('alert')).toHaveTextContent('Could not start the thread'),
     )
   })
 })

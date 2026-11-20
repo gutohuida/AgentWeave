@@ -20,10 +20,10 @@ export function scrollToAnchor(id: string): void {
 const LOCATE_PROJECT_ANCHOR = 'locate-project'
 
 const WHY: Record<NonNullable<ProjectSetupItem['reason']>, string> = {
-  not_installed: 'its coding agent is not installed on this machine',
-  not_logged_in: 'its coding agent is not logged in on this machine',
+  not_installed: 'its coding CLI is not installed on this machine',
+  not_logged_in: 'its coding CLI is not logged in on this machine',
   no_model: 'it has no model chosen',
-  cannot_run: 'its coding agent cannot run',
+  cannot_run: 'its coding CLI cannot run',
 }
 
 export function describeSetupItem(
@@ -50,7 +50,7 @@ export function describeSetupItem(
       return {
         ...base,
         title: 'Make the folder a git repository',
-        detail: 'Without one, every agent writes in the same folder: none gets a branch of its own, and nothing is merged.',
+        detail: 'Without one, every profile writes in the same folder: none gets a branch of its own, and nothing is merged.',
         action: {
           label: 'Make it a repository…',
           onClick: () => {
@@ -70,7 +70,7 @@ export function describeSetupItem(
       return {
         ...base,
         title: 'Start your specifications',
-        detail: 'This project has no specification documents yet. An agent can write down what its code does, or interview you to plan it.',
+        detail: 'This project has no specification documents yet. A profile can write down what its code does, or interview you to plan it.',
         action: { label: 'Start…', onClick: () => goTo(projectDestination(projectId, 'spec')) },
       }
     case 'can-run': {
@@ -82,7 +82,7 @@ export function describeSetupItem(
         detail:
           item.reason === 'cannot_run' && item.detail
             ? item.detail
-            : 'Its turns fail at launch. Fix that on this machine, or give it a model whose coding agent runs.',
+            : 'Its runs fail at launch. Fix that on this machine, or give it a model whose coding CLI runs.',
         action: {
           label: 'Choose its model',
           onClick: () => {
