@@ -274,7 +274,6 @@
 .aw-rail-note-error svg { color: var(--red); }
 .aw-rail-link { color: var(--text); text-decoration: underline; text-underline-offset: 2px; border-radius: var(--radius-sm); }
 .aw-rail-link:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--ring); }
-.aw-rail-skeleton { height: 10px; margin: 9px 8px; border-radius: var(--radius-sm); background: var(--row-hover); }
 .aw-rail-compact-mark { position: absolute; right: -3px; top: -3px; display: inline-flex; align-items: center; justify-content: center; width: 14px; height: 14px; border-radius: 999px; border: 2px solid var(--rail); background: var(--amber); color: var(--bg); }
 @media (prefers-reduced-motion: reduce) { .aw-rail-tb .aw-pulse { animation: none; } }
 .aw-rail-tb .aw-rail-more { color: var(--text-2); }

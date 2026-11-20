@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNod
 import type { AgentConversation } from '@/api/agentChat'
 import type { ProjectAgentSummary } from '@/api/projects'
 import { Icon } from '@/components/common/Icon'
+import { LoadingThread } from '@/components/common/LoadingThread'
 import { Input } from '@/components/ui/input'
 import { agentColorVars } from '@/lib/agentColors'
 import { formatCount } from '@/lib/format'
@@ -177,7 +178,7 @@ export function ThreadsAndBuilds({
           />
           {!isCollapsed('builds') && (
             <>
-              {buildsState === 'loading' && <RowsLoading rows={2} label="Loading builds" />}
+              {buildsState === 'loading' && <LoadingThread size="inline" label="Loading builds" />}
               {buildsState === 'error' && (
                 <ListError what="builds" onRetry={() => onRetry(projectId, 'builds')} testId={`rail-builds-error-${projectId}`} />
               )}
@@ -223,7 +224,7 @@ export function ThreadsAndBuilds({
 
         {!isCollapsed('threads') && (
           <>
-            {threadsState === 'loading' && <RowsLoading rows={5} label="Loading threads" />}
+            {threadsState === 'loading' && <LoadingThread size="inline" label="Loading threads" />}
             {threadsState === 'error' && (
               <ListError what="threads" onRetry={() => onRetry(projectId, 'threads')} testId={`rail-threads-error-${projectId}`} />
             )}
@@ -399,17 +400,6 @@ function BuildRow({
           <Icon name="close" size={12} />
         </button>
       )}
-    </div>
-  )
-}
-
-/** Shaped like the rows it stands in for, and shown only after the loader delay. */
-function RowsLoading({ rows, label }: { rows: number; label: string }) {
-  return (
-    <div className="aw-delayed" role="status" aria-label={label}>
-      {Array.from({ length: rows }, (_, i) => (
-        <div key={i} className="aw-rail-skeleton" style={{ width: `${88 - ((i * 17) % 34)}%` }} />
-      ))}
     </div>
   )
 }
