@@ -8,7 +8,7 @@ import { toast } from '@/lib/toast'
 import { useConfigStore } from '@/store/configStore'
 import { InstructionsSettings } from '../OtherSettings'
 
-const DESCRIPTION = "Rules every agent in this project reads at the start of a session, before its own charter."
+const DESCRIPTION = "Rules every profile in this project reads at the start of a session, before its own charter."
 
 /**
  * Project settings → Instructions, editable only once they have actually been read.
@@ -91,7 +91,7 @@ export function InstructionsSection() {
       action={{ label: "Use AGENTS.md as this project's instructions", onClick: () => switchSource(true) }}
     >
       <p>
-        Agents are given the instructions below, not that file. Using AGENTS.md instead adds these instructions to it in one commit on the main branch; they stay kept here, unused, should you switch back.
+        Profiles are given the instructions below, not that file. Using AGENTS.md instead adds these instructions to it in one commit on the main branch; they stay kept here, unused, should you switch back.
       </p>
     </SettingsNotice>
   ) : null

@@ -69,7 +69,7 @@ export function JobsScreen({ onOpenTasks }: { onOpenTasks?: (taskIds: string[]) 
 
   return (
     <>
-      <QueryErrorNotice failures={[['the agents', agentsError]]} />
+      <QueryErrorNotice failures={[['the profiles', agentsError]]} />
       <JobsView
         jobs={jobs ?? []}
         archived={archived ?? []}

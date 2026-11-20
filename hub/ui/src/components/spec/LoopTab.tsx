@@ -37,7 +37,7 @@ function stagedFields(loop: LoopSummary): Array<{ key: string; label: string; no
   if (pending.agent !== undefined) {
     rows.push({
       key: 'agent',
-      label: 'Default agent',
+      label: 'Default profile',
       now: loop.agent || 'none',
       next: pending.agent || 'none',
     })
@@ -198,7 +198,7 @@ function LoopActions({ loop }: { loop: LoopSummary & { job_id: string } }) {
     <div className="mt-3 space-y-2" data-testid="loop-tab-actions">
       {!ended && (
         <p data-testid="loop-tab-controller" style={{ fontSize: 11, color: 'var(--text-3)' }}>
-          Additions to this queue are decided by {delegated ? agent || 'the loop’s agent' : 'you'}.
+          Additions to this queue are decided by {delegated ? agent || 'the loop’s profile' : 'you'}.
           {agent && !agentArchived && (
             <>
               {' '}
@@ -282,7 +282,7 @@ function LoopActions({ loop }: { loop: LoopSummary & { job_id: string } }) {
 
       {!ended && archivedListFailed && (
         <p style={{ fontSize: 11, color: 'var(--text-3)' }}>
-          Could not check whether {agent || 'the loop’s agent'} is archived; delegating to an archived agent has no effect.
+          Could not check whether {agent || 'the loop’s profile'} is archived; delegating to an archived profile has no effect.
         </p>
       )}
 

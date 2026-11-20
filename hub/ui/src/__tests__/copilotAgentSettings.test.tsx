@@ -210,7 +210,7 @@ describe('a copilot agent has a GitHub-server setting', () => {
   it('says the GitHub tools are read-only and run without asking, and promises no card', () => {
     renderExecution(agent({ runner: 'copilot' }))
     expect(
-      screen.getByText(/Gives this agent Copilot's built-in GitHub tools, read-only\./),
+      screen.getByText(/Gives this profile Copilot's built-in GitHub tools, read-only\./),
     ).toBeInTheDocument()
     expect(
       screen.getByText(/Copilot runs them without asking you, in every posture, Ask me included\./),

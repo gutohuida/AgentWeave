@@ -36,11 +36,11 @@ export type ProjectPart = 'general' | 'collaboration' | 'permissions' | 'checks'
 
 const PARTS: Record<ProjectPart, { icon: string; title: string; description: string; Page: typeof ProjectBasicsSettings }> = {
   general: { icon: 'folder', title: 'Project', description: 'What this project is called and where it lives on this machine.', Page: ProjectBasicsSettings },
-  collaboration: { icon: 'forum', title: 'Collaboration', description: 'How far agents may pass work between themselves before you are asked.', Page: CollaborationSettings },
-  permissions: { icon: 'lock', title: 'Permissions', description: "What agents may do when nobody said otherwise. An agent's own settings win over these.", Page: PermissionsSettings },
+  collaboration: { icon: 'forum', title: 'Collaboration', description: 'How far profiles may pass work between themselves before you are asked.', Page: CollaborationSettings },
+  permissions: { icon: 'lock', title: 'Permissions', description: "What profiles may do when nobody said otherwise. A profile's own settings win over these.", Page: PermissionsSettings },
   checks: { icon: 'verified_user', title: 'Checks', description: 'What must pass before approved work lands.', Page: ChecksSettings },
   landing: { icon: 'git_merge', title: 'Landing', description: 'Where approved work goes: merged into the main branch, or onto a pull request.', Page: LandingSettings },
-  checkpoints: { icon: 'book_marked', title: 'Checkpoints', description: "When a conversation's context fills, the Hub writes a checkpoint so a fresh conversation can continue the work.", Page: CheckpointsSettings },
+  checkpoints: { icon: 'book_marked', title: 'Checkpoints', description: "When a thread's context fills, the Hub writes a checkpoint so a fresh thread can continue the work.", Page: CheckpointsSettings },
 }
 
 /** Project settings → one of the sections General split into, on the Hub. Each change is its own save, sending only the fields

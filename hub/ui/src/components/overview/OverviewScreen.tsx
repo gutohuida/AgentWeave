@@ -37,7 +37,7 @@ const MENDER = 'mender'
 
 const STALL_TITLE: Record<Stall['cause'], string> = {
   loop_stalled: 'A loop has nothing it can start',
-  delivery_refused: 'An agent’s turn was refused',
+  delivery_refused: 'A profile’s run was refused',
   integration_skipped: 'Approved work did not merge',
   integration_failed: 'Approved work failed to merge',
   review_unstaffed: 'Nobody can review a task',
@@ -95,13 +95,13 @@ export function OverviewScreen({
   const { data: ledger, error: ledgerError, refetch: refetchLedger } = useProjectLedger()
   const { data: accounting, error: accountingError, refetch: refetchAccounting } = useAccounting()
   const failures: QueryFailure[] = [
-    ['the agents', agentsError, refetchAgents],
+    ['the profiles', agentsError, refetchAgents],
     ['the questions', questionsError, refetchQuestions],
     ['the stalls', stallsError, refetchStalls],
     ['the known-failing list', knownFailingError, refetchKnownFailing],
     ['the quarantine', quarantineError, refetchQuarantine],
     ['the tasks', tasksError, refetchTasks],
-    ['the conversations', conversationsError, refetchConversations],
+    ['the threads', conversationsError, refetchConversations],
     ['the ledger', ledgerError, refetchLedger],
     ['the budget', accountingError, refetchAccounting],
     ['the main branch notices', mainNoticesError, refetchMainNotices],
@@ -160,7 +160,7 @@ export function OverviewScreen({
         // The thread it was asked in when the Hub says which: the answer is delivered there.
         primary: q.from_agent
           ? {
-              label: 'Open conversation',
+              label: 'Open thread',
               onClick: () => (q.conversation_id ? openConversation(q.from_agent, q.conversation_id) : onNavigate(`agent:${q.from_agent}`)),
             }
           : { label: 'Answer', onClick: () => onNavigate('questions') },
@@ -260,7 +260,7 @@ export function OverviewScreen({
         ),
         at: new Date().toISOString(),
         picker: {
-          label: 'Agent that drafts the next slice',
+          label: 'Profile that drafts the next slice',
           options,
           value: agent,
           onChange: (value: string) => setOfferAgent((current) => ({ ...current, [key]: value })),
@@ -277,7 +277,7 @@ export function OverviewScreen({
                     tone: 'success',
                     // The slice's document exists now (FR-1); its conversation opens with it.
                     action: taken?.conversation_id
-                      ? { label: 'Open the conversation', onClick: () => openConversation(taken.agent || agent, taken.conversation_id!) }
+                      ? { label: 'Open the thread', onClick: () => openConversation(taken.agent || agent, taken.conversation_id!) }
                       : undefined,
                   }),
                 onError: refusal('The drafting turn was not queued'),
@@ -347,7 +347,7 @@ export function OverviewScreen({
       id: m.id,
       kind: 'merged' as const,
       title: m.task_title ?? 'A task',
-      detail: `Merged into ${m.target_branch ?? 'the main branch'} · approved by ${m.actor_kind === 'operator' ? 'you' : (m.actor ?? 'an agent')}`,
+      detail: `Merged into ${m.target_branch ?? 'the main branch'} · approved by ${m.actor_kind === 'operator' ? 'you' : (m.actor ?? 'a profile')}`,
       at: m.at!,
       usd: usdByTask.get(m.task_id) ?? null,
       onOpen: () => openTask(m.task_id),
@@ -382,7 +382,7 @@ export function OverviewScreen({
       statusLabel: state === 'waiting' ? 'Waiting' : getStatusConfig(a.status).label || a.status,
       doing:
         state === 'running'
-          ? `Working on “${latest ? conversationLabel(latest) : 'a conversation'}”`
+          ? `Working on “${latest ? conversationLabel(latest) : 'a thread'}”`
           : state === 'waiting'
             ? 'Waiting for your answer'
             : state === 'stalled'

@@ -186,7 +186,7 @@ export function TaskCard({
           {canStart ? (
             <span className="aw-reveal">
               <Menu>
-                <MenuTrigger data-slot="icon-button" className="aw-icon-button" aria-label={`${task.status === 'completed' && onReviewTask ? 'Start review of' : 'Start work on'} ${task.title}`} title={task.status === 'completed' && onReviewTask ? 'Start a review of this' : 'Start an agent on this'}>
+                <MenuTrigger data-slot="icon-button" className="aw-icon-button" aria-label={`${task.status === 'completed' && onReviewTask ? 'Start review of' : 'Start work on'} ${task.title}`} title={task.status === 'completed' && onReviewTask ? 'Start a review of this' : 'Start a profile on this'}>
                   <Icon name="play_arrow" size={13} />
                 </MenuTrigger>
                 <MenuContent align="end">

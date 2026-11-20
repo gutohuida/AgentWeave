@@ -86,7 +86,7 @@ export function JobForm({ onSubmit, onCancel, isPending }: JobFormProps) {
       return
     }
     if (!agent) {
-      setError('Agent is required')
+      setError('Profile is required')
       return
     }
     if (!message.trim()) {
@@ -174,11 +174,11 @@ export function JobForm({ onSubmit, onCancel, isPending }: JobFormProps) {
           {/* Agent */}
           <div>
             <label className="block mb-1.5 text-[11px] font-medium" style={{ color: 'var(--text-3)' }}>
-              Target Agent
+              Target profile
             </label>
             <div className="control-select-wrap">
               <select className="control-field" value={agent} onChange={(e) => setAgent(e.target.value)} style={inputStyle} disabled={isPending}>
-                <option value="">Select an agent…</option>
+                <option value="">Select a profile…</option>
                 {agents?.map((a) => <option key={a.name} value={a.name}>@{a.name}</option>)}
               </select>
               <Icon name="expand_more" size={15} className="control-select-icon" />
@@ -193,7 +193,7 @@ export function JobForm({ onSubmit, onCancel, isPending }: JobFormProps) {
             <textarea
               value={message}
               onChange={(e) => setMessage(e.target.value)}
-              placeholder="The message to send to the agent when this job runs…"
+              placeholder="The message to send to the profile when this job runs…"
               rows={3}
               className="control-field h-24 resize-none"
               style={inputStyle}

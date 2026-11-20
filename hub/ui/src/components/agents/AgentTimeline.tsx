@@ -118,7 +118,7 @@ export function OutsideWritesLine({ writes }: { writes: OutsideWrite[] | null | 
       data-testid="run-outside-writes"
       className="text-[11px] text-center"
       style={{ color: 'var(--text-3)' }}
-      title="Recorded, not prevented. The agent's activity has one notice per destination."
+      title="Recorded, not prevented. The run's activity has one notice per destination."
     >
       Wrote outside its workspace: {shown}
       {overflow > 0 && ` and ${overflow} more`}
@@ -293,7 +293,7 @@ export function AgentTimeline({
         style={{ color: 'var(--text-3)' }}
       >
         <span className="timeline-empty-icon" aria-hidden="true"><Icon name="chat" size={20} /></span>
-        <p className="mt-3 text-[13px] font-semibold" style={{ color: 'var(--text)' }}>No conversation yet</p>
+        <p className="mt-3 text-[13px] font-semibold" style={{ color: 'var(--text)' }}>No thread yet</p>
         <p className="mt-1 text-[11.5px]">Write below to start this thread.</p>
       </div>
     )
@@ -421,7 +421,7 @@ export function AgentTimeline({
           {/* F633: the count is the agent's, not this conversation's; with nothing queued here it
               must not read as if this conversation were the one waiting. */}
           {queueStatus.waiting_count} waiting
-          {pending.length === 0 ? ' in another conversation' : ''}
+          {pending.length === 0 ? ' in another thread' : ''}
           {queueStatus.waiting_reason ? ` — ${queueStatus.waiting_reason}` : ''}
         </p>
       )}
@@ -807,7 +807,7 @@ function isHiddenThought(entry: TimelineEntry): boolean {
   return payload?.hidden === true || !entry.content?.trim()
 }
 
-const HIDDEN_REASONING_TITLE = 'The agent reasoned here; this model does not share its reasoning text.'
+const HIDDEN_REASONING_TITLE = 'The run reasoned here; this model does not share its reasoning text.'
 
 /** A turn's reasoning with no text, as one muted line in place of a work block. While it is the
  *  turn's latest event the icon breathes, so a long silent think reads as work, not a stall. */
@@ -1045,7 +1045,7 @@ function WorkRow({
             <span
               data-testid="work-row-subagent"
               className="flex-shrink-0"
-              title="Made by a subagent this agent delegated to"
+              title="Made by a subagent this profile delegated to"
               style={{ color: 'var(--text-3)' }}
             >
               subagent: {subagent}

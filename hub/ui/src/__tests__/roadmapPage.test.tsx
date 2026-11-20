@@ -132,7 +132,7 @@ describe('a roadmap page', () => {
   it('takes a draft with the roadmap author preselected', async () => {
     renderBody(view(SPEC_VISUALS))
     await userEvent.click(within(slice('s3')).getByRole('button', { name: /Draft this slice/ }))
-    expect(screen.getByLabelText('Agent that drafts this slice')).toHaveValue('Architect')
+    expect(screen.getByLabelText('Profile that drafts this slice')).toHaveValue('Architect')
     await userEvent.click(screen.getByRole('button', { name: 'Draft' }))
     expect(take).toHaveBeenCalledWith({ roadmap: RM, slice: 's3', agent: 'Architect' }, expect.anything())
   })
@@ -174,10 +174,10 @@ describe('a roadmap page', () => {
     expect(screen.getByTestId('rm-added')).toHaveTextContent('Added after approval by Architect')
     await userEvent.click(screen.getByRole('button', { name: /Edit slices/ }))
     expect(screen.queryByRole('textbox')).toBeNull()
-    await userEvent.click(screen.getByRole('button', { name: /Add a slice with an agent/ }))
-    expect(screen.getByLabelText('Agent to add the slice with')).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: /Add a slice with a profile/ }))
+    expect(screen.getByLabelText('Profile to add the slice with')).toBeInTheDocument()
     expect(screen.queryByRole('textbox')).toBeNull()
-    await userEvent.click(screen.getByRole('button', { name: 'Start the conversation' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Start the thread' }))
     expect(converse).toHaveBeenCalledWith({ roadmap: RM, agent: undefined }, expect.anything())
   })
 

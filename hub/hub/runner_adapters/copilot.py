@@ -238,7 +238,7 @@ class CopilotAdapter(RunnerAdapter):
     # Slice 2 D16: Copilot's own task tool dispatches a subagent, which is not an AgentWeave agent.
     host_tool_note = (
         "Copilot has its own tools with similar purposes (such as its task tool); these AgentWeave "
-        "tools are the only way to reach AgentWeave agents or the operator."
+        "tools are the only way to reach AgentWeave profiles or the operator."
     )
     # `None`: the Hub's MCP child inherits the run's environment (slice 2 D3).
     mcp_env_names = None

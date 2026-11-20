@@ -113,7 +113,7 @@ class ClaudeAdapter(RunnerAdapter):
     mcp_tool_prefix = "mcp__agentweave__"
     host_tool_note = (
         "Your host also has tools with similar names — `SendMessage` continues a subagent you "
-        "started — which cannot reach AgentWeave agents or the operator."
+        "started — which cannot reach AgentWeave profiles or the operator."
     )
     # FR-9 of `dashboards-that-feel-alive-and-draw-right-the-first-time`: Claude Code defers MCP
     # tools behind `ToolSearch`, and a Haiku turn called it 21 times, never the tool it loaded.

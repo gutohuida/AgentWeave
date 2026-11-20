@@ -50,7 +50,7 @@ export function DashboardsScreen() {
         })
       }
       agents={(agents.data ?? []).map((a) => a.name)}
-      agentsError={agents.error ? readableApiError(agents.error, 'Could not load the agents.') : null}
+      agentsError={agents.error ? readableApiError(agents.error, 'Could not load the profiles.') : null}
       onAskToChange={(d, agent) => {
         if (!projectId) return
         // A draft, not a send: the composer opens holding the line, and only the operator sends it.

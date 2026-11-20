@@ -60,7 +60,7 @@ export function DeleteProjectDialog({
           Delete “{project.name}”
         </h2>
         <p className="mt-1 text-xs" style={{ color: 'var(--text-3)' }}>
-          This removes the project from AgentWeave — its agents, conversations, tasks, and every
+          This removes the project from AgentWeave — its profiles, threads, tasks, and every
           other record — permanently. The folder on disk is never touched.
         </p>
 

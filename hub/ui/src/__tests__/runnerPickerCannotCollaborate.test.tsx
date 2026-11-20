@@ -62,7 +62,7 @@ describe('the runner picker says when an agent will run but cannot collaborate (
 
     const line = screen.getByText(/cannot collaborate/)
     expect(line).toHaveAttribute('role', 'status')
-    expect(line).toHaveTextContent(`This agent will run, but cannot collaborate: ${OPT_OUT}`)
+    expect(line).toHaveTextContent(`This profile will run, but cannot collaborate: ${OPT_OUT}`)
   })
 
   it('says nothing for a collaboration-ready agent', () => {
@@ -80,7 +80,7 @@ describe('the runner picker says when an agent will run but cannot collaborate (
   it('an agent that cannot run is told only that', () => {
     verdict({ present: false, authorized: false, runnable: false, reason: NO_RUNNER, collaboration_ready: null })
 
-    expect(screen.getByText(/^This agent cannot run/)).toHaveTextContent(`This agent cannot run: ${NO_RUNNER}`)
+    expect(screen.getByText(/^This profile cannot run/)).toHaveTextContent(`This profile cannot run: ${NO_RUNNER}`)
     expect(screen.queryByText(/cannot collaborate/)).not.toBeInTheDocument()
   })
 
@@ -96,7 +96,7 @@ describe('the runner picker says when an agent will run but cannot collaborate (
       collaboration_reason: OPT_OUT,
     })
 
-    expect(screen.getByText(/^This agent cannot run/)).toBeInTheDocument()
+    expect(screen.getByText(/^This profile cannot run/)).toBeInTheDocument()
     expect(screen.queryByText(/cannot collaborate/)).not.toBeInTheDocument()
   })
 
@@ -104,7 +104,7 @@ describe('the runner picker says when an agent will run but cannot collaborate (
     verdict({ ...runnable, collaboration_ready: false, collaboration_reason: null })
 
     expect(screen.getByText(/cannot collaborate/)).toHaveTextContent(
-      'This agent will run, but cannot collaborate: the Hub reports its tool calls would be refused.',
+      'This profile will run, but cannot collaborate: the Hub reports its tool calls would be refused.',
     )
   })
 })

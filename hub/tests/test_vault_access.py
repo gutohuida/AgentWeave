@@ -8,6 +8,7 @@ calls the agent route directly.
 """
 
 import asyncio
+import re
 import time
 from pathlib import Path
 from typing import List
@@ -307,7 +308,8 @@ def test_the_tool_description_and_the_instruction_line_name_the_ordering_and_fet
     line = " ".join(next(op.text for op in _operations() if op.tool == "vault_map").split())
     for text in (tool, line):
         assert "fetches" in text
-        assert "how often agents have read" in text
+        # The tool's description says profiles (FR-11 of profiles-threads-and-builds-everywhere).
+        assert re.search(r"how often (agents|profiles) have read", text)
         assert "newest first" in text  # as the tie-break, after the reads
     assert "what the business has told this project, newest first." not in tool
 

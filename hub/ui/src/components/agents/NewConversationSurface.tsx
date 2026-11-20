@@ -175,7 +175,7 @@ export function NewConversationSurface({
       // honour and says why; 'Could not start the conversation' throws that away and leaves the
       // operator with a dead composer and no remedy.
       const refusal = new ApiError(response.status, await response.text())
-      setError(readableRefusal(refusal, 'Could not start the conversation'))
+      setError(readableRefusal(refusal, 'Could not start the thread'))
       throw refusal
     }
     const result = (await response.json()) as { conversation_id: string }
@@ -187,7 +187,7 @@ export function NewConversationSurface({
   const agentChooser = (
     <div className="flex flex-col items-center gap-2" style={{ marginTop: 24 }}>
       <p className="text-center text-[11.5px]" style={{ color: 'var(--text-3)' }}>
-        Start with a recent agent, or choose another before you send.
+        Start with a recent profile, or choose another before you send.
       </p>
       <div className="flex flex-wrap justify-center gap-1.5">
         {roster.map((candidate) => {
@@ -219,7 +219,7 @@ export function NewConversationSurface({
   return (
     <div className="flex h-full flex-col overflow-hidden" style={{ background: 'var(--bg)' }}>
       <div className="conversation-header-surface aw-convbar" data-testid="conversation-header">
-        <span className="aw-convbar-agent">New conversation</span>
+        <span className="aw-convbar-agent">New thread</span>
         {/* The project the unsent message will act on, repeated at the decision point so it
             cannot look detached from it. */}
         <span
@@ -261,7 +261,7 @@ export function NewConversationSurface({
             </span>
             {/* Unbound, the line is the question that has to be answered first, not decoration. */}
             <h2 className="aw-newconv-title" data-testid="new-conversation-headline">
-              {agent ? `New conversation with ${agent}` : 'Who should work on this?'}
+              {agent ? `New thread with ${agent}` : 'Who should work on this?'}
             </h2>
           </div>
         )}
@@ -273,13 +273,13 @@ export function NewConversationSurface({
         onToggleOption={() => undefined}
         composer={{
           key: composerKey,
-          agent: agent ?? 'an agent',
+          agent: agent ?? 'a profile',
           projectId,
           conversationId: null,
           isRunning: false,
           onSubmit: handleSubmit,
-          placeholder: agent ? undefined : 'Choose an agent, then write your first message…',
-          disabledReason: agent ? undefined : 'Choose an agent to start',
+          placeholder: agent ? undefined : 'Choose a profile, then write your first message…',
+          disabledReason: agent ? undefined : 'Choose a profile to start',
           workspacePaths,
           specDocuments: specDocumentList?.documents,
           specDocumentsStatus: specDocumentList ? undefined : specDocumentsFailed ? 'error' : 'loading',

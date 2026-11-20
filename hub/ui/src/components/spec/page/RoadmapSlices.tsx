@@ -264,7 +264,7 @@ export function RoadmapSlices(props: RoadmapSlicesProps) {
             </span>
             {props.pickerFor?.('add') ?? (
               <button data-slot="rm-add" type="button" className="aw-rm-add" onClick={props.onAddWithAgent}>
-                <Icon name="sparkles" size={12} /> Add a slice with an agent
+                <Icon name="sparkles" size={12} /> Add a slice with a profile
               </button>
             )}
           </li>

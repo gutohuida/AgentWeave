@@ -141,7 +141,7 @@ describe('durable handoff has a persistent place on the conversation', () => {
     const handoff = await screen.findByTestId('conversation-handoff')
 
     expect(handoff).toBeDisabled()
-    expect(handoff).toHaveAccessibleName('Checkpoint — Start a conversation first')
+    expect(handoff).toHaveAccessibleName('Checkpoint — Start a thread first')
   })
 
   it('states its reason while the agent is busy', async () => {
@@ -149,6 +149,6 @@ describe('durable handoff has a persistent place on the conversation', () => {
     const handoff = await screen.findByTestId('conversation-handoff')
 
     await waitFor(() => expect(handoff).toBeDisabled())
-    expect(handoff).toHaveAccessibleName('Checkpoint — Unavailable while the agent is busy')
+    expect(handoff).toHaveAccessibleName('Checkpoint — Unavailable while the profile is busy')
   })
 })

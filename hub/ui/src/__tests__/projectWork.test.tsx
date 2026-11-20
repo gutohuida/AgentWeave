@@ -87,7 +87,7 @@ describe('ProjectWork', () => {
     stats.since.length = 0
     render(<ProjectWork />)
     expect(screen.getByTestId('work-row-spec-doc-a')).toBeInTheDocument()
-    await userEvent.click(screen.getByRole('radio', { name: 'Agent' }))
+    await userEvent.click(screen.getByRole('radio', { name: 'Profile' }))
     expect(screen.getByTestId('work-row-agent-qa')).toBeInTheDocument()
     await userEvent.type(screen.getByLabelText('Since'), '2026-10-26')
     expect(stats.since[0]).toBeNull()

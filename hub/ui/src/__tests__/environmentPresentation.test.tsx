@@ -75,7 +75,7 @@ describe('configuration surface presentation', () => {
       'Checks', 'Landing', 'Worktrees', 'Spec steps', 'Traces', 'Diagnostics',
     ])
     expect([...nav.querySelectorAll('.aw-settings-nav-group')].map((g) => g.textContent)).toEqual([
-      'Project', 'Agents', 'Landing work', 'Specs and records',
+      'Project', 'Profiles', 'Landing work', 'Specs and records',
     ])
     expect(within(nav).getByRole('button', { name: /Worktrees/ })).toHaveAttribute('aria-current', 'page')
     // The words the old rail used for the same place are gone.

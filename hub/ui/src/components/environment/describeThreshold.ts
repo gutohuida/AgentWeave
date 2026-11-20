@@ -49,13 +49,13 @@ export function runnerCeilingNote(
   const who = (runner && RUNNER_NAMES[runner]) || 'Its runner'
   const configured = typeof value === 'number' ? value : null
   if (mode === 'percent' && configured !== null && configured > ceiling) {
-    return `This agent's threshold of ${configured}% is lowered to ${ceiling}%: ${who} compacts at about ${compactionPercent}% of its window.`
+    return `This profile's threshold of ${configured}% is lowered to ${ceiling}%: ${who} compacts at about ${compactionPercent}% of its window.`
   }
   if (compactionPercent >= 95) return null
   if (mode === 'tokens' && configured !== null) {
-    return `This agent's checkpoint fires at ${configured} tokens or at ${ceiling}% of its window, whichever comes first.`
+    return `This profile's checkpoint fires at ${configured} tokens or at ${ceiling}% of its window, whichever comes first.`
   }
-  return `${who} compacts at about ${compactionPercent}% of its window. This agent's checkpoint fires by ${ceiling}% at the latest.`
+  return `${who} compacts at about ${compactionPercent}% of its window. This profile's checkpoint fires by ${ceiling}% at the latest.`
 }
 
 /**
@@ -79,6 +79,6 @@ export function projectCeilingNotes(
     .sort(([a], [b]) => a - b)
     .map(
       ([point, names]) =>
-        `Lowered to ${finalWarningPercent(point)}% for agents on a runner that compacts at about ${point}% (${names.join(', ')}).`,
+        `Lowered to ${finalWarningPercent(point)}% for profiles on a runner that compacts at about ${point}% (${names.join(', ')}).`,
     )
 }

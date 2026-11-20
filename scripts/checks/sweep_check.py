@@ -108,6 +108,7 @@ SCOPES: dict[str, tuple[str, ...]] = {
     "hub/tests/test_the_hub_reads_no_test_runner.py": (),
     "hub/tests/test_the_old_check_rules_stay_retired.py": (),
     "hub/tests/test_the_sweep_set_is_current.py": ("hub/tests/",),
+    "hub/tests/test_ui_vocabulary.py": ("hub/ui/src/", "scripts/checks/ui_vocabulary"),
     "hub/tests/test_vault_archive.py": ("hub/ui/src/api/", "scripts/drive/"),
     "hub/tests/test_workspace_writes.py": ("hub/ui/src/components/agents/",),
     "hub/tests/test_write_paths_on_run_events.py": (),

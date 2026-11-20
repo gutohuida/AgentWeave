@@ -35,7 +35,7 @@ function Harness() {
   const [open, setOpen] = useState(false)
   return (
     <>
-      <button onClick={() => setOpen(true)}>Add agent</button>
+      <button onClick={() => setOpen(true)}>Add profile</button>
       <AgentCreateDialog open={open} onClose={() => setOpen(false)} onCreated={vi.fn()} />
     </>
   )
@@ -44,13 +44,13 @@ function Harness() {
 describe('useDialogFocus — restore on close (D3)', () => {
   it('returns focus to the trigger after Escape, even when the dialog opened with autoFocus', () => {
     render(<Harness />)
-    const trigger = screen.getByRole('button', { name: 'Add agent' })
+    const trigger = screen.getByRole('button', { name: 'Add profile' })
     trigger.focus()
     fireEvent.click(trigger)
 
     // React's own `autoFocus` has already moved the keyboard onto the name input by the time
     // this assertion runs -- this is the condition D3's argument describes, not a simulation of it.
-    expect(screen.getByLabelText('Agent name')).toHaveFocus()
+    expect(screen.getByLabelText('Profile name')).toHaveFocus()
 
     fireEvent.keyDown(document, { key: 'Escape' })
 
@@ -69,8 +69,8 @@ describe('the Provider list is one layer (F1027)', () => {
   it('moves with the arrow keys, picks with Enter, and Escape closes only the list', async () => {
     const user = userEvent.setup()
     render(<Harness />)
-    await user.click(screen.getByRole('button', { name: 'Add agent' }))
-    await user.type(screen.getByLabelText('Agent name'), 'kbtwo')
+    await user.click(screen.getByRole('button', { name: 'Add profile' }))
+    await user.type(screen.getByLabelText('Profile name'), 'kbtwo')
 
     const provider = screen.getByRole('button', { name: 'Provider' })
     provider.focus()
@@ -86,12 +86,12 @@ describe('the Provider list is one layer (F1027)', () => {
     await user.keyboard('{Escape}')
 
     expect(screen.queryByRole('menu')).toBeNull()
-    expect(screen.getByRole('dialog', { name: 'Create agent' })).toBeInTheDocument()
-    expect(screen.getByLabelText('Agent name')).toHaveValue('kbtwo')
+    expect(screen.getByRole('dialog', { name: 'Create profile' })).toBeInTheDocument()
+    expect(screen.getByLabelText('Profile name')).toHaveValue('kbtwo')
     expect(screen.getByRole('button', { name: 'Provider' })).toHaveFocus()
 
     // A second Escape is the dialog's.
     await user.keyboard('{Escape}')
-    expect(screen.queryByRole('dialog', { name: 'Create agent' })).toBeNull()
+    expect(screen.queryByRole('dialog', { name: 'Create profile' })).toBeNull()
   })
 })

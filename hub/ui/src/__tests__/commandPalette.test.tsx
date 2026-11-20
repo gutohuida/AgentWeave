@@ -70,7 +70,7 @@ function renderPalette(overrides: Partial<Parameters<typeof CommandPalette>[0]> 
   return callbacks
 }
 
-const PLACEHOLDER = /search conversations, agents, documents, tasks/i
+const PLACEHOLDER = /search threads, profiles, documents, tasks/i
 
 afterEach(cleanup)
 
@@ -116,7 +116,7 @@ describe('command palette — open and close', () => {
     renderPalette()
     fireEvent.keyDown(document, { key: 'k', ctrlKey: true })
     const dialog = await screen.findByRole('dialog', { name: 'Command palette' })
-    expect(dialog).toHaveAccessibleDescription(/current project's agents, tasks/i)
+    expect(dialog).toHaveAccessibleDescription(/current project's profiles, tasks/i)
     expect(screen.getByText('Navigate')).toBeInTheDocument()
     expect(screen.getByText('Open')).toBeInTheDocument()
     expect(screen.getByText('Close')).toBeInTheDocument()
@@ -172,7 +172,7 @@ describe('command palette — the four action kinds', () => {
     expect(await screen.findByText('in progress')).toBeInTheDocument()
     expect(screen.getByText(/unassigned · updated/i)).toBeInTheDocument()
     expect(screen.getByText(/baseline · updated/i)).toBeInTheDocument()
-    expect(screen.getByText(/conversation · updated/i)).toBeInTheDocument()
+    expect(screen.getByText(/thread · updated/i)).toBeInTheDocument()
   })
 })
 

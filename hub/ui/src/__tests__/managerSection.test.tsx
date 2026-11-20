@@ -31,7 +31,7 @@ const CATALOG = {
 }
 const JOB = {
   key: 'conversation-titles',
-  title: 'Conversation titles',
+  title: 'Thread titles',
   description: 'Names a conversation after its first exchange.',
   trigger: 'turn_completed',
   needs_runner: false,
@@ -109,14 +109,14 @@ describe('Project settings → Manager', () => {
     render(<ManagerSection />, { wrapper })
 
     await screen.findByTestId('manager-job-conversation-titles')
-    expect(screen.getByRole('heading', { name: 'Conversation titles' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Thread titles' })).toBeInTheDocument()
     expect(screen.getByTestId('manager-job-conversation-titles-enabled')).toHaveAttribute('aria-checked', 'true')
-    await waitFor(() => expect(menuSelect('Conversation titles runner')).toHaveTextContent('Titler'))
+    await waitFor(() => expect(menuSelect('Thread titles runner')).toHaveTextContent('Titler'))
     // Each runner named by its own model (F268), as every runner menu is.
-    const options = await openMenuSelect(user, 'Conversation titles runner')
+    const options = await openMenuSelect(user, 'Thread titles runner')
     expect(options.find((o) => o.textContent?.startsWith('Titler'))).toHaveTextContent('Opus 5 · claude')
     await user.keyboard('{Escape}')
-    expect(menuSelect('Conversation titles model')).toHaveTextContent('Haiku 4.5')
+    expect(menuSelect('Thread titles model')).toHaveTextContent('Haiku 4.5')
 
     const first = await screen.findByTestId('manager-firing-0')
     expect(within(first).getByText('Nothing to do')).toBeInTheDocument()
@@ -135,7 +135,7 @@ describe('Project settings → Manager', () => {
     }
     render(<ManagerSection />, { wrapper })
     expect(await screen.findByTestId('manager-firing-1-subject')).toHaveTextContent('Bakery naming ideas')
-    expect(screen.getByTestId('manager-firing-0-subject')).toHaveTextContent('conversation conv-2')
+    expect(screen.getByTestId('manager-firing-0-subject')).toHaveTextContent('thread conv-2')
   })
 
   it('badges an answered report and opens what the model answered (F641, F581)', async () => {
@@ -205,12 +205,12 @@ describe('Project settings → Manager', () => {
     render(<ManagerSection />, { wrapper })
 
     await screen.findByTestId('manager-job-conversation-titles')
-    const titles = (await openMenuSelect(user, 'Conversation titles runner')).map((o) => o.textContent)
-    expect(titles[0]).toMatch(/^The agent’s own runner/)
+    const titles = (await openMenuSelect(user, 'Thread titles runner')).map((o) => o.textContent)
+    expect(titles[0]).toMatch(/^The profile’s own runner/)
     await user.keyboard('{Escape}')
     const distilChoices = (await openMenuSelect(user, 'Vault distillation runner')).map((o) => o.textContent)
     expect(distilChoices[0]).toMatch(/^No runner/)
-    expect(distilChoices.some((t) => /agent’s own runner/.test(t ?? ''))).toBe(false)
+    expect(distilChoices.some((t) => /profile’s own runner/.test(t ?? ''))).toBe(false)
     await user.keyboard('{Escape}')
     const distil = screen.getByTestId('manager-job-vault-distillation')
     expect(within(distil).getByText(/does nothing until a runner is chosen/i)).toBeInTheDocument()
@@ -233,7 +233,7 @@ describe('Project settings → Manager', () => {
     await screen.findByTestId('manager-job-mender')
     await waitFor(() => expect(menuSelect('Mender model')).toHaveTextContent('Sonnet 5.5 (the mender’s default)'))
     expect(menuSelect('Mender model')).not.toHaveTextContent('The runner’s model')
-    expect(menuSelect('Conversation titles model')).toHaveTextContent('The runner’s model')
+    expect(menuSelect('Thread titles model')).toHaveTextContent('The runner’s model')
   })
 
   it('says the mender uses its default model, not the runner’s, when its model is cleared', async () => {
@@ -273,8 +273,8 @@ describe('Project settings → Manager', () => {
     expect(patches[0].url).toBe('http://hub/api/v1/projects/proj-a/manager/jobs/conversation-titles')
     expect(patches[0].body).toEqual({ enabled: false })
 
-    await waitFor(() => expect(menuSelect('Conversation titles model')).not.toBeDisabled())
-    await chooseMenuOption(user, 'Conversation titles model', /The runner’s model/)
+    await waitFor(() => expect(menuSelect('Thread titles model')).not.toBeDisabled())
+    await chooseMenuOption(user, 'Thread titles model', /The runner’s model/)
     await waitFor(() => expect(patches).toHaveLength(2))
     expect(patches[1].body).toEqual({ model: null })
   })
@@ -290,8 +290,8 @@ describe('Project settings → Manager', () => {
       return undefined
     }
     render(<ManagerSection />, { wrapper })
-    await waitFor(() => expect(menuSelect('Conversation titles runner')).toHaveTextContent('Titler'))
-    await chooseMenuOption(user, 'Conversation titles runner', /^Codex/)
+    await waitFor(() => expect(menuSelect('Thread titles runner')).toHaveTextContent('Titler'))
+    await chooseMenuOption(user, 'Thread titles runner', /^Codex/)
     await waitFor(() => expect(patches).toHaveLength(1))
     expect(patches[0].body).toEqual({ runner_id: 'runner-codex', model: null })
   })
@@ -305,7 +305,7 @@ describe('Project settings → Manager', () => {
     }
     render(<ManagerSection />, { wrapper })
     expect(await screen.findByRole('alert')).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Conversation titles runner' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Thread titles runner' })).toBeNull()
   })
 
   it('says when nothing has fired yet', async () => {
@@ -346,8 +346,8 @@ describe('Project settings → Manager', () => {
     expect(within(await screen.findByTestId('manager-firing-0')).getByText('1,000 tokens · $0.06')).toBeInTheDocument()
     expect(within(screen.getByTestId('manager-firing-1')).getByText('800 tokens · $0.04')).toBeInTheDocument()
     expect(screen.queryByTestId('manager-job-conversation-titles-total')).toBeNull()
-    expect(screen.queryByText('Conversation titles firing')).toBeNull()
-    expect(screen.queryByRole('button', { name: 'Conversation titles firing' })).toBeNull()
+    expect(screen.queryByText('Thread titles firing')).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Thread titles firing' })).toBeNull()
 
     await chooseMenuOption(user, 'Thread chapters firing', /^Automatic/)
     await waitFor(() => expect(patches).toContainEqual({ url: expect.stringContaining('/manager/jobs/chapters'), body: { mode: 'automatic' } }))

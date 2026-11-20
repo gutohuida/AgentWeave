@@ -209,7 +209,7 @@ export function buildDigest(events: EventLogEntry[], ctx: DigestContext = {}): D
       const count = (t: string) => bg.filter((e) => e.event_type === t).length
       const parts = [
         [count('context_warning'), 'context reading'],
-        [count('conversation_titled'), 'conversation title'],
+        [count('conversation_titled'), 'thread title'],
         [count('manager_job_fired'), 'manager job'],
         [count('run_divergence_resolved'), 'divergence resolved'],
       ]

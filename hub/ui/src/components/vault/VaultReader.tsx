@@ -140,7 +140,7 @@ export function VaultReader({
               size="sm"
               data-testid="vault-distil"
               disabled={extracting || !canExtract(entry)}
-              title="Reads this source and writes down each fact it states, citing the lines it rests on. Agents then cite facts instead of re-reading the whole source."
+              title="Reads this source and writes down each fact it states, citing the lines it rests on. Profiles then cite facts instead of re-reading the whole source."
               onClick={() => onExtractFacts(entry.id)}
             >
               <Icon name="sparkles" size={14} />
@@ -194,7 +194,7 @@ export function VaultReader({
                 variant="outline"
                 size="sm"
                 data-testid="vault-archive"
-                title="Take this source and its facts out of agents’ view. Nothing is lost; restore it from the archived list."
+                title="Take this source and its facts out of profiles’ view. Nothing is lost; restore it from the archived list."
                 onClick={() => void run(onArchive(entry.id))}
               >
                 <Icon name="archive" size={14} />
@@ -215,7 +215,7 @@ export function VaultReader({
                     toast({ title: 'Id copied', description: entry.id })
                   }}
                 >
-                  Copy id for an agent
+                  Copy id for a profile
                 </MenuItem>
                 {onDelete ? (
                   <>
@@ -248,7 +248,7 @@ export function VaultReader({
             <dt>Added</dt>
             <dd title={formatDateTime(entry.created_at, now)}>
               {formatDay(entry.created_at, now)}
-              {entry.added_by ? <span title="An agent added this source by path"> by {entry.added_by}</span> : null}
+              {entry.added_by ? <span title="A profile added this source by path"> by {entry.added_by}</span> : null}
             </dd>
           </div>
           <div>
@@ -265,7 +265,7 @@ export function VaultReader({
           </div>
           {entry.fetches !== undefined ? (
             <div>
-              <dt>Read by agents</dt>
+              <dt>Read by profiles</dt>
               <dd data-testid="vault-entry-fetches" title={entry.last_fetched_at ? `Last read ${formatDateTime(entry.last_fetched_at, now)}` : undefined}>
                 {entry.fetches ? `${entry.fetches} ${entry.fetches === 1 ? 'time' : 'times'}` : 'Not yet'}
               </dd>
@@ -569,7 +569,7 @@ function FactsView({
         <Icon name="sparkles" size={18} />
         <p className="vault-tab-empty-title">No facts yet</p>
         <p className="vault-tab-empty-text">
-          Extracting reads this source and lists each fact it states, with the lines it rests on. Agents cite a fact instead
+          Extracting reads this source and lists each fact it states, with the lines it rests on. Profiles cite a fact instead
           of re-reading the whole source.
         </p>
         <Button variant="outline" size="sm" disabled={extracting || !extractable} onClick={onExtract}>
@@ -640,7 +640,7 @@ function FactsView({
                 </Button>
               ) : null}
               {(fact.fetches ?? 0) > 0 ? (
-                <span data-testid={`vault-fetches-${fact.id}`} title="Times agents read this fact">
+                <span data-testid={`vault-fetches-${fact.id}`} title="Times profiles read this fact">
                   Read {fact.fetches}×
                 </span>
               ) : null}
@@ -657,9 +657,9 @@ function UsedBy({ entry, now }: { entry: VaultEntry; now: Date }) {
     return (
       <div className="vault-tab-empty">
         <Icon name="visibility" size={18} />
-        <p className="vault-tab-empty-title">No agent has read this yet</p>
+        <p className="vault-tab-empty-title">No profile has read this yet</p>
         <p className="vault-tab-empty-text">
-          Every agent turn mentions the vault in one line, and agents read an entry when their work needs it. Reads show up
+          Every run mentions the vault in one line, and profiles read an entry when their work needs it. Reads show up
           here.
         </p>
       </div>

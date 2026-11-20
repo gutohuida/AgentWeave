@@ -223,7 +223,7 @@ export function CloseSettings() {
     >
       <SettingsRow
         label="Closing the window leaves AgentWeave running"
-        description="The window closes and the Hub and its agents carry on, as before. Kept by this app, for this Hub."
+        description="The window closes and the Hub and its profiles carry on, as before. Kept by this app, for this Hub."
         control={
           <Switch
             checked={keepsRunning}

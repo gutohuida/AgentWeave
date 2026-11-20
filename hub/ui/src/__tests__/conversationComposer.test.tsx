@@ -122,7 +122,7 @@ describe('Composer — column layout (2026-08-04-hub-charcoal-visual-refresh)', 
     ).toBeTruthy()
     // The conversation-routing pill used to live in the leading slot. Conversation selection is
     // navigation's job now, and no control on this surface may act as a second switcher.
-    expect(root.textContent).not.toContain('New conversation')
+    expect(root.textContent).not.toContain('New thread')
   })
 })
 

@@ -45,10 +45,12 @@ def test_a_hub_module_change_runs_every_sweep_test():
 def test_a_ui_source_change_runs_only_the_tests_that_read_the_ui():
     assert _affected("hub/ui/src/components/agents/AgentCard.tsx") == [
         "hub/tests/test_surface_ceilings.py",
+        "hub/tests/test_ui_vocabulary.py",
         "hub/tests/test_workspace_writes.py",
     ]
     assert _affected("hub/ui/src/api/vault.ts") == [
         "hub/tests/test_surface_ceilings.py",
+        "hub/tests/test_ui_vocabulary.py",
         "hub/tests/test_vault_archive.py",
     ]
 
@@ -210,6 +212,7 @@ def test_one_hub_ui_module_runs_its_tests_and_writes_the_report(tmp_path, monkey
     assert code == 0 and len(seen) == 1
     assert [a for a in seen[0] if a.endswith(".py")] == [
         "hub/tests/test_surface_ceilings.py",
+        "hub/tests/test_ui_vocabulary.py",
         "hub/tests/test_vault_archive.py",
     ]
     assert f"--junitxml={report}" in seen[0]

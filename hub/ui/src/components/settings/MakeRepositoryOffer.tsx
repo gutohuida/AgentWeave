@@ -38,7 +38,7 @@ export function MakeRepositoryOffer({
     return (
       <div id={MAKE_REPOSITORY_ANCHOR} className="flex flex-col gap-2" data-testid="make-repository-offer">
         <p className="aw-row-note">
-          Without git, agents cannot each work in their own checkout, and approved work has nowhere to merge.
+          Without git, profiles cannot each work in their own checkout, and approved work has nowhere to merge.
         </p>
         <span>
           <Button variant="outline" size="sm" onClick={onStart}>

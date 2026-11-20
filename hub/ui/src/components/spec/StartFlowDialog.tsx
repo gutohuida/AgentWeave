@@ -50,7 +50,7 @@ export function StartFlowDialog({
     event.preventDefault()
     setError(null)
     if (!name.trim()) return setError('Name is required')
-    if (!chosen) return setError('Choose the agent that works this flow.')
+    if (!chosen) return setError('Choose the profile that works this flow.')
     if (!message.trim()) return setError('Message is required')
     if (!cron.trim()) return setError('Cron expression is required')
     // `create_flow` refuses the same way: a flow with no stop never ends.
@@ -120,7 +120,7 @@ export function StartFlowDialog({
           </div>
           <div>
             <label className={label} style={{ color: 'var(--text-3)' }} htmlFor="flow-agent">
-              Default agent
+              Default profile
             </label>
             <div className="control-select-wrap">
               <select
@@ -132,7 +132,7 @@ export function StartFlowDialog({
                 onChange={(e) => setAgent(e.target.value)}
                 disabled={createFlow.isPending}
               >
-                <option value="">Select an agent…</option>
+                <option value="">Select a profile…</option>
                 {open.map((a) => (
                   <option key={a.name} value={a.name}>
                     @{a.name}
@@ -211,7 +211,7 @@ export function StartFlowDialog({
 
           {agentsFailed && (
             <p role="alert" className="text-xs" style={{ color: 'var(--amber)' }}>
-              Could not load the agent list.
+              Could not load the profile list.
             </p>
           )}
           {error && (

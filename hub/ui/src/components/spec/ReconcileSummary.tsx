@@ -109,7 +109,7 @@ function AskToReconcile({ path }: { path: string }) {
       style={{ background: 'var(--surface-2)', color: 'var(--text-2)' }}
     >
       <span>
-        Not reconciled with the code. An agent can read the change and the code and class each gap
+        Not reconciled with the code. A profile can read the change and the code and class each gap
         as missing, partial, contradicts or unrequested.
       </span>
       {asked ? (
@@ -117,7 +117,7 @@ function AskToReconcile({ path }: { path: string }) {
       ) : (
         <div className="flex items-center gap-1.5">
           <select
-            aria-label="Agent to reconcile"
+            aria-label="Profile to reconcile"
             value={agent}
             onChange={(event) => setAgent(event.target.value)}
             className="rounded-[var(--radius-sm)] px-1.5 py-0.5"
@@ -129,7 +129,7 @@ function AskToReconcile({ path }: { path: string }) {
             }}
           >
             <option value="" disabled>
-              {agentsError ? 'Could not load the agents' : 'Choose an agent…'}
+              {agentsError ? 'Could not load the profiles' : 'Choose a profile…'}
             </option>
             {agents.map((row) => (
               <option key={row.name} value={row.name}>

@@ -124,11 +124,11 @@ export function RoadmapSection({ doc, now, onOpenDocument }: { doc: SpecDocument
     const author = target === 'add' ? null : authorOf(target)
     return (
       <AgentPicker
-        label={target === 'add' ? 'Agent to add the slice with' : 'Agent that drafts this slice'}
+        label={target === 'add' ? 'Profile to add the slice with' : 'Profile that drafts this slice'}
         agents={agents}
         author={author}
         busy={take.isPending || converse.isPending}
-        action={target === 'add' ? 'Start the conversation' : 'Draft'}
+        action={target === 'add' ? 'Start the thread' : 'Draft'}
         onCancel={() => setPicking(null)}
         onPick={(agent) => {
           if (target === 'add') {

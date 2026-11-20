@@ -193,7 +193,7 @@ describe('Project settings → General, applied on change', () => {
 
   it('says the agent-jobs switch covers jobs, flows and loops, as the refusal does (F639)', () => {
     render(<GeneralSection />)
-    expect(screen.getByRole('switch', { name: 'Agents may start jobs, flows and loops' })).toHaveAttribute('aria-checked', 'false')
+    expect(screen.getByRole('switch', { name: 'Profiles may start jobs, flows and loops' })).toHaveAttribute('aria-checked', 'false')
     expect(screen.getByText(/asking to start a job, flow or loop is refused/)).toBeInTheDocument()
   })
 
@@ -499,7 +499,7 @@ describe('Project settings → General, applied on change', () => {
     await user.click(screen.getByRole('button', { name: 'Edit lint' }))
     const dialog = await screen.findByRole('dialog')
     await chooseMenuOption(user, 'Runs', /At landing only/)
-    expect(within(dialog).getByText(/a fast check gates an agent's completion before review, so it cannot be landing-only/i)).toBeInTheDocument()
+    expect(within(dialog).getByText(/a fast check gates a profile's completion before review, so it cannot be landing-only/i)).toBeInTheDocument()
     expect(within(dialog).getByRole('button', { name: 'Save check' })).toBeDisabled()
     expect(update).not.toHaveBeenCalled()
     await user.click(within(dialog).getByRole('button', { name: 'Cancel' }))
@@ -654,7 +654,7 @@ describe('Project settings → General, applied on change', () => {
     expect(lastPatch()).toEqual({ name: 'Storefront' })
     commit('Hop budget', '15')
     expect(lastPatch()).toEqual({ hop_budget: 15 })
-    fireEvent.click(screen.getByRole('switch', { name: 'Agents may start jobs, flows and loops' }))
+    fireEvent.click(screen.getByRole('switch', { name: 'Profiles may start jobs, flows and loops' }))
     expect(lastPatch()).toEqual({ allow_agent_jobs: true })
     expect(update).toHaveBeenCalledTimes(3)
   })
@@ -685,8 +685,8 @@ describe('Project settings → General, applied on change', () => {
     }
     const has = (labels: string[], ...names: string[]) => names.every((name) => labels.some((label) => label.includes(name)))
     expect(has(rowsOf('general'), 'Name', 'Folder')).toBe(true)
-    expect(has(rowsOf('collaboration'), 'Agents may start jobs', 'Hop budget', 'Deliveries per turn')).toBe(true)
-    expect(has(rowsOf('collaboration'), 'Agent budget')).toBe(false)
+    expect(has(rowsOf('collaboration'), 'Profiles may start jobs', 'Hop budget', 'Deliveries per turn')).toBe(true)
+    expect(has(rowsOf('collaboration'), 'Profile budget')).toBe(false)
     expect(has(rowsOf('permissions'), 'Default permissions')).toBe(true)
     expect(has(rowsOf('checks'), 'Generated files')).toBe(true)
     expect(has(rowsOf('landing'), 'Main branch')).toBe(true)
@@ -701,10 +701,10 @@ describe('Project settings → General, applied on change', () => {
     expect(lastPatch()).toEqual({ hop_budget: 9 })
   })
 
-  it('says agent budget caps agents an agent asks for, not agents running at once', () => {
+  it('says profile budget caps agents an agent asks for, not agents running at once', () => {
     render(<GeneralSection />)
-    const row = screen.getByLabelText('Agent budget').closest('.aw-settings-row') as HTMLElement
-    expect(row.textContent).toMatch(/an agent asking for another is refused/i)
+    const row = screen.getByLabelText('Profile budget').closest('.aw-settings-row') as HTMLElement
+    expect(row.textContent).toMatch(/a profile asking for another is refused/i)
     expect(row.textContent).toMatch(/Adding one yourself is never limited/)
     expect(row.textContent).not.toMatch(/at the same time/i)
   })
@@ -782,8 +782,8 @@ describe('Project settings → General, applied on change', () => {
 
   it('shows no conversation title controls: they moved to Manager', () => {
     render(<GeneralSection />)
-    expect(screen.queryByLabelText('Conversation titles')).toBeNull()
-    expect(screen.queryByLabelText('Conversation title runner')).toBeNull()
+    expect(screen.queryByLabelText('Thread titles')).toBeNull()
+    expect(screen.queryByLabelText('Thread title runner')).toBeNull()
   })
 
   it("names the project's checkpoint model on every checkpoint-runner choice, whatever each runner records (F268)", async () => {
@@ -877,7 +877,7 @@ describe('project-level checkpoint-ceiling notice (task 1.18(b), design D10)', (
     projectAgents = []
     projectAgentsFailed = true
     render(<GeneralSection />)
-    expect(screen.queryByText(/agents could not be read/)).toBeInTheDocument()
+    expect(screen.queryByText(/profiles could not be read/)).toBeInTheDocument()
   })
 
   it('names an agent whose runner compacts below the configured threshold', () => {
@@ -925,23 +925,23 @@ describe('F728 a save answers warnings, and the page shows them', () => {
   })
 
   it('lists what the Hub warned of after the save', async () => {
-    const warning = 'The agent budget is now 2, but 3 agents are open.'
+    const warning = 'The profile budget is now 2, but 3 agents are open.'
     render(<GeneralSection />)
-    commit('Agent budget', '2')
+    commit('Profile budget', '2')
     answer({ warnings: [warning] })
     expect(await screen.findByTestId('settings-save-warnings')).toHaveTextContent(warning)
   })
 
   it('shows no warning list for a save that warned of nothing', () => {
     render(<GeneralSection />)
-    commit('Agent budget', '6')
+    commit('Profile budget', '6')
     answer({ warnings: [] })
     expect(screen.queryByTestId('settings-save-warnings')).not.toBeInTheDocument()
   })
 
   it('names a refused save in the page, with the Hub’s reason', async () => {
     render(<GeneralSection />)
-    commit('Agent budget', '6')
+    commit('Profile budget', '6')
     answer({ error: new ApiError(422, JSON.stringify({ detail: 'notes must sit below the threshold' })) })
     expect(await screen.findByTestId('settings-save-refusal')).toHaveTextContent('notes must sit below the threshold')
   })

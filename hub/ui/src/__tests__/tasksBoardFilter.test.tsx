@@ -111,7 +111,7 @@ describe('the board can be filtered from outside itself', () => {
     expect(screen.getByText('Settle the account')).toBeInTheDocument()
     expect(screen.getByText('Round consistently')).toBeInTheDocument()
     expect(screen.getByText('Unrelated work')).toBeInTheDocument()
-    expect(screen.getByRole('group', { name: 'Filter by agent' })).toBeInTheDocument()
+    expect(screen.getByRole('group', { name: 'Filter by profile' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /^worker/ })).toBeInTheDocument()
     expect(screen.queryByTestId('tasks-requirement-filter-banner')).not.toBeInTheDocument()
   })

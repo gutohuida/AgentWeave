@@ -140,7 +140,7 @@ export function LoopSettings({ loop }: { loop: LoopSummary & { job_id: string } 
 
       {!editing ? (
         <div className="mt-1 space-y-0.5" style={{ fontSize: 11, color: 'var(--text)' }} data-testid="loop-tab-settings-read">
-          <p><span style={{ color: 'var(--text-3)' }}>Default agent: </span>{loop.agent || 'none'}</p>
+          <p><span style={{ color: 'var(--text-3)' }}>Default profile: </span>{loop.agent || 'none'}</p>
           <p><span style={{ color: 'var(--text-3)' }}>Message: </span>{job.message}</p>
           <p>
             <span style={{ color: 'var(--text-3)' }}>Cadence: </span>
@@ -168,7 +168,7 @@ export function LoopSettings({ loop }: { loop: LoopSummary & { job_id: string } 
             />
           </label>
           <label className="block" style={{ fontSize: 11, color: 'var(--text-3)' }}>
-            Default agent
+            Default profile
             <select
               className="mt-0.5 block w-full rounded-[var(--radius-sm)] px-2 py-1"
               style={inputStyle}
@@ -187,7 +187,7 @@ export function LoopSettings({ loop }: { loop: LoopSummary & { job_id: string } 
           </p>
           {controlWarning && (
             <p role="note" data-testid="loop-tab-settings-control-warning" style={{ fontSize: 11, color: 'var(--amber)' }}>
-              This loop’s queue is decided by its creator agent. Changing the agent gives control back to you
+              This loop’s queue is decided by the profile that created it. Changing the profile gives control back to you
               when the change applies.
             </p>
           )}

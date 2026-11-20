@@ -9,7 +9,7 @@ import { MenuSelect } from '@/components/ui/menu'
 import { useDialogFocus } from '@/hooks/useDialogFocus'
 
 function errorDetail(error: unknown): string {
-  if (!(error instanceof Error)) return 'The agent could not be created.'
+  if (!(error instanceof Error)) return 'The profile could not be created.'
   try {
     const parsed = JSON.parse(error.message) as { detail?: string }
     return parsed.detail ?? error.message
@@ -139,11 +139,11 @@ export function AgentCreateDialog({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: 'var(--scrim)' }} role="dialog" aria-modal="true" aria-labelledby="agent-create-title">
       <div ref={panelRef} tabIndex={-1} className="lifted-surface w-[min(480px,calc(100vw-32px))] p-5" style={{ background: 'var(--surface)' }}>
-        <h2 id="agent-create-title" className="text-sm font-semibold">Create agent</h2>
+        <h2 id="agent-create-title" className="text-sm font-semibold">Create profile</h2>
         <p className="mt-1 text-xs" style={{ color: 'var(--text-3)' }}>Choose a provider and model — the Hub provisions the runner for you.</p>
 
         <label className="mt-4 block text-xs">
-          Agent name
+          Profile name
           <input data-dialog-initial-focus value={name} onChange={(event) => setName(event.target.value)} placeholder="codex-reviewer" className="mt-1 block w-full rounded-md px-3 py-2" style={{ background: 'var(--surface-2)', border: '1px solid var(--border)' }} />
         </label>
         {name && !/^[a-zA-Z0-9_-]{1,32}$/.test(name.trim()) && <p className="mt-1 text-[11px]" style={{ color: 'var(--red)' }}>Use 1–32 letters, numbers, hyphens, or underscores.</p>}
@@ -185,7 +185,7 @@ export function AgentCreateDialog({
         {createAgent.error && <div role="alert" className="mt-3 rounded-md px-3 py-2 text-xs" style={{ background: 'var(--error-cont)', color: 'var(--red)' }}>{errorDetail(createAgent.error)}</div>}
         <div className="mt-5 flex justify-end gap-2">
           <Button variant="ghost" size="sm" onClick={onClose}>Cancel</Button>
-          <Button variant="primary" size="sm" onClick={submit} disabled={!canSubmit || createAgent.isPending}>{createAgent.isPending ? 'Creating…' : 'Create agent'}</Button>
+          <Button variant="primary" size="sm" onClick={submit} disabled={!canSubmit || createAgent.isPending}>{createAgent.isPending ? 'Creating…' : 'Create profile'}</Button>
         </div>
       </div>
     </div>

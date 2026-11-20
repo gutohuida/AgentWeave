@@ -248,7 +248,7 @@ export function ConversationTrace({
       </section>
 
       {shown.length === 0 ? (
-        <p className="aw-ctrace-empty" data-testid="conversation-trace-empty">No turn of this conversation matches. Widen the turns or the start time.</p>
+        <p className="aw-ctrace-empty" data-testid="conversation-trace-empty">No run of this thread matches. Widen the runs or the start time.</p>
       ) : (
         <div className="aw-ctrace-body">
           <div className="aw-ctrace-timeline" data-testid="ctrace-timeline">

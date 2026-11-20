@@ -314,7 +314,7 @@ export function ThreadScreen({ projectId, knot, onAddress, onOpenLink }: ThreadS
             ) : null}
             {agents.isError ? (
               <p className="aw-thread-note" role="status">
-                The agents could not be read, so they are shown without their colours.
+                The profiles could not be read, so they are shown without their colours.
               </p>
             ) : null}
           </>

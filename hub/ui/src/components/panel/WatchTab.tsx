@@ -73,7 +73,7 @@ export function WatchTab({ peers, peer, onPeerChange, conversations, conversatio
       <div className="aw-ptab-head">
         <div className="aw-ptab-controls">
           <MenuSelect<string>
-            label="Agent to watch"
+            label="Profile to watch"
             value={peer}
             onChange={onPeerChange}
             maxWidth={200}
@@ -87,7 +87,7 @@ export function WatchTab({ peers, peer, onPeerChange, conversations, conversatio
           />
           {conversations.length > 1 ? (
             <MenuSelect<string>
-              label="Conversation"
+              label="Thread"
               value={conversationId ?? ''}
               onChange={onConversationChange}
               maxWidth={220}

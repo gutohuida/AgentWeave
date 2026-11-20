@@ -147,12 +147,12 @@ export function ReviewerLine({ status }: { status: SpecDeliveryStatus }) {
     >
       {stale && <Icon name="warning" size={13} />}
       {!status.reviewer
-        ? 'Reviewed by any free agent: the document names no reviewer.'
+        ? 'Reviewed by any free profile: the document names no reviewer.'
         : stale
           ? `Reviewed by @${status.reviewer}, ${
               status.reviewer_state === 'archived'
                 ? 'which is archived'
-                : 'which is not an agent on this project'
+                : 'which is not a profile on this project'
             }: its reviews will come to you.`
           : `Reviewed by @${status.reviewer}.`}
     </p>

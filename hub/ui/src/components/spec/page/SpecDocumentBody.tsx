@@ -582,7 +582,7 @@ export function DocumentFilterBar({
       {showTaskFilters ? (
         <span className="aw-sp-filtergroup" aria-label="Tasks">
           <MenuSelect label="Tasks by status" value={filters.status} onChange={(status) => onChange({ ...filters, status })} options={statusOptions} maxWidth={150} />
-          <MenuSelect label="Tasks by agent" value={filters.agent} onChange={(agent) => onChange({ ...filters, agent })} options={agentOptions} maxWidth={150} />
+          <MenuSelect label="Tasks by profile" value={filters.agent} onChange={(agent) => onChange({ ...filters, agent })} options={agentOptions} maxWidth={150} />
           <Segmented
             label="Order tasks"
             size="xs"

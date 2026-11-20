@@ -208,7 +208,7 @@ describe('each settings page names whose settings it holds, and links to App set
   it('an agent’s settings is that agent’s, and its section list ends with a link that goes there', () => {
     window.history.pushState(null, '', '/?project=proj-test&agent=claude&settings=identity')
     mount(<App />)
-    const nav = screen.getByRole('navigation', { name: 'claude settings' })
+    const nav = screen.getByRole('navigation', { name: 'Profiles' })
     const link = within(nav).getByRole('button', { name: /App settings/ })
     fireEvent.click(link)
     expectAppSettingsOpen()

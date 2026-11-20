@@ -15,7 +15,7 @@ import { openTraces, type TracesRequest } from '@/store/tracesRequestStore'
 
 const GROUPINGS: Array<{ value: Grouping; label: string }> = [
   { value: 'spec', label: 'Spec' },
-  { value: 'agent', label: 'Agent' },
+  { value: 'agent', label: 'Profile' },
   { value: 'model', label: 'Model' },
   { value: 'level', label: 'Level' },
 ]
@@ -153,7 +153,7 @@ function GroupRows({ grouping, group, since }: { grouping: Grouping; group: Work
           showWall={showWall}
           request={
             grouping === 'agent' && group.key
-              ? { agent: group.key, since: sinceIso, label: `agent ${group.label}` }
+              ? { agent: group.key, since: sinceIso, label: `profile ${group.label}` }
               : undefined
           }
         />

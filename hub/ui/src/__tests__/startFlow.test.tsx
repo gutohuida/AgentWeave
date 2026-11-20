@@ -141,7 +141,7 @@ describe('StartFlowDialog', () => {
     return screen.findByRole('dialog')
   }
   const chooseAgent = () =>
-    fireEvent.change(screen.getByLabelText('Default agent'), { target: { value: 'B' } })
+    fireEvent.change(screen.getByLabelText('Default profile'), { target: { value: 'B' } })
   const start = () => fireEvent.click(screen.getByRole('button', { name: 'Start flow' }))
 
   it('(d) posts the document, the queue stop, an empty purpose and no work_needs_evidence', async () => {
@@ -174,7 +174,7 @@ describe('StartFlowDialog', () => {
   it('does not preselect an agent when there is more than one', async () => {
     await openDialog()
     start()
-    expect(await screen.findByRole('alert')).toHaveTextContent('Choose the agent')
+    expect(await screen.findByRole('alert')).toHaveTextContent('Choose the profile')
     expect(posts).toHaveLength(0)
   })
 

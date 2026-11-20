@@ -235,7 +235,7 @@ describe('a conversation with a document open mounts the one composer', () => {
   it('creates a conversation with the first message when the agent has none', async () => {
     renderChat()
     expect(screen.getByTestId('session-continuity')).toHaveTextContent(
-      'Next message starts a fresh conversation',
+      'Next message starts a fresh thread',
     )
 
     await send('what does this document say?')
@@ -367,7 +367,7 @@ describe('one way to choose an agent', () => {
   it('offers no agent selector on the conversation surface', () => {
     renderChat()
     expect(screen.queryByRole('combobox')).not.toBeInTheDocument()
-    expect(screen.queryByLabelText('Agent')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Profile')).not.toBeInTheDocument()
     expect(document.querySelectorAll('select')).toHaveLength(0)
   })
 

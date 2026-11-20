@@ -205,14 +205,14 @@ describe('the stale-recommendation strip', () => {
     renderPhaseBar()
     const strip = await screen.findByTestId('delivery-stale-strip')
     expect(strip).toHaveTextContent('The recommended build names dev2, which is archived')
-    expect(strip).toHaveTextContent('Building will not start a flow unless you choose another agent')
+    expect(strip).toHaveTextContent('Building will not start a flow unless you choose another profile')
   })
 
   it('names an unknown agent differently from an archived one', async () => {
     specDelivery = { state: 'stale', agent: 'ghost', reason: 'unknown' }
     renderPhaseBar()
     const strip = await screen.findByTestId('delivery-stale-strip')
-    expect(strip).toHaveTextContent('names ghost, which is not an agent on this project')
+    expect(strip).toHaveTextContent('names ghost, which is not a profile on this project')
   })
 })
 
@@ -455,7 +455,7 @@ describe('who reviews (F508)', () => {
     specDelivery = { state: 'ok', agent: 'dev' }
     renderPhaseBar()
     const line = await screen.findByTestId('delivery-reviewer')
-    expect(line).toHaveTextContent('Reviewed by any free agent')
+    expect(line).toHaveTextContent('Reviewed by any free profile')
     expect(line).toHaveAttribute('data-stale', 'false')
   })
 
@@ -469,7 +469,7 @@ describe('who reviews (F508)', () => {
 
   it.each<['archived' | 'unknown', string]>([
     ['archived', 'which is archived'],
-    ['unknown', 'which is not an agent on this project'],
+    ['unknown', 'which is not a profile on this project'],
   ])('flags a %s default reviewer and says the reviews come to the operator', async (state, words) => {
     specDelivery = { state: 'ok', agent: 'dev', reviewer: 'critic', reviewer_state: state }
     renderPhaseBar()

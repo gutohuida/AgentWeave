@@ -82,7 +82,7 @@ describe('ProjectLedger', () => {
     expect(screen.getByTestId('ledger-total-merged').textContent).toBe('1')
     expect(screen.getByTestId('ledger-totals').textContent).toContain('1 skipped')
     expect(screen.getByTestId('ledger-totals').textContent).toContain('1 open')
-    expect(screen.getByTestId('ledger-totals').textContent).toContain('1 from specs · 1 by agents')
+    expect(screen.getByTestId('ledger-totals').textContent).toContain('1 from specs · 1 by profiles')
   })
 
   it('renders merges in the route’s order and opens a task', async () => {

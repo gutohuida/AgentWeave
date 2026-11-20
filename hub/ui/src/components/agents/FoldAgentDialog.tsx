@@ -18,8 +18,8 @@ import { describeSettingValue } from '@/lib/foldPresentation'
 const SETTING_LABELS: Record<string, string> = {
   runner: 'Runner and model',
   charter: 'Charter',
-  can_read_checkpoints: 'May read other agents’ checkpoints',
-  can_recall: 'May recall other agents’ observations',
+  can_read_checkpoints: 'May read other profiles’ checkpoints',
+  can_recall: 'May recall other profiles’ observations',
   can_accept_evidence: 'May accept evidence',
   can_admin_specs: 'May tidy the specifications',
   default_permission_mode: 'Permission posture',
@@ -142,7 +142,7 @@ export function FoldPreviewBody({ preview }: { preview: FoldPreview }) {
             ))}
           </ul>
         )}
-        <p className="mt-1">Finished work, runs and conversations keep the name {source}.</p>
+        <p className="mt-1">Finished work, runs and threads keep the name {source}.</p>
       </Section>
     </div>
   )
@@ -180,13 +180,13 @@ function FoldBody({ agent, onDone }: { agent: string; onDone: () => void }) {
           label="Fold into"
           value={into ?? ''}
           onChange={setInto}
-          placeholder="Choose the agent to keep…"
+          placeholder="Choose the profile to keep…"
           options={profiles.map((profile) => ({ value: profile.name, label: profile.name }))}
         />
       </div>
       {rosterError ? (
         <p role="alert" className="mt-3 text-xs" style={{ color: 'var(--amber)' }}>
-          {readableApiError(rosterError, 'Could not read the agents to fold into.')}
+          {readableApiError(rosterError, 'Could not read the profiles to fold into.')}
         </p>
       ) : null}
       {isLoading ? <p className="mt-3 text-xs" style={{ color: 'var(--text-3)' }}>Checking what would change…</p> : null}
@@ -227,8 +227,8 @@ export function FoldAgentDialog({ agent }: { agent: string }) {
         </Button>
       </DialogTrigger>
       <DialogContent
-        title={`Fold ${agent} into another agent?`}
-        description={`${agent} is archived for good and its work and settings join the agent you choose. Its conversations, runs and checkpoints stay readable under ${agent}; it accepts no new turn.`}
+        title={`Fold ${agent} into another profile?`}
+        description={`${agent} is archived for good and its work and settings join the profile you choose. Its threads, runs and checkpoints stay readable under ${agent}; it accepts no new run.`}
         width={620}
       >
         <FoldBody agent={agent} onDone={() => setOpen(false)} />

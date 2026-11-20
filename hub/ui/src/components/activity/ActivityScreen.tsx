@@ -135,8 +135,8 @@ function LiveDigest({ onOpenConversation }: { onOpenConversation?: (agent: strin
       <QueryErrorNotice
         failures={[
           ['the turns', accountingError],
-          ['the agents', agentsError],
-          ['the conversations', conversationsError],
+          ['the profiles', agentsError],
+          ['the threads', conversationsError],
           ['the tasks', tasksError],
         ]}
       />

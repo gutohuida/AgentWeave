@@ -135,9 +135,9 @@ describe('the rail scopes agent creation to the project it was clicked on', () =
 
   it('opens the creation dialog when the rail asks for it', () => {
     render(withQueryClient(<App />))
-    expect(screen.queryByLabelText('Agent name')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Profile name')).not.toBeInTheDocument()
     fireEvent.click(screen.getByTestId('rail-add-agent-proj-b'))
-    expect(screen.getByLabelText('Agent name')).toBeInTheDocument()
+    expect(screen.getByLabelText('Profile name')).toBeInTheDocument()
   })
 
   it('scopes to the already-selected project too, when that is the one clicked', () => {

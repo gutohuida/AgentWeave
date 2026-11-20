@@ -88,7 +88,7 @@ export function CloseAlreadyBuilt({
           variant="outline"
           size="xs"
           data-testid="already-built-open"
-          title="The work is already on the main branch: close the open tasks without running an agent"
+          title="The work is already on the main branch: close the open tasks without starting a run"
           onClick={() => setOpen(true)}
         >
           {tasksUnreadable

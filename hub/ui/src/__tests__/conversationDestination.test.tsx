@@ -142,7 +142,7 @@ describe('the panel renders the destination’s conversation, and holds no opini
     render(<AgentOutputPanel agent={agent} conversationId={null} />)
     await waitFor(() =>
       expect(screen.getByTestId('session-continuity')).toHaveTextContent(
-        'Next message starts a fresh conversation',
+        'Next message starts a fresh thread',
       ),
     )
     expect(requestedConversationId).toBeNull()

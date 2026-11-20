@@ -81,8 +81,8 @@ export function VaultStorageDialog({
               onChange={setVisibility}
               maxWidth={480}
               options={[
-                { value: 'tracked', label: 'In the repository', detail: 'Committed with the project, so teammates and their agents see it.', icon: 'call_split' },
-                { value: 'private', label: 'Private, this machine', detail: 'Kept outside the repository. Only agents on this machine read it.', icon: 'lock' },
+                { value: 'tracked', label: 'In the repository', detail: 'Committed with the project, so teammates and their profiles see it.', icon: 'call_split' },
+                { value: 'private', label: 'Private, this machine', detail: 'Kept outside the repository. Only profiles on this machine read it.', icon: 'lock' },
               ]}
             />
           </Field>

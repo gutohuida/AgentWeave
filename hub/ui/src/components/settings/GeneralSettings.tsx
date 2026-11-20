@@ -47,7 +47,7 @@ const PHASE_OPTIONS: ReadonlyArray<SelectOption<CheckPhase>> = [
 
 /** What the Hub answers to a fast check marked landing-only (FR-4), said before the save. */
 const FAST_NOT_LANDING_ONLY =
-  "A fast check gates an agent's completion before review, so it cannot be landing-only."
+  "A fast check gates a profile's completion before review, so it cannot be landing-only."
 
 /** Where the Hub puts the ids of the tests to re-run (`project_checks.TESTS_PLACEHOLDER`). */
 const TESTS_PLACEHOLDER = '{tests}'
@@ -158,7 +158,7 @@ export interface GeneralSettingsProps {
   contextWindow?: number | null
   /** Where an agent's checkpoint fires below the project's threshold (D10). */
   ceilingNotes?: string[]
-  /** The project's agents could not be read, so those notes cannot be computed. */
+  /** The project's profiles could not be read, so those notes cannot be computed. */
   agentsUnreadable?: boolean
   /** What the last save answered (warnings, a refusal), shown under the page heading. */
   notices?: React.ReactNode
@@ -179,22 +179,22 @@ function CollaborationRows({ settings, onChange }: RowsProps) {
   return (
     <>
         <SettingsRow
-          label="Agents may start jobs, flows and loops"
-          description="Off: an agent asking to start a job, flow or loop is refused, and you are asked instead."
+          label="Profiles may start jobs, flows and loops"
+          description="Off: a profile asking to start a job, flow or loop is refused, and you are asked instead."
           changed={settings.allow_agent_jobs !== PROJECT_DEFAULTS.allow_agent_jobs}
           origin={{ kind: 'changed', other: 'Off' }}
-          onReset={() => onChange({ allow_agent_jobs: PROJECT_DEFAULTS.allow_agent_jobs }, 'Agents may no longer start jobs')}
+          onReset={() => onChange({ allow_agent_jobs: PROJECT_DEFAULTS.allow_agent_jobs }, 'Profiles may no longer start jobs')}
           control={
             <Switch
-              aria-label="Agents may start jobs, flows and loops"
+              aria-label="Profiles may start jobs, flows and loops"
               checked={settings.allow_agent_jobs}
-              onCheckedChange={(v) => onChange({ allow_agent_jobs: v }, v ? 'Agents may start jobs' : 'Agents can no longer start jobs')}
+              onCheckedChange={(v) => onChange({ allow_agent_jobs: v }, v ? 'Profiles may start jobs' : 'Profiles can no longer start jobs')}
             />
           }
         />
         <SettingsRow
           label="Profiles run in parallel"
-          description="On: one agent profile may run several turns at once, each on different work. Off: each profile runs one turn at a time, and anything else waits for it. A change applies to the next turn that starts."
+          description="On: one profile may have several runs at once, each on different work. Off: each profile has one run at a time, and anything else waits for it. A change applies to the next run that starts."
           changed={(settings.profiles_run_in_parallel ?? false) !== PROJECT_DEFAULTS.profiles_run_in_parallel}
           origin={{ kind: 'changed', other: 'Off' }}
           onReset={() => onChange({ profiles_run_in_parallel: false }, 'Profiles run one turn at a time again')}
@@ -212,7 +212,7 @@ function CollaborationRows({ settings, onChange }: RowsProps) {
         <SettingsRow
           label="Hop budget"
           htmlFor="s-hops"
-          description="How many agent-to-agent hops a chain may take before it pauses for you."
+          description="How many profile-to-profile hops a chain may take before it pauses for you."
           changed={settings.hop_budget !== PROJECT_DEFAULTS.hop_budget}
           origin={{ kind: 'changed', other: String(PROJECT_DEFAULTS.hop_budget) }}
           onReset={() => onChange({ hop_budget: PROJECT_DEFAULTS.hop_budget }, `Hop budget reset to ${PROJECT_DEFAULTS.hop_budget}`)}
@@ -231,7 +231,7 @@ function CollaborationRows({ settings, onChange }: RowsProps) {
         <SettingsRow
           label="Deliveries per turn"
           htmlFor="s-cap"
-          description="The most queued messages one agent turn takes in."
+          description="The most queued messages one run takes in."
           changed={settings.turn_delivery_cap !== PROJECT_DEFAULTS.turn_delivery_cap}
           origin={{ kind: 'changed', other: String(PROJECT_DEFAULTS.turn_delivery_cap) }}
           onReset={() => onChange({ turn_delivery_cap: PROJECT_DEFAULTS.turn_delivery_cap }, `Deliveries per turn reset to ${PROJECT_DEFAULTS.turn_delivery_cap}`)}
@@ -255,12 +255,12 @@ function CollaborationRows({ settings, onChange }: RowsProps) {
 export function AgentBudgetRow({ settings, onChange }: RowsProps) {
   return (
         <SettingsRow
-          label="Agent budget"
+          label="Profile budget"
           htmlFor="s-agents"
-          description="How many agents the project may hold before an agent asking for another is refused. Adding one yourself is never limited."
+          description="How many profiles the project may hold before a profile asking for another is refused. Adding one yourself is never limited."
           changed={settings.agent_budget !== PROJECT_DEFAULTS.agent_budget}
           origin={{ kind: 'changed', other: String(PROJECT_DEFAULTS.agent_budget) }}
-          onReset={() => onChange({ agent_budget: PROJECT_DEFAULTS.agent_budget }, `Agent budget reset to ${PROJECT_DEFAULTS.agent_budget}`)}
+          onReset={() => onChange({ agent_budget: PROJECT_DEFAULTS.agent_budget }, `Profile budget reset to ${PROJECT_DEFAULTS.agent_budget}`)}
           control={
             <CommittedInput
               id="s-agents"
@@ -269,7 +269,7 @@ export function AgentBudgetRow({ settings, onChange }: RowsProps) {
               suffix="agents"
               value={String(settings.agent_budget)}
               validate={wholeNumber(1, 64, 'agents')}
-              onCommit={(v) => onChange({ agent_budget: Number(v) }, `Agent budget set to ${v}`)}
+              onCommit={(v) => onChange({ agent_budget: Number(v) }, `Profile budget set to ${v}`)}
             />
           }
         />
@@ -281,7 +281,7 @@ function PermissionRows({ settings, permissionModes, onChange }: RowsProps & Pic
     <>
         <SettingsRow
           label="Default permissions"
-          description="For every run whose conversation and agent have not chosen. Full access allows everything, Copilot and specification turns included."
+          description="For every run whose thread and profile have not chosen. Full access allows everything, Copilot and specification turns included."
           changed={Boolean(settings.default_permission_mode)}
           origin={{ kind: 'changed', other: 'Each runner’s own' }}
           overrides={<AgentOverrides setting="default_permission_mode" section="permissions" agentLabel="Default permissions" />}
@@ -300,7 +300,7 @@ function PermissionRows({ settings, permissionModes, onChange }: RowsProps & Pic
         />
         <SettingsRow
           label="Granted reach"
-          description="Under Workspace only: folders and hosts an agent may use beyond its workspace (a shell command needs read and write). A guardrail against mistakes, not a sandbox; writes outside are still recorded on the run."
+          description="Under Workspace only: folders and hosts a profile may use beyond its workspace (a shell command needs read and write). A guardrail against mistakes, not a sandbox; writes outside are still recorded on the run."
           stacked
           changed={Boolean(settings.reach_grants?.roots.length || settings.reach_grants?.hosts.length)}
           origin={{ kind: 'changed', other: 'nothing beyond the workspace' }}
@@ -673,8 +673,8 @@ function CheckpointRows({
               onChange={(v) => onChange({ checkpoint_mode: v }, `Checkpoints: ${CHECKPOINT_MODE_LABEL[v]}`)}
               options={[
                 { value: 'offered', label: 'Offer me one', detail: 'At the threshold the Hub writes one and tells you. Nothing is archived until you cut over.' },
-                { value: 'automatic', label: 'Automatic', detail: 'At the threshold the Hub writes one, opens a successor with it, and archives this conversation.' },
-                { value: 'off', label: 'Off', detail: 'No checkpoints are written by themselves. You can still write one from a conversation.' },
+                { value: 'automatic', label: 'Automatic', detail: 'At the threshold the Hub writes one, opens a successor with it, and archives this thread.' },
+                { value: 'off', label: 'Off', detail: 'No checkpoints are written by themselves. You can still write one from a thread.' },
               ]}
             />
           }
@@ -727,13 +727,13 @@ function CheckpointRows({
               {note}
             </p>
           ))}
-          {agentsUnreadable ? <p className="aw-row-note">The project's agents could not be read, so a threshold lowered for their runners is not shown.</p> : null}
+          {agentsUnreadable ? <p className="aw-row-note">The project's profiles could not be read, so a threshold lowered for their runners is not shown.</p> : null}
         </SettingsRow>
         <SettingsRow
           label="Ask for notes at"
           htmlFor="s-notes"
           inactive={settings.checkpoint_mode === 'off' || stored == null}
-          description={stored == null ? 'Set a checkpoint point first: notes are asked for below it.' : 'Before the checkpoint, the agent is asked what the record cannot show. Must sit below the checkpoint point.'}
+          description={stored == null ? 'Set a checkpoint point first: notes are asked for below it.' : 'Before the checkpoint, the profile is asked what the record cannot show. Must sit below the checkpoint point.'}
           control={
             <CommittedInput
               id="s-notes"
@@ -756,12 +756,12 @@ function CheckpointRows({
         <SettingsRow
           label="Continue automatically"
           inactive={settings.checkpoint_mode === 'off'}
-          description="After a cut-over, start the new conversation's first turn without waiting. Off: you get a Continue button, never a message you have to invent."
+          description="After a cut-over, start the new thread's first run without waiting. Off: you get a Continue button, never a message you have to invent."
           control={
             <Switch
               aria-label="Continue automatically"
               checked={settings.checkpoint_auto_continue}
-              onCheckedChange={(v) => onChange({ checkpoint_auto_continue: v }, v ? 'New conversations continue on their own' : 'New conversations wait for Continue')}
+              onCheckedChange={(v) => onChange({ checkpoint_auto_continue: v }, v ? 'New threads continue on their own' : 'New threads wait for Continue')}
             />
           }
         />
@@ -895,9 +895,9 @@ export function ProjectBasicsSettings(props: GeneralSettingsProps) {
 
 export function CollaborationSettings(props: GeneralSettingsProps) {
   return (
-    <SettingsPage icon="forum" title="Collaboration" description="How far agents may pass work between themselves before you are asked.">
+    <SettingsPage icon="forum" title="Collaboration" description="How far profiles may pass work between themselves before you are asked.">
       {props.notices}
-      <SettingsGroup title="Agents working together">
+      <SettingsGroup title="Profiles working together">
         <CollaborationRows {...props} />
       </SettingsGroup>
     </SettingsPage>
@@ -906,9 +906,9 @@ export function CollaborationSettings(props: GeneralSettingsProps) {
 
 export function PermissionsSettings(props: GeneralSettingsProps) {
   return (
-    <SettingsPage icon="lock" title="Permissions" description="What agents may do when nobody said otherwise. An agent's own settings win over these.">
+    <SettingsPage icon="lock" title="Permissions" description="What profiles may do when nobody said otherwise. A profile's own settings win over these.">
       {props.notices}
-      <SettingsGroup title="Defaults for every agent">
+      <SettingsGroup title="Defaults for every profile">
         <PermissionRows {...props} />
       </SettingsGroup>
     </SettingsPage>
@@ -945,7 +945,7 @@ export function LandingSettings(props: GeneralSettingsProps) {
 
 export function CheckpointsSettings(props: GeneralSettingsProps) {
   return (
-    <SettingsPage icon="book_marked" title="Checkpoints" description="When a conversation's context fills, the Hub writes a checkpoint so a fresh conversation can continue the work.">
+    <SettingsPage icon="book_marked" title="Checkpoints" description="When a thread's context fills, the Hub writes a checkpoint so a fresh thread can continue the work.">
       {props.notices}
       <SettingsGroup title="When and who">
         <CheckpointRows {...props} />
@@ -1122,7 +1122,7 @@ function CheckDialog({
           <Field
             label="Fast"
             htmlFor="c-fast"
-            hint={`Run when an agent completes its task, before anyone reviews it: a failure refuses the completion with the check's output, so the agent fixes it in the same turn. For quick checks like lint and format, at most ${FAST_CHECK_MAX_SECONDS} seconds.`}
+            hint={`Run when a profile completes its task, before anyone reviews it: a failure refuses the completion with the check's output, so the profile fixes it in the same run. For quick checks like lint and format, at most ${FAST_CHECK_MAX_SECONDS} seconds.`}
           >
             <Switch id="c-fast" aria-label="Fast" checked={fast} onCheckedChange={setFast} />
           </Field>

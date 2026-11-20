@@ -92,7 +92,7 @@ describe('charter management UI', () => {
   it('warns that a charter shown unbound may be bound when the roster cannot be read', () => {
     agentsError = new Error('500')
     render(<ChartersPage />)
-    expect(screen.getByTestId('charters-bound-error')).toHaveTextContent('Which agents hold each charter could not be read.')
+    expect(screen.getByTestId('charters-bound-error')).toHaveTextContent('Which profiles hold each charter could not be read.')
   })
 
   it('lists charters and submits custom authored content', async () => {
