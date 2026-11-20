@@ -209,7 +209,7 @@ export default function App() {
   useEffect(() => {
     if (destination.kind !== 'conversation' || !syncedConversationId) return
     if (documentWrite.current || setConversationDocument.isPending) return
-    if (!conversationDocuments.data || conversationDocuments.isFetching) return
+    if (conversationDocuments.error || !conversationDocuments.data || conversationDocuments.isFetching) return
     const held = conversationDocuments.data.attached?.path ?? null
     if (destination.document === held) return
     if (destination.document === null) {
@@ -221,7 +221,7 @@ export default function App() {
       setConversationDocument.mutate({ conversationId: syncedConversationId, path: destination.document })
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps -- `setConversationDocument` is a fresh object each render
-  }, [destination, syncedConversationId, conversationDocuments.data, conversationDocuments.isFetching,
+  }, [destination, syncedConversationId, conversationDocuments.data, conversationDocuments.isFetching, conversationDocuments.error,
     navigateTo, setConversationDocument.isPending])
 
   // Auto-selection is destination resolution, not a navigation the operator performed: it is
