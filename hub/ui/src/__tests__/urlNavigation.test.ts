@@ -147,16 +147,14 @@ describe('phase 5 URL navigation contract', () => {
       expect(back.conversationId).toBeNull()
     })
 
-    it('carries the open document back, because settings is a round trip', () => {
-      // The attachment is not only a reading panel — it is what the next turn is written against.
-      // Dropping it on the way back out of settings changed how the following run behaved with
-      // nothing on screen to say so (operator, 2026-08-20: "leaving a conversation detaches the
-      // spec open").
+    it('does not carry a document back: the conversation reopened shows its own, from the Hub', () => {
+      // Reversed (every-spec-entry-point-leads-into-the-journey, FR-11): the attachment belongs
+      // to the conversation, and `useConversationSpecDocuments` restores it, so settings has no
+      // document to carry.
       const back = agentSettingsBackDestination(
         agentSettingsDestination('proj-1', 'claude', 'permissions'),
-        'spec/capabilities/runner-registry/spec.json',
       )
-      expect(back.document).toBe('spec/capabilities/runner-registry/spec.json')
+      expect(back.document).toBeNull()
     })
 
     it('still returns with nothing open when nothing was open', () => {
@@ -319,12 +317,13 @@ describe('the open document is part of the conversation destination', () => {
     expect(serializeDestination(forged)).not.toContain('document')
   })
 
-  it('keeps the document across a conversation change', () => {
-    // The document is what the operator is working on, not a property of the thread they are
-    // working on it in.
+  it('drops the document across a conversation change', () => {
+    // Reversed (FR-12): the document is a property of the conversation it was opened in, so a
+    // navigation to another conversation names none; the Hub supplies that conversation's own.
     const first = agentDestination('proj-1', 'claude', 'conv-1', DOC)
-    const second = agentDestination('proj-1', 'claude', 'conv-2', first.document)
-    expect(second.document).toBe(DOC)
+    const second = agentDestination('proj-1', 'claude', 'conv-2')
+    expect(first.document).toBe(DOC)
+    expect(second.document).toBeNull()
   })
 
   it('a resolved conversation destination keeps its document', () => {

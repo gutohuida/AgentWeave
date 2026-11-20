@@ -352,9 +352,9 @@ export function environmentDestination(
   }
 }
 
-/** `document` defaults to null — most navigations to a conversation are not carrying one. The
- *  callers that are (opening a document, and the specification entry point) pass it explicitly,
- *  and `withDocument` below is what keeps an already-open one across a conversation change. */
+/** `document` defaults to null: a conversation owns its document (the Hub holds it), so changing
+ *  conversation carries nothing across. Only opening a document, and the specification entry
+ *  points, pass one explicitly. */
 export function agentDestination(
   projectId: string,
   agent: string,
@@ -403,13 +403,8 @@ export function destinationProjectId(destination: WorkspaceDestination): string 
  *  already resolves null to the agent's newest, so this needs no lookup of its own. */
 export function agentSettingsBackDestination(
   destination: Extract<WorkspaceDestination, { kind: 'agent-settings' }>,
-  /** What was open beside the conversation before settings were opened. Settings is a place the
-   *  operator steps into and straight back out of, so returning with the document dropped both
-   *  closed the reader and — because the attachment is what the next turn is written against —
-   *  silently changed how the following run behaved. */
-  document: string | null = null,
 ): Extract<WorkspaceDestination, { kind: 'conversation' }> {
-  return agentDestination(destination.projectId, destination.agent, null, document)
+  return agentDestination(destination.projectId, destination.agent)
 }
 
 /** The composer-primary surface for a conversation that does not exist yet.
