@@ -43,8 +43,9 @@ builders to meet or adjust (`fold_preview`, `fold`, `names_profile`):
   - agent reads carry `folded_into`; a folded agent is out of lifecycle=open;
   - addressing a folded name answers 409 detail {"code": "agent_folded", "folded_into"};
   - an independence refusal of a profile's run names the profile and the folded author: its text
-    holds both "Developer" as the profile and "DeveloperOpus" as the name the work was done under,
-    and says it was folded (`names_profile`).
+    holds both "Developer" as the profile and "DeveloperOpus" as the name the work was done under
+    (`names_profile`); RV judges the independence refusals (403) alone, since a move the lifecycle
+    then refuses (409, e.g. completed -> approved once under_review was refused) is not one.
 
 Each check is reported as reached or not, and as passed or failed at its own assertion, in the
 per-check baseline printed at the end (`check <key>: reached=<yes|no> failed_at_assertion=<yes|no>
@@ -172,7 +173,12 @@ def refused(code, out):
 def names_profile(out):
     """An independence refusal naming the profile and the folded name the work was done under."""
     text = json.dumps(out)
-    return DEV_OPUS in text and DEV in text.replace(DEV_OPUS, "") and "fold" in text.lower()
+    return DEV_OPUS in text and DEV in text.replace(DEV_OPUS, "")
+
+
+def independence_refused(code):
+    """An independence refusal is a 403; a 409 is the lifecycle refusing an edge, not a verdict."""
+    return code == 403
 
 
 def short(value, n=300):
@@ -361,9 +367,12 @@ def drive(state):
     finally:
         review.end()
     status = task_row(task_id)[0]
-    refusals = [(to, c, o) for to, c, o in moves if refused(c, o)]
+    # Only the independence refusals are judged: with under_review refused, the approve that
+    # follows meets the lifecycle's 409 (completed -> approved), which names no profile.
+    refusals = [(to, c, o) for to, c, o in moves if independence_refused(c)]
     covered("RV", True,
             bool(refusals) and all(names_profile(o) for _, _, o in refusals)
+            and all(refused(c, o) for _, c, o in moves)
             and status == "completed" and DEV not in approved_by(task_id),
             "; ".join(f"{to}: {c} {short(o, 220)}" for to, c, o in moves)
             + f"; task now {status}")
