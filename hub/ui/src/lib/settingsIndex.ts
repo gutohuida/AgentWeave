@@ -57,6 +57,7 @@ const AGENT: Record<AgentSettingsSection, string> = {
   permissions: 'Permissions',
   checkpoints: 'Checkpoints',
   workspace: 'Workspace',
+  runs: 'Runs',
 }
 
 const app = (section: AppSettingsSection, label: string, description: string): SettingEntry => ({

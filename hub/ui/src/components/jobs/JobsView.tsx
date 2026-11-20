@@ -54,6 +54,7 @@ export function JobsView({
   onNew,
   onOpenTasks,
   renderRow,
+  renderArchivedRuns,
   now,
 }: {
   jobs: Job[]
@@ -74,6 +75,8 @@ export function JobsView({
   onOpenTasks?: (job: Job) => void
   /** Wraps a row so its container can hold per-row state. Defaults to the bare row. */
   renderRow?: (job: Job, row: (extras: JobRowExtras) => React.ReactNode) => React.ReactNode
+  /** An archived loop's runs, shown when its row is opened (FR-13: a flow's runs outlive it). */
+  renderArchivedRuns?: (job: Job) => React.ReactNode
   now: Date
 }) {
   const [filter, setFilter] = React.useState<JobFilter>('all')
@@ -132,7 +135,7 @@ export function JobsView({
             Could not read the archived jobs: {archivedError}
           </p>
         ) : (
-          <ArchivedJobs jobs={archived} now={now} />
+          <ArchivedJobs jobs={archived} now={now} renderRuns={renderArchivedRuns} />
         )
       ) : jobs.length === 0 && archived.length > 0 ? (
         // F637: archiving every job is not having none. Say what is archived, and where.
@@ -401,7 +404,7 @@ export function JobRow({
 }
 
 /** Archived jobs, read-only (F637): nothing is deleted on archive. */
-function ArchivedJobs({ jobs, now }: { jobs: Job[]; now: Date }) {
+function ArchivedJobs({ jobs, now, renderRuns }: { jobs: Job[]; now: Date; renderRuns?: (job: Job) => React.ReactNode }) {
   if (jobs.length === 0) {
     return (
       <div className="aw-jobs-empty">
@@ -418,9 +421,37 @@ function ArchivedJobs({ jobs, now }: { jobs: Job[]; now: Date }) {
             {job.agent} · fired {job.run_count} time{job.run_count === 1 ? '' : 's'}
             {job.archived_at ? <span title={formatDateTime(job.archived_at, now)}> · archived {formatAgo(job.archived_at, now)} ago</span> : null}
           </span>
+          {job.loop && renderRuns ? <ArchivedRuns job={job} renderRuns={renderRuns} /> : null}
         </li>
       ))}
     </ul>
+  )
+}
+
+/** An archived loop's runs behind one disclosure, read only once it is opened. */
+function ArchivedRuns({ job, renderRuns }: { job: Job; renderRuns: (job: Job) => React.ReactNode }) {
+  const [open, setOpen] = React.useState(false)
+  const regionId = `archived-runs-${job.id}`
+  return (
+    <>
+      <button
+        type="button"
+        data-slot="archived-job-runs"
+        className="aw-job-archived-runs-toggle"
+        aria-expanded={open}
+        aria-controls={regionId}
+        aria-label={`${open ? 'Hide' : 'Show'} the runs of ${job.name}`}
+        onClick={() => setOpen((v) => !v)}
+      >
+        <Icon name={open ? 'expand_less' : 'expand_more'} size={13} />
+        {open ? 'Hide runs' : 'Show runs'}
+      </button>
+      {open ? (
+        <div id={regionId} className="aw-job-archived-runs" data-testid={`archived-job-runs-${job.id}`}>
+          {renderRuns(job)}
+        </div>
+      ) : null}
+    </>
   )
 }
 

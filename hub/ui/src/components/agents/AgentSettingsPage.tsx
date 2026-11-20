@@ -35,6 +35,7 @@ import { runnerModelPart } from '@/lib/runnerLabel'
 import { toast } from '@/lib/toast'
 import { FoldAgentDialog } from '@/components/agents/FoldAgentDialog'
 import { AgentIdentitySettings, type AgentPatch } from './settings/AgentSettingsSections'
+import { AgentRunsPage } from './settings/AgentRunsPage'
 import {
   AgentCharterGroup,
   AgentCheckpointsSettings,
@@ -66,14 +67,15 @@ const SECTIONS: ReadonlyArray<{ id: AgentSettingsSection; label: string; icon: s
   { id: 'permissions', label: 'Permissions', icon: 'lock' },
   { id: 'checkpoints', label: 'Checkpoints', icon: 'book_marked' },
   { id: 'workspace', label: 'Workspace', icon: 'folder' },
+  { id: 'runs', label: 'Runs', icon: 'timeline' },
 ]
 
 /**
  * An agent's configuration, as a destination rather than a dialog: its own section list and a way
  * back to its conversations, inside the content area (the app's rail stays put).
  *
- * Five sections (Agent, Running, Permissions, Checkpoints, Workspace), every setting applying on
- * change with a toast. The old seven section ids are resolved to these before they get here
+ * Six sections (Agent, Running, Permissions, Checkpoints, Workspace, and Runs, which lists what it
+ * has run), every setting applying on change with a toast. The old seven section ids are resolved to these before they get here
  * (`resolveAgentSettingsSection`).
  */
 export function AgentSettingsPage({ agent, section, onSelectSection, onBack, onOpenAppSettings, setting }: AgentSettingsPageProps) {
@@ -525,6 +527,8 @@ function SectionContent({ agent, section }: { agent: AgentSummary; section: Agen
       return <CheckpointsSection agent={agent} />
     case 'workspace':
       return <WorkspaceSection agent={agent} />
+    case 'runs':
+      return <AgentRunsPage agent={agent.name} />
   }
 }
 

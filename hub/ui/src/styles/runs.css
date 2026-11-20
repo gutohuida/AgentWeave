@@ -1,0 +1,28 @@
+/* A profile's and a flow's runs (components/traces/RunList.tsx): one line per run, newest first. */
+.aw-run-list-host { display: flex; flex-direction: column; gap: 6px; container-type: inline-size; }
+.aw-run-list { display: flex; flex-direction: column; margin: 0; padding: 0; list-style: none; border: 1px solid var(--border); border-radius: var(--radius-md); overflow: hidden; }
+.aw-run-row { border-bottom: 1px solid var(--border); }
+.aw-run-row:last-child { border-bottom: 0; }
+.aw-run-open {
+  display: grid; grid-template-columns: 8.5rem minmax(0, 1fr) 8rem 3rem; align-items: center; gap: 12px;
+  width: 100%; min-height: 34px; padding: 6px 12px; border: 0; background: transparent; color: var(--text);
+  font-size: 12.5px; text-align: left; cursor: pointer; transition: background var(--dur-fast) var(--ease);
+}
+.aw-run-row:has(.aw-run-profile) .aw-run-open { grid-template-columns: 8.5rem 8rem minmax(0, 1fr) 8rem 3rem; }
+.aw-run-open:hover { background: var(--row-hover); }
+.aw-run-open:focus-visible { outline: 2px solid var(--ring); outline-offset: -2px; }
+.aw-run-kind, .aw-run-outcome { display: inline-flex; align-items: center; gap: 6px; min-width: 0; white-space: nowrap; }
+.aw-run-outcome-word { color: var(--text); }
+.aw-run-profile, .aw-run-task { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.aw-run-profile { color: var(--text-2); }
+.aw-run-time { color: var(--text-2); text-align: right; font-variant-numeric: tabular-nums; }
+.aw-run-list-note { display: flex; align-items: center; gap: 10px; margin: 0; font-size: 12.5px; color: var(--text-2); }
+.aw-run-more { align-self: flex-start; }
+/* Narrow: the profile and the task move to a second line under the kind, outcome and time. */
+@container (max-width: 560px) {
+  .aw-run-open, .aw-run-row:has(.aw-run-profile) .aw-run-open { grid-template-columns: minmax(0, 1fr) auto auto; }
+  .aw-run-task { grid-column: 1 / -1; grid-row: 2; color: var(--text-2); }
+  .aw-run-row:has(.aw-run-profile) .aw-run-task { grid-column: 2 / -1; }
+  .aw-run-profile { grid-column: 1; grid-row: 2; }
+}
+@media (prefers-reduced-motion: reduce) { .aw-run-open { transition: none; } }
