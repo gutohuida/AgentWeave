@@ -954,8 +954,12 @@ async def own_checker_refusal(
     builder: Optional[str],
     assignee: Optional[str],
     checker: Optional[str],
+    project_id: Optional[str] = None,
 ) -> Optional[str]:
     """Why a task being filed would have its builder check its own work, or None.
+
+    Compared by profile (FR-9): a builder and checker that resolve to one profile -- one of them
+    folded into the other, or both into a third -- are the same checker of the same work.
 
     The check would never run: the reviewer ladder excludes the author and will not substitute for
     a named checker (`scheduler.resolve_reviewer`, rung 1b). The build's defaults count only where
@@ -975,8 +979,26 @@ async def own_checker_refusal(
             default_checker = _person(latest.people.get("checker"))
     who_builds = named_builder or default_builder
     who_checks = named_checker or default_checker
-    if not who_builds or who_builds != who_checks:
+    if not who_builds or not who_checks:
         return None
+    if who_builds != who_checks:
+        from .agent_profiles import counts_as, shared_profile
+
+        project_id = project_id or (document.project_id if document is not None else None)
+        profile = (
+            await shared_profile(session, project_id, who_builds, who_checks)
+            if project_id
+            else None
+        )
+        if profile is None:
+            return None
+        return (
+            f"This task would have profile {profile!r} both build it and check it, and nobody "
+            f"checks their own work: {counts_as(who_builds, who_checks, profile)}. Its builder "
+            f"{who_builds} is {'named' if named_builder else 'the build default'} and its checker "
+            f"{who_checks} is {'named' if named_checker else 'the build default'}. Name a builder "
+            f"and checker of different profiles."
+        )
     return (
         f"This task would have {who_builds} both build it and check it, and nobody checks their own "
         f"work: its builder is {'named' if named_builder else 'the build default'} and its checker "
@@ -1656,12 +1678,20 @@ async def hand_out(
     named = checker_of(build, task) if review else None
     own = (named[0] if named is not None else None) if review else task.builder
     if pool is not None and agent not in pool and agent != own:
+        from . import agent_profiles
+
+        folded = await agent_profiles.folded_refusal(session, project_id, agent)
+        if folded:
+            raise HandOutRefused(folded, 409)
         which = "reviewer pool" if review else "builders"
         raise HandOutRefused(
             f"{agent} is not among build {build.id}'s {which} ({', '.join(pool)}).", 409
         )
     if agent not in await open_agents(session, project_id):
-        raise HandOutRefused(f"{agent} is not an open agent of this project.", 409)
+        from . import agent_profiles
+
+        folded = await agent_profiles.folded_refusal(session, project_id, agent)
+        raise HandOutRefused(folded or f"{agent} is not an open agent of this project.", 409)
     if review:
         # The check follows the level and goes to the task's checker (`check-goes-to-its-checker`):
         # none at Fast, and only the checker the build names, where it names one.
