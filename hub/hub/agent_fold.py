@@ -66,6 +66,9 @@ class FoldPlan:
     setting_differences: List[Dict[str, Any]] = field(default_factory=list)
     pool_entries_added: List[Dict[str, Any]] = field(default_factory=list)
     open_work: List[Dict[str, Any]] = field(default_factory=list)
+    #: The one profile setting a fold can write: a profile with no pool default takes the first
+    #: added entry as its default runner. Listed so the preview shows it before confirming.
+    profile_changes: List[Dict[str, Any]] = field(default_factory=list)
 
     @property
     def can_fold(self) -> bool:
@@ -80,6 +83,7 @@ class FoldPlan:
             "setting_differences": self.setting_differences,
             "pool_entries_added": self.pool_entries_added,
             "open_work": self.open_work,
+            "profile_changes": self.profile_changes,
         }
 
     def refusal_detail(self) -> Dict[str, Any]:
@@ -565,6 +569,11 @@ async def plan_fold(session: AsyncSession, source: Agent, profile: Agent) -> Fol
     plan.setting_differences = await _setting_differences(session, source, profile)
     added, runners = await _pool_additions(session, source, profile)
     plan.pool_entries_added = serialize_pool(added, runners)
+    has_default = any(entry.is_default for entry in await pool_rows(session, profile.id))
+    if added and not has_default and profile.runner_id != added[0].runner_id:
+        plan.profile_changes = [
+            {"setting": "runner_id", "profile": profile.runner_id, "after": added[0].runner_id}
+        ]
     plan.open_work = await _open_work(session, source, profile, apply=False)
     return plan
 

@@ -216,6 +216,7 @@ async def test_preview_lists_differences_and_the_fold_keeps_the_profiles_setting
         ("task", "t-open-2", "assignee"),
     ]
     assert [e["runner_id"] for e in body["pool_entries_added"]] == [opus]
+    assert body["profile_changes"] == []  # a profile with a default keeps every setting
 
     folded = await _fold(app, auth_headers, "DevOpus", "Dev")
     assert folded.status_code == 200, folded.text
@@ -267,6 +268,38 @@ async def test_the_profiles_pool_gains_the_sources_entries_once(app, auth_header
     ]
     assert resp.json()["profile"]["pool"] == pool
     assert (await _listed(app, auth_headers, "Dev"))["runner_id"] == sonnet
+
+
+@pytest.mark.asyncio
+async def test_a_profile_with_no_pool_takes_a_default_and_the_preview_says_so(
+    app, auth_headers, add_agent
+):
+    """The one setting a fold writes: a profile with no pool default (so no runner) takes the
+    first added entry as its default, since a non-empty pool has exactly one. FR-2 keeps the
+    profile's settings unchanged, so the preview names this change before the operator confirms."""
+    sonnet = await _runner(app, auth_headers, "Claude Sonnet", "claude-sonnet-5-5")
+    opus = await _runner(app, auth_headers, "Claude Opus", "claude-opus-5-5")
+    await add_agent("Dev")
+    await add_agent("DevOpus")
+    await _set_pool(
+        app,
+        auth_headers,
+        "DevOpus",
+        [{"runner_id": opus, "default": True}, {"runner_id": sonnet}],
+    )
+    assert (await _listed(app, auth_headers, "Dev"))["pool"] == []
+    before = (await _listed(app, auth_headers, "Dev"))["runner_id"]
+
+    body = (await _preview(app, auth_headers, "DevOpus", "Dev")).json()
+    assert body["profile_changes"] == [{"setting": "runner_id", "profile": before, "after": opus}]
+
+    assert (await _fold(app, auth_headers, "DevOpus", "Dev")).status_code == 200
+    listed = await _listed(app, auth_headers, "Dev")
+    assert [(e["runner_id"], e["default"]) for e in listed["pool"]] == [
+        (opus, True),
+        (sonnet, False),
+    ]
+    assert listed["runner_id"] == opus
 
 
 # ------------------------------------------------------------ FR-4: folded-record-stays

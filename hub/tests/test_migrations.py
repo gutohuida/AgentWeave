@@ -4400,6 +4400,8 @@ def test_migration_0113_leaves_the_real_agents_table_insertable(tmp_path) -> Non
         conn.execute(_REAL_AGENTS_DDL)
         # A column a later revision adds (0172), which the ORM insert below names.
         conn.execute("ALTER TABLE agents ADD COLUMN can_admin_specs BOOLEAN DEFAULT '0' NOT NULL")
+        # And one 0188 adds.
+        conn.execute("ALTER TABLE agents ADD COLUMN folded_into VARCHAR(64)")
         conn.execute("CREATE INDEX ix_agents_name ON agents (name)")
         conn.execute("CREATE INDEX ix_agents_created_by_run_id ON agents (created_by_run_id)")
         conn.execute("CREATE UNIQUE INDEX ix_agents_project_name ON agents (project_id, name)")
