@@ -42003,3 +42003,101 @@ Launchability showed claude `present/authorized/runnable` while every turn faile
 On `:8000` the Hub's `git checkout` in QA2's review checkout died after about 1 s with exit 1 and empty stderr, which is what `taskkill /F` / `TerminateProcess(h, 1)` leaves, and left a stale `index.lock`. AW-152 traced the lock to the only live run at 15:07:17 UTC (DCUSW-4).
 
 **Status:** hazard closed (AW-159); cause **suspected, not proven**. Drive cleanups walked `ParentProcessId` from a seconds-old `Get-CimInstance` table and from remembered pids, then `taskkill /T /F`'d each, so a reused pid could have been ended. Now `scripts/drive/proc_safe.py` walks a Toolhelp table with creation times through `hub/hub/process_job.descendants` (a child counts only if created no earlier than its parent), drops remembered roots older than the drive, and ends processes only through handles whose creation time matches the snapshot. Converted: `d1105_own_app`, `d1107_updates_itself`, `d1108_windows_notifications`, `s1022_tr_drive`, `s1023_tc_drive`, `f907_drive`, `s1023_rn_busy`, `s1023_rn_stop_tree`; `test_pty_runner` no longer tree-kills a pid it has already seen exit. Left alone: drives that `taskkill` only a `Popen` they still hold (the handle keeps the pid from being reused), `panel_terminal_drive`/`t_row19_crash`/`t_sweep_row5_runs` (they only observe; `t_row19_crash` stops the Hub it started by pid from its own state), and `d1_0909_shutdown` (one CIM pipeline kills each pid it just listed). **Test:** `tests/test_drive_proc_safe.py`.
+
+## F1199 (A) -- a peer message makes the checker finish the builder's task, and the build stalls with nobody able to review it
+
+Drive 2026-11-21 (fresh Hub :8031, profile `sweep1121`, three Haiku profiles, onboarding's builder + checker shape). QA sent FWCAW-1 back twice; Developer's third turn (`run-013a289882ca`) ended without completing and messaged QA (`msg-30137cb35e75`). That message was delivered as `entry-376a8cd22ac1` into `run-4dcfa9265fd8`: QA, in its review conversation `conv-7f3e3b12be73`, but with `workspace_dir` the **builder's** task checkout (`.agentweave/tasks/task-051b575a325d`, not `.agentweave/reviews/QA`) and `task_id` bound. QA moved the task `in_progress → completed` (task_transitions seq 11). The flow then stalled: "this task names 'QA' as its reviewer, and that agent is the one that completed this task". Two profiles is the setup the Overview recommends, so one peer message deadlocks an ordinary build.
+
+**Status:** open
+**Source:** found by driving
+**Theme:** flows and review
+**Ready:** yes
+**Expected:** a checker's turn never builds or completes the task it checks: a peer message to it about a task under build runs as a review or message turn, not a build turn in the builder's checkout.
+
+## F1200 (A) -- no way to make a runner, so a pool can only take models another profile already uses
+
+Settings → Runners was deleted (SASSW-2, 971f2a4), and the pool editor's *Add a model* lists only existing runners (`PoolEditor.tsx:62`). On a fresh project that's three "Its default model" entries plus whatever *Add profile* created. Its "Add a runner" / "Manage runners" links never render (no caller passes `onOpenRunners`).
+
+**Status:** open -- specified in `spec/changes/a-profile-s-pool-and-a-new-chat-can-use-any-model-of-any-provider` (exploring)
+**Source:** asked for by the operator, confirmed by driving
+**Theme:** profiles and pools
+**Ready:** no (spec in exploring)
+
+## F1201 (A) -- widening the side panel pushes the thread bar's Checkpoint and ⋯ menu under the panel, and the panel can then only be closed by dragging it back
+
+At 1440 wide with the panel open, dragging the thread column to its 380 px minimum leaves the ⋯ button at x=705 while the column ends at x=624. Checkpoint is cut off and the title disappears. The panel has no close control of its own (only "+"); *Hide side panel* lives in that ⋯ menu. Cause: `.aw-convbar-end` and the status are `flex: none`, and the only shrink rule is `@media (max-width: 1100px)` on the **viewport** (`hub/ui/src/styles/conversation.css:40-46`), not the pane. The composer's controls wrap to three lines at the same width. Shots: `testbed/e2e-1121/shots/20-panel-open.png`, `21-panel-dragged.png`.
+
+**Status:** open
+**Source:** asked for by the operator, reproduced by driving
+**Theme:** conversation layout
+**Ready:** yes
+**Tier:** 0
+
+## F1202 (B) -- a stalled build reads "Running" on its own page, and the board shows it as ready for review
+
+Same stall as F1199: the sidebar says **Stalled**, the build page header says **Running**, and the Tasks board card says "Ready for review" with no sign of the stall. The stall notice (build page and Overview's "Nobody can review a task") names two ways out ("naming a different reviewer, or reviewing it yourself"), but the card offers only **Dismiss** / **Open task**, and neither path has a control there. The notice also starts lower-case ("this task names…").
+
+**Status:** open
+**Source:** found by driving
+**Theme:** builds
+**Ready:** yes
+
+## F1203 (B) -- the Overview's quarantine form renders unstyled
+
+Under *Quarantined tests*: raw white inputs with placeholders "check" and "test id", and loose lines "Never quarantined" / "No test is marked." / "Never quarantine a test", in dark and light. Shots `42-overview-bottom.png`, `45-overview-light.png`.
+
+**Status:** open
+**Source:** found by driving
+**Theme:** overview
+**Ready:** yes
+**Tier:** 0
+
+## F1204 (B) -- the two profile-creation dialogs disagree: one has no model choice, the other uses unthemed native selects
+
+*Add a builder and a checker* (`SetupProfilesDialog`) offers runners by name only ("Claude (default)", "Codex (default)", "Copilot (default)"): no model and no provider mark. *Create profile* (`AgentCreateDialog`) has a themed Provider menu, but Model and Charter are native `<select>`s, and its name placeholder is "codex-reviewer" whatever the provider.
+
+**Status:** open
+**Source:** found by driving
+**Theme:** profiles and pools
+**Ready:** yes
+
+## F1205 (B) -- "Describe a change you want" doesn't start a specification, and every such thread gets the same title
+
+The starter fills the composer with its boilerplate but doesn't arm Explore. The sidebar and bar title every thread it starts "I want to change this project. Interview me…". Here the agent created the document on its own on the second turn.
+
+**Status:** open
+**Source:** found by driving
+**Theme:** conversations and composer
+**Ready:** yes
+
+## F1206 (C) -- the spec page header contradicts itself and wraps
+
+The header shows a warning badge of 2 next to a "1 warning" pill. It says "Reviewed by any free profile" while every task names QA as checker. It shows "Task ids FWCAW-N" with a literal N, and keeps the "Writing" phase badge at the build step. While building it wraps to three lines (the flow name repeats the document title). The summary and problem render Markdown backticks literally.
+
+**Status:** open
+**Source:** found by driving
+**Theme:** spec documents
+**Ready:** yes
+
+## F1207 (C) -- a profile's settings are hard to find in the new layout
+
+The sidebar no longer lists profiles. The Overview's *Profiles* card sits at the very bottom, below the test sections, and clicking a profile opens its conversation. Project settings has a *Profiles* group (Instructions, Charters, Checkpoints, Manager) that lists no profiles. What is left: a thread's ⋯ menu, Ctrl+K after typing, or a warning chip.
+
+**Status:** open -- specified in `spec/changes/a-profile-s-pool-and-a-new-chat-can-use-any-model-of-any-provider`
+**Source:** asked for by the operator
+**Theme:** profiles and pools
+**Ready:** no
+
+## F1208 (C) -- small first-run and naming frictions (one drive, 2026-11-21)
+
+- The Overview shows two competing first-run cards: "2 things before this project can work" (builder + checker) and "Welcome… 1 Add a profile".
+- The "Started <document> (<step>). Work on it in this thread?" card comes back at every step, and says "Started" for a document that already exists.
+- The model and CLI repeat: "Claude Code — Haiku 4.5 · Haiku 4.5 · Workspace only" (new thread) and "Claude Code — Haiku 4.5 · Claude Code" (pool row). A pool row's detail repeats the runner name.
+- The *Thread* tab (chapters) collides with the sidebar's *Threads* (conversations). On a fresh project it shows only the Hub-seeded vault note, twice.
+- The Tasks filter bar is cramped: "QA (" is truncated, "Show finished" wraps, and "0 finished tasks are hidden" has no padding.
+- The agent settings rail is headed "Profiles" over one profile.
+
+**Status:** open
+**Source:** found by driving
+**Theme:** UI polish
+**Ready:** yes
