@@ -53,12 +53,15 @@ async def _completed_task(session, task_id: str, *, by: str | None, assignee: st
         project_id="proj-test",
         title=f"Task {task_id}",
         status="in_progress" if by else "completed",
-        assignee=assignee,
+        assignee=by or assignee,
     )
     session.add(task)
     await session.flush()
     if by:
+        # Built and completed by *by*, who holds it while it builds: only the task's builder
+        # completes it (`a-two-profile-build-cannot-deadlock-and-a-stall-says-so`, FR-5).
         await apply_transition(session, task, "completed", run_actor(f"run-{by}-authored", by))
+        task.assignee = assignee
     await session.commit()
     return task
 

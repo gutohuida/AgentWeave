@@ -30,7 +30,10 @@ from sqlalchemy.orm import Session
 from . import blocking, flow_advance, readable_ids, traces
 from .db.models import Conversation, RequirementEvidence, Run, Task, TaskTransition
 from .task_transitions import (
+    BAND_AGENT_ACTIONABLE,
+    BAND_AWAITING_PERSON,
     SEND_BACK_CLASSES,
+    STATUS_BANDS,
     STATUS_BLOCKED,
     Actor,
     allowed_targets,
@@ -485,12 +488,29 @@ async def task_authorship(session: AsyncSession, task_id: str) -> TaskAuthorship
     )
 
 
+#: The statuses in which a task's holder is the one building it (`builder_profile`): the work an
+#: agent can move, and work waiting on a person mid-build. Not finished or under review.
+_BUILDING_STATUSES = frozenset(
+    status
+    for status, band in STATUS_BANDS.items()
+    if band in (BAND_AGENT_ACTIONABLE, BAND_AWAITING_PERSON)
+)
+
+
 async def builder_profile(session: AsyncSession, task: Task) -> Optional[str]:
     """The task's builder profile, as named **at the time of the question** (D3): the task's
     `builder`, else its build's default builder; with neither, the agent whose run first moved it
-    to `in_progress`. Reassigning the build changes it from then on."""
+    to `in_progress`. Reassigning the build changes it from then on.
+
+    A task that names no builder and is held for building has its holder as builder, ahead of the
+    build's default: the flow hands the build to another agent where the default must check it
+    (`every-task-goes-to-its-people`), and that hand-out is the reassignment. Not while completed
+    or under review, where the holder is the reviewer; completing writes the holder into `builder`
+    (`apply_transition`), so a finished task names its builder anyway."""
     if (task.builder or "").strip():
         return task.builder.strip()
+    if (task.assignee or "").strip() and task.status in _BUILDING_STATUSES:
+        return task.assignee.strip()
     if task.build_id:
         from .db.models import Build
 
@@ -814,6 +834,48 @@ async def decide_move(
     except TransitionRefusedError as refusal:
         return MoveVerdict(allowed=False, refusal=refusal)
     return MoveVerdict(allowed=True, holder=holder)
+
+
+async def _guard_only_the_builder_completes(
+    session: AsyncSession, task: Task, to_status: str, actor: Actor
+) -> None:
+    """Only the task's builder profile completes it (`a-two-profile-build-cannot-deadlock-and-a-
+    stall-says-so`, FR-5, D3).
+
+    Found in the 2026-11-21 drive: QA, the checker, completed FWCAW-1 from a message turn, and the
+    flow then had no profile left to review it. The builder is the one named on the task **at the
+    time of the move** (`builder_profile`), so reassigning the build moves the right to complete
+    with it; any thread of that profile may complete, and folded names count as it.
+
+    Exempt (FR-6): the operator; a run the operator started themselves (`Run.initiator`, AW-101);
+    and the Hub's mender, whose job is landing stuck work. With no builder determinable the move is
+    permitted: refuse to offer, permit to act. The refusal names the profile and no run or
+    conversation id (FR-9)."""
+    if actor.is_operator or to_status != "completed":
+        return
+    builder = await builder_profile(session, task)
+    if not builder or actor.agent == builder:
+        return
+    from .agent_profiles import shared_profile
+
+    if await shared_profile(session, task.project_id, actor.agent, builder) is not None:
+        return
+    run = await session.get(Run, actor.run_id) if actor.run_id else None
+    if run is not None and run.initiator == "operator":
+        return
+    from .db.models import Agent
+    from .stalls import is_mender
+
+    agent = await session.scalar(
+        select(Agent).where(Agent.project_id == task.project_id, Agent.name == actor.agent)
+    )
+    if is_mender(agent):
+        return
+    raise ActorNotPermittedError(
+        f"Cannot move task {task.readable_id or task.id} to 'completed': {builder} is this task's "
+        f"builder, and only its builder completes it. You are reviewing it: give your verdict, "
+        f"or tell {builder} what you found."
+    )
 
 
 async def _guard_author_is_not_reviewer(
@@ -1211,6 +1273,7 @@ async def completion_refusal(
         return verdict.refusal
     try:
         await _guard_run_holds_the_task(session, task, "completed", actor)
+        await _guard_only_the_builder_completes(session, task, "completed", actor)
     except TransitionRefusedError as refusal:
         return refusal
     return None
@@ -1355,6 +1418,9 @@ async def apply_transition(
     free_move = to_status in free_targets(from_status) and await is_free_mover(session, task, actor)
     if not (free_move and to_status == "completed"):
         await _guard_run_holds_the_task(session, task, to_status, actor)
+    # Then that this agent may finish it at all: only the task's builder profile completes it
+    # (FR-5). After the holding check, whose refusal names the more specific remedy.
+    await _guard_only_the_builder_completes(session, task, to_status, actor)
 
     # The dependency gate, on the edges that *begin* work: `pending -> in_progress` and
     # `assigned -> in_progress`. Not `-> assigned` and not `-> rejected`: a whole wave can be routed
