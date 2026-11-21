@@ -26,6 +26,7 @@ const SpecHome = React.lazy(() => import('./SpecHome'))
 const BuildView = React.lazy(() => import('./BuildView'))
 const BuildSummaries = React.lazy(() => import('./BuildSummaries'))
 const ProfilePools = React.lazy(() => import('./ProfilePools'))
+const Profiles = React.lazy(() => import('./Profiles'))
 
 export function screenFor(route: MockRoute): ScreenComponent {
   switch (route.kind) {
@@ -60,7 +61,7 @@ export function screenFor(route: MockRoute): ScreenComponent {
     case 'app-settings':
       return AppSettings
     case 'tab':
-      return { overview: Overview, tasks: Tasks, spec: Spec, vault: Vault, jobs: Jobs, activity: Activity, dashboards: Dashboards, thread: Thread, checkpoints: Checkpoints }[route.tab]
+      return { overview: Overview, tasks: Tasks, spec: Spec, vault: Vault, jobs: Jobs, activity: Activity, dashboards: Dashboards, thread: Thread, checkpoints: Checkpoints, profiles: Profiles }[route.tab]
   }
 }
 
@@ -74,6 +75,7 @@ export const SCREENS: Array<{ id: string; label: string; route: MockRoute }> = [
   { id: 'task-threads', label: 'Spec · Task threads, three ways', route: { kind: 'task-threads' } },
   { id: 'roadmap', label: 'Spec · A roadmap’s own page', route: { kind: 'roadmap' } },
   { id: 'spec-home', label: 'Spec · Home, three ways to relate', route: { kind: 'spec-home' } },
+  { id: 'profiles', label: 'Profiles · Every profile and its settings', route: { kind: 'tab', tab: 'profiles' } },
   { id: 'checkpoints', label: 'Checkpoints', route: { kind: 'tab', tab: 'checkpoints' } },
   { id: 'vault', label: 'Vault', route: { kind: 'tab', tab: 'vault' } },
   { id: 'jobs', label: 'Jobs', route: { kind: 'tab', tab: 'jobs' } },

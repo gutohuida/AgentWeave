@@ -52,7 +52,33 @@ const SECTIONS: Array<{ id: AgentSettingsSection; label: string; icon: string }>
 export default function AgentSettings({ route, go, now }: ScreenProps) {
   const name = route.kind === 'agent-settings' ? route.agent : 'Builder'
   const section: AgentSettingsSection = route.kind === 'agent-settings' && SECTIONS.some((s) => s.id === route.section) ? route.section : 'running'
-  const initial = agents.find((a) => a.name === name) ?? agents[0]!
+  return <AgentSettingsBody name={name} section={section} onSelectSection={(id) => go({ kind: 'agent-settings', agent: name, section: id })} go={go} now={now} />
+}
+
+/** The same sections inside the Profiles page's detail (`embedded`): no back link, no title block
+ *  (the detail's head says whose they are), no footer, and the sections named as the app names them
+ *  (Profile, Running, ...). Key it by profile so each keeps its own edits. `summary` and `initialPool`
+ *  give the profile; the Agent screen falls back to the recorded agent and Developer's pool. */
+export function AgentSettingsBody({
+  name,
+  section,
+  onSelectSection,
+  go,
+  now,
+  embedded = false,
+  summary,
+  initialPool,
+}: {
+  name: string
+  section: AgentSettingsSection
+  onSelectSection: (id: AgentSettingsSection) => void
+  go: ScreenProps['go']
+  now: Date
+  embedded?: boolean
+  summary?: AgentSummary
+  initialPool?: AgentPoolEntry[]
+}) {
+  const initial = summary ?? agents.find((a) => a.name === name) ?? agents[0]!
   const [agent, setAgent] = React.useState<AgentSummary>(initial)
   React.useEffect(() => setAgent(initial), [initial])
   // mock state: the recorded roster carries no runner; Builder runs on Sonnet here.
@@ -62,7 +88,7 @@ export default function AgentSettings({ route, go, now }: ScreenProps) {
   // `?pool=empty|one|refused` presets the states the data lacks; Builder holds Developer's five.
   const poolState = new URLSearchParams(window.location.hash.split('?')[1] ?? '').get('pool')
   const [pool, setPool] = React.useState<AgentPoolEntry[]>(() =>
-    poolState === 'empty' ? [] : poolState === 'one' ? [POOLS.Developer![0]!] : POOLS.Developer!,
+    initialPool ?? (poolState === 'empty' ? [] : poolState === 'one' ? [POOLS.Developer![0]!] : POOLS.Developer!),
   )
   const [poolError, setPoolError] = React.useState<string | null>(
     poolState === 'refused' ? 'Refused: Opus 5.5 is not offered max effort by this runner’s Claude Code version. Nothing was changed.' : null,
@@ -80,7 +106,7 @@ export default function AgentSettings({ route, go, now }: ScreenProps) {
     case 'agent':
       body = (
         <AgentIdentitySettings
-          title="Agent"
+          title={embedded ? 'Profile' : 'Agent'}
           agent={agent}
           now={now}
           onChange={apply}
@@ -177,16 +203,16 @@ export default function AgentSettings({ route, go, now }: ScreenProps) {
 
   return (
     <SettingsNavLayout
-      title={`${agent.name} settings`}
+      title={embedded ? `${agent.name}: profile sections` : `${agent.name} settings`}
       subtitle={(() => {
         const d = pool.find((e) => e.default)
         return d ? (pool.length > 1 ? `${label(d)} and ${pool.length - 1} more` : label(d)) : 'No model'
       })()}
-      back={{ label: `Back to ${agent.name}`, onClick: () => go({ kind: 'conversation', agent: agent.name, conversationId: null }) }}
-      items={SECTIONS}
+      back={embedded ? undefined : { label: `Back to ${agent.name}`, onClick: () => go({ kind: 'conversation', agent: agent.name, conversationId: null }) }}
+      items={embedded ? SECTIONS.map((s) => (s.id === 'agent' ? { ...s, label: 'Profile' } : s.id === 'running' ? { ...s, meta: pool.length === 0 ? 'None' : String(pool.length) } : s)) : SECTIONS}
       active={section}
-      onSelect={(id) => go({ kind: 'agent-settings', agent: agent.name, section: id })}
-      footer={{ label: 'Project settings', icon: 'settings', onClick: () => go({ kind: 'settings', section: 'general' }) }}
+      onSelect={onSelectSection}
+      footer={embedded ? undefined : { label: 'Project settings', icon: 'settings', onClick: () => go({ kind: 'settings', section: 'general' }) }}
     >
       {body}
     </SettingsNavLayout>

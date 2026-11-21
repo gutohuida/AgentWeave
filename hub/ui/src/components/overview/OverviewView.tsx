@@ -6,6 +6,7 @@ import { agentColorVars } from '@/lib/agentColors'
 import { formatAgo, formatDateTime, formatDuration, formatMoney, formatTokens, formatTokensExact } from '@/lib/format'
 import '@/styles/overview.css'
 import { OpenInBuild } from './OpenInBuild'
+import { ProfileLink } from '@/components/agents/ProfileLink'
 import { LoadingThread } from '@/components/common/LoadingThread'
 
 /** The Overview: what needs the operator, what is running, what just finished.
@@ -85,6 +86,8 @@ export interface AgentStripItem {
   statusLabel?: string
   /** Controls of the agent's own, beside the row and never inside its button (its posture). */
   extra?: React.ReactNode
+  /** The way into the profile's own page (its settings, models and threads), beside the row. */
+  profile?: { href: string; onOpen: () => void }
   onOpen: () => void
 }
 
@@ -381,7 +384,7 @@ export function OverviewView({
             {agents.map((a) => {
               const color = agentColorVars(a.colorIndex)
               return (
-                <li key={a.name} data-testid={`agent-card-${a.name}`}>
+                <li key={a.name} data-testid={`agent-card-${a.name}`} className={a.profile ? 'aw-ov-agent-item' : undefined}>
                   <button
                     data-slot="agent-row"
                     type="button"
@@ -402,6 +405,11 @@ export function OverviewView({
                       {a.usd != null ? formatMoney(a.usd) : '—'}
                     </span>
                   </button>
+                  {a.profile ? (
+                    <ProfileLink name={a.name} href={a.profile.href} onOpen={a.profile.onOpen} className="aw-ov-profile-link">
+                      <Icon name="settings" size={14} />
+                    </ProfileLink>
+                  ) : null}
                   {a.extra ? <div className="aw-ov-agent-extra">{a.extra}</div> : null}
                 </li>
               )

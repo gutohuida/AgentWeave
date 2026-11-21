@@ -116,6 +116,7 @@ export default function Overview({ go, now }: ScreenProps) {
             ? 'Waiting for your answer'
             : `Last active ${a.last_seen ? formatAgoLong(a.last_seen, now) : 'never'}`,
       usd: usdByAgent.get(a.name) ?? 0,
+      profile: { href: `#tab/profiles?profile=${encodeURIComponent(a.name)}`, onOpen: () => go({ kind: 'tab', tab: 'profiles', profile: a.name }) },
       onOpen: () => (latest ? go({ kind: 'conversation', agent: a.name, conversationId: latest.id }) : go({ kind: 'conversation', agent: a.name, conversationId: null })),
     }
   })

@@ -1,0 +1,127 @@
+/* The Profiles page (mock 2026-11-21, operator's "A + C"): a master-detail workspace. Tokens only.
+   P1 density with quiet chrome, P3 tabular right-aligned numbers, P21 status = word + colour. */
+
+.aw-pf { display: grid; grid-template-columns: minmax(340px, 440px) minmax(0, 1fr); height: 100%; min-height: 0; }
+
+/* ---- the list (master) ---- */
+.aw-pf-list { display: flex; flex-direction: column; min-height: 0; border-right: 1px solid var(--border-region); }
+.aw-pf-list-head { display: flex; align-items: center; gap: 8px; padding: 12px 14px 6px 16px; }
+.aw-pf-search { position: relative; flex: 1; min-width: 0; }
+.aw-pf-search-icon { position: absolute; left: 9px; top: 50%; transform: translateY(-50%); color: var(--text-3); pointer-events: none; }
+.aw-pf-search .aw-pf-search-input { width: 100%; padding-left: 28px; }
+.aw-pf-order { margin: 0; padding: 2px 16px 8px; font-size: 11.5px; color: var(--text-3); }
+.aw-pf-list-body { flex: 1; min-height: 0; overflow-y: auto; padding: 0 8px 24px; }
+
+.aw-pf-group + .aw-pf-group { margin-top: 6px; }
+.aw-pf-group-label {
+  display: flex; align-items: center; gap: 6px; margin: 0; padding: 8px 8px 4px;
+  font-size: 11px; font-weight: 600; letter-spacing: .02em; color: var(--text-3);
+}
+.aw-pf-group-count { font-weight: 500; }
+.aw-pf-disclosure {
+  display: inline-flex; align-items: center; gap: 4px; padding: 2px 4px 2px 0; border-radius: var(--radius-sm);
+  font: inherit; letter-spacing: inherit; color: inherit;
+}
+.aw-pf-disclosure:hover { color: var(--text); }
+.aw-pf-disclosure:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--ring); }
+.aw-pf-rows { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 1px; }
+
+.aw-pf-row {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 12px; row-gap: 2px; align-items: center;
+  width: 100%; padding: 7px 10px; border-radius: var(--radius-md); text-align: left; color: var(--text);
+  transition: background-color var(--dur-fast) ease;
+}
+.aw-pf-row:hover { background: var(--row-hover); }
+.aw-pf-row[aria-current="true"] { background: var(--row-selected); box-shadow: inset 2px 0 0 var(--agent-accent, var(--text-3)); }
+.aw-pf-row:focus-visible { outline: none; box-shadow: inset 0 0 0 2px var(--ring); }
+.aw-pf-row[data-kind="no-model"] .aw-agent-dot, .aw-pf-row[data-kind="idle"] .aw-agent-dot { opacity: .55; }
+.aw-pf-cell { min-width: 0; display: flex; align-items: center; gap: 8px; }
+.aw-pf-id { font-size: 13px; }
+.aw-pf-name { font-weight: 550; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 0 1 auto; max-width: 11em; }
+.aw-pf-model { display: inline-flex; align-items: center; gap: 5px; min-width: 0; font-size: 12px; color: var(--text-2); }
+.aw-pf-model .truncate { min-width: 0; }
+.aw-pf-num { justify-content: flex-end; font-size: 12px; color: var(--text-2); text-align: right; white-space: nowrap; }
+.aw-pf-id + .aw-pf-num { color: var(--text); }
+.aw-pf-num[data-unknown="true"] { color: var(--text-3); font-style: italic; }
+.aw-pf-state { font-size: 12px; color: var(--text-2); }
+.aw-pf-detail { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--text-3); }
+.aw-pf-ago { font-size: 11.5px; color: var(--text-3); }
+.aw-pf-row[data-kind="working"] .aw-pf-detail, .aw-pf-row[data-kind="reviewing"] .aw-pf-detail { color: var(--text-2); }
+
+/* Status: the word carries it, the mark and its colour accompany it. */
+.aw-pf-status { display: inline-flex; align-items: center; gap: 6px; flex: none; font-weight: 500; color: var(--text); white-space: nowrap; }
+.aw-pf-status-mark { width: 7px; height: 7px; flex: none; border-radius: 999px; background: var(--text-3); }
+.aw-pf-status[data-kind="working"] .aw-pf-status-mark { background: var(--green); }
+.aw-pf-status[data-kind="reviewing"] .aw-pf-status-mark { background: var(--blue); }
+.aw-pf-status[data-kind="idle"] .aw-pf-status-mark { background: transparent; box-shadow: inset 0 0 0 1.5px var(--text-3); }
+.aw-pf-status[data-kind="held"] .aw-pf-status-mark { background: var(--amber); border-radius: 1px; }
+.aw-pf-status[data-kind="no-model"] .aw-pf-status-mark { background: transparent; box-shadow: inset 0 0 0 1.5px var(--amber); border-radius: 1px; }
+.aw-pf-status[data-kind="archived"] { color: var(--text-3); font-weight: 400; }
+.aw-pf-status[data-kind="archived"] .aw-pf-status-mark { background: transparent; box-shadow: inset 0 0 0 1.5px var(--border-hi); }
+.aw-pf-row[data-kind="working"] .aw-pf-status-mark { animation: aw-pulse 2s steps(6) infinite; }
+
+/* Notes: a filter that matched nothing, a list that could not load. */
+.aw-pf-note { display: flex; gap: 10px; padding: 18px 12px; font-size: 12.5px; color: var(--text-2); }
+.aw-pf-note-icon { flex: none; margin-top: 2px; color: var(--amber); }
+.aw-pf-note-title { margin: 0 0 2px; font-weight: 600; color: var(--text); }
+.aw-pf-note-body { margin: 0 0 10px; max-width: 34em; color: var(--text-3); line-height: 1.45; }
+.aw-pf-skeleton { display: flex; flex-direction: column; gap: 8px; padding: 8px 10px; }
+.aw-pf-skeleton-row { height: 38px; border-radius: var(--radius-md); background: var(--surface-2); }
+
+/* ---- the detail ---- */
+.aw-pf-detail-pane { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+.aw-pf-nodetail { padding: 28px; font-size: 12.5px; color: var(--text-3); }
+.aw-pf-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; padding: 14px 20px 10px; }
+.aw-pf-head-id { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.aw-pf-head-dot { width: 9px; height: 9px; }
+.aw-pf-head-text { min-width: 0; }
+.aw-pf-head-name { margin: 0; font-size: 16px; font-weight: 650; letter-spacing: -.01em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.aw-pf-head-sub { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 8px; margin: 2px 0 0; font-size: 12px; color: var(--text-3); }
+.aw-pf-head-actions { display: flex; align-items: center; gap: 8px; }
+
+.aw-pf-now {
+  display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 12px; margin: 0 20px 6px; padding: 7px 12px;
+  border: 1px solid var(--border-region); border-radius: var(--radius-md); background: var(--surface-2);
+  font-size: 12.5px; color: var(--text-2);
+}
+.aw-pf-now-label { font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--text-3); }
+.aw-pf-now-what { flex: 1; min-width: 12em; }
+.aw-pf-now-what strong { font-weight: 550; color: var(--text); }
+.aw-pf-now-when { color: var(--text-3); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.aw-pf-now-links { display: inline-flex; gap: 12px; }
+.aw-profile-link { color: var(--blue); border-radius: 3px; text-decoration: none; }
+.aw-profile-link:hover { text-decoration: underline; }
+.aw-profile-link:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+.aw-pf-now-link { font-weight: 550; }
+
+/* The profile's settings, reused whole: their own section list and scroll, inside the detail. */
+.aw-pf-settings { flex: 1; min-height: 0; margin-top: 4px; border-top: 1px solid var(--border-region); }
+.aw-pf-settings .aw-settings-layout { grid-template-columns: 176px minmax(0, 1fr); }
+.aw-pf-settings .aw-settings-nav { padding: 14px 8px 20px 12px; }
+.aw-pf-settings .aw-settings-nav-head { display: none; }
+
+.aw-pf-empty { display: flex; align-items: center; justify-content: center; height: 100%; }
+.aw-pf-empty-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
+
+/* Narrow: the list stays visible above the detail (P9), its rows keep their two lines. */
+@media (max-width: 1100px) {
+  .aw-pf { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(150px, 34%) minmax(0, 1fr); }
+  .aw-pf-list { border-right: 0; border-bottom: 1px solid var(--border-region); }
+  .aw-pf-settings .aw-settings-layout { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); }
+  .aw-pf-settings .aw-settings-nav { flex-direction: row; align-items: center; overflow-x: auto; padding: 6px 12px; border-right: 0; border-bottom: 1px solid var(--border-region); }
+  .aw-pf-settings .aw-settings-nav-list { flex-direction: row; }
+  .aw-pf-settings .aw-settings-nav-item { width: auto; white-space: nowrap; }
+  .aw-pf-settings .aw-settings-search { display: none; }
+}
+@media (prefers-reduced-motion: reduce) { .aw-pf-row[data-kind="working"] .aw-pf-status-mark { animation: none; } }
+
+/* The Overview's way into a profile (ProfileLink): an icon at the row's end, quiet until reached. */
+.aw-ov-agent-item { position: relative; }
+.aw-ov-agent-item .aw-ov-agent-row { padding-right: 44px; }
+.aw-ov-profile-link {
+  position: absolute; top: 50%; right: 8px; transform: translateY(-50%);
+  display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 26px;
+  border-radius: var(--radius-sm); color: var(--text-3); opacity: .55;
+}
+.aw-ov-agent-item:hover .aw-ov-profile-link, .aw-ov-profile-link:focus-visible { opacity: 1; }
+.aw-ov-profile-link:hover { background: var(--row-hover); color: var(--text); }

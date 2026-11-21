@@ -3,6 +3,7 @@ import { Sidebar } from '@/components/layout/Sidebar'
 import { TopBar } from '@/components/layout/TopBar'
 import { Toaster } from '@/components/ui/toast'
 import { APP_SETTINGS_SECTIONS, PROJECT_TABS, type AppSettingsSection, type ProjectTab } from '@/lib/navigation'
+import { PROFILES_MOCK_STATES, useProfilesAddress, type ProfilesMockState } from './profilesMock'
 import { MOCK_NOW, project, projects, tasks } from './fixtures'
 import { BUILD_MOCK_STATES, DEFAULT_BUILD, RECORDED_BUILDS, useBuildHash, type BuildMockState } from './buildsMock'
 import { beforeKey, type MockRoute } from './routes'
@@ -13,13 +14,17 @@ import { NOTICE_LEVELS } from './specBanner'
 import { SPEC_MOCK_STATES, setSpecMockControls, useSpecMockControls } from './specMock'
 import { setTasksMockControls, useTasksMockControls } from './tasksMock'
 
+/** The tabs the mock's top bar lists: the app's own, with Profiles after Tasks (operator, 2026-11-21).
+ *  Profiles is not in the app's PROJECT_TABS until the page is wired in. */
+const MOCK_TABS: readonly ProjectTab[] = PROJECT_TABS.flatMap((t): ProjectTab[] => (t === 'tasks' ? [t, 'profiles'] : [t]))
+
 const BEFORE = import.meta.glob('./before/*.webp', { eager: true, query: '?url', import: 'default' }) as Record<string, string>
 
 function parseHash(): MockRoute {
   // A query after the route (`?state=…&layout=…&at=…`) presets a screen's mock controls.
   const raw = decodeURIComponent(window.location.hash.replace(/^#/, '')).split('?')[0]!
   const [kind, a, b, c] = raw.split('/')
-  if (kind === 'tab' && (PROJECT_TABS as readonly string[]).includes(a ?? '')) return { kind: 'tab', tab: a as ProjectTab }
+  if (kind === 'tab' && (MOCK_TABS as readonly string[]).includes(a ?? '')) return { kind: 'tab', tab: a as ProjectTab }
   if (kind === 'conversation' && a) return { kind: 'conversation', agent: a, conversationId: b || null, ...(c && PANELS.has(c) ? { panel: c as NonNullable<Extract<MockRoute, { kind: 'conversation' }>['panel']> } : {}) }
   if (kind === 'settings') return { kind: 'settings', section: (a as never) || 'general' }
   if (kind === 'agent-settings' && a) return { kind: 'agent-settings', agent: a, section: (b as never) || 'running' }
@@ -44,7 +49,7 @@ function parseHash(): MockRoute {
 function toHash(route: MockRoute): string {
   switch (route.kind) {
     case 'tab':
-      return `tab/${route.tab}`
+      return `tab/${route.tab}${route.profile ? `?profile=${encodeURIComponent(route.profile)}` : ''}`
     case 'conversation':
       return `conversation/${route.agent}/${route.conversationId ?? ''}${route.panel ? `/${route.panel}` : ''}`
     case 'settings':
@@ -107,7 +112,7 @@ export function MockApp() {
   }
 
   const Screen = screenFor(route)
-  const fill = route.kind === 'tab' && (route.tab === 'tasks' || route.tab === 'spec' || route.tab === 'vault')
+  const fill = route.kind === 'tab' && (route.tab === 'tasks' || route.tab === 'spec' || route.tab === 'vault' || route.tab === 'profiles')
   const awaitingReview = tasks.filter((t) => t.status === 'under_review' || t.status === 'completed').length
   const beforeSrc = (() => {
     const key = beforeKey(route)
@@ -146,7 +151,7 @@ export function MockApp() {
         <TopBar
           project={{ id: project.id, name: project.name, path: project.working_directory }}
           projects={projects.map((p) => ({ id: p.id, name: p.name, path: p.working_directory }))}
-          tabs={PROJECT_TABS}
+          tabs={MOCK_TABS}
           active={route.kind === 'tab' ? route.tab : route.kind === 'traces' ? 'activity' : null}
           // Overview's count is what its "Needs you" section lists (QA1's question and the unmerged task).
           counts={{ tasks: awaitingReview, overview: 2 }}
@@ -216,6 +221,7 @@ function MockBar({
       ) : null}
       <SidebarMockBar />
       {route.kind === 'tab' && route.tab === 'tasks' ? <TasksMockBar /> : null}
+      {route.kind === 'tab' && route.tab === 'profiles' ? <ProfilesMockBar /> : null}
       {route.kind === 'build' || route.kind === 'build-summaries' ? <BuildMockBar showBuild={route.kind === 'build'} /> : null}
       <button type="button" className="mock-bar-button" disabled={!hasBefore} data-on={before ? 'true' : 'false'} onClick={onBefore}>
         {before ? 'Showing today' : 'Compare with today'}
@@ -230,6 +236,21 @@ function SidebarMockBar() {
   return (
     <select className="mock-bar-select" aria-label="Sidebar" value={state} onChange={(e) => setSidebarMockState(e.target.value as SidebarMockState)}>
       {SIDEBAR_MOCK_STATES.map((s) => (
+        <option key={s.value} value={s.value}>
+          {s.label}
+        </option>
+      ))}
+    </select>
+  )
+}
+
+/** The Profiles page's states: the roster, one profile, none, a filter that matches none, a failed
+ *  load and a slow one. */
+function ProfilesMockBar() {
+  const { state, set } = useProfilesAddress()
+  return (
+    <select className="mock-bar-select" aria-label="Profiles state" value={state} onChange={(e) => set({ state: e.target.value as ProfilesMockState, q: null })}>
+      {PROFILES_MOCK_STATES.map((s) => (
         <option key={s.value} value={s.value}>
           {s.label}
         </option>

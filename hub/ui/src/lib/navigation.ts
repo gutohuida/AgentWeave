@@ -24,7 +24,9 @@ export interface RailProject {
  *  you are working on rather than what you are working *beside* — the document and its navigation,
  *  no conversation (operator, 2026-08-10: "just to focus on spec"). */
 export const PROJECT_TABS = ['overview', 'thread', 'tasks', 'spec', 'checkpoints', 'vault', 'jobs', 'activity', 'dashboards'] as const
-export type ProjectTab = (typeof PROJECT_TABS)[number]
+/** `profiles` is mock-only until the Profiles page is wired in (mock/screens/Profiles.tsx): it is not
+ *  in PROJECT_TABS, so the real top bar never lists it and a URL naming it falls back to Overview. */
+export type ProjectTab = (typeof PROJECT_TABS)[number] | 'profiles'
 
 /** What each project tab is called on screen (the top bar). */
 export const TAB_LABELS: Record<ProjectTab, string> = {
@@ -37,6 +39,7 @@ export const TAB_LABELS: Record<ProjectTab, string> = {
   jobs: 'Jobs',
   activity: 'Activity',
   dashboards: 'Dashboards',
+  profiles: 'Profiles',
 }
 
 /** Project settings' sections, in the order the side list shows them (grouped there). `general` is
