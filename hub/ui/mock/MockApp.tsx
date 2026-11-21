@@ -112,7 +112,7 @@ export function MockApp() {
   }
 
   const Screen = screenFor(route)
-  const fill = route.kind === 'tab' && (route.tab === 'tasks' || route.tab === 'spec' || route.tab === 'vault' || route.tab === 'profiles')
+  const fill = route.kind === 'tab' && (route.tab === 'tasks' || route.tab === 'spec' || route.tab === 'vault')
   const awaitingReview = tasks.filter((t) => t.status === 'under_review' || t.status === 'completed').length
   const beforeSrc = (() => {
     const key = beforeKey(route)

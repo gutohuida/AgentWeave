@@ -2,25 +2,29 @@ import * as React from 'react'
 import { EmptyState } from '@/components/common/EmptyState'
 import { Button } from '@/components/ui/button'
 import { Icon } from '@/components/common/Icon'
+import { Segmented, type SegmentedOption } from '@/components/ui/segmented'
 import { ProfileDetailHeader, ProfileNowStrip } from './ProfileDetailHeader'
-import { ProfilesList } from './ProfilesList'
+import { ProfilesIndex } from './ProfilesIndex'
 import type { ProfileListItem, ProfileNow } from './profilesModel'
 import '@/styles/profiles.css'
 
 /**
- * The Profiles workspace: every profile in a list that stays put, and the selected profile's own
- * settings beside it (P5: the profile's one full view is its settings, so the page reuses the
- * settings sections as `children` rather than drawing its own). Three different empties are kept
- * apart (P19): no profiles at all, a filter that matches none, and a list that could not load.
+ * The Profiles tab: an index of every profile, and one profile's own page. Two levels, one
+ * horizontal navigation on each: the app's top bar, then (on a profile) one row of tabs. There is
+ * no list or section column beside the content; the profile's name switches to another profile.
  *
- * Escape inside the detail returns focus to the profile's row (P9).
+ * The profile's page is its settings (P5: one canonical full view), reused as `children` under the
+ * tabs rather than drawn again. Three different empties are kept apart (P19): no profiles at all, a
+ * filter that matches none, and a list that could not load. Escape on a profile's page goes back to
+ * the index with that profile's row focused (P9).
  */
 export function ProfilesPage({
   items,
   selected,
   query,
   onQueryChange,
-  onSelect,
+  onOpen,
+  onClose,
   onAdd,
   onAddPair,
   state = 'ready',
@@ -29,18 +33,24 @@ export function ProfilesPage({
   nowFor,
   hasThread,
   profileHref,
-  onOpenProfile,
   onNewThread,
   onOpenLatestThread,
   onOpenTask,
   onOpenBuild,
+  sections,
+  section,
+  onSection,
   children,
 }: {
   items: readonly ProfileListItem[]
+  /** The profile whose page is open; null shows the index. */
   selected: string | null
   query: string
   onQueryChange: (query: string) => void
-  onSelect: (name: string) => void
+  /** Opens a profile's page (a row, the switcher, a link to another profile). */
+  onOpen: (name: string) => void
+  /** Back to the index. */
+  onClose: () => void
   onAdd: () => void
   /** Starts the usual pair: a builder and a checker. */
   onAddPair: () => void
@@ -50,16 +60,21 @@ export function ProfilesPage({
   nowFor: (name: string) => ProfileNow
   hasThread: (name: string) => boolean
   profileHref: (name: string) => string
-  onOpenProfile: (name: string) => void
   onNewThread: (name: string) => void
   onOpenLatestThread: (name: string) => void
   onOpenTask: (name: string) => void
   onOpenBuild: (name: string) => void
-  /** The selected profile's settings sections (the page's detail). */
+  /** The page's tabs, in order, and the one open. */
+  sections: ReadonlyArray<SegmentedOption<string>>
+  section: string
+  onSection: (section: string) => void
+  /** The open tab's content: the profile's own settings section. */
   children: React.ReactNode
 }) {
-  const rootRef = React.useRef<HTMLDivElement>(null)
   const profile = items.find((p) => p.name === selected) ?? null
+  // The profile the operator last had open, so the index can hand focus back to its row.
+  const lastOpen = React.useRef<string | null>(null)
+  if (profile) lastOpen.current = profile.name
 
   if (state === 'ready' && items.length === 0) {
     return (
@@ -84,52 +99,60 @@ export function ProfilesPage({
     )
   }
 
+  if (!profile || state !== 'ready') {
+    return (
+      <div data-testid="profiles-page">
+        <ProfilesIndex
+          items={items}
+          query={query}
+          onQueryChange={onQueryChange}
+          onOpen={onOpen}
+          onNewThread={onNewThread}
+          onAdd={onAdd}
+          state={state}
+          onRetry={onRetry}
+          now={now}
+          focusProfile={lastOpen.current}
+        />
+      </div>
+    )
+  }
+
   return (
-    <div className="aw-pf" ref={rootRef} data-testid="profiles-page">
-      <ProfilesList
-        items={items}
-        selected={profile?.name ?? null}
-        query={query}
-        onQueryChange={onQueryChange}
-        onSelect={onSelect}
-        onAdd={onAdd}
-        state={state}
-        onRetry={onRetry}
-        now={now}
+    <div
+      className="aw-pf-page"
+      data-testid="profile-page"
+      onKeyDown={(event) => {
+        // Only a key pressed on the page itself: a menu or dialog is portalled, and its own Escape
+        // closes it first. A text field keeps its Escape.
+        if (event.key !== 'Escape' || event.defaultPrevented) return
+        if (!event.currentTarget.contains(event.target as Node)) return
+        if ((event.target as HTMLElement).closest('input, textarea, [role="combobox"]')) return
+        onClose()
+      }}
+    >
+      <ProfileDetailHeader
+        profile={profile}
+        all={items}
+        onBack={onClose}
+        onSwitch={onOpen}
+        hasThread={hasThread(profile.name)}
+        onNewThread={() => onNewThread(profile.name)}
+        onOpenLatestThread={() => onOpenLatestThread(profile.name)}
       />
-      <div
-        className="aw-pf-detail-pane"
-        onKeyDown={(event) => {
-          // Only keys pressed inside the detail itself: a menu or dialog is portalled, and its own
-          // Escape closes it first.
-          if (event.key !== 'Escape' || event.defaultPrevented || !profile) return
-          if (!event.currentTarget.contains(event.target as Node)) return
-          rootRef.current?.querySelector<HTMLElement>(`[data-slot="profile-row"][data-profile="${CSS.escape(profile.name)}"]`)?.focus()
-        }}
-      >
-        {profile ? (
-          <>
-            <ProfileDetailHeader
-              profile={profile}
-              hasThread={hasThread(profile.name)}
-              onNewThread={() => onNewThread(profile.name)}
-              onOpenLatestThread={() => onOpenLatestThread(profile.name)}
-            />
-            <ProfileNowStrip
-              now={nowFor(profile.name)}
-              at={now}
-              profileHref={profileHref}
-              onOpenProfile={onOpenProfile}
-              onOpenTask={() => onOpenTask(profile.name)}
-              onOpenBuild={() => onOpenBuild(profile.name)}
-            />
-            <div className="aw-pf-settings" data-testid="profile-settings">
-              {children}
-            </div>
-          </>
-        ) : (
-          <div className="aw-pf-nodetail">{state === 'ready' ? 'Choose a profile to see its settings.' : null}</div>
-        )}
+      <ProfileNowStrip
+        now={nowFor(profile.name)}
+        at={now}
+        profileHref={profileHref}
+        onOpenProfile={onOpen}
+        onOpenTask={() => onOpenTask(profile.name)}
+        onOpenBuild={() => onOpenBuild(profile.name)}
+      />
+      <div className="aw-pf-tabs">
+        <Segmented value={section} onChange={onSection} options={sections} label={`${profile.name} sections`} />
+      </div>
+      <div className="aw-pf-section" data-testid="profile-settings">
+        {children}
       </div>
     </div>
   )

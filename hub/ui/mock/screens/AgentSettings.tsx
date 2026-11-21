@@ -55,9 +55,8 @@ export default function AgentSettings({ route, go, now }: ScreenProps) {
   return <AgentSettingsBody name={name} section={section} onSelectSection={(id) => go({ kind: 'agent-settings', agent: name, section: id })} go={go} now={now} />
 }
 
-/** The same sections inside the Profiles page's detail (`embedded`): no back link, no title block
- *  (the detail's head says whose they are), no footer, and the sections named as the app names them
- *  (Profile, Running, ...). Key it by profile so each keeps its own edits. `summary` and `initialPool`
+/** The same sections inside a profile's page (`embedded`): just the open section, with no section
+ *  list, back link or search (the page's own tabs choose the section). Key it by profile so each keeps its own edits. `summary` and `initialPool`
  *  give the profile; the Agent screen falls back to the recorded agent and Developer's pool. */
 export function AgentSettingsBody({
   name,
@@ -68,6 +67,7 @@ export function AgentSettingsBody({
   embedded = false,
   summary,
   initialPool,
+  onPoolCount,
 }: {
   name: string
   section: AgentSettingsSection
@@ -77,6 +77,8 @@ export function AgentSettingsBody({
   embedded?: boolean
   summary?: AgentSummary
   initialPool?: AgentPoolEntry[]
+  /** Told the pool's size whenever it changes, for the page's Models tab. */
+  onPoolCount?: (count: number) => void
 }) {
   const initial = summary ?? agents.find((a) => a.name === name) ?? agents[0]!
   const [agent, setAgent] = React.useState<AgentSummary>(initial)
@@ -94,6 +96,7 @@ export function AgentSettingsBody({
     poolState === 'refused' ? 'Refused: Opus 5.5 is not offered max effort by this runner’s Claude Code version. Nothing was changed.' : null,
   )
   const label = (e: AgentPoolEntry) => entryLabel(POOL_CATALOG, e)
+  React.useEffect(() => onPoolCount?.(pool.length), [pool.length, onPoolCount])
 
   const say = (said: string) => toast({ title: said, tone: 'success' })
   const apply = (patch: Partial<AgentSummary> | AgentPatch, said: string) => {
@@ -201,18 +204,20 @@ export function AgentSettingsBody({
       break
   }
 
+  if (embedded) return <div className="aw-pf-section-body">{body}</div>
+
   return (
     <SettingsNavLayout
-      title={embedded ? `${agent.name}: profile sections` : `${agent.name} settings`}
+      title={`${agent.name} settings`}
       subtitle={(() => {
         const d = pool.find((e) => e.default)
         return d ? (pool.length > 1 ? `${label(d)} and ${pool.length - 1} more` : label(d)) : 'No model'
       })()}
-      back={embedded ? undefined : { label: `Back to ${agent.name}`, onClick: () => go({ kind: 'conversation', agent: agent.name, conversationId: null }) }}
-      items={embedded ? SECTIONS.map((s) => (s.id === 'agent' ? { ...s, label: 'Profile' } : s.id === 'running' ? { ...s, meta: pool.length === 0 ? 'None' : String(pool.length) } : s)) : SECTIONS}
+      back={{ label: `Back to ${agent.name}`, onClick: () => go({ kind: 'conversation', agent: agent.name, conversationId: null }) }}
+      items={SECTIONS}
       active={section}
       onSelect={onSelectSection}
-      footer={embedded ? undefined : { label: 'Project settings', icon: 'settings', onClick: () => go({ kind: 'settings', section: 'general' }) }}
+      footer={{ label: 'Project settings', icon: 'settings', onClick: () => go({ kind: 'settings', section: 'general' }) }}
     >
       {body}
     </SettingsNavLayout>

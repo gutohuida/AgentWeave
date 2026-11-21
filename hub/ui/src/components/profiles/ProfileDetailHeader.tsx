@@ -2,19 +2,28 @@ import * as React from 'react'
 import { ProfileLink } from '@/components/agents/ProfileLink'
 import { Icon, ProviderMark } from '@/components/common/Icon'
 import { Button } from '@/components/ui/button'
+import { Menu, MenuContent, MenuItem, MenuLabel, MenuTrigger } from '@/components/ui/menu'
 import { agentColorVars } from '@/lib/agentColors'
 import { formatAgo, formatAgoLong, formatDateTime, formatIn } from '@/lib/format'
 import { modelLine, statusWord, type ProfileListItem, type ProfileNow } from './profilesModel'
 import '@/styles/profiles.css'
 
-/** The detail's head: who this is, its status, and the two ways to talk to it. */
+/** The profile page's head: a way back, who this is (the name switches to another profile), its
+ *  status, and the two ways to talk to it. */
 export function ProfileDetailHeader({
   profile,
+  all,
+  onBack,
+  onSwitch,
   onNewThread,
   onOpenLatestThread,
   hasThread,
 }: {
   profile: ProfileListItem
+  /** Every profile, for the switcher. */
+  all: readonly ProfileListItem[]
+  onBack: () => void
+  onSwitch: (name: string) => void
   onNewThread: () => void
   onOpenLatestThread: () => void
   /** Whether the profile has any thread to open. */
@@ -23,14 +32,37 @@ export function ProfileDetailHeader({
   const color = agentColorVars(profile.colorIndex)
   const canStart = !profile.archived && profile.status.kind !== 'no-model'
   const why = profile.archived ? 'Archived: restore it under Profile before starting a thread' : profile.status.kind === 'no-model' ? 'It has no model yet: add one under Running' : undefined
+  const open = all.filter((p) => !p.archived)
+  const archived = all.filter((p) => p.archived)
+  const item = (p: ProfileListItem) => (
+    <MenuItem key={p.name} icon={p.name === profile.name ? 'check' : undefined} onSelect={() => onSwitch(p.name)}>
+      {p.name}
+      <span className="aw-pf-switch-status"> · {p.archived ? 'Archived' : statusWord(p.status)}</span>
+    </MenuItem>
+  )
   return (
     <header className="aw-pf-head" style={{ '--agent-accent': color.accent } as React.CSSProperties}>
+      <div className="aw-pf-back-row">
+        <button type="button" data-slot="profiles-back" className="aw-pf-back" onClick={onBack}>
+          <Icon name="arrow_left" size={13} />
+          All profiles
+        </button>
+      </div>
       <div className="aw-pf-head-id">
         <span className="aw-agent-dot aw-pf-head-dot" aria-hidden="true" />
         <div className="aw-pf-head-text">
-          <h2 className="aw-pf-head-name" title={profile.name}>
-            {profile.name}
-          </h2>
+          <Menu>
+            <MenuTrigger data-slot="profile-switcher" className="aw-pf-switcher" aria-label={`${profile.name}. Switch profile`} title="Switch profile">
+              <h2 className="aw-pf-head-name">{profile.name}</h2>
+              <Icon name="expand_more" size={14} className="aw-pf-switcher-chevron" />
+            </MenuTrigger>
+            <MenuContent align="start" style={{ minWidth: 260 }}>
+              <MenuLabel>Switch profile</MenuLabel>
+              {open.map(item)}
+              {archived.length ? <MenuLabel>Archived</MenuLabel> : null}
+              {archived.map(item)}
+            </MenuContent>
+          </Menu>
           <p className="aw-pf-head-sub">
             <span>{profile.charterName ? `${profile.charterName} charter` : 'No charter'}</span>
             <span aria-hidden="true">·</span>
@@ -98,7 +130,6 @@ export function ProfileNowStrip({
               </>
             ) : null}
             <strong>{now.task}</strong>
-            {now.build ? <> in {now.build}</> : null}
           </span>
           <span className="aw-pf-now-when" title={`Since ${formatDateTime(now.since, at)}`}>
             for {formatAgo(now.since, at)}
