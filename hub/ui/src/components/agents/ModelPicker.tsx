@@ -158,8 +158,9 @@ export function ModelPicker({ provider, effectiveModel, onChangeModel, openReque
         className={`${composerControlClassName} min-w-0 max-w-full`}
         // Same rule as `ControlPill`: the model's name is what truncates, never the word "Model".
         title={`Model: ${currentLabel ?? effectiveModel ?? '—'}`}
+        aria-label={`Model: ${currentLabel ?? effectiveModel ?? '—'}`}
       >
-        <span className="shrink-0" style={{ color: 'var(--text-3)' }}>Model: </span>
+        <span className="aw-composer-prefix shrink-0" style={{ color: 'var(--text-3)' }}>Model: </span>
         {mark}
         <span className="min-w-0 truncate">{currentLabel ?? effectiveModel ?? '—'}</span>
         <span className="shrink-0">▾</span>

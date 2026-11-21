@@ -89,7 +89,7 @@ export function PoolPicker({
         className={`${composerControlClassName} inline-flex h-8 min-w-0 max-w-full items-center gap-1 px-2.5 text-xs`}
         title={`Model: ${label}. ${agentName} may run on this model only; add others in its settings.`}
       >
-        <span className="shrink-0" style={{ color: 'var(--text-3)' }}>Model: </span>
+        <span className="aw-composer-prefix shrink-0" style={{ color: 'var(--text-3)' }}>Model: </span>
         {mark}
         <span className="min-w-0 truncate">{label}</span>
       </span>
@@ -107,8 +107,9 @@ export function PoolPicker({
         aria-expanded={open}
         className={`${composerControlClassName} min-w-0 max-w-full`}
         title={`Model: ${label}`}
+        aria-label={`Model: ${label}`}
       >
-        <span className="shrink-0" style={{ color: 'var(--text-3)' }}>Model: </span>
+        <span className="aw-composer-prefix shrink-0" style={{ color: 'var(--text-3)' }}>Model: </span>
         {mark}
         <span className="min-w-0 truncate">{label}</span>
         <span className="shrink-0">▾</span>
