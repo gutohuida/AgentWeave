@@ -2,6 +2,8 @@ import * as React from 'react'
 import { useAgents } from '@/api/agents'
 import { readableApiError } from '@/api/client'
 import { useSpecDocuments } from '@/api/spec'
+import { useOpenStalls } from '@/api/stalls'
+import { stallsByTask } from '@/lib/stalls'
 import {
   useAllowedTransitions,
   useRetryIntegration,
@@ -108,6 +110,8 @@ export function TasksScreen({
           : { specDocumentId: scope.id }
   const { data: taskPage, isLoading, isError } = useTasks(scopeOptions)
   const { data: agents = [], error: agentsError } = useAgents()
+  const { data: stallRows, error: stallsError } = useOpenStalls()
+  const openStalls = React.useMemo(() => stallsByTask(stallRows ?? []), [stallRows])
   const { data: allowed, error: transitionsError } = useAllowedTransitions()
   const updateTask = useUpdateTask()
   const startWork = useStartWorkOnTask()
@@ -328,7 +332,7 @@ export function TasksScreen({
     <>
       {/* The agent filter and Start work's agent menu are built from the roster; unread, both would
           offer nobody. */}
-      <QueryErrorNotice failures={[['the profiles', agentsError], ['the spec counts', boardsError]]} className="aw-board-notice" />
+      <QueryErrorNotice failures={[['the profiles', agentsError], ['the spec counts', boardsError], ['the stalls', stallsError]]} className="aw-board-notice" />
       {taskPage?.has_more ? (
         <div className="aw-board-notice" data-testid="tasks-truncated-banner">
           <Icon name="info" size={14} />
@@ -448,6 +452,7 @@ export function TasksScreen({
             />
           }
           moves={moves}
+          stalls={openStalls}
           startAgents={agents.map((agent) => agent.name)}
           onStartWork={onStartWork}
           onReviewTask={onReviewTask}

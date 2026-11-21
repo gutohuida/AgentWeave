@@ -280,6 +280,9 @@ interface TaskDetailDrawerProps {
   /** Threaded straight to the requirement chips (F4) — clicking one from inside the drawer
    *  navigates exactly the way clicking one on the collapsed card does. */
   onOpenRequirement?: (documentPath: string, anchor: string) => void
+  /** The view it opens on; Story when absent. A stall's "Review it yourself" opens Details, where
+   *  the operator's review is (Land it). */
+  initialView?: TaskView
 }
 
 /**
@@ -298,12 +301,12 @@ interface TaskDetailDrawerProps {
  * is still there to return to. It closes the way every other dialog here does: click outside,
  * or Escape.
  */
-export function TaskDetailDrawer({ task, onClose, onOpenRequirement }: TaskDetailDrawerProps) {
+export function TaskDetailDrawer({ task, onClose, onOpenRequirement, initialView = 'story' }: TaskDetailDrawerProps) {
   const buildProjectId = useConfigStore((state) => state.selectedProjectId)
   // The story is the default view (slice task-story): it answers "is this done, and how did it get
   // here?" before the controls. A Hub that predates `/story` answers 404, and the drawer then keeps
   // the details view without offering a switch that leads nowhere.
-  const [view, setView] = useState<TaskView>('story')
+  const [view, setView] = useState<TaskView>(initialView)
   // Offered only while the story is loading or has loaded: an error (a Hub before `/story`) or a
   // query that cannot run leaves the details view, with no switch that leads nowhere.
   const story = useTaskStory(task?.id ?? '', task !== null)
@@ -392,7 +395,7 @@ export function TaskDetailDrawer({ task, onClose, onOpenRequirement }: TaskDetai
   )
 
   useEffect(() => {
-    setView('story')
+    setView(initialView)
     setRefusal(null)
     setNextTurn(null)
     setBlockingReason(null)
@@ -403,7 +406,7 @@ export function TaskDetailDrawer({ task, onClose, onOpenRequirement }: TaskDetai
     setPickedPrerequisite('')
     setDependencyRefusal(null)
     setConfirmingLand(false)
-  }, [task?.id])
+  }, [task?.id, initialView])
 
   // The inline confirm takes the keyboard on Cancel, the safe side, like every other confirm (F825).
   useEffect(() => {

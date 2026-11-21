@@ -9,6 +9,9 @@ import { builderAndReviewer, formatStageAge } from '@/lib/taskStage'
 import type { CardMoveProps } from './TaskCardCompact'
 import { TONE_COLOR, stageVisual, waitsWording } from '@/lib/taskStageVisual'
 import { StageThread } from './StageThread'
+import type { Stall } from '@/api/stalls'
+import { StallRemedies } from '@/components/stalls/StallRemedies'
+import { STALLED, stallNotice } from '@/lib/stalls'
 import { TaskStartMenuItems } from './TaskStartMenuItems'
 import { canOfferStart } from '@/lib/taskStartMenu'
 import '@/styles/task-redesign.css'
@@ -36,6 +39,7 @@ export function TaskCard({
   onReviewTask,
   move,
   select,
+  stall,
 }: {
   task: Task
   /** An agent's palette index (from the roster), for its name's colour. */
@@ -60,8 +64,15 @@ export function TaskCard({
   move?: CardMoveProps
   /** Present while the board is picking tasks to close together. */
   select?: { checked: boolean; onToggle: () => void }
+  /** The open stall naming this task: the card reads Stalled, over its stage, and offers the
+   *  stall's remedies (FR-7, FR-8). */
+  stall?: Stall | null
 }) {
-  const visual = stageVisual(task.stage)
+  // A closed task needs nothing, as the build's need reads it (`build_needs._task_need`).
+  const stalled = stall && task.status !== 'approved' && task.status !== 'rejected' ? stall : null
+  const visual = stalled
+    ? { ...stageVisual(task.stage), glyph: STALLED.icon, word: STALLED.label, tone: 'needs-you' as const, moving: false }
+    : stageVisual(task.stage)
   const clock = now ?? new Date()
   const reviewed = builderAndReviewer(task)
   const builder = reviewed.builder ?? task.builder ?? task.assignee ?? null
@@ -80,6 +91,7 @@ export function TaskCard({
   const failed = failedChecks ?? task.failed_checks ?? null
   const stageTitle = [
     visual.word,
+    stalled ? stallNotice(stalled.reason, task.readable_id) : null,
     task.stage_detail,
     task.stage_since ? `since ${formatDateTime(task.stage_since, clock)}` : null,
     waitsOn ? waitsWording(task.stage, waitsOn) : null,
@@ -91,6 +103,7 @@ export function TaskCard({
       className="aw-tcard aw-reveal-host"
       data-task-id={task.id}
       data-stage={task.stage ?? 'not_started'}
+      data-stalled={stalled ? 'true' : undefined}
       data-tone={visual.tone}
       data-selected={selected ? 'true' : 'false'}
       data-dragging={move?.dragging ? 'true' : 'false'}
@@ -197,6 +210,7 @@ export function TaskCard({
           ) : null}
         </span>
       ) : null}
+      {stalled ? <StallRemedies stall={stalled} taskRef={task.readable_id} compact /> : null}
       <StageThread stage={task.stage} compact />
     </article>
   )

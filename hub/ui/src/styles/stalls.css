@@ -1,0 +1,28 @@
+/* A stall's remedies (`components/stalls/StallRemedies.tsx`): the same controls beside the notice on
+   the build page header, the Overview's notice and the board card (P2). */
+.aw-stall-remedies { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.aw-stall-remedy-row { display: flex; flex-wrap: wrap; gap: 6px; }
+.aw-stall-picker {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 4px;
+  padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface-2, transparent);
+}
+.aw-stall-picker-label { color: var(--text-2); font-size: 12px; margin-right: 4px; }
+.aw-stall-picker-note { color: var(--text-3); font-size: 11px; margin-left: 4px; }
+.aw-stall-refusal, .aw-stall-done { display: flex; align-items: flex-start; gap: 5px; margin: 0; font-size: 12px; }
+.aw-stall-refusal { color: var(--red); }
+.aw-stall-done { color: var(--text-2); }
+.aw-stall-done svg { color: var(--green); flex: none; margin-top: 1px; }
+.aw-stall-refusal svg { flex: none; margin-top: 1px; }
+.aw-stall-remedies[data-compact="true"] { padding: 0 8px 8px; }
+.aw-stall-remedies[data-compact="true"] .aw-stall-picker { padding: 4px 6px; }
+
+/* The Stalled status word (FR-7): amber, the brand's "needs you", with its icon (P21). */
+.aw-stalled-word { display: inline-flex; align-items: center; gap: 5px; font-weight: 600; color: var(--text); }
+.aw-stalled-word svg { color: var(--amber); }
+.aw-stall-notice { display: flex; flex-direction: column; gap: 6px; padding: 8px 10px; border: 1px solid color-mix(in srgb, var(--amber) 35%, var(--border)); border-radius: 8px; background: color-mix(in srgb, var(--amber) 7%, transparent); }
+.aw-stall-notice-text { display: flex; gap: 6px; align-items: flex-start; margin: 0; font-size: 13px; color: var(--text); }
+.aw-stall-notice-text svg { color: var(--amber); flex: none; margin-top: 2px; }
+
+/* A narrow column (the build page beside the spec list at 420px) wraps a control's label rather
+   than pushing the control out of its notice. */
+.aw-stall-remedy-row > button { max-width: 100%; height: auto; min-height: 1.75rem; white-space: normal; text-align: left; }

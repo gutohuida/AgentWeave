@@ -46,6 +46,9 @@ import {
   type TimelineRun,
   type TimelineSendBack,
 } from './buildViewModel'
+import type { Stall } from '@/api/stalls'
+import { StallRemedies } from '@/components/stalls/StallRemedies'
+import { STALLED, stallNotice } from '@/lib/stalls'
 import '@/styles/builds.css'
 
 export interface BuildViewProps {
@@ -65,6 +68,11 @@ export interface BuildViewProps {
   /** The trace's link to the conversation the run happened in. */
   onOpenConversation: (run: BuildRunRead) => void
   colorIndexOf?: (agent: string) => number | null | undefined
+  /** The project's open stalls; the header names each one about a task of this build, with its
+   *  remedies beside it (FR-8). */
+  stalls?: Stall[]
+  /** The stalls could not be read: the header says the build may be stalled without showing it. */
+  stallsUnread?: boolean
 }
 
 /** One build: its tasks in their document's order, each opening one timeline of the runs that
@@ -127,7 +135,7 @@ function BuildSkeleton() {
   )
 }
 
-function BuildViewLoaded({ read, now, address, onAddressChange, refreshError, onRetry, onOpenDocument, onOpenConversation, colorIndexOf }: BuildViewProps & { read: BuildRead }) {
+function BuildViewLoaded({ read, now, address, onAddressChange, refreshError, onRetry, onOpenDocument, onOpenConversation, colorIndexOf, stalls, stallsUnread }: BuildViewProps & { read: BuildRead }) {
   const totals = buildTotals(read, now)
   const addressedTask = address.task ? read.tasks.find((t) => taskKey(t) === address.task || t.id === address.task) : address.run ? taskOfRun(read, address.run) : null
   const [expanded, setExpanded] = React.useState<Set<string>>(() => new Set(addressedTask ? [addressedTask.id] : []))
@@ -173,7 +181,7 @@ function BuildViewLoaded({ read, now, address, onAddressChange, refreshError, on
 
   return (
     <div className="aw-bv" data-testid="build-view" data-build-id={read.build.id}>
-      <BuildHeader read={read} now={now} totals={totals} refreshError={refreshError ?? null} onRetry={onRetry} onOpenDocument={onOpenDocument} onShowNeeds={() => setFilter('needs-you')} />
+      <BuildHeader read={read} now={now} totals={totals} stalls={stalls ?? []} stallsUnread={Boolean(stallsUnread)} refreshError={refreshError ?? null} onRetry={onRetry} onOpenDocument={onOpenDocument} onShowNeeds={() => setFilter('needs-you')} />
 
       <section className="aw-bv-tasks" aria-label="Tasks">
         <div className="aw-bv-toolbar">
@@ -314,10 +322,14 @@ function BuildHeader({
   onRetry,
   onOpenDocument,
   onShowNeeds,
+  stalls,
+  stallsUnread,
 }: {
   read: BuildRead
   now: Date
   totals: ReturnType<typeof buildTotals>
+  stalls: Stall[]
+  stallsUnread: boolean
   refreshError: string | null
   onRetry: () => void
   onOpenDocument: () => void
@@ -330,6 +342,13 @@ function BuildHeader({
   const cost = totalCell(totals.cost)
   const note = leftOut(totals.cost)
   const stopped = b.needs_operator?.kind === 'stopped'
+  // The build's open stalls, each about one of its tasks. Stalled wins over Running (FR-7): the
+  // sidebar's word, read from the same need, or from a stall the read has not caught up with yet.
+  const refs = new Map(read.tasks.map((t) => [t.id, t.ref]))
+  // A closed task needs nothing, as the build's own need reads it (`build_needs._task_need`).
+  const open = new Set(read.tasks.filter((t) => t.status !== 'approved' && t.status !== 'rejected').map((t) => t.id))
+  const own = stalls.filter((s) => s.task_id && open.has(s.task_id))
+  const stalled = b.state === 'running' && (b.needs_operator?.kind === 'stalled' || own.length > 0)
   return (
     <header className="aw-bv-header">
       <div className="aw-bv-titleline">
@@ -349,10 +368,17 @@ function BuildHeader({
       </div>
 
       <div className="aw-bv-meta">
-        <span className="aw-bv-state" data-state={b.state}>
-          {b.state === 'running' ? <span className="aw-bv-live" aria-hidden="true" /> : <Icon name={state.icon} size={13} />}
-          {state.label}
-        </span>
+        {stalled ? (
+          <span className="aw-bv-state aw-stalled-word" data-state="stalled" data-testid="build-state">
+            <Icon name={STALLED.icon} size={13} />
+            {STALLED.label}
+          </span>
+        ) : (
+          <span className="aw-bv-state" data-state={b.state} data-testid="build-state">
+            {b.state === 'running' ? <span className="aw-bv-live" aria-hidden="true" /> : <Icon name={state.icon} size={13} />}
+            {state.label}
+          </span>
+        )}
         <span>
           started{' '}
           <time dateTime={b.created_at} title={formatDateTime(b.created_at, now)}>
@@ -375,6 +401,22 @@ function BuildHeader({
           </span>
         ) : null}
       </div>
+
+      {stallsUnread ? (
+        <div className="aw-bv-stale" role="alert">
+          <Icon name="alert_triangle" size={14} />
+          <span>Couldn’t read the stalls from the Hub, so a stalled task of this build may not say so here.</span>
+        </div>
+      ) : null}
+      {own.map((stall) => (
+        <section key={stall.id} className="aw-stall-notice" aria-label={`Stalled: ${refs.get(stall.task_id!) ?? 'a task'}`} data-testid={`build-stall-${stall.id}`}>
+          <p className="aw-stall-notice-text">
+            <Icon name={STALLED.icon} size={14} />
+            <span>{stallNotice(stall.reason, refs.get(stall.task_id!))}</span>
+          </p>
+          <StallRemedies stall={stall} taskRef={refs.get(stall.task_id!)} />
+        </section>
+      ))}
 
       {refreshError ? (
         <div className="aw-bv-stale" role="alert">
