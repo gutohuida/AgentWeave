@@ -235,8 +235,12 @@ async def test_the_most_recent_completion_is_the_one_that_counts(app):
         await apply_transition(session, task, "completed", run_actor("run-1", "agent-1"))
         await apply_transition(session, task, "under_review", run_actor("run-2", "agent-2"))
         await apply_transition(session, task, "revision_needed", run_actor("run-2", "agent-2"))
+        # The operator hands the build to agent-3: only the builder completes, and the builder
+        # never reviews (`a-two-profile-build-cannot-deadlock-and-a-stall-says-so`, FR-1, FR-5).
+        task.assignee = task.builder = "agent-3"
         await apply_transition(session, task, "in_progress", run_actor("run-3", "agent-3"))
         await apply_transition(session, task, "completed", run_actor("run-3", "agent-3"))
+        task.assignee = None
         await apply_transition(session, task, "under_review", operator())
         await session.commit()
 
