@@ -580,6 +580,14 @@ async def assignee_produced_the_work(
     work. This asks whether the one already holding it is an author, and F142's measured row -- the
     agent moved it through `in_progress`, the operator did the rest, nobody recorded evidence -- is
     an author by this rule and not by that one.
+
+    **By name, not by thread, deliberately** (`a-two-profile-build-cannot-deadlock-and-a-stall-
+    says-so`, TPBCD-5). Where one thread of the checker profile authored the work and another of its
+    review threads went silent holding it, this is what carries the review on into a new thread of
+    that profile -- driven 2026-11-21 (`scripts/drive/d1121_tpbcd5_silent_review.py`). By thread the
+    silent holder authored nothing, and the row would stall as a declared reviewer gone quiet. It
+    cannot hand an authoring thread the review: the ladder excludes by `review_exclusions`, and the
+    staffed review opens its own conversation.
     """
     if not task.assignee:
         return False

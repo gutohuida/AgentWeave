@@ -38,6 +38,7 @@ from hub.scheduler import JobScheduler, decide_firing, resolve_reviewer
 from hub.spec_lifecycle import Actor as EvidenceActor
 from hub.task_transition_service import (
     NEW_THREAD,
+    assignee_produced_the_work,
     decide_move,
     lineage_of_conversation,
     review_exclusions,
@@ -545,3 +546,41 @@ async def test_a_named_checker_that_is_the_builder_reads_in_sentence_case(add_ag
     assert agent is None
     assert reason.startswith("This task names 'Developer' as its checker")
     assert "builder" in reason
+
+
+# ------------------------------------------ the wedge predicate stays by name (TPBCD-5, 2026-11-21)
+
+
+async def test_a_silent_qa_review_of_work_a_qa_thread_authored_still_reads_as_a_wedge(add_agent):
+    """`assignee_produced_the_work` compares by name, not by thread, and deliberately.
+
+    Driven 2026-11-21 (`scripts/drive/d1121_tpbcd5_silent_review.py`): QA's message thread X
+    completed the task, QA's review thread Y ended with no verdict, and the flow carried the review
+    on into a third QA thread, which approved it -- through the scheduler's wedge arm, because QA
+    holding the task is QA by name. By thread, Y authored nothing, so the same row would read as a
+    declared reviewer gone silent and stall as `review_unstaffed` instead. The staffed review opens
+    its own thread, so the name here restaffs QA and never hands X the review."""
+    for name in (BUILDER, CHECKER):
+        await add_agent(name)
+    x = await _thread(CHECKER, "conv-qa-x")
+    await _thread(CHECKER, "conv-qa-y")
+    await _task(checker=CHECKER, status="under_review", assignee=CHECKER)
+    await _completed_in(TASK, CHECKER, x)
+    async with async_session_factory() as db:
+        task = await db.get(Task, TASK)
+        assert await assignee_produced_the_work(db, task) is True
+        # And the review that recovery staffs may go to QA, in a new thread.
+        assert CHECKER not in await review_exclusions(db, task)
+
+
+async def test_a_silent_qa_review_of_developer_work_is_no_wedge(add_agent):
+    """The control from the same drive: Developer authored everything, so QA holding the task is
+    a reviewer, and its silence is surfaced (run_divergence D4) rather than restaffed."""
+    for name in (BUILDER, CHECKER):
+        await add_agent(name)
+    a = await _thread(BUILDER, "conv-dev-a")
+    await _task(checker=CHECKER, status="under_review", assignee=CHECKER)
+    await _completed_in(TASK, BUILDER, a)
+    await _evidence_in(TASK, BUILDER, a, "ev-dev")
+    async with async_session_factory() as db:
+        assert await assignee_produced_the_work(db, await db.get(Task, TASK)) is False
