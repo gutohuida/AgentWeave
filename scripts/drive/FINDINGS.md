@@ -42010,6 +42010,8 @@ Drive 2026-11-21 (fresh Hub :8031, profile `sweep1121`, three Haiku profiles, on
 
 Re-read from the drive's database (2026-11-21, read-only): the message carried **no** `task_id`, and the entry has neither `task_id` nor `review_task_id`. It reached QA's review thread because it was Developer's reply to QA's send-back message `msg-38796857377e`, sent from `conv-7f3e3b12be73`. That thread's own `task_id` bound the run. In that turn QA tried to accept evidence (refused) and approve, then completed the task, ran the tests in the builder's checkout, and recorded FR-2 evidence of its own. The stall is `stall-442d07c7b549`.
 
+Replicated 2026-11-21 by `scripts/drive/d1121_f1199_reply_into_review_thread.py` (fresh Hub :8032, profile `f1199repro`, task `task-79baddd25d1f`): twice, a plain reply from Developer, naming no task, was delivered into QA's task-bound review thread. Both QA turns ran in `.agentweave/tasks/<task>`, attached to the task. One moved the task to in_progress; the other moved it to under_review and approved it, with no review turn, and the work merged. The checkout and attachment recurred both times; the completion depends on what the agent chooses. Exit 1 (FAIL checkout, FAIL attachment). Live-Hub history: 18 non-builder moves to in_progress in the builder's checkout and 1 non-builder completion (AW-101, operator-requested and helpful) out of 968.
+
 **Status:** open -- specified in `spec/changes/a-two-profile-build-cannot-deadlock-and-a-stall-says-so` (exploring; roadmap `profiles-rollout-ui-ux-and-flow-fixes`)
 **Source:** found by driving
 **Theme:** flows and review
