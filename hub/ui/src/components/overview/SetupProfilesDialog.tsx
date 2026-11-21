@@ -94,7 +94,7 @@ function ProfileFields({
             options={runnerOptions}
           />
         </Field>
-        <Field label="Charter (optional)" htmlFor={`setup-profiles-${role}-charter`} hint="Instructions added to every turn it takes.">
+        <Field label="Charter (optional)" htmlFor={`setup-profiles-${role}-charter`} hint="Instructions added to each of its runs.">
           <MenuSelect
             id={`setup-profiles-${role}-charter`}
             testId={`setup-profiles-${role}-charter`}
