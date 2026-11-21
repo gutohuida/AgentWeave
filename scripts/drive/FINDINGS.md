@@ -42008,6 +42008,8 @@ On `:8000` the Hub's `git checkout` in QA2's review checkout died after about 1 
 
 Drive 2026-11-21 (fresh Hub :8031, profile `sweep1121`, three Haiku profiles, onboarding's builder + checker shape). QA sent FWCAW-1 back twice; Developer's third turn (`run-013a289882ca`) ended without completing and messaged QA (`msg-30137cb35e75`). That message was delivered as `entry-376a8cd22ac1` into `run-4dcfa9265fd8`: QA, in its review conversation `conv-7f3e3b12be73`, but with `workspace_dir` the **builder's** task checkout (`.agentweave/tasks/task-051b575a325d`, not `.agentweave/reviews/QA`) and `task_id` bound. QA moved the task `in_progress → completed` (task_transitions seq 11). The flow then stalled: "this task names 'QA' as its reviewer, and that agent is the one that completed this task". Two profiles is the setup the Overview recommends, so one peer message deadlocks an ordinary build.
 
+Re-read from the drive's database (2026-11-21, read-only): the message carried **no** `task_id`, and the entry has neither `task_id` nor `review_task_id`. It reached QA's review thread because it was Developer's reply to QA's send-back message `msg-38796857377e`, sent from `conv-7f3e3b12be73`. That thread's own `task_id` bound the run. In that turn QA tried to accept evidence (refused) and approve, then completed the task, ran the tests in the builder's checkout, and recorded FR-2 evidence of its own. The stall is `stall-442d07c7b549`.
+
 **Status:** open -- specified in `spec/changes/a-two-profile-build-cannot-deadlock-and-a-stall-says-so` (exploring; roadmap `profiles-rollout-ui-ux-and-flow-fixes`)
 **Source:** found by driving
 **Theme:** flows and review
