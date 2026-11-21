@@ -12,10 +12,11 @@ and records evidence for it, as QA did in the 11-21 drive. When QA's completion 
 builder-only guard), QA tells Developer and Developer completes it: QA's thread has still recorded
 the evidence, which excludes it from the review as much as completing does.
 
+Setup (fatal, not a criterion check): a QA thread completed the task or recorded evidence for it,
+outside any review -- the condition the rest needs; its lineages are the "authoring" lineages.
+
 Checks, each reached or not and passed or failed at its own assertion:
 
-  A0  setup: a QA thread completed the task or recorded evidence for it, outside any review (the
-      condition the rest needs; its lineages are the "authoring" lineages)
   R1  a review of the task is queued for QA into a conversation whose lineage is none of those
   V1  a verdict on the task (approved, revision_needed or rejected) is given by a QA run in that
       fresh lineage
@@ -60,7 +61,7 @@ DEV, QA = "Developer", "QA"
 REQ = "hello"
 YEARLY = "0 0 1 1 *"
 FIRINGS = 6
-CHECKS = ("A0", "R1", "V1", "S1", "G1")
+CHECKS = ("R1", "V1", "S1", "G1")
 VERDICTS = ("approved", "revision_needed", "rejected")
 
 baseline = {}
@@ -216,11 +217,12 @@ def drive(state):
 
     facts = authoring(task)
     lineages = {run: lineage_of_run(run) for run in facts}
-    covered("A0", True, bool(facts),
+    d.check("setup: a QA thread completed the task or recorded evidence, outside a review",
+            bool(facts),
             "QA runs outside a review that worked the task: "
             + (", ".join(f"{run} ({', '.join(sorted(what))}; lineage {lineages[run]})"
-                         for run, what in facts.items()) or "none"))
-    reached = bool(facts)
+                         for run, what in facts.items()) or "none"), fatal=True)
+    reached = True
     authored = set(lineages.values())
     # A fact with no lineage excludes the whole agent (design D1), so no thread can be "fresh".
     named_only = None in authored
@@ -294,6 +296,8 @@ def main():
 if __name__ == "__main__":
     main()
 
+# Re-run with A0 made a fatal setup step: run 150428 (own Hub :8037, 98 s, exit 1), same outcome
+# (QA run-d6d8f90d0342 completed + recorded evidence; review_unstaffed stall-9d72572858d3).
 # Observed on pre-build code (branch agentweave/task/task-09dd80eb9515 at 96fa0c8, master's line),
 # 2026-11-21, run 144918 (artefacts drive1121-two-profile-flow/144918, own Hub :8033 on a new
 # database, 37 s, one firing). Exit 1. Developer built hello.txt and messaged QA naming the task;
@@ -302,7 +306,7 @@ if __name__ == "__main__":
 # 'QA' as its reviewer, and that agent is the one that completed this task. Naming a different
 # reviewer, or reviewing it yourself, is the way forward -- the flow will not substitute somebody
 # else for a named reviewer." -- the 11-21 deadlock (stall-442d07c7b549), replicated by a flow.
-#   A0  reached, passes: QA's thread completed the task and recorded evidence outside a review.
+#   setup passes: QA's thread completed the task and recorded evidence outside a review.
 #   R1  fails: no review entry was queued for QA at all.
 #   V1  fails: no verdict.
 #   S1  fails: the review_unstaffed stall above.
