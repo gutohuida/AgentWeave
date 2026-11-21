@@ -531,10 +531,11 @@ describe('conversation controls — autoscroll follows scroll position', () => {
 
   it('keeps following when the newest folded outbound message expands', () => {
     const originalResizeObserver = globalThis.ResizeObserver
-    let resizeCallback: ResizeObserverCallback | null = null
+    // Every observer the panel creates (the turn's, and the thread bar's own width, F1201).
+    const resizeCallbacks: ResizeObserverCallback[] = []
     class DisclosureResizeObserver {
       constructor(callback: ResizeObserverCallback) {
-        resizeCallback = callback
+        resizeCallbacks.push(callback)
       }
       observe() {}
       unobserve() {}
@@ -577,8 +578,8 @@ describe('conversation controls — autoscroll follows scroll position', () => {
       output.scrollTop = 1000
       fireEvent.scroll(output)
       act(() => {
-        if (!resizeCallback) throw new Error('turn ResizeObserver was not installed')
-        resizeCallback([], {} as ResizeObserver)
+        if (resizeCallbacks.length === 0) throw new Error('turn ResizeObserver was not installed')
+        for (const callback of resizeCallbacks) callback([], {} as ResizeObserver)
       })
 
       expect(screen.getByText('Name one more month you like.')).toBeInTheDocument()

@@ -12,6 +12,9 @@ export type ContextSeverity = 'normal' | 'warning' | 'critical' | 'neutral'
 export interface ContextPresentation {
   usage: ContextUsage
   label: string
+  /** The label as the ring's companion where room is short: the percentage, or the token count
+   *  when the limit is unknown. Never empty, so a compacted reading still says something. */
+  shortLabel: string
   detail: string
   percent: number | null
   severity: ContextSeverity
@@ -215,6 +218,7 @@ export function presentContextUsage(value: unknown): ContextPresentation | null 
     return {
       usage,
       label: 'Context unsupported',
+      shortLabel: 'n/a',
       detail: 'This runner does not report context usage',
       percent: null,
       severity: 'neutral',
@@ -227,6 +231,7 @@ export function presentContextUsage(value: unknown): ContextPresentation | null 
     return {
       usage,
       label: 'Context unavailable',
+      shortLabel: '…',
       detail: 'Waiting for a context sample',
       percent: null,
       severity: 'neutral',
@@ -276,6 +281,10 @@ export function presentContextUsage(value: unknown): ContextPresentation | null 
   return {
     usage,
     label,
+    // Whole percent: the ring already draws the fraction, and the bar needs the room.
+    shortLabel: percent !== null
+      ? `${percent > 0 && percent < 1 ? '<1' : Math.round(percent)}%${estimated ? ' est.' : ''}`
+      : formatTokens(usage.context_tokens ?? 0),
     detail,
     percent,
     severity,

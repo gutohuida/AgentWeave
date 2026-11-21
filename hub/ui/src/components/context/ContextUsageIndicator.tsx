@@ -34,6 +34,10 @@ export function ContextUsageIndicator({
         <span className="context-usage-label" style={{ color: context.color }}>
           {context.label}
         </span>
+        {/* Shown instead of the label only where a caller compacts it (the thread bar). */}
+        <span className="context-usage-short" style={{ color: context.color }}>
+          {context.shortLabel}
+        </span>
         <span className="context-usage-popover" role="tooltip">
           <span className="context-usage-popover-title">Context window</span>
           <span className="context-usage-popover-row"><span>Used</span><b>{used} tok</b></span>

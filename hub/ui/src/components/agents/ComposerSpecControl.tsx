@@ -88,7 +88,7 @@ export function ComposerSpecControl({
           aria-pressed={armed}
         >
           <Icon name="article" size={13} />
-          <span className="min-w-0 truncate">
+          <span className="aw-composer-explore-text min-w-0 truncate">
             {busy ? 'Starting…' : armed ? 'Exploring' : 'Explore'}
           </span>
         </Button>
@@ -128,7 +128,7 @@ export function ComposerSpecControl({
         aria-label={`Spec: ${documentLabel}`}
         aria-pressed
       >
-        <span className="shrink-0" style={{ color: 'var(--text-3)' }}>Spec: </span>
+        <span className="aw-composer-prefix shrink-0" style={{ color: 'var(--text-3)' }}>Spec: </span>
         <Icon name="article" size={13} />
         <span className="min-w-0 truncate">{documentLabel}</span>
       </Button>

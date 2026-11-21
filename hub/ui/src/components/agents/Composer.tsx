@@ -21,6 +21,7 @@ import { MODEL_COMMAND, resolveTriggerResults, type SpecReferenceTarget } from '
 import { findSpecReferences, formatSpecReference, type SpecReference } from '@/lib/specReference'
 import { ComposerTriggerMenu, type ComposerTriggerMenuItem } from './ComposerTriggerMenu'
 import { ComposerModelControls } from './ComposerModelControls'
+import '@/styles/conversation.css'
 import { chatChoiceOverrides, chatEntry } from './pool/poolModel'
 import type { AgentPoolEntry } from '@/api/agentPool'
 import { ComposerSpecControl } from './ComposerSpecControl'
@@ -441,7 +442,7 @@ export function Composer({
 
   return (
     <div
-      className="composer-form flex flex-col gap-2"
+      className="composer-form aw-composer-controls flex flex-col gap-2"
       data-slot="composer"
       data-submitting={submitting ? 'true' : 'false'}
       aria-busy={submitting}
@@ -519,7 +520,12 @@ export function Composer({
           its container instead — clipping the permission posture mid-word. Nothing leaves the row
           at any width; a control that disappears when the pane narrows is one the operator cannot
           find (design.md Decision 5). */}
-      <div className="flex flex-wrap items-center justify-between gap-2" data-slot="composer-control-row">
+      {/* The row answers to the composer's width, not the window's (F1201): the root is the
+          container its narrow rules query (conversation.css). Below the width where everything
+          fits, the pills drop their "Label:" prefixes (their accessible names keep them); at the
+          narrowest Explore is icon-only and the controls flow as one wrapped run, so they take at
+          most two lines. */}
+      <div className="aw-composer-control-row flex flex-wrap items-center justify-between gap-2" data-slot="composer-control-row">
         <div className="flex min-w-0 flex-wrap items-center gap-2" data-slot="composer-control-row-leading">
           {/* The reference menu without typing (FR-5): the operator did not know `@` existed.
               `onMouseDown` keeps the field's caret where it was. */}

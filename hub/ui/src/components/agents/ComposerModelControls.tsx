@@ -95,8 +95,10 @@ export function ControlPill({
         // The value is in the tooltip because it is the part that truncates. What the control
         // *is* never does: `Permissions: Edit fi…` is useless, `Permissions: Edit…` is not.
         title={`${label}: ${valueLabel}`}
+        // Named in full: where the row is narrow the "Label:" prefix is hidden (F1201).
+        aria-label={`${label}: ${valueLabel}`}
       >
-        <span className="shrink-0" style={{ color: 'var(--text-3)' }}>{label}: </span>
+        <span className="aw-composer-prefix shrink-0" style={{ color: 'var(--text-3)' }}>{label}: </span>
         {icon}
         <span className="min-w-0 truncate">{valueLabel}</span>
         <span className="shrink-0">▾</span>
@@ -156,7 +158,7 @@ function RunnerModel({ model, label }: { model: string | null; label: string | u
       className={`${composerControlClassName} inline-flex h-8 min-w-0 max-w-full items-center gap-1 px-2.5 text-xs`}
       title={`Model: ${shown}. This profile's runner sends its own model to its provider; change it on the runner.`}
     >
-      <span className="shrink-0" style={{ color: 'var(--text-3)' }}>Model: </span>
+      <span className="aw-composer-prefix shrink-0" style={{ color: 'var(--text-3)' }}>Model: </span>
       <span className="min-w-0 truncate">{shown}</span>
     </span>
   )

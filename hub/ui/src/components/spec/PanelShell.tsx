@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { Icon } from '@/components/common/Icon'
+import { Button } from '@/components/ui/button'
 import { RowMenu, type RowMenuItem } from '@/components/layout/RowMenu'
 import {
   selectProjectPanel,
@@ -40,6 +41,10 @@ interface PanelShellProps {
   /** Renders the active tab's content. Called for the visible tab only — "one tab's content
    *  rendered at a time" (task 2.1). */
   renderTabContent: (tab: PanelTab) => React.ReactNode
+  /** Closes the whole panel. Given, the header carries its own "Close side panel" control at
+   *  every width, with or without a tab open, so the panel never depends on a menu it can cover
+   *  to be dismissed (F1201). */
+  onClose?: () => void
 }
 
 /**
@@ -59,7 +64,7 @@ interface PanelShellProps {
  * inside the same tab, so `Tab` reaches it right after its tab; it needs no roving index of its
  * own because it is never a stop arrow keys visit.
  */
-export function PanelShell({ projectId, availableTabs, describeTab, renderTabContent }: PanelShellProps) {
+export function PanelShell({ projectId, availableTabs, describeTab, renderTabContent, onClose }: PanelShellProps) {
   const projects = usePanelTabsStore((state) => state.projects)
   const openTab = usePanelTabsStore((state) => state.openTab)
   const closeTab = usePanelTabsStore((state) => state.closeTab)
@@ -127,61 +132,76 @@ export function PanelShell({ projectId, availableTabs, describeTab, renderTabCon
 
   return (
     <div className="flex h-full min-h-0 min-w-0 flex-col" data-testid="panel-shell">
-      <div
-        role="tablist"
-        aria-label="Panel"
-        aria-orientation="horizontal"
-        className="flex shrink-0 items-center gap-0.5 overflow-x-auto px-1"
-        data-testid="panel-tab-strip"
-      >
-        {panel.tabs.map((tab, index) => {
-          const descriptor = describeTab(tab.id)
-          const selected = tab.id === panel.activeTabId
-          return (
-            <div
-              key={tab.id}
-              className="panel-tab-chip"
-              data-selected={selected ? 'true' : 'false'}
-            >
-              <button
-                type="button"
-                role="tab"
-                id={`panel-tab-${tab.id}`}
-                aria-selected={selected}
-                aria-controls={selected ? 'panel-tabpanel' : undefined}
-                tabIndex={selected ? 0 : -1}
-                ref={registerTabButton(tab.id)}
-                data-testid={`panel-tab-${tab.id}`}
-                className="flex min-w-0 items-center gap-1.5 border-0 bg-transparent"
-                style={{ fontSize: 13, cursor: 'pointer', padding: '2px 2px' }}
-                title={descriptor.label}
-                onClick={() => activateTab(projectId, tab.id)}
-                onKeyDown={(event) => handleStripKeyDown(event, index)}
+      <div className="flex shrink-0 items-center" data-testid="panel-header">
+        <div
+          role="tablist"
+          aria-label="Panel"
+          aria-orientation="horizontal"
+          className="flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto px-1"
+          data-testid="panel-tab-strip"
+        >
+          {panel.tabs.map((tab, index) => {
+            const descriptor = describeTab(tab.id)
+            const selected = tab.id === panel.activeTabId
+            return (
+              <div
+                key={tab.id}
+                className="panel-tab-chip"
+                data-selected={selected ? 'true' : 'false'}
               >
-                <span className="panel-tab-identity inline-flex"><Icon name={descriptor.icon} size={14} /></span>
-                <span className="max-w-[140px] truncate">{descriptor.label}</span>
-              </button>
-              <button
-                type="button"
-                aria-label={`Close ${descriptor.label}`}
-                title={`Close ${descriptor.label}`}
-                data-testid={`panel-tab-close-${tab.id}`}
-                className="panel-tab-close flex border-0 bg-transparent"
-                style={{ cursor: 'pointer', color: 'var(--text-3)', padding: 2 }}
-                onClick={(event) => {
-                  // The tab's own onClick would otherwise fire too, activating a tab this same
-                  // click is closing.
-                  event.stopPropagation()
-                  closeTab(projectId, tab.id)
-                }}
-              >
-                <Icon name="close" size={14} />
-              </button>
-            </div>
-          )
-        })}
-        {menuItems.length > 0 && (
-          <RowMenu label="Add a tab" items={menuItems} testId="panel-tab-add" persistent icon="add" />
+                <button
+                  type="button"
+                  role="tab"
+                  id={`panel-tab-${tab.id}`}
+                  aria-selected={selected}
+                  aria-controls={selected ? 'panel-tabpanel' : undefined}
+                  tabIndex={selected ? 0 : -1}
+                  ref={registerTabButton(tab.id)}
+                  data-testid={`panel-tab-${tab.id}`}
+                  className="flex min-w-0 items-center gap-1.5 border-0 bg-transparent"
+                  style={{ fontSize: 13, cursor: 'pointer', padding: '2px 2px' }}
+                  title={descriptor.label}
+                  onClick={() => activateTab(projectId, tab.id)}
+                  onKeyDown={(event) => handleStripKeyDown(event, index)}
+                >
+                  <span className="panel-tab-identity inline-flex"><Icon name={descriptor.icon} size={14} /></span>
+                  <span className="max-w-[140px] truncate">{descriptor.label}</span>
+                </button>
+                <button
+                  type="button"
+                  aria-label={`Close ${descriptor.label}`}
+                  title={`Close ${descriptor.label}`}
+                  data-testid={`panel-tab-close-${tab.id}`}
+                  className="panel-tab-close flex border-0 bg-transparent"
+                  style={{ cursor: 'pointer', color: 'var(--text-3)', padding: 2 }}
+                  onClick={(event) => {
+                    // The tab's own onClick would otherwise fire too, activating a tab this same
+                    // click is closing.
+                    event.stopPropagation()
+                    closeTab(projectId, tab.id)
+                  }}
+                >
+                  <Icon name="close" size={14} />
+                </button>
+              </div>
+            )
+          })}
+          {menuItems.length > 0 && (
+            <RowMenu label="Add a tab" items={menuItems} testId="panel-tab-add" persistent icon="add" />
+          )}
+        </div>
+        {onClose && (
+          <Button
+            variant="ghost"
+            size="icon-xs"
+            className="mr-1 shrink-0"
+            data-testid="panel-close"
+            aria-label="Close side panel"
+            title="Close side panel"
+            onClick={onClose}
+          >
+            <Icon name="right_panel_close" size={15} />
+          </Button>
         )}
       </div>
       <div className="min-h-0 flex-1 overflow-auto">
