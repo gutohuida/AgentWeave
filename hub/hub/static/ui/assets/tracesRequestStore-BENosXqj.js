@@ -1,0 +1,1 @@
+import{am as a,dt as s,E as o}from"./index-CpAYtHR4.js";let n=0;const r=o(e=>({request:null,ask:t=>e({request:{...t,nonce:++n}}),clear:()=>e({request:null})}));function u(e,t){r.getState().ask(t),a(s(e,"activity"))}export{u as o,r as u};
