@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { postureAtRest, useAgents } from '@/api/agents'
 import { useRunners } from '@/api/runners'
 import { overridesForRunner, runnerSetsModel } from '@/lib/runnerProvider'
@@ -22,6 +22,7 @@ import { agentColorVars } from '@/lib/agentColors'
 import { setComposerDraft } from '@/lib/composerDrafts'
 import { useProjectHasNoWork } from '@/api/firstRun'
 import { useConfigStore } from '@/store/configStore'
+import { useSSE } from '@/hooks/useSSE'
 
 /** Ways to start, offered under the intro. Picking one puts its message in the composer — not
  *  sent: the operator edits and sends. */
@@ -113,10 +114,44 @@ export function NewConversationSurface({
    * exactly as long as it takes to write one. */
   const [exploring, setExploring] = useState(false)
 
+  /* The Hub answers the first message only once it has tried to start the turn, and preparing the
+   * agent's checkout can take a while. The conversation exists, and appears in the rail, from the
+   * moment the message is accepted (`queue_entry_queued`), so the operator was left on a cleared
+   * composer beside a thread they had to open by hand. This follows it the moment it is announced;
+   * the response, when it comes, only does so if that has not already happened. */
+  const sending = useRef<{ agent: string; document: string | null; started: boolean } | null>(null)
+  const open = (conversationId: string) => {
+    const send = sending.current
+    if (!send || send.started) return
+    send.started = true
+    // Two arguments when there is no document, not a third that happens to be undefined.
+    if (send.document) onStarted(send.agent, conversationId, send.document)
+    else onStarted(send.agent, conversationId)
+  }
+  useSSE((event) => {
+    if (event.type !== 'queue_entry_queued') return
+    const queued = (event.data ?? {}) as {
+      project_id?: string
+      agent?: string
+      conversation_id?: string
+      origin_type?: string
+    }
+    if (
+      queued.project_id === projectId &&
+      queued.agent === sending.current?.agent &&
+      queued.origin_type === 'operator' &&
+      queued.conversation_id
+    ) {
+      open(queued.conversation_id)
+    }
+  })
+
   const handleSubmit = async (message: string): Promise<void> => {
     if (!agent) return
     setError(null)
     const sentOverrides = overridesForRunner(pendingOverrides, runnerRow)
+    const send = { agent, document: null as string | null, started: false }
+    sending.current = send
 
     /* The document is created BEFORE the turn, not after it. Creating it afterwards left the
      * first message — the one that decides how the agent frames the whole exploration — with no
@@ -136,6 +171,7 @@ export function NewConversationSurface({
           { title: message.trim().slice(0, 120) },
         )
         specDocument = created.path
+        send.document = specDocument
       } catch {
         // A minted name cannot collide, so this is a real failure rather than the document
         // already being there. Send the turn anyway: losing the operator's first message —
@@ -149,6 +185,7 @@ export function NewConversationSurface({
      * removes the row, the file and its index entry; best effort, since the refusal is what the
      * operator needs to read, and an orphan is the lesser loss. */
     const withdraw = () => {
+      if (sending.current === send) sending.current = null
       if (!specDocument) return
       void deleteJson(`/api/v1/projects/${projectId}/project/documents/${specDocument}`).catch(() => undefined)
     }
@@ -179,9 +216,7 @@ export function NewConversationSurface({
       throw refusal
     }
     const result = (await response.json()) as { conversation_id: string }
-    // Two arguments when there is no document, not a third that happens to be undefined.
-    if (specDocument) onStarted(agent, result.conversation_id, specDocument)
-    else onStarted(agent, result.conversation_id)
+    open(result.conversation_id)
   }
 
   const agentChooser = (

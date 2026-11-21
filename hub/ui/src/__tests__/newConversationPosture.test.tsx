@@ -5,6 +5,7 @@ import { NewConversationSurface } from '@/components/agents/NewConversationSurfa
 import { useConfigStore } from '@/store/configStore'
 import { MODEL_CATALOG_FIXTURE } from './support/modelCatalogFixture'
 import { setComposerText } from './testUtils/composerField'
+vi.mock('@/hooks/useSSE', () => ({ useSSE: () => {} }))
 vi.mock('@/api/firstRun', () => ({ useProjectHasNoWork: () => false }))
 
 /**

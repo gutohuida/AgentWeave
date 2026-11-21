@@ -71,11 +71,15 @@ SHARED_DEPENDENCY_DIRS = ("node_modules", ".venv", "venv")
 TASK_BRANCH_PREFIX = BRANCH_PREFIX + "task/"
 
 _GIT_TIMEOUT_SECONDS = 30
+#: `git worktree add` writes every tracked file of the checkout, which on a large repository on
+#: Windows (thousands of files, a scanning antivirus) runs past `_GIT_TIMEOUT_SECONDS`: a flow's
+#: task checkout was killed at 30 s on 2026-11-21 and git finished on its own moments later.
+_WORKTREE_ADD_TIMEOUT_SECONDS = 300
 #: F1197: an `index.lock` in a review checkout's own git dir at least this old is stale. No git the
-#: Hub starts there outlives `_GIT_TIMEOUT_SECONDS` (it is killed at it, which is how such a lock
+#: Hub starts there outlives `_WORKTREE_ADD_TIMEOUT_SECONDS` (it is killed at it, which is how such a lock
 #: is left behind), and `ensure_review_checkout` runs serialized with every other worktree change
 #: while the reviewer has no turn running, so nothing of the Hub's can be holding it.
-STALE_INDEX_LOCK_SECONDS = _GIT_TIMEOUT_SECONDS
+STALE_INDEX_LOCK_SECONDS = _WORKTREE_ADD_TIMEOUT_SECONDS
 _AGENT_NAME_RE = re.compile(r"^[a-zA-Z0-9_-]{1,32}$")
 #: Restated by the CLI as `RESERVED_AGENT_NAMES` (`src/agentweave/constants.py`); change together.
 #: `operator` is `schemas.messages.OPERATOR_SENDER` (F415): an agent of that name would be hidden
@@ -128,7 +132,11 @@ class ReviewCommitUnavailableError(RuntimeError):
 
 
 def _run_git(
-    cwd: Path, *args: str, check: bool = True, ok_codes: Sequence[int] = (0,)
+    cwd: Path,
+    *args: str,
+    check: bool = True,
+    ok_codes: Sequence[int] = (0,),
+    timeout: Optional[float] = None,
 ) -> subprocess.CompletedProcess:
     result = traces.run(
         ["git", "-c", "core.quotepath=off", *args],
@@ -138,7 +146,8 @@ def _run_git(
         text=True,
         encoding="utf-8",
         errors="replace",
-        timeout=_GIT_TIMEOUT_SECONDS,
+        # Read at the call, not bound as the default, so the suite's raised limit reaches it.
+        timeout=_GIT_TIMEOUT_SECONDS if timeout is None else max(timeout, _GIT_TIMEOUT_SECONDS),
         **no_console_kwargs(),
     )
     if check and result.returncode != 0:
@@ -821,9 +830,20 @@ def ensure_worktree(repo_root: Path, agent: str) -> Path:
         )
         if is_ancestor.returncode == 0:
             _run_git(repo_root, "branch", "--force", branch, "HEAD")
-        _run_git(repo_root, "worktree", "add", str(path), branch)
+        _run_git(
+            repo_root, "worktree", "add", str(path), branch, timeout=_WORKTREE_ADD_TIMEOUT_SECONDS
+        )
     else:
-        _run_git(repo_root, "worktree", "add", "-b", branch, str(path), "HEAD")
+        _run_git(
+            repo_root,
+            "worktree",
+            "add",
+            "-b",
+            branch,
+            str(path),
+            "HEAD",
+            timeout=_WORKTREE_ADD_TIMEOUT_SECONDS,
+        )
 
     _symlink_shared_dependencies(repo_root, path)
     return path
@@ -1492,12 +1512,23 @@ def ensure_task_worktree(
         # The task was released (design D5) and is being worked again. Its own history is on
         # the branch, so it resumes from there rather than restarting at the base; prerequisites
         # approved since the branch was cut are brought in (F158).
-        _run_git(repo_root, "worktree", "add", str(path), branch)
+        _run_git(
+            repo_root, "worktree", "add", str(path), branch, timeout=_WORKTREE_ADD_TIMEOUT_SECONDS
+        )
         _symlink_shared_dependencies(repo_root, path)
         _catch_up_prerequisites(path, task_id, approved, names)
         return path
 
-    _run_git(repo_root, "worktree", "add", "-b", branch, str(path), base)
+    _run_git(
+        repo_root,
+        "worktree",
+        "add",
+        "-b",
+        branch,
+        str(path),
+        base,
+        timeout=_WORKTREE_ADD_TIMEOUT_SECONDS,
+    )
     try:
         _merge_prerequisites(path, task_id, tuple(prerequisites), names)
     except IsolationUnavailableError:
@@ -1700,7 +1731,15 @@ def ensure_review_checkout(
         # refuses to proceed while it does.
         _run_git(repo_root, "worktree", "prune", check=False)
         path.parent.mkdir(parents=True, exist_ok=True)
-        _run_git(repo_root, "worktree", "add", "--detach", str(path), commit)
+        _run_git(
+            repo_root,
+            "worktree",
+            "add",
+            "--detach",
+            str(path),
+            commit,
+            timeout=_WORKTREE_ADD_TIMEOUT_SECONDS,
+        )
 
     # Task 1.3, and design D6: without this the reviewer cannot run the suite, which is the entire
     # justification for giving it a checkout rather than a diff.
@@ -1782,9 +1821,20 @@ def ensure_thread_worktree(repo_root: Path, agent: str, thread: str, base: str) 
     _refuse_a_ref_that_names_no_commit(repo_root, branch if exists else base)
     path.parent.mkdir(parents=True, exist_ok=True)
     if exists:
-        _run_git(repo_root, "worktree", "add", str(path), branch)
+        _run_git(
+            repo_root, "worktree", "add", str(path), branch, timeout=_WORKTREE_ADD_TIMEOUT_SECONDS
+        )
     else:
-        _run_git(repo_root, "worktree", "add", "-b", branch, str(path), f"{base}^{{commit}}")
+        _run_git(
+            repo_root,
+            "worktree",
+            "add",
+            "-b",
+            branch,
+            str(path),
+            f"{base}^{{commit}}",
+            timeout=_WORKTREE_ADD_TIMEOUT_SECONDS,
+        )
     _symlink_shared_dependencies(repo_root, path)
     return path
 
@@ -2448,9 +2498,20 @@ def ensure_mend_checkout(repo_root: Path, agent: str, task_id: str, commit: str)
         != 0
     )
     if carries_work:
-        _run_git(repo_root, "worktree", "add", str(path), branch)
+        _run_git(
+            repo_root, "worktree", "add", str(path), branch, timeout=_WORKTREE_ADD_TIMEOUT_SECONDS
+        )
     else:
-        _run_git(repo_root, "worktree", "add", "-B", branch, str(path), resolved)
+        _run_git(
+            repo_root,
+            "worktree",
+            "add",
+            "-B",
+            branch,
+            str(path),
+            resolved,
+            timeout=_WORKTREE_ADD_TIMEOUT_SECONDS,
+        )
     _symlink_shared_dependencies(repo_root, path)
     return path
 

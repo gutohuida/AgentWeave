@@ -146,3 +146,16 @@ async def test_what_a_waiting_task_waits_on_is_named_and_a_busy_one_names_nothin
     c = await _row(app, auth_headers, busy)
     assert c["stage"] == "working"
     assert c["stage_waits_on"] is None
+
+
+@pytest.mark.asyncio
+async def test_a_task_whose_checkout_is_being_prepared_says_so(app, auth_headers):
+    """Its turn is starting and git is writing its checkout: neither "not started" nor working."""
+    from hub import workspace_preparation
+
+    task_id = await _task("assigned", assignee="D")
+    async with workspace_preparation.preparing(
+        P, agent="D", task_id=task_id, conversation_id="conv-stage-prep"
+    ):
+        assert (await _row(app, auth_headers, task_id))["stage"] == "preparing_checkout"
+    assert (await _row(app, auth_headers, task_id))["stage"] == "not_started"

@@ -710,6 +710,15 @@ function applyInvalidation(queryClient: QueryClient, event: SSEEvent): void {
         case 'accounting_budget_updated':
           inv({ queryKey: ['project', pid, 'accounting'] })
           break
+        case 'workspace_preparing':
+        case 'workspace_prepared':
+          // A turn's checkout is being written, or is done: the thread says so, and a task's
+          // stage moves between "Preparing checkout" and its next one.
+          inv({ queryKey: ['project', pid, 'preparing'] })
+          if ((event.data as { task_id?: string | null })?.task_id) {
+            inv({ queryKey: ['project', pid, 'tasks'] })
+          }
+          break
         case 'queue_entry_queued':
         case 'queue_entry_delivered':
         case 'queue_entry_withdrawn':

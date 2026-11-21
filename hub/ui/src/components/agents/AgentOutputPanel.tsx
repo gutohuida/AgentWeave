@@ -25,6 +25,8 @@ import { useQueueStatus, useQueuedEntries, releaseQueueEntry, withdrawQueueEntry
 import { useRunners } from '@/api/runners'
 import { overridesForRunner, runnerSetsModel } from '@/lib/runnerProvider'
 import { useWorkspacePaths } from '@/api/workspace'
+import { usePreparingWorkspaces } from '@/api/workspacePreparation'
+import { ConversationPreparing } from './ConversationPreparing'
 import { useSpecDocuments } from '@/api/spec'
 import { useAnswerSpecDocumentOffer, useConversationSpecDocuments } from '@/api/conversationSpec'
 import { ConversationSpecOffers } from '@/components/conversation/ConversationSpecOffers'
@@ -491,6 +493,14 @@ export function AgentOutputPanel({
     (entry) => entry.conversation_id === currentConversationId,
   )
   const { data: workspacePaths = [] } = useWorkspacePaths()
+  // The checkout this conversation's turn is waiting on, while the Hub writes it. A failed read
+  // claims nothing either way: the thread behaves as it did before the line existed, rather than
+  // trusting the last answer, which may name a checkout that has finished since.
+  const { data: preparations = [], isError: preparationsUnknown } = usePreparingWorkspaces()
+  const preparation =
+    startingFresh || preparationsUnknown
+      ? undefined
+      : preparations.find((p) => p.conversation_id === currentConversationId)
   // The project's documents: the composer's `@` menu lists them as specs.
   const { data: specDocumentList, isError: specDocumentsFailed } = useSpecDocuments()
   // Change documents an agent created in this conversation, offered to the operator (FR-7).
@@ -1515,7 +1525,10 @@ export function AgentOutputPanel({
               when the work is already described. Shown only when there is queued work and no run
               — otherwise the composer is the right control. */}
           {/* Not for hop-held work (F653): that has its own Continue on the entry. */}
-          {hasQueuedWork && !agentIsRunning && !hasHopHeld && (
+          <ConversationPreparing agent={agent.name} preparation={preparation} />
+
+          {/* Not while its checkout is being prepared: that work is already starting. */}
+          {hasQueuedWork && !agentIsRunning && !hasHopHeld && !preparation && (
             <div className="flex items-center gap-2">
               <Button
                 variant="primary"

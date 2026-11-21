@@ -25,6 +25,7 @@ import contextlib
 import logging
 import os
 import shutil
+import subprocess
 import sys
 import weakref
 from dataclasses import dataclass, field
@@ -61,6 +62,7 @@ from ... import (
     task_workspace,
     tool_server,
     traces,
+    workspace_preparation,
     worktrees,
 )
 from ...agent_auth import hash_run_token, mint_run_token
@@ -751,6 +753,7 @@ class TriggerAgentError(Exception):
         agent_wide: bool = False,
         agent_workspace_unavailable: bool = False,
         after_rollback: Optional[Callable[[AsyncSession], Awaitable[None]]] = None,
+        retry_later: bool = False,
     ) -> None:
         self.status_code = status_code
         self.detail = detail
@@ -863,6 +866,11 @@ class TriggerAgentError(Exception):
         #: opens the operator's question this way: committing it on the dispatch's own session
         #: would make whatever the dispatch staged durable along with it.
         self.after_rollback = after_rollback
+        #: Nothing else will ask again: no turn is running whose end re-drains the queue, and the
+        #: condition is the machine's rather than the input's (a git that did not finish in time).
+        #: `turn_scheduler` tries the agent again after a delay; the attempt is still counted, so a
+        #: git that never finishes gives the input up and says so instead of retrying forever.
+        self.retry_later = retry_later
         super().__init__(detail)
 
 
@@ -1936,10 +1944,18 @@ async def _trigger_agent_directly(
             task_id=turn_workspace.task_id if takes_task else None,
         )
         try:
-            with traces.work(
-                "worktree_create",
-                project_id,
-                **{"aw.agent": agent, "aw.task.id": turn_workspace.task_id},
+            async with (
+                workspace_preparation.preparing(
+                    project_id,
+                    agent=agent,
+                    task_id=turn_workspace.task_id if takes_task else None,
+                    conversation_id=conversation.id,
+                ),
+                traces.work(
+                    "worktree_create",
+                    project_id,
+                    **{"aw.agent": agent, "aw.task.id": turn_workspace.task_id},
+                ),
             ):
                 # Serialized with every other worktree creation, release and merge, as they
                 # were while they ran on the loop (`blocking.run_serialized`, D5).
@@ -1957,6 +1973,22 @@ async def _trigger_agent_directly(
                     clear_stale_lock=clear_stale_lock,
                     thread=thread,
                 )
+        except subprocess.SubprocessError as exc:
+            # A git that did not finish while preparing the checkout (`TimeoutExpired`). Not a
+            # `GitCommandError`, so before this it escaped the trigger: the input stayed queued
+            # with no reason and no count, nothing re-drained it, and a flow read the task as
+            # being worked by a turn that never existed (2026-11-21).
+            where = (
+                f"the checkout for task {turn_workspace.task_id}"
+                if takes_task
+                else f"{agent}'s workspace"
+            )
+            raise TriggerAgentError(
+                status.HTTP_409_CONFLICT,
+                f"Git did not finish preparing {where} ({type(exc).__name__}); "
+                "the Hub will try again shortly",
+                retry_later=True,
+            ) from exc
         except (worktrees.GitCommandError, worktrees.IsolationUnavailableError) as exc:
             if isinstance(exc, worktrees.CheckoutLockedError):
                 _report_locked_checkout(

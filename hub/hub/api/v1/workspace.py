@@ -14,7 +14,7 @@ from typing import List, Literal, Optional, Tuple
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ... import changes_view, project_workspace, worktrees
+from ... import changes_view, project_workspace, workspace_preparation, worktrees
 from ...auth import get_project
 from ...config import settings
 from ...db.engine import get_session
@@ -170,3 +170,14 @@ async def get_workspace_file(
     return WorkspaceFileResponse(
         path=result.path, binary=result.binary, size=result.size, content=result.content
     )
+
+
+@router.get("/preparing")
+async def get_preparing_workspaces(project: Tuple[str, str] = Depends(get_project)) -> List[dict]:
+    """The checkouts the Hub is preparing for a turn right now, oldest first.
+
+    Live state, not history: `workspace_preparing` and `workspace_prepared` say when one starts and
+    ends, and this answers a view that opened in between.
+    """
+    project_id, _ = project
+    return [p.payload() for p in workspace_preparation.current(project_id)]

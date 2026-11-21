@@ -67,6 +67,7 @@ vi.mock('@/api/spec', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/api/spec')>()),
   useSpecDocuments: () => ({ data: { documents: [] } }),
 }))
+vi.mock('@/api/workspacePreparation', () => ({ usePreparingWorkspaces: () => ({ data: [] }) }))
 vi.mock('@/api/workspace', () => ({ useWorkspacePaths: () => ({ data: [] }) }))
 vi.mock('@/api/runners', () => ({ useRunners: () => ({ data: [] }) }))
 vi.mock('@/api/accounting', () => ({
