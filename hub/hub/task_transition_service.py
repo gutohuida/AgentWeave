@@ -28,7 +28,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
 
 from . import blocking, flow_advance, readable_ids, traces
-from .db.models import RequirementEvidence, Run, Task, TaskTransition
+from .db.models import Conversation, RequirementEvidence, Run, Task, TaskTransition
 from .task_transitions import (
     SEND_BACK_CLASSES,
     STATUS_BLOCKED,
@@ -376,6 +376,167 @@ async def evidence_authors_by_task(
     return authors
 
 
+# --- threads (`a-two-profile-build-cannot-deadlock-and-a-stall-says-so`, D1/D2) ------------------
+
+#: The thread a review the Hub staffs runs in. Every staffed review opens a new conversation
+#: (`scheduler`'s dispatch, `mender.hand_to_review`), so its lineage equals no recorded one by
+#: construction: only a fact recorded with no lineage can exclude it.
+NEW_THREAD = "<a new thread>"
+
+
+def same_thread(recorded: Optional[str], thread: Optional[str]) -> bool:
+    """Whether a fact recorded in lineage *recorded* belongs to the thread *thread*.
+
+    Unknown on either side counts as the same thread (D1: fall back to the name, never to
+    permission): a fact with no lineage excludes every thread of its agent, and an actor whose
+    thread is unknown is compared by name, as before threads were read at all."""
+    return recorded is None or thread is None or recorded == thread
+
+
+async def lineages_of_runs(
+    session: AsyncSession, run_ids: Iterable[Optional[str]]
+) -> "dict[str, str]":
+    """Each run's conversation lineage, for the runs that have one. A checkpoint cut-over keeps the
+    lineage (`conversations.lineage_of`), so a thread continued past a checkpoint is one thread."""
+    ids = sorted({run_id for run_id in run_ids if run_id})
+    if not ids:
+        return {}
+    rows = await session.execute(
+        select(Run.id, Conversation.id, Conversation.lineage_id)
+        .join(Conversation, Conversation.id == Run.conversation_id)
+        .where(Run.id.in_(ids))
+    )
+    return {run_id: lineage or conversation for run_id, conversation, lineage in rows.all()}
+
+
+async def lineage_of_conversation(
+    session: AsyncSession, conversation_id: Optional[str]
+) -> Optional[str]:
+    if not conversation_id:
+        return None
+    row = (
+        await session.execute(
+            select(Conversation.id, Conversation.lineage_id).where(
+                Conversation.id == conversation_id
+            )
+        )
+    ).first()
+    return (row[1] or row[0]) if row is not None else None
+
+
+async def actor_thread(session: AsyncSession, actor: object) -> Optional[str]:
+    """The lineage of the run *actor* acts through, or None where it has none (the operator, a
+    run with no conversation). Reads `run_id`, which both `Actor` shapes carry."""
+    run_id = getattr(actor, "run_id", None)
+    if not run_id:
+        return None
+    return (await lineages_of_runs(session, [run_id])).get(run_id)
+
+
+@dataclass(frozen=True)
+class TaskAuthorship:
+    """Who authored a task's work, and in which thread (D1).
+
+    The recorded completer (`completion_attribution`'s agent) with the lineage of the run that
+    completed it, and each agent that recorded evidence with the lineages of its rows. `None` among
+    the lineages is a fact with no lineage recorded, which excludes the whole agent."""
+
+    completer: Optional[str]
+    completer_thread: Optional[str]
+    evidence: "Dict[str, frozenset]"
+
+    def by_name(self) -> "set[str]":
+        """The authors excluded whatever their thread: a fact of theirs carries no lineage."""
+        names = {agent for agent, lineages in self.evidence.items() if None in lineages}
+        if self.completer and self.completer_thread is None:
+            names.add(self.completer)
+        return names
+
+
+async def task_authorship(session: AsyncSession, task_id: str) -> TaskAuthorship:
+    completion = (
+        await session.execute(
+            select(TaskTransition.actor_agent, TaskTransition.run_id)
+            .where(TaskTransition.task_id == task_id)
+            .where(TaskTransition.to_status == "completed")
+            .order_by(TaskTransition.sequence.desc())
+            .limit(1)
+        )
+    ).first()
+    completer, completer_run = (completion[0], completion[1]) if completion else (None, None)
+    rows = (
+        await session.execute(
+            select(RequirementEvidence.actor, RequirementEvidence.run_id)
+            .where(RequirementEvidence.task_id == task_id)
+            .where(RequirementEvidence.actor_kind == "agent")
+            .where(RequirementEvidence.actor != "")
+            .distinct()
+        )
+    ).all()
+    lineages = await lineages_of_runs(session, [completer_run, *(run for _, run in rows)])
+    evidence: "dict[str, set[Optional[str]]]" = {}
+    for agent, run_id in rows:
+        if agent:
+            evidence.setdefault(agent, set()).add(lineages.get(run_id) if run_id else None)
+    return TaskAuthorship(
+        completer=completer or None,
+        completer_thread=lineages.get(completer_run) if completer_run else None,
+        evidence={agent: frozenset(found) for agent, found in evidence.items()},
+    )
+
+
+async def builder_profile(session: AsyncSession, task: Task) -> Optional[str]:
+    """The task's builder profile, as named **at the time of the question** (D3): the task's
+    `builder`, else its build's default builder; with neither, the agent whose run first moved it
+    to `in_progress`. Reassigning the build changes it from then on."""
+    if (task.builder or "").strip():
+        return task.builder.strip()
+    if task.build_id:
+        from .db.models import Build
+
+        build = await session.get(Build, task.build_id)
+        people = build.people if build is not None and isinstance(build.people, dict) else {}
+        named = (people.get("builder") or "").strip()
+        if named:
+            return named
+    first = await session.scalar(
+        select(TaskTransition.actor_agent)
+        .where(TaskTransition.task_id == task.id)
+        .where(TaskTransition.to_status == "in_progress")
+        .where(TaskTransition.actor_agent.isnot(None))
+        .order_by(TaskTransition.sequence)
+        .limit(1)
+    )
+    return first or None
+
+
+async def review_exclusions(session: AsyncSession, task: Task) -> "Dict[str, str]":
+    """Who may not be given *task*'s review **in a new thread**, and why: the staffing arms'
+    exclusion (`scheduler`'s review arm, `review_on_completion`), stated once.
+
+    Every thread of the builder profile (FR-1). Where an agent completed the task, its completer
+    and evidence authors only by name where a fact of theirs carries no lineage (D1): a staffed
+    review opens a new conversation, whose lineage differs from every authoring one, so another
+    thread of the same checker profile may take it (FR-2, FR-3). Where the operator completed it,
+    every agent any record associates with the task, as before (F142). Not widened to profiles;
+    the ladder widens what it is given."""
+    exclude: "Dict[str, str]" = {}
+    attribution = await completion_attribution(session, task.id)
+    if attribution.agent is None:
+        for agent in sorted(await agents_that_may_have_authored(session, task)):
+            exclude[agent] = "has worked on this task"
+    else:
+        by_name = (await task_authorship(session, task.id)).by_name()
+        if attribution.agent in by_name:
+            exclude[attribution.agent] = "is the one that completed this task"
+        for author in sorted(by_name - {attribution.agent}):
+            exclude[author] = "recorded evidence for this task"
+    builder = await builder_profile(session, task)
+    if builder:
+        exclude.setdefault(builder, "is this task's builder, and its builder never reviews it")
+    return exclude
+
+
 async def assignee_produced_the_work(
     session: AsyncSession,
     task: Task,
@@ -459,7 +620,12 @@ async def agents_that_may_have_authored(session: AsyncSession, task: Task) -> "s
 
 
 async def authorship_reason(
-    session: AsyncSession, task: Task, agent: Optional[str]
+    session: AsyncSession,
+    task: Task,
+    agent: Optional[str],
+    *,
+    thread: Optional[str] = None,
+    builder_rule: bool = True,
 ) -> Optional[str]:
     """Why *agent* may not review *task*, as one clause, or `None` where it may.
 
@@ -469,51 +635,90 @@ async def authorship_reason(
     including a mender that re-recorded some (F505). Read alone, never the union
     `agents_that_may_have_authored`, for the reason `agents_that_recorded_evidence_for` gives.
     """
-    found = await _authorship(session, task, agent)
+    found = await _authorship(session, task, agent, thread=thread, builder_rule=builder_rule)
     return found[1] if found is not None else None
 
 
 async def _authorship(
-    session: AsyncSession, task: Task, agent: Optional[str]
+    session: AsyncSession,
+    task: Task,
+    agent: Optional[str],
+    *,
+    thread: Optional[str] = None,
+    builder_rule: bool = True,
 ) -> "Optional[tuple[str, str]]":
-    """`authorship_reason` with which record made *agent* the author: `("completed", clause)` or
-    `("evidence", clause)`.
+    """`authorship_reason` with which record made *agent* the author: `("completed", clause)`,
+    `("evidence", clause)` or `("builder", clause)`.
 
-    Compared by **profile**, not by name (`fold-duplicate-agents-into-one-profile-with-their-
-    history-kept`, FR-9): a folded name counts as its profile, so a profile authored everything done
-    under any name folded into it, before the fold as well as after, and the clause names it. With
-    nothing folded every name is its own profile and this is the name comparison it always was.
+    Compared by **(profile, thread)** (`a-two-profile-build-cannot-deadlock-and-a-stall-says-so`,
+    D2). *thread* is the lineage the acting thread runs in: a completion or evidence row recorded
+    in another lineage of the same profile is another agent's, and does not exclude it (FR-2).
+    `None` is an actor whose thread is unknown, compared by name as before; `NEW_THREAD` is a
+    review about to open its own conversation. A fact recorded with no lineage excludes every
+    thread (D1). Every thread of the task's builder profile is excluded whatever it did (FR-1),
+    unless *builder_rule* is off: the holder guard asks about authorship records only.
+
+    Folded names count as their profile (`fold-duplicate-agents-into-one-profile-with-their-
+    history-kept`, FR-9), and the clause names it. With nothing folded every name is its own
+    profile.
     """
     from .agent_profiles import counts_as, folded_map
 
     if not agent:
         return None
-    completer = await agent_that_completed(session, task.id)
-    authors = await agents_that_recorded_evidence_for(session, task.id)
-    if completer == agent:
-        return "completed", f"{agent!r} is the agent recorded as completing it"
-    if agent in authors:
+    authorship = await task_authorship(session, task.id)
+    completer = authorship.completer
+    authors = authorship.evidence
+    builder = await builder_profile(session, task) if builder_rule else None
+
+    def by_completion(name: str) -> bool:
+        return completer == name and same_thread(authorship.completer_thread, thread)
+
+    def by_evidence(name: str) -> bool:
+        return any(same_thread(lineage, thread) for lineage in authors.get(name, ()))
+
+    def whose(name: str, threaded: bool) -> str:
+        return f"this thread of {name!r}" if threaded and thread is not None else repr(name)
+
+    if by_completion(agent):
+        return (
+            "completed",
+            f"{whose(agent, authorship.completer_thread is not None)} is the agent recorded as "
+            f"completing it",
+        )
+    if by_evidence(agent):
         return (
             "evidence",
-            f"{agent!r} recorded evidence for this task, which claims the work as its own",
+            f"{whose(agent, None not in authors[agent])} recorded evidence for this task, which "
+            f"claims the work as its own",
         )
-    folded = await folded_map(session, task.project_id, [agent, completer or "", *authors])
+    if builder == agent:
+        return "builder", f"{agent!r} is this task's builder, and its builder never reviews it"
+    folded = await folded_map(
+        session, task.project_id, [agent, completer or "", builder or "", *authors]
+    )
     if not folded:
         return None
     profile = folded.get(agent, agent)
-    if completer and folded.get(completer, completer) == profile:
+    if completer and folded.get(completer, completer) == profile and by_completion(completer):
         return (
             "completed",
             f"{counts_as(agent, completer, profile)}, and {completer!r} is the agent recorded as "
             f"completing it",
         )
     for author in sorted(authors):
-        if folded.get(author, author) == profile:
+        if folded.get(author, author) == profile and by_evidence(author):
             return (
                 "evidence",
                 f"{counts_as(agent, author, profile)}, and {author!r} recorded evidence for this "
                 f"task, which claims the work as that profile's",
             )
+    if builder and folded.get(builder, builder) == profile:
+        return (
+            "builder",
+            f"{counts_as(agent, builder, profile)}, and {builder!r} is this task's builder, and "
+            f"its builder never reviews it",
+        )
     return None
 
 
@@ -633,13 +838,14 @@ async def _guard_author_is_not_reviewer(
     """
     if actor.is_operator or to_status not in _REVIEW_OUTCOMES:
         return
-    found = await _authorship(session, task, actor.agent)
+    # By thread (D2): another thread of the checker profile may give the verdict.
+    found = await _authorship(session, task, actor.agent, thread=await actor_thread(session, actor))
     if found is not None:
         via, reason = found
         completing_agent = await agent_that_completed(session, task.id)
         whose = (
             ""
-            if via == "completed"
+            if via in ("completed", "builder")
             else (
                 "No agent is recorded as completing it, so the evidence is the record of who "
                 "wrote it. "
@@ -727,7 +933,16 @@ async def _guard_reviewer_is_not_the_author(
         else "None of the task tools you are offered reassigns a task; the operator can move "
         "it on."
     )
-    reason = await authorship_reason(session, task, holder)
+    # The holder's thread (D2): the actor's own where it takes the review itself; otherwise the
+    # review is staffed into a new conversation, and its verdict guard reads that thread's.
+    thread = (
+        await actor_thread(session, actor)
+        if not actor.is_operator and actor.agent == holder
+        else NEW_THREAD
+    )
+    # Authorship records only, not the builder rule (FR-1 is enforced where a review is given and
+    # decided): an operator moving a builder-held task by hand names no author here, as before.
+    reason = await authorship_reason(session, task, holder, thread=thread, builder_rule=False)
     if reason is not None:
         raise ActorNotPermittedError(
             f"Cannot move task {task.id} to 'under_review' with {holder!r} as its holder: "

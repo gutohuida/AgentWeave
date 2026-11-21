@@ -1403,7 +1403,35 @@ async def _shares_author_profile(
 
     if actor.kind != "agent" or evidence.actor_kind != "agent" or not actor.name:
         return None
-    return await shared_profile(session, evidence.project_id, actor.name, evidence.actor)
+    profile = await shared_profile(session, evidence.project_id, actor.name, evidence.actor)
+    if profile is None:
+        return None
+    if await _another_thread(session, evidence, actor):
+        return None
+    return profile
+
+
+async def _another_thread(
+    session: AsyncSession, evidence: RequirementEvidence, actor: Actor
+) -> bool:
+    """Whether *actor* runs in a thread other than the one that recorded *evidence*
+    (`a-two-profile-build-cannot-deadlock-and-a-stall-says-so`, FR-2): another thread of the
+    checker profile is another agent and may decide it. Never for the task's builder profile,
+    whose every thread stays off its review (FR-1), and never where either thread is unknown
+    (D1: the name, never permission)."""
+    from .agent_profiles import shared_profile
+    from .task_transition_service import builder_profile, lineages_of_runs, same_thread
+
+    if not evidence.run_id or not actor.run_id:
+        return False
+    lineages = await lineages_of_runs(session, [evidence.run_id, actor.run_id])
+    if same_thread(lineages.get(evidence.run_id), lineages.get(actor.run_id)):
+        return False
+    task = await session.get(Task, evidence.task_id) if evidence.task_id else None
+    builder = await builder_profile(session, task) if task is not None else None
+    return not (
+        builder and await shared_profile(session, evidence.project_id, actor.name or "", builder)
+    )
 
 
 async def _refuse_own_evidence(
@@ -1416,6 +1444,19 @@ async def _refuse_own_evidence(
     if profile is None:
         return
     if actor.name == evidence.actor:
+        from .task_transition_service import lineages_of_runs
+
+        if evidence.run_id and actor.run_id:
+            lineages = await lineages_of_runs(session, [evidence.run_id, actor.run_id])
+            if lineages.get(actor.run_id) and lineages.get(actor.run_id) == lineages.get(
+                evidence.run_id
+            ):
+                raise EvidenceRefusedError(
+                    f"an agent cannot accept evidence it produced: this thread of "
+                    f"{actor.name!r} recorded {evidence.id}; another thread of the checker "
+                    f"profile, another agent or the operator decides",
+                    code="self_acceptance",
+                )
         raise EvidenceRefusedError(
             "an agent cannot accept evidence it produced; another agent or the operator decides",
             code="self_acceptance",
