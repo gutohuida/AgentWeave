@@ -124,25 +124,14 @@ async def _review_queued(session: AsyncSession, task: Task) -> bool:
 
 
 async def _exclusions(session: AsyncSession, task: Task) -> Dict[str, str]:
-    """Who may not review it, and why: the flow's own derivation (`scheduler`'s staffing arm),
-    widened to the authors' profiles (FR-9), so a named checker that shares one is refused here."""
+    """Who may not review it, and why: the flow's own derivation (`review_exclusions`, shared with
+    `scheduler`'s staffing arm), widened to the authors' profiles (FR-9), so a named checker that
+    shares one is refused here. By thread (D2): an author is excluded by name only where a fact of
+    its carries no lineage, because the review opens a new conversation."""
     from .agent_profiles import widen_to_profiles
-    from .task_transition_service import (
-        agents_that_may_have_authored,
-        agents_that_recorded_evidence_for,
-        completion_attribution,
-    )
+    from .task_transition_service import review_exclusions
 
-    attribution = await completion_attribution(session, task.id)
-    if attribution.agent is None:
-        exclude = dict.fromkeys(
-            await agents_that_may_have_authored(session, task), "has worked on this task"
-        )
-    else:
-        exclude = {attribution.agent: "is the one that completed this task"}
-        for author in await agents_that_recorded_evidence_for(session, task.id):
-            exclude.setdefault(author, "recorded evidence for this task")
-    return await widen_to_profiles(session, task.project_id, exclude)
+    return await widen_to_profiles(session, task.project_id, await review_exclusions(session, task))
 
 
 async def _choose(session: AsyncSession, task: Task) -> "tuple[Optional[str], bool, Optional[str]]":
@@ -163,12 +152,28 @@ async def _choose(session: AsyncSession, task: Task) -> "tuple[Optional[str], bo
             return (
                 None,
                 True,
-                f"this task names {checker!r} as its checker, and that agent {exclude[checker]}. "
+                f"This task names {checker!r} as its checker, and that agent {exclude[checker]}. "
                 f"Naming a different checker, or reviewing it yourself, is the way forward -- "
                 f"nobody is substituted for a named checker.",
             )
         if checker not in await builds.open_agents(session, task.project_id):
             return None, True, builds.not_open_reason(task, "checker", checker)
+        from .db.models import Agent
+
+        runner = await session.scalar(
+            select(Agent.runner_id).where(
+                Agent.project_id == task.project_id, Agent.name == checker
+            )
+        )
+        if runner is None:
+            # A cause no new thread removes (D4): held, naming it, never substituted.
+            return (
+                None,
+                True,
+                f"{task.display_id}'s checker {checker} has no runner bound, so its check is held "
+                f"and given to nobody else. Bind a runner to {checker}, or name a different "
+                f"checker.",
+            )
         return checker, True, None
     choice = await resolve_reviewer(session, task, project_id=task.project_id, exclude=exclude)
     if choice.agent is None and choice.rung == "unstaffed":
@@ -182,7 +187,7 @@ async def _choose(session: AsyncSession, task: Task) -> "tuple[Optional[str], bo
             return (
                 None,
                 False,
-                "there is no agent other than the author to review this"
+                "There is no agent other than the author to review this"
                 + (f" ({authors})" if authors else "")
                 + f". Add an agent to review it. {own_review_remedy(task)}",
             )
