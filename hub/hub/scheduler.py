@@ -2414,7 +2414,7 @@ async def resolve_reviewer(
             return ReviewerChoice(
                 rung="unresolved",
                 reason=(
-                    f"this task names {resolution.declared!r} as its reviewer, and that agent "
+                    f"This task names {resolution.declared!r} as its reviewer, and that agent "
                     f"{exclude[resolution.agent]}. Naming a different reviewer, or reviewing "
                     f"it yourself, is the way forward -- the flow will not substitute somebody "
                     f"else for a named reviewer."
@@ -2593,10 +2593,7 @@ async def decide_firing(
     agent's job is to fill it, and whether a *drained* queue should stop firing at all is
     `_loop_stop_reason`'s question, asked earlier and separately.
     """
-    from .task_transition_service import (
-        agents_that_may_have_authored,
-        assignee_produced_the_work,
-    )
+    from .task_transition_service import assignee_produced_the_work, review_exclusions
 
     gated: "list[tuple[Task, dependency_gate.DependencyRefusal]]" = []
     unstaffed: "list[tuple[str, str]]" = []
@@ -3249,36 +3246,14 @@ async def decide_firing(
             approvals.append(task.id)
             continue
 
-        if attribution.agent is not None:
-            # **An agent completed it.** Byte-identical to what shipped, and deliberately so
-            # (design D6): where the product has a *decided* answer to who the author is, the whole
-            # corpus is keyed on it and this change does not widen it.
-            exclude = {attribution.agent: "is the one that completed this task"}
-            # F505: plus every agent that recorded evidence for it, which the verdict guard refuses
-            # whether or not another agent completed the task.
-            for author in await facts.evidence_authors(task):
-                exclude.setdefault(author, "recorded evidence for this task")
-        else:
-            # **The operator completed it**, which is provenance -- a person did it -- and not an
-            # absence. Withholding review here removes the flow's own second half at exactly the
-            # moment the operator involved themselves, and leaves them no way out: `completed`
-            # reaches only `rejected` and `under_review`, and moving it to `under_review` by hand
-            # offers it to nobody. The product has already decided this case on its other path:
-            # `agent_trigger.py` bars a manually dispatched reviewer only where an agent is
-            # *recorded* as completing the task, so an operator-completed task is reviewable by
-            # hand today. This removes a disagreement between two paths about one task.
-            #
-            # **But the exclusion cannot be `{author}`, because there is no author to name**, and
-            # `exclude=set()` is a self-approval route: the agent that wrote the work is still
-            # eligible, and both transition guards *permit* when the completer is unknown --
-            # `task_is_claimable_by`'s own "self-approval reached by two permissive defaults
-            # agreeing", arriving through this new door. So the ladder gets every agent any record
-            # associates with the task. Over-inclusive by construction, because with no completion
-            # row the author is not provable from anything and a source's silence is not evidence
-            # that an agent did not work the task.
-            exclude = dict.fromkeys(
-                await agents_that_may_have_authored(session, task), "has worked on this task"
-            )
+        # **Who may not be given the review** (`a-two-profile-build-cannot-deadlock-and-a-stall-
+        # says-so`, D2): every thread of the builder profile, and an author by name only where a
+        # fact of its carries no lineage -- the review opens a new conversation, which no
+        # authoring thread is, so another thread of the checker profile takes it rather than the
+        # flow stalling (FR-3). Where the operator completed it, every agent any record associates
+        # with the task, as before (F142): with no completion row the author is not provable from
+        # anything, and over-inclusive is the safe direction.
+        exclude = await review_exclusions(session, task)
 
         choice = await resolve_reviewer(
             session,
@@ -3288,6 +3263,22 @@ async def decide_firing(
             unavailable=taken,
             facts=facts,
         )
+        if choice.agent is not None and choice.rung == "declared":
+            # A named checker with no runner cannot be given the review, and no new thread
+            # changes that: held and surfaced naming the cause (D4), never substituted.
+            record = next(
+                (r for r in await facts.roster(loop.project_id) if r.name == choice.agent), None
+            )
+            if record is not None and not record.has_runner:
+                unstaffed.append(
+                    (
+                        task.id,
+                        f"{task.display_id}'s checker {choice.agent} has no runner bound, so its "
+                        f"check is held and given to nobody else. Bind a runner to "
+                        f"{choice.agent}, or name a different checker.",
+                    )
+                )
+                continue
         if choice.agent is not None:
             selections.append(LoopSelection(task=task, agent=choice.agent, is_review=True))
             taken.add(choice.agent)

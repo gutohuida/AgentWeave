@@ -1077,7 +1077,7 @@ async def _review_cause_from_entries(
 
 
 async def review_dispatch_refusal(
-    session: AsyncSession, task: "Task", *, reviewer: str
+    session: AsyncSession, task: "Task", *, reviewer: str, thread: Optional[str] = None
 ) -> "Optional[Tuple[int, str]]":
     """Why *reviewer* may not be dispatched to review *task*, or `None`.
 
@@ -1100,7 +1100,7 @@ async def review_dispatch_refusal(
     """
     # Imported here, not at module scope: this module is imported back by `task_transitions`'s
     # neighbours, and the service imports nothing from the API layer.
-    from ...task_transition_service import authorship_reason
+    from ...task_transition_service import NEW_THREAD, authorship_reason
 
     if task.status not in (REVIEWABLE_LOOP_TASK_STATUSES + WITH_REVIEWER_LOOP_TASK_STATUSES):
         return (
@@ -1109,7 +1109,9 @@ async def review_dispatch_refusal(
             f"A review begins from work that is awaiting one. Staffing a reviewer onto this task "
             f"would take it from whoever holds it and move it nowhere.",
         )
-    reason = await authorship_reason(session, task, reviewer)
+    # By thread (D2): *thread* is the lineage the review would run in, where the caller names an
+    # existing conversation; otherwise the dispatch opens a new one, which no authoring thread is.
+    reason = await authorship_reason(session, task, reviewer, thread=thread or NEW_THREAD)
     if reason is not None:
         # F505: whether or not another agent completed it -- the verdict guard's rule, read alike.
         # One clause, `authorship_reason`, shared with the transition guards (FR-8).
@@ -2932,7 +2934,13 @@ async def trigger_agent(
             )
         # The status first (F731): a pending task was refused as "has no branch to review", true
         # but beside the point -- nothing about it is awaiting a review yet.
-        early = await review_dispatch_refusal(session, review_target, reviewer=body.agent)
+        # The named conversation's thread, where the operator continues one (D2).
+        early = await review_dispatch_refusal(
+            session,
+            review_target,
+            reviewer=body.agent,
+            thread=(conversation.lineage_id or conversation.id) if conversation else None,
+        )
         if early is not None:
             raise HTTPException(status_code=early[0], detail=early[1])
         from ...task_integration import review_target as resolve_review_target
