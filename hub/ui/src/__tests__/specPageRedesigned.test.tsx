@@ -290,21 +290,25 @@ describe('rendered-natively (FR-3)', () => {
     expect(container.querySelector('iframe')).toBeNull()
     expect(within(anchor('FR-1')!).getByText('Requirement number 1 holds.')).toBeInTheDocument()
     expect(within(anchor('FR-1')!).getByText(/given 1/)).toBeInTheDocument()
-    // Let the page's own loads finish (a slow machine lands them late) before counting.
+    // Reloading means reading the document (or its coverage) again. Count only those reads: on a
+    // contended machine the page's other loads land late, after any "settled" sample.
+    const reads = () =>
+      vi.mocked(fetch).mock.calls.filter(([url]) => /\/project\/spec(\/coverage)?$/.test(new URL(String(url), 'http://hub.test').pathname)).length
     let settled = -1
     await waitFor(() => {
-      const n = vi.mocked(fetch).mock.calls.length
+      const n = reads()
       const stable = n === settled
       settled = n
       expect(stable).toBe(true)
     }, { interval: 150 })
-    const frames = vi.mocked(fetch).mock.calls.length
+    const frames = reads()
+    expect(frames).toBeGreaterThan(0)
 
     // FR-5: only the requirements awaiting evidence review show.
     await chooseMenuOption(user, 'Requirements by evidence', /Awaiting review/)
     expect(anchor('FR-2')).toBeTruthy()
     expect(anchor('FR-1')).toBeNull()
-    expect(vi.mocked(fetch).mock.calls.length).toBe(frames)
+    expect(reads()).toBe(frames)
   })
 
   it('F1129: the tasks section opens the board narrowed to this spec', async () => {
