@@ -3,6 +3,7 @@ import { Icon } from '@/components/common/Icon'
 import { Input } from '@/components/ui/input'
 import { Segmented } from '@/components/ui/segmented'
 import type { AgentSummary } from '@/api/agents'
+import type { Stall } from '@/api/stalls'
 import type { Task } from '@/api/tasks'
 import { agentColorVars } from '@/lib/agentColors'
 import { groupByStanding, isFinished } from '@/lib/taskStage'
@@ -66,6 +67,7 @@ export function BoardView({
   startAgents,
   onStartWork,
   onReviewTask,
+  stalls,
   now,
   children,
 }: {
@@ -99,6 +101,8 @@ export function BoardView({
   onStartWork?: (taskId: string, agent: string) => void
   /** Starts an agent's review turn on a completed task, from its card's menu. */
   onReviewTask?: (taskId: string, agent: string) => void
+  /** The open stall naming each task, by task id (`stallsByTask`): its card reads Stalled. */
+  stalls?: Map<string, Stall>
   now?: Date
   /** The Dependencies view, rendered in place of the columns when `view` is dependencies. */
   children?: React.ReactNode
@@ -310,6 +314,7 @@ export function BoardView({
                       startAgents={startAgents}
                       onStartWork={onStartWork}
                       onReviewTask={onReviewTask}
+                      stall={stalls?.get(task.id) ?? null}
                       move={
                         moves
                           ? {

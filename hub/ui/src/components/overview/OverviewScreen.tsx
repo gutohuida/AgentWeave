@@ -7,6 +7,8 @@ import { useQueueStatuses } from '@/api/queue'
 import { readableApiError } from '@/api/client'
 import { useAnswerQuestion, useDeclineQuestion, useQuestions } from '@/api/questions'
 import { useEndStall, useOpenStalls, type Stall } from '@/api/stalls'
+import { StallRemedies } from '@/components/stalls/StallRemedies'
+import { stallNotice } from '@/lib/stalls'
 import { useClearStableFixTasks, useDisturbedRuns, useKnownFailing } from '@/api/knownFailing'
 import { useCheckNotices } from '@/api/checkNotices'
 import { describeMainNotice, useMarkMainNoticeSeen, useOpenMainNotices } from '@/api/mainNotices'
@@ -224,13 +226,17 @@ export function OverviewScreen({
     // Every other stall (`hub/hub/stalls.py`); a merge stall is the merge row above.
     ...openStalls
       .filter((st) => !(st.cause.startsWith('integration_') && tasks.some((t) => t.id === st.task_id)))
-      .map<NeedItem>((st) => ({
+      .map<NeedItem>((st) => {
+        const ref = tasks.find((t) => t.id === st.task_id)?.readable_id ?? null
+        return {
         id: `stall-${st.id}`,
         kind: 'stall',
         agent: st.conversation_id ? MENDER : null,
         colorIndex: st.conversation_id ? colorOf(MENDER) : null,
         title: STALL_TITLE[st.cause],
-        detail: sentence(st.reason) + (st.conversation_id ? ' The mender is on it.' : ''),
+        // In the operator's words (FR-9): a capital first, no stored ids.
+        detail: stallNotice(st.reason, ref) + (st.conversation_id ? ' The mender is on it.' : ''),
+        remedies: <StallRemedies stall={st} taskRef={ref} />,
         at: st.last_seen_at,
         primary: st.conversation_id
           ? { label: 'Open the mender’s thread', onClick: () => openConversation(MENDER, st.conversation_id!) }
@@ -239,7 +245,8 @@ export function OverviewScreen({
             : { label: 'Open tasks', onClick: () => onNavigate('tasks') },
         // Ended by hand: what the operator says when they have dealt with it themselves.
         secondary: { label: 'Dismiss', onClick: () => endStall.mutate(st.id, { onError: refusal('The notice was not dismissed') }) },
-      })),
+        }
+      }),
     // A built roadmap slice whose next slice's drafting is offered (`hub/hub/slice_drafting.py`):
     // Draft queues it to the chosen agent (the author preselected), Not now hides it.
     ...offers.map<NeedItem>((offer) => {
