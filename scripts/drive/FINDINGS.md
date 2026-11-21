@@ -42105,3 +42105,15 @@ The sidebar no longer lists profiles. The Overview's *Profiles* card sits at the
 **Source:** found by driving
 **Theme:** UI polish
 **Ready:** yes
+
+## F1209 (C) -- a task's recommended people: the reason fields are undocumented, and "acknowledge" refuses what the operator sees as a warning
+
+Authoring slice 1 of `profiles-rollout-ui-ux-and-flow-fixes` on 2026-11-21, a save returned `recommended_people` for every task in both `warnings` and `notes`, and the operator's Check showed it as **Warning**. `acknowledge_spec_gap` on it was refused 422 "is a note: it gates nothing, so there is nothing to acknowledge". The operator then pasted the four warnings into the thread. The `submit_spec_document` tool description lists a task's `builder` and `checker`, but not `builder_reason` / `checker_reason`. The warning text ("a builder with no reason") does not name them either, so the only way to find them was to grep `spec_completeness.recommended_people_warnings`. Clearing it took two more full-document submissions.
+
+- The same finding is listed under both `warnings` and `notes`, and the acknowledge route treats it as a note while the operator's screen treats it as a warning.
+- The tool description and the warning text should name `builder_reason` and `checker_reason`.
+
+**Status:** open
+**Source:** found by driving
+**Theme:** spec documents
+**Ready:** yes
