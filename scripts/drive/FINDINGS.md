@@ -42008,7 +42008,7 @@ On `:8000` the Hub's `git checkout` in QA2's review checkout died after about 1 
 
 Drive 2026-11-21 (fresh Hub :8031, profile `sweep1121`, three Haiku profiles, onboarding's builder + checker shape). QA sent FWCAW-1 back twice; Developer's third turn (`run-013a289882ca`) ended without completing and messaged QA (`msg-30137cb35e75`). That message was delivered as `entry-376a8cd22ac1` into `run-4dcfa9265fd8`: QA, in its review conversation `conv-7f3e3b12be73`, but with `workspace_dir` the **builder's** task checkout (`.agentweave/tasks/task-051b575a325d`, not `.agentweave/reviews/QA`) and `task_id` bound. QA moved the task `in_progress → completed` (task_transitions seq 11). The flow then stalled: "this task names 'QA' as its reviewer, and that agent is the one that completed this task". Two profiles is the setup the Overview recommends, so one peer message deadlocks an ordinary build.
 
-**Status:** open
+**Status:** open -- specified in `spec/changes/a-two-profile-build-cannot-deadlock-and-a-stall-says-so` (exploring; roadmap `profiles-rollout-ui-ux-and-flow-fixes`)
 **Source:** found by driving
 **Theme:** flows and review
 **Ready:** yes
@@ -42027,7 +42027,7 @@ Settings → Runners was deleted (SASSW-2, 971f2a4), and the pool editor's *Add 
 
 At 1440 wide with the panel open, dragging the thread column to its 380 px minimum leaves the ⋯ button at x=705 while the column ends at x=624. Checkpoint is cut off and the title disappears. The panel has no close control of its own (only "+"); *Hide side panel* lives in that ⋯ menu. Cause: `.aw-convbar-end` and the status are `flex: none`, and the only shrink rule is `@media (max-width: 1100px)` on the **viewport** (`hub/ui/src/styles/conversation.css:40-46`), not the pane. The composer's controls wrap to three lines at the same width. Shots: `testbed/e2e-1121/shots/20-panel-open.png`, `21-panel-dragged.png`.
 
-**Status:** open
+**Status:** open -- specified in `spec/changes/the-thread-bar-and-composer-survive-a-wide-side-panel` (exploring; roadmap `profiles-rollout-ui-ux-and-flow-fixes`)
 **Source:** asked for by the operator, reproduced by driving
 **Theme:** conversation layout
 **Ready:** yes
@@ -42037,7 +42037,7 @@ At 1440 wide with the panel open, dragging the thread column to its 380 px minim
 
 Same stall as F1199: the sidebar says **Stalled**, the build page header says **Running**, and the Tasks board card says "Ready for review" with no sign of the stall. The stall notice (build page and Overview's "Nobody can review a task") names two ways out ("naming a different reviewer, or reviewing it yourself"), but the card offers only **Dismiss** / **Open task**, and neither path has a control there. The notice also starts lower-case ("this task names…").
 
-**Status:** open
+**Status:** open -- specified in `spec/changes/a-two-profile-build-cannot-deadlock-and-a-stall-says-so` (exploring; roadmap `profiles-rollout-ui-ux-and-flow-fixes`)
 **Source:** found by driving
 **Theme:** builds
 **Ready:** yes
@@ -42046,7 +42046,7 @@ Same stall as F1199: the sidebar says **Stalled**, the build page header says **
 
 Under *Quarantined tests*: raw white inputs with placeholders "check" and "test id", and loose lines "Never quarantined" / "No test is marked." / "Never quarantine a test", in dark and light. Shots `42-overview-bottom.png`, `45-overview-light.png`.
 
-**Status:** open
+**Status:** open -- specified in `spec/changes/first-run-and-the-overview-read-cleanly` (exploring; roadmap `profiles-rollout-ui-ux-and-flow-fixes`)
 **Source:** found by driving
 **Theme:** overview
 **Ready:** yes
@@ -42056,7 +42056,7 @@ Under *Quarantined tests*: raw white inputs with placeholders "check" and "test 
 
 *Add a builder and a checker* (`SetupProfilesDialog`) offers runners by name only ("Claude (default)", "Codex (default)", "Copilot (default)"): no model and no provider mark. *Create profile* (`AgentCreateDialog`) has a themed Provider menu, but Model and Charter are native `<select>`s, and its name placeholder is "codex-reviewer" whatever the provider.
 
-**Status:** open
+**Status:** open -- specified in `spec/changes/a-profile-s-pool-and-a-new-chat-can-use-any-model-of-any-provider` (exploring; roadmap `profiles-rollout-ui-ux-and-flow-fixes`)
 **Source:** found by driving
 **Theme:** profiles and pools
 **Ready:** yes
@@ -42065,7 +42065,7 @@ Under *Quarantined tests*: raw white inputs with placeholders "check" and "test 
 
 The starter fills the composer with its boilerplate but doesn't arm Explore. The sidebar and bar title every thread it starts "I want to change this project. Interview me…". Here the agent created the document on its own on the second turn.
 
-**Status:** open
+**Status:** open -- specified in `spec/changes/starting-a-spec-from-a-thread-and-a-spec-page-that-agrees-with-itself` (exploring; roadmap `profiles-rollout-ui-ux-and-flow-fixes`)
 **Source:** found by driving
 **Theme:** conversations and composer
 **Ready:** yes
@@ -42074,7 +42074,7 @@ The starter fills the composer with its boilerplate but doesn't arm Explore. The
 
 The header shows a warning badge of 2 next to a "1 warning" pill. It says "Reviewed by any free profile" while every task names QA as checker. It shows "Task ids FWCAW-N" with a literal N, and keeps the "Writing" phase badge at the build step. While building it wraps to three lines (the flow name repeats the document title). The summary and problem render Markdown backticks literally.
 
-**Status:** open
+**Status:** open -- specified in `spec/changes/starting-a-spec-from-a-thread-and-a-spec-page-that-agrees-with-itself` (exploring; roadmap `profiles-rollout-ui-ux-and-flow-fixes`)
 **Source:** found by driving
 **Theme:** spec documents
 **Ready:** yes
@@ -42097,7 +42097,7 @@ The sidebar no longer lists profiles. The Overview's *Profiles* card sits at the
 - The Tasks filter bar is cramped: "QA (" is truncated, "Show finished" wraps, and "0 finished tasks are hidden" has no padding.
 - The agent settings rail is headed "Profiles" over one profile.
 
-**Status:** open
+**Status:** open -- specified in `spec/changes/first-run-and-the-overview-read-cleanly` (offer-card bullet: `starting-a-spec-from-a-thread-and-a-spec-page-that-agrees-with-itself` (exploring; roadmap `profiles-rollout-ui-ux-and-flow-fixes`)
 **Source:** found by driving
 **Theme:** UI polish
 **Ready:** yes
