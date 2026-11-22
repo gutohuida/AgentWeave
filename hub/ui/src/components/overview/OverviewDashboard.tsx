@@ -263,7 +263,7 @@ export function OverviewDashboard({ projectName, needs, running, finished, finis
           tone={running.length > 0 ? 'info' : 'calm'}
           status={running.length > 0 ? 'Working' : 'Idle'}
           figure={String(running.length)}
-          lines={[running.length > 0 ? agentList(running.map((r) => r.agent)) : 'No agent is working right now.']}
+          lines={[running.length > 0 ? agentList(running.map((r) => r.agent)) : 'No profile is working right now.']}
           opens="the running work"
           onOpen={() => onNavigate('running')}
         />
