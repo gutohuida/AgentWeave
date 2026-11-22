@@ -2,6 +2,7 @@ import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AgentSummary } from '@/api/agents'
+import type { QueueStatus } from '@/api/queue'
 import type { Task } from '@/api/tasks'
 import { ProfilesScreen } from '@/components/profiles/ProfilesScreen'
 import { profileItem, profileStatus } from '@/components/profiles/rosterItems'
@@ -13,6 +14,7 @@ import { MODEL_CATALOG_FIXTURE } from './support/modelCatalogFixture'
 const refetch = vi.fn()
 let roster: { data?: AgentSummary[]; isLoading: boolean; error: unknown } = { data: [], isLoading: false, error: null }
 let tasks: Task[] = []
+let queueStatuses: QueueStatus[] = []
 
 vi.mock('@/api/agents', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/api/agents')>()),
@@ -31,6 +33,8 @@ vi.mock('@/api/tasks', () => ({
   useTasks: () => ({ data: { tasks } }),
   useTask: (id: string | null) => ({ data: tasks.find((t) => t.id === id) }),
 }))
+// The batched queue-status route, as the Overview reads it: one status per open profile.
+vi.mock('@/api/queue', () => ({ useQueueStatuses: (agents: string[]) => queueStatuses.filter((q) => agents.includes(q.agent)) }))
 vi.mock('@/api/agentChat', () => ({ useProjectConversations: () => ({ data: { conversations: [] } }) }))
 vi.mock('@/components/overview/SetupProfilesDialog', () => ({ SetupProfilesDialog: () => null }))
 vi.mock('@/components/agents/AgentSettingsPage', () => ({
@@ -64,6 +68,7 @@ function show(selected: string | null = null, section: 'agent' | 'running' = 'ag
 beforeEach(() => {
   refetch.mockReset()
   tasks = [task]
+  queueStatuses = []
   roster = {
     isLoading: false,
     error: null,
@@ -86,6 +91,14 @@ describe('a roster entry as a Profiles row', () => {
     expect(profileStatus(roster.data![1]!, taskOf)).toEqual({ kind: 'idle' })
   })
 
+  it('reads work waiting that cannot start as Held with the queue’s reason, and a running profile as working regardless', () => {
+    const taskOf = (id: string) => tasks.find((t) => t.id === id)
+    const reason = 'QA is waiting for its Claude allowance'
+    expect(profileStatus(roster.data![1]!, taskOf, reason)).toEqual({ kind: 'held', detail: reason })
+    expect(profileStatus(roster.data![1]!, taskOf, null)).toEqual({ kind: 'idle' })
+    expect(profileStatus(roster.data![2]!, taskOf, 'agent is already running').kind).toBe('working')
+  })
+
   it('names the default model and counts the rest of the pool; unknown spend stays unknown', () => {
     const item = profileItem(roster.data![2]!, { catalog: MODEL_CATALOG_FIXTURE, charterName: 'Developer', spend: null, taskOf: () => task })
     expect(item.provider).toBe('claude')
@@ -106,6 +119,24 @@ describe('the Profiles index (FR-12)', () => {
     const archived = screen.getByRole('button', { name: /Archived/ })
     expect(archived).toHaveAttribute('aria-expanded', 'false')
     expect(archived).toHaveTextContent('1')
+  })
+
+  it('shows a held profile as Held with its reason, in its row and in its Now strip', () => {
+    queueStatuses = [
+      { agent: 'QA', waiting_count: 1, running: false, waiting_reason: 'token budget exhausted' },
+      { agent: 'Builder', waiting_count: 0, running: true, waiting_reason: null },
+    ]
+    show()
+    const rows = screen.getAllByRole('button').filter((b) => b.getAttribute('data-slot') === 'profile-row')
+    const qa = rows.find((r) => r.getAttribute('data-profile') === 'QA')!
+    expect(within(qa).getByText('Held')).toBeInTheDocument()
+    expect(qa).toHaveTextContent('token budget exhausted')
+  })
+
+  it('names the hold in a held profile’s Now strip', () => {
+    queueStatuses = [{ agent: 'QA', waiting_count: 1, running: false, waiting_reason: 'token budget exhausted' }]
+    show('QA')
+    expect(screen.getByRole('region', { name: 'Now' })).toHaveTextContent('Held, token budget exhausted')
   })
 
   it('opens a profile’s page from its row', async () => {

@@ -1,1 +1,0 @@
-import{u as s,j as a,ar as u,d$ as l}from"./index-B5EdiS92.js";function p({document:n,identifier:o,children:i="history",testId:r}){const e=s(t=>t.selectedProjectId);return e?a.jsx("button",{type:"button",className:"aw-link aw-link-inline","data-testid":r,onClick:t=>{t.stopPropagation(),u(l(e,n,o))},children:i}):null}export{p as R};

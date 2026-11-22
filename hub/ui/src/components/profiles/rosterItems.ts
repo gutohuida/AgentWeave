@@ -18,9 +18,14 @@ function hasModel(agent: AgentSummary): boolean {
   return (agent.pool?.length ?? 0) > 0 || Boolean(agent.runner_id)
 }
 
-/** Working or reviewing, and on what; Idle; No model. A run on a task under review that the profile
- *  did not build is a review. */
-export function profileStatus(agent: AgentSummary, taskOf: (id: string) => Task | undefined): ProfileStatus {
+/** Working or reviewing, and on what; Held, and why; Idle; No model. A run on a task under review
+ *  that the profile did not build is a review. Held is work waiting that cannot start: the queue
+ *  route's `waiting_reason` (an allowance, a budget, a missing CLI...), read only while nothing runs. */
+export function profileStatus(
+  agent: AgentSummary,
+  taskOf: (id: string) => Task | undefined,
+  heldReason: string | null = null,
+): ProfileStatus {
   const run = currentRun(agent)
   const live = run !== null || agent.status === 'running' || agent.status === 'working'
   if (live) {
@@ -29,6 +34,7 @@ export function profileStatus(agent: AgentSummary, taskOf: (id: string) => Task 
     return { kind: reviewing ? 'reviewing' : 'working', detail: task?.title ?? (run?.task_id ? null : run ? 'a thread' : null) }
   }
   if (!hasModel(agent)) return { kind: 'no-model' }
+  if (heldReason) return { kind: 'held', detail: heldReason }
   return { kind: 'idle' }
 }
 
@@ -40,11 +46,14 @@ export function profileItem(
     charterName,
     spend,
     taskOf,
+    heldReason = null,
   }: {
     catalog: ModelCatalogResponse | undefined
     charterName: string | null
     spend: number | null | undefined
     taskOf: (id: string) => Task | undefined
+    /** The queue's reason its waiting work has not started, if any. */
+    heldReason?: string | null
   },
 ): ProfileListItem {
   const pool = agent.pool ?? []
@@ -58,7 +67,7 @@ export function profileItem(
     providerLabel: provider ? cliLabel(provider) : null,
     model: entry ? entryLabel(catalog, entry) : agent.runner_id ? (agent.display_model ?? null) : null,
     moreModels: Math.max(0, pool.length - 1),
-    status: profileStatus(agent, taskOf),
+    status: profileStatus(agent, taskOf, heldReason),
     spendUsd: spend,
     lastActiveAt: agent.last_seen ?? null,
     archived: agent.lifecycle === 'archived',

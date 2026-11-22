@@ -4,6 +4,7 @@ import { useProjectConversations } from '@/api/agentChat'
 import { useCharters } from '@/api/charters'
 import { useProjectLedger } from '@/api/ledger'
 import { useModelCatalog } from '@/api/modelCatalog'
+import { useQueueStatuses } from '@/api/queue'
 import { useSpecDocuments } from '@/api/spec'
 import { useTask, useTasks } from '@/api/tasks'
 import { AgentSettingsPage } from '@/components/agents/AgentSettingsPage'
@@ -64,6 +65,9 @@ export function ProfilesScreen({
   const now = React.useMemo(() => new Date(), [roster.dataUpdatedAt]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const agents = React.useMemo(() => roster.data ?? [], [roster.data])
+  const openNames = React.useMemo(() => agents.filter((a) => a.lifecycle !== 'archived').map((a) => a.name), [agents])
+  const queueStatuses = useQueueStatuses(openNames)
+  const heldReasonOf = (name: string) => queueStatuses.find((q) => q.agent === name)?.waiting_reason ?? null
   const picked = agents.find((a) => a.name === selected) ?? null
   // The task the open profile is on, read on its own: the board's page may not hold it.
   const pickedRun = picked ? currentRun(picked) : null
@@ -82,6 +86,7 @@ export function ProfilesScreen({
       charterName: charters.find((c) => c.id === agent.charter_id)?.name ?? null,
       spend: spendOf(agent.name),
       taskOf,
+      heldReason: heldReasonOf(agent.name),
     }),
   )
   const latestThread = (name: string) =>
@@ -107,6 +112,7 @@ export function ProfilesScreen({
         reviewing: item.status.kind === 'reviewing' ? (task?.builder ?? task?.assignee ?? null) : null,
       }
     }
+    if (item?.status.kind === 'held') return { kind: 'held', reason: item.status.detail ?? 'waiting' }
     return agent.last_seen ? { kind: 'last-run', at: agent.last_seen } : { kind: 'never' }
   }
 
