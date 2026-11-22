@@ -79,6 +79,7 @@ vi.mock('@/api/tasks', () => ({
   }),
   useUpdateTask: () => ({ mutate: updateTaskMutate }),
   useRetryIntegration: () => ({ mutate: vi.fn(), isPending: false }),
+  useTask: () => ({ data: { id: 'task-11', readable_id: 'WIRE-1', title: 'Wire the exporter', builder: 'builder', checker: 'QA' } }),
 }))
 vi.mock('@/api/agentChat', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/api/agentChat')>()
@@ -103,7 +104,12 @@ vi.mock('@/api/ledger', () => ({
 }))
 vi.mock('@/api/queue', () => ({ useQueueStatuses: () => queueStatuses }))
 const endStallMutate = vi.fn()
-vi.mock('@/api/stalls', () => ({ useOpenStalls: () => ({ data: openStalls }), useEndStall: () => ({ mutate: endStallMutate }) }))
+const nameCheckerMutate = vi.fn()
+vi.mock('@/api/stalls', () => ({
+  useOpenStalls: () => ({ data: openStalls }),
+  useEndStall: () => ({ mutate: endStallMutate }),
+  useNameChecker: () => ({ mutate: nameCheckerMutate, isPending: false }),
+}))
 let knownFailing: KnownFailingEntry[] | null = null
 let knownFailingError: Error | null = null
 const knownFailingRefetch = vi.fn()
@@ -435,6 +441,29 @@ describe('a stalled project under Needs you', () => {
     expect(useTaskFilterStore.getState().pendingOpenTaskId).toBe('task-4')
     fireEvent.click(within(row).getByRole('button', { name: 'Dismiss' }))
     expect(endStallMutate).toHaveBeenCalledWith('stall-1', expect.objectContaining({ onError: expect.any(Function) }))
+  })
+
+  it('offers a review stall’s remedies beside its notice, in the operator’s words (FR-8, FR-9)', () => {
+    openStalls = [
+      stall({
+        id: 'stall-r',
+        key: 'review_unstaffed:task-11',
+        cause: 'review_unstaffed',
+        task_id: 'task-11',
+        reason: "this task names 'QA' as its checker, and that agent has no runner bound",
+        remedies: ['name_checker', 'review_yourself'],
+      }),
+    ]
+    const onNavigate = vi.fn()
+    render(<OverviewScreen onNavigate={onNavigate} />)
+    const row = screen.getByText('Nobody can review a task').closest('li') as HTMLElement
+    expect(row).toHaveTextContent("This task names 'QA' as its checker, and that agent has no runner bound.")
+    expect(within(row).getByRole('button', { name: 'Review WIRE-1 yourself' })).toBeInTheDocument()
+    fireEvent.click(within(row).getByRole('button', { name: 'Name a different checker for WIRE-1' }))
+    // The roster's one other profile is the builder, who never checks its own task.
+    expect(within(row).getByRole('group', { name: 'Who checks WIRE-1 instead' })).toHaveTextContent('No other profile can check it.')
+    expect(onNavigate).not.toHaveBeenCalled()
+    expect(nameCheckerMutate).not.toHaveBeenCalled()
   })
 
   it('says the mender is on a stall it holds, and opens its thread', () => {

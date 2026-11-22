@@ -77,6 +77,7 @@ vi.mock('@/api/queue', () => ({
   withdrawQueueEntry: vi.fn(),
 }))
 
+vi.mock('@/api/workspacePreparation', () => ({ usePreparingWorkspaces: () => ({ data: [] }) }))
 vi.mock('@/api/workspace', () => ({ useWorkspacePaths: () => ({ data: [] }) }))
 // The composer's @ menu lists the project's documents (reference-a-spec-in-a-sentence-from-the-composer).
 vi.mock('@/api/spec', async (importOriginal) => ({

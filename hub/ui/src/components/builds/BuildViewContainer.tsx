@@ -1,6 +1,7 @@
 import * as React from "react";
 import { useAgents } from "@/api/agents";
 import { useBuildRead } from "@/api/buildRead";
+import { useOpenStalls } from "@/api/stalls";
 import { readableApiError } from "@/api/client";
 import {
   agentDestination,
@@ -43,6 +44,7 @@ export function BuildViewContainer({
 }: BuildViewContainerProps) {
   const { data: read, error, isError, refetch } = useBuildRead(buildId);
   const { data: agents = [], error: agentsError } = useAgents();
+  const { data: stalls = [], error: stallsError } = useOpenStalls();
   const now = useNow();
   const colorIndexOf = React.useCallback(
     (name: string) => agents.find((a) => a.name === name)?.color_index,
@@ -91,6 +93,8 @@ export function BuildViewContainer({
           )
         }
         colorIndexOf={colorIndexOf}
+        stalls={stalls}
+        stallsUnread={Boolean(stallsError)}
       />
     </div>
   );

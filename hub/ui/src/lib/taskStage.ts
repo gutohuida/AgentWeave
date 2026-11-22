@@ -5,6 +5,7 @@ import { hubDate } from './hubTime'
 
 export const STAGE_LABELS: Record<string, string> = {
   not_started: 'Not started',
+  preparing_checkout: 'Preparing its checkout',
   working: 'Being worked on',
   waiting_for_answer: 'Waiting for an answer',
   waiting_for_review: 'Waiting for review',

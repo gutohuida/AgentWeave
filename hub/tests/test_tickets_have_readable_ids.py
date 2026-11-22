@@ -491,6 +491,7 @@ _ROUTE_BODIES = {
     ("POST", "/tasks/{task_id}/checks/run"): None,
     ("POST", "/tasks/{task_id}/integrations/retry"): None,
     ("POST", "/tasks/{task_id}/reassign"): {"agent": "nobody-here"},
+    ("POST", "/tasks/{task_id}/checker"): {"agent": "nobody-here"},
     ("POST", "/tasks/{task_id}/land"): None,
     ("GET", "/tasks/{task_id}/story"): None,
     ("GET", "/tasks/{task_id}/moves"): None,

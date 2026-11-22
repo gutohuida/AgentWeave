@@ -15,7 +15,13 @@ import '@/styles/conversation.css'
  *
  *  Left: who (agent dot and name) and what (the conversation's title, renamed in place), then how
  *  it is going ("working · 2m 14s" with the pulse, or "idle"). Right: the context ring, Checkpoint,
- *  Stop while a turn runs, and one overflow menu for the rest. It never wraps; the title gives way. */
+ *  Stop while a turn runs, and one overflow menu for the rest. It never wraps; the title gives way.
+ *
+ *  It answers to its own width, not the window's (F1201): beside a wide side panel the thread
+ *  column can be 380px in a 1920px window. When the title would show fewer than
+ *  `TITLE_MIN_CHARS` characters the bar compacts one step at a time, in this order and no other:
+ *  (1) the context label becomes its percentage, (2) Checkpoint becomes icon-only, (3) Checkpoint
+ *  moves into ⋯. Status, Stop and ⋯ never leave the bar. */
 export interface ConversationBarProps {
   agent: AgentSummary
   conversation: AgentConversation | null
@@ -57,6 +63,38 @@ export interface ConversationBarProps {
   onArchive?: () => void
 }
 
+/** How many of the title's characters must stay visible before the bar compacts another step. */
+const TITLE_MIN_CHARS = 8
+/** The compaction steps: 0 is the full bar, 3 has Checkpoint in ⋯. */
+const COMPACT_STEPS = 3
+
+let measureCanvas: CanvasRenderingContext2D | null = null
+
+/** Whether the bar, at its current `data-compact` step, fits without scrolling and leaves the
+ *  title its minimum. Reads layout, so each call is one reflow. */
+function barFits(bar: HTMLElement, titleText: HTMLElement | null): boolean {
+  if (bar.scrollWidth > bar.clientWidth + 1) return false
+  const node = titleText?.firstChild
+  if (!titleText || !node || node.nodeType !== Node.TEXT_NODE) return true
+  const text = node.textContent ?? ''
+  const chars = Math.min(TITLE_MIN_CHARS, text.length)
+  if (chars === 0) return true
+  const range = document.createRange()
+  // No layout to read (a test DOM): nothing can be measured, so nothing is compacted for it.
+  if (typeof range.getBoundingClientRect !== 'function') return true
+  range.setStart(node, 0)
+  range.setEnd(node, chars)
+  let need = range.getBoundingClientRect().width
+  if (chars < text.length) {
+    measureCanvas ??= document.createElement('canvas').getContext('2d')
+    if (measureCanvas) {
+      measureCanvas.font = getComputedStyle(titleText).font
+      need += measureCanvas.measureText('…').width
+    }
+  }
+  return titleText.clientWidth + 0.5 >= need
+}
+
 export function ConversationBar({
   agent,
   conversation,
@@ -94,6 +132,42 @@ export function ConversationBar({
   React.useEffect(() => setRenamedTo(null), [title])
   const shownTitle = renamedTo ?? title
   const color = agentColorVars(agent.color_index)
+  const statusText = isRunning
+    ? `working${elapsedSeconds !== null ? ` · ${formatDuration(elapsedSeconds)}` : ''}`
+    : agent.status === 'idle' ? 'idle' : agent.status
+
+  const rootRef = React.useRef<HTMLDivElement | null>(null)
+  const titleTextRef = React.useRef<HTMLSpanElement | null>(null)
+  const setRoot = React.useCallback((el: HTMLDivElement | null) => {
+    rootRef.current = el
+    if (typeof barRef === 'function') barRef(el)
+    else if (barRef) (barRef as React.MutableRefObject<HTMLDivElement | null>).current = el
+  }, [barRef])
+  const [compact, setCompact] = React.useState(0)
+  /* Each measurement starts from the full bar and takes the first step that fits, so the result
+     depends only on the width and the content, never on the previous step: no oscillation. The
+     steps are applied to the DOM directly while measuring (one reflow each), then committed. */
+  const measure = React.useCallback(() => {
+    const bar = rootRef.current
+    if (!bar) return
+    let step = 0
+    for (; step < COMPACT_STEPS; step++) {
+      bar.dataset.compact = String(step)
+      if (barFits(bar, titleTextRef.current)) break
+    }
+    bar.dataset.compact = String(step)
+    setCompact(step)
+  }, [])
+  const contextKey = JSON.stringify(conversation?.context_usage ?? null)
+  React.useLayoutEffect(measure, [measure, shownTitle, statusText, contextKey, isRunning, isStopping, checkpointLabel, editing, busyElsewhere?.title, agent.name, onCheckpoint, onStop])
+  React.useEffect(() => {
+    const bar = rootRef.current
+    if (!bar || typeof ResizeObserver === 'undefined') return
+    const observer = new ResizeObserver(() => measure())
+    observer.observe(bar)
+    return () => observer.disconnect()
+  }, [measure])
+  const checkpointInMenu = compact >= 3 && !!onCheckpoint
 
   const commit = () => {
     const next = draft.trim()
@@ -105,10 +179,10 @@ export function ConversationBar({
   }
 
   return (
-    <div ref={barRef} className="conversation-header-surface aw-convbar" data-testid="conversation-header" style={{ '--agent-accent': color.accent } as React.CSSProperties}>
+    <div ref={setRoot} className="conversation-header-surface aw-convbar" data-testid="conversation-header" data-compact={compact} style={{ '--agent-accent': color.accent } as React.CSSProperties}>
       <span className="aw-convbar-agent">
         <span data-testid={`conversation-agent-color-${agent.name}`} className={['aw-convbar-dot', isRunning ? 'aw-pulse' : ''].join(' ')} aria-hidden="true" />
-        {agent.name}
+        <span className="truncate">{agent.name}</span>
       </span>
       <span className="aw-convbar-sep" aria-hidden="true">/</span>
 
@@ -134,13 +208,14 @@ export function ConversationBar({
           data-slot="convbar-title"
           className="aw-convbar-title"
           title={onRename && conversation ? `${shownTitle} — click to rename` : shownTitle}
+          aria-label={shownTitle}
           disabled={!onRename || !conversation}
           onClick={() => {
             setDraft(shownTitle)
             setEditing(true)
           }}
         >
-          <span className="truncate">{shownTitle}</span>
+          <span ref={titleTextRef} className="truncate">{shownTitle}</span>
           {onRename && conversation ? <Icon name="edit" size={12} className="aw-convbar-title-pencil" /> : null}
         </button>
       )}
@@ -154,7 +229,7 @@ export function ConversationBar({
         </span>
       ) : (
         <span className="aw-convbar-status" data-running={isRunning ? 'true' : 'false'} role="status" aria-live="polite">
-          {isRunning ? `working${elapsedSeconds !== null ? ` · ${formatDuration(elapsedSeconds)}` : ''}` : agent.status === 'idle' ? 'idle' : agent.status}
+          {statusText}
         </span>
       )}
 
@@ -179,7 +254,7 @@ export function ConversationBar({
             title={checkpointDisabledReason ?? 'Write a checkpoint and hand this thread to a fresh one'}
           >
             <Icon name="move_up" size={13} />
-            {checkpointLabel}
+            <span className="aw-convbar-checkpoint-label">{checkpointLabel}</span>
           </Button>
         ) : null}
         <Menu>
@@ -189,6 +264,26 @@ export function ConversationBar({
             </Button>
           </MenuTrigger>
           <MenuContent style={{ minWidth: 236 }}>
+            {checkpointInMenu ? (
+              /* Checkpoint's last compaction step: an item, not gone. Unavailable, it stays
+                 reachable and says why (aria-disabled, not disabled, so arrows still land on it). */
+              <>
+                <MenuItem
+                  icon="move_up"
+                  data-testid="conversation-handoff-item"
+                  aria-disabled={checkpointDisabledReason !== null || undefined}
+                  data-unavailable={checkpointDisabledReason !== null ? 'true' : undefined}
+                  title={checkpointDisabledReason ?? 'Write a checkpoint and hand this thread to a fresh one'}
+                  onSelect={(event) => {
+                    if (checkpointDisabledReason !== null) event.preventDefault()
+                    else onCheckpoint?.()
+                  }}
+                >
+                  {checkpointDisabledReason ? `${checkpointLabel} — ${checkpointDisabledReason}` : checkpointLabel}
+                </MenuItem>
+                <MenuSeparator />
+              </>
+            ) : null}
             {totalTokens ? (
               <MenuLabel>
                 <span data-testid="conversation-token-total" title={`${formatTokensExact(totalTokens)} used across this thread`}>

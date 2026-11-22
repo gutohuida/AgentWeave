@@ -25,6 +25,8 @@ export const THREAD_KNOTS = ['Built', 'Reviewed', 'Approved', 'Checked', 'On mai
 
 const VISUALS: Record<string, StageVisual> = {
   not_started: { glyph: 'circle_dashed', word: 'Not started', tone: 'idle', knot: -1 },
+  // Its turn is starting: git is writing the task's checkout, which can take a minute.
+  preparing_checkout: { glyph: 'git_branch_plus', word: 'Preparing checkout', tone: 'live', knot: -1, moving: true },
   working: { glyph: 'circle_dot', word: 'Building', tone: 'live', knot: 0, moving: true },
   waiting_for_answer: { glyph: 'hand', word: 'Needs your answer', tone: 'needs-you', knot: 0 },
   waiting_for_review: { glyph: 'hourglass', word: 'Ready for review', tone: 'idle', knot: 1 },

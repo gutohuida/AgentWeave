@@ -5,6 +5,7 @@ import { NewConversationSurface } from '@/components/agents/NewConversationSurfa
 import { overridesForRunner } from '@/lib/runnerProvider'
 import { useConfigStore } from '@/store/configStore'
 import { MODEL_CATALOG_FIXTURE } from './support/modelCatalogFixture'
+vi.mock('@/hooks/useSSE', () => ({ useSSE: () => {} }))
 vi.mock('@/api/firstRun', () => ({ useProjectHasNoWork: () => false }))
 
 // `a-copilot-agent-uses-hooks-and-its-own-agents` test 1.14, the runner half (design D7, review

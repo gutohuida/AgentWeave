@@ -1,6 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { getJson, postJson } from './client'
 import { useConfigStore } from '@/store/configStore'
+import { stallNotice } from '@/lib/stalls'
+import { toast } from '@/lib/toast'
 
 /** One time the project's work stopped moving (`hub/hub/stalls.py`). */
 export interface Stall {
@@ -28,7 +30,13 @@ export interface Stall {
   outcome: 'open' | 'fixed' | 'gave_up' | 'resolved'
   outcome_detail: string
   ended_at: string | null
+  /** The controls the notice offers, derived by the Hub from the cause (D5); absent from an older Hub. */
+  remedies?: StallRemedy[]
 }
+
+/** `name_checker`: name a different checker for the task; `review_yourself`: the operator's own review. */
+export type StallRemedy = 'name_checker' | 'review_yourself'
+
 
 /** The project's open stalls, newest first. SSE (`stall_recorded`, `stall_ended`) invalidates it. */
 export function useOpenStalls() {
@@ -52,5 +60,31 @@ export function useEndStall() {
         detail: 'Dismissed by the operator.',
       }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['project', projectId, 'stalls'] }),
+  })
+}
+
+/** Name a different checker for a stalled task (`POST /tasks/{id}/checker`): recorded on its build,
+ *  finished work handed to them for review, and the task's review stall ended.
+ *
+ *  The Hub's answer is said in a toast from here, not from the control: the stall's end reaches the
+ *  page by the event stream, often before this answer does, and the control leaves with the stall,
+ *  so a callback of the control's own would never run (React Query drops an unmounted caller's). */
+export function useNameChecker() {
+  const queryClient = useQueryClient()
+  const { selectedProjectId: projectId } = useConfigStore()
+  return useMutation({
+    mutationFn: ({ taskId, agent }: { taskId: string; agent: string; taskRef?: string | null }) =>
+      postJson<{ next_turn?: string | null }>(`/api/v1/projects/${projectId}/tasks/${encodeURIComponent(taskId)}/checker`, { agent }),
+    onSuccess: (answer, { agent, taskRef }) => {
+      const ref = taskRef || 'the task'
+      toast({
+        title: `${agent} checks ${ref}`,
+        description: stallNotice(answer?.next_turn ?? `${agent} checks it now.`, taskRef),
+        tone: 'success',
+      })
+      queryClient.invalidateQueries({ queryKey: ['project', projectId, 'stalls'] })
+      queryClient.invalidateQueries({ queryKey: ['project', projectId, 'tasks'] })
+      queryClient.invalidateQueries({ queryKey: ['project', projectId, 'builds'] })
+    },
   })
 }

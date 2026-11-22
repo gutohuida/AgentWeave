@@ -396,6 +396,43 @@ async def resolve_task(db: AsyncSession, project_id: str, task_id: str, *, by: s
             await end(db, stall, "resolved", f"The work merged ({by or 'the Hub'}).")
 
 
+#: The controls a stall's notice offers, by cause (`a-two-profile-build-cannot-deadlock-and-a-
+#: stall-says-so`, D5): derived on every read from the cause, so the notice's prose and the
+#: controls beside it cannot drift, and nothing is stored. `name_checker` names a different
+#: checker for the task (`POST /tasks/{id}/checker`); `review_yourself` opens the operator's own
+#: review of it.
+REMEDIES: Dict[str, "tuple[str, ...]"] = {"review_unstaffed": ("name_checker", "review_yourself")}
+
+
+def remedies_of(stall: Stall) -> List[str]:
+    """The remedies an open stall about one task offers; none once it ended or names no task."""
+    if stall.ended_at is not None or not stall.task_id:
+        return []
+    return list(REMEDIES.get(stall.cause, ()))
+
+
+async def end_review_stalls(db: AsyncSession, task: Task, detail: str) -> int:
+    """End the open `review_unstaffed` stalls naming *task*, `resolved`: the operator removed their
+    cause. Commits, and broadcasts each as `stalls.end` does."""
+    rows = (
+        (
+            await db.execute(
+                select(Stall).where(
+                    Stall.project_id == task.project_id,
+                    Stall.task_id == task.id,
+                    Stall.cause == "review_unstaffed",
+                    Stall.ended_at.is_(None),
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    for stall in rows:
+        await end(db, stall, "resolved", detail)
+    return len(rows)
+
+
 def view(stall: Stall) -> Dict[str, Any]:
     def at(value: Optional[datetime]) -> Optional[str]:
         return value.isoformat() if value is not None else None
@@ -415,6 +452,7 @@ def view(stall: Stall) -> Dict[str, Any]:
         "outcome": stall.outcome,
         "outcome_detail": stall.outcome_detail,
         "ended_at": at(stall.ended_at),
+        "remedies": remedies_of(stall),
     }
 
 

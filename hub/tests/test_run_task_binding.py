@@ -433,14 +433,15 @@ async def test_an_unbound_run_has_nothing_to_have_neglected(app):
 
 @pytest.mark.asyncio
 async def test_another_run_moving_the_task_does_not_absolve_this_one(app):
-    """The question is about this run, not about the task. A second agent tidying up afterwards
-    does not make the first run's turn clean."""
+    """The question is about this run, not about the task. Somebody else tidying up afterwards
+    does not make the first run's turn clean. The operator, since only the task's builder profile
+    completes it among agents (`a-two-profile-build-cannot-deadlock-and-a-stall-says-so`, FR-5)."""
     async with async_session_factory() as session:
         task = await _make_task(session, "task-boundary-4", "pending")
         run = _run("run-boundary-4")
         session.add(run)
         await bind_run_to_task(session, run, task)
-        await apply_transition(session, task, "completed", run_actor("run-other", "reviewer"))
+        await apply_transition(session, task, "completed", operator())
         await session.commit()
 
         assert await run_advanced_its_task(session, run) is False

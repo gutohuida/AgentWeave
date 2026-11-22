@@ -538,6 +538,11 @@ export function ConversationView({
       availableTabs={availablePanelTabs}
       describeTab={describePanelTab}
       renderTabContent={renderPanelTabContent}
+      onClose={() => {
+        // What ⋯ › Hide side panel does, from the panel itself.
+        setShellOpen(projectId, false)
+        setOverlayOpen(false)
+      }}
     />
   ) : null
 

@@ -48,6 +48,8 @@ export interface NeedItem {
   picker?: { label: string; options: string[]; value: string; onChange: (value: string) => void }
   /** Further controls, shown first (a way to open the task or the mender's thread). */
   more?: { label: string; onClick: () => void }[]
+  /** A stall's remedies, drawn beside its notice by the one component every surface uses (FR-8). */
+  remedies?: React.ReactNode
 }
 
 export interface RunningItem {
@@ -256,6 +258,7 @@ export function OverviewView({
                   <div className="aw-ov-need-body">
                     <p className="aw-ov-need-title">{need.title}</p>
                     {need.detail ? <p className="aw-ov-need-detail">{need.detail}</p> : null}
+                    {need.remedies ?? null}
                     {need.options?.length ? (
                       <div className="aw-ov-options" role="group" aria-label="Answers">
                         {need.options.map((option) => (

@@ -2590,6 +2590,106 @@ async def reassign_task(
     return rendered
 
 
+class NameCheckerRequest(RequestModel):
+    agent: str = Field(min_length=1, max_length=64)
+
+
+@router.post("/{task_id}/checker", response_model=TaskResponse)
+async def name_checker(
+    task_id: OperatorTaskId,
+    body: NameCheckerRequest,
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    """Name a different checker for a task, the remedy a `review_unstaffed` stall offers
+    (`a-two-profile-build-cannot-deadlock-and-a-stall-says-so`, D5, FR-8).
+
+    The build's people record the new checker for the task, so the flow's later reviews of it go to
+    them too; finished work is handed to them for review now, through the mender's hand-off, which
+    refuses an author of the work; and the task's open `review_unstaffed` stalls end, their cause
+    removed. A checker who is not open, mends stalls, has no runner, or is the task's builder is
+    refused before anything changes, naming why."""
+    from ... import flow_advance, stalls
+    from ...task_transition_service import builder_profile
+    from .mender import hand_to_review
+
+    project_id, _ = project
+    task = await session.get(Task, task_id)
+    if task is None or task.project_id != project_id:
+        raise HTTPException(status_code=404, detail=f"Task '{task_id}' not found")
+    if task.status in TERMINAL_STATUSES:
+        raise HTTPException(
+            status_code=409,
+            detail=f"{task.display_id} is {task.status}, so there is nothing left to check.",
+        )
+    agent = body.agent.strip()
+    await agent_profiles.require_not_folded(session, project_id, agent)
+    refusal = await assignee_refusal(session, project_id, agent)
+    if refusal is not None:
+        raise HTTPException(status_code=422, detail=refusal)
+    checker = await session.scalar(
+        select(Agent).where(Agent.project_id == project_id, Agent.name == agent)
+    )
+    if stalls.is_mender(checker):
+        raise HTTPException(status_code=422, detail=f"{agent} mends stalls and checks no task.")
+    if checker is None or checker.runner_id is None:
+        raise HTTPException(
+            status_code=422,
+            detail=f"{agent} has no runner bound, so it cannot check this task. Bind a "
+            f"runner to {agent}, or name a different checker.",
+        )
+    builder = await builder_profile(session, task)
+    if builder and builder.casefold() == agent.casefold():
+        raise HTTPException(
+            status_code=422,
+            detail=f"{agent} is this task's builder, and a builder does not check its own "
+            "task. Name a different checker, or review it yourself.",
+        )
+    if task.status == "completed":
+        # An author of the work may not review it: asked before anything changes.
+        from .agent_trigger import review_dispatch_refusal
+
+        refused = await review_dispatch_refusal(session, task, reviewer=agent)
+        if refused is not None:
+            raise HTTPException(status_code=refused[0], detail=refused[1])
+    if task.build_id:
+        build = await session.get(Build, task.build_id)
+        if build is not None and isinstance(build.people, dict):
+            people = dict(build.people)
+            tasks_map = dict(people.get("tasks") or {})
+            key = task.spec_task_key or task.id
+            entry = dict(tasks_map.get(key) or {})
+            entry["checker"] = agent
+            # The pool entry chosen for the old checker ran on its runner; the new one runs on its
+            # own (`chosen_entry`).
+            entry.pop("checker_entry", None)
+            tasks_map[key] = entry
+            people["tasks"] = tasks_map
+            build.people = people
+    task.updated = datetime.now(timezone.utc)
+    if task.status == "completed":
+        await session.commit()
+        try:
+            await hand_to_review(session, task, agent, origin="operator")
+            next_turn = f"{agent} is {task.display_id}'s checker, and its review turn is queued."
+        except HTTPException as exc:
+            # The checker is named either way; the review waits for what the hand-off names.
+            next_turn = (
+                f"{agent} is {task.display_id}'s checker. Its review is not queued yet: "
+                + (exc.detail if isinstance(exc.detail, str) else "the hand-off was refused.")
+            )
+    else:
+        await session.commit()
+        next_turn = f"{agent} is {task.display_id}'s checker from its next review."
+    await stalls.end_review_stalls(session, task, f"The operator named {agent} as the checker.")
+    if await flow_advance.is_live(session, task.loop_id):
+        flow_advance.request(task.loop_id)
+    await session.refresh(task)
+    rendered = await _commit_and_render(session, task, project_id=project_id, approval_report=[])
+    rendered.next_turn = next_turn
+    return rendered
+
+
 class LandRequest(RequestModel):
     """Land's optional body: the operator's reason to land over failing checks (F605)."""
 

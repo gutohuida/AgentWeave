@@ -25,6 +25,7 @@ import contextlib
 import logging
 import os
 import shutil
+import subprocess
 import sys
 import weakref
 from dataclasses import dataclass, field
@@ -61,6 +62,7 @@ from ... import (
     task_workspace,
     tool_server,
     traces,
+    workspace_preparation,
     worktrees,
 )
 from ...agent_auth import hash_run_token, mint_run_token
@@ -751,6 +753,7 @@ class TriggerAgentError(Exception):
         agent_wide: bool = False,
         agent_workspace_unavailable: bool = False,
         after_rollback: Optional[Callable[[AsyncSession], Awaitable[None]]] = None,
+        retry_later: bool = False,
     ) -> None:
         self.status_code = status_code
         self.detail = detail
@@ -863,6 +866,11 @@ class TriggerAgentError(Exception):
         #: opens the operator's question this way: committing it on the dispatch's own session
         #: would make whatever the dispatch staged durable along with it.
         self.after_rollback = after_rollback
+        #: Nothing else will ask again: no turn is running whose end re-drains the queue, and the
+        #: condition is the machine's rather than the input's (a git that did not finish in time).
+        #: `turn_scheduler` tries the agent again after a delay; the attempt is still counted, so a
+        #: git that never finishes gives the input up and says so instead of retrying forever.
+        self.retry_later = retry_later
         super().__init__(detail)
 
 
@@ -1069,7 +1077,7 @@ async def _review_cause_from_entries(
 
 
 async def review_dispatch_refusal(
-    session: AsyncSession, task: "Task", *, reviewer: str
+    session: AsyncSession, task: "Task", *, reviewer: str, thread: Optional[str] = None
 ) -> "Optional[Tuple[int, str]]":
     """Why *reviewer* may not be dispatched to review *task*, or `None`.
 
@@ -1092,7 +1100,7 @@ async def review_dispatch_refusal(
     """
     # Imported here, not at module scope: this module is imported back by `task_transitions`'s
     # neighbours, and the service imports nothing from the API layer.
-    from ...task_transition_service import authorship_reason
+    from ...task_transition_service import NEW_THREAD, authorship_reason
 
     if task.status not in (REVIEWABLE_LOOP_TASK_STATUSES + WITH_REVIEWER_LOOP_TASK_STATUSES):
         return (
@@ -1101,7 +1109,9 @@ async def review_dispatch_refusal(
             f"A review begins from work that is awaiting one. Staffing a reviewer onto this task "
             f"would take it from whoever holds it and move it nowhere.",
         )
-    reason = await authorship_reason(session, task, reviewer)
+    # By thread (D2): *thread* is the lineage the review would run in, where the caller names an
+    # existing conversation; otherwise the dispatch opens a new one, which no authoring thread is.
+    reason = await authorship_reason(session, task, reviewer, thread=thread or NEW_THREAD)
     if reason is not None:
         # F505: whether or not another agent completed it -- the verdict guard's rule, read alike.
         # One clause, `authorship_reason`, shared with the transition guards (FR-8).
@@ -1936,10 +1946,18 @@ async def _trigger_agent_directly(
             task_id=turn_workspace.task_id if takes_task else None,
         )
         try:
-            with traces.work(
-                "worktree_create",
-                project_id,
-                **{"aw.agent": agent, "aw.task.id": turn_workspace.task_id},
+            async with (
+                workspace_preparation.preparing(
+                    project_id,
+                    agent=agent,
+                    task_id=turn_workspace.task_id if takes_task else None,
+                    conversation_id=conversation.id,
+                ),
+                traces.work(
+                    "worktree_create",
+                    project_id,
+                    **{"aw.agent": agent, "aw.task.id": turn_workspace.task_id},
+                ),
             ):
                 # Serialized with every other worktree creation, release and merge, as they
                 # were while they ran on the loop (`blocking.run_serialized`, D5).
@@ -1957,6 +1975,22 @@ async def _trigger_agent_directly(
                     clear_stale_lock=clear_stale_lock,
                     thread=thread,
                 )
+        except subprocess.SubprocessError as exc:
+            # A git that did not finish while preparing the checkout (`TimeoutExpired`). Not a
+            # `GitCommandError`, so before this it escaped the trigger: the input stayed queued
+            # with no reason and no count, nothing re-drained it, and a flow read the task as
+            # being worked by a turn that never existed (2026-11-21).
+            where = (
+                f"the checkout for task {turn_workspace.task_id}"
+                if takes_task
+                else f"{agent}'s workspace"
+            )
+            raise TriggerAgentError(
+                status.HTTP_409_CONFLICT,
+                f"Git did not finish preparing {where} ({type(exc).__name__}); "
+                "the Hub will try again shortly",
+                retry_later=True,
+            ) from exc
         except (worktrees.GitCommandError, worktrees.IsolationUnavailableError) as exc:
             if isinstance(exc, worktrees.CheckoutLockedError):
                 _report_locked_checkout(
@@ -2900,7 +2934,13 @@ async def trigger_agent(
             )
         # The status first (F731): a pending task was refused as "has no branch to review", true
         # but beside the point -- nothing about it is awaiting a review yet.
-        early = await review_dispatch_refusal(session, review_target, reviewer=body.agent)
+        # The named conversation's thread, where the operator continues one (D2).
+        early = await review_dispatch_refusal(
+            session,
+            review_target,
+            reviewer=body.agent,
+            thread=(conversation.lineage_id or conversation.id) if conversation else None,
+        )
         if early is not None:
             raise HTTPException(status_code=early[0], detail=early[1])
         from ...task_integration import review_target as resolve_review_target

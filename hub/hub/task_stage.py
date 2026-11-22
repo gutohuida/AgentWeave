@@ -16,10 +16,12 @@ from typing import Dict, Optional, Tuple
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from . import loose_close
+from . import loose_close, workspace_preparation
 from .db.models import EventLog, Question, Run, Task, TaskLanding, TaskTransition
 
 NOT_STARTED = "not_started"
+#: Its turn is starting: the Hub is preparing the task's checkout (`workspace_preparation`).
+PREPARING_CHECKOUT = "preparing_checkout"
 WORKING = "working"
 WAITING_FOR_ANSWER = "waiting_for_answer"
 WAITING_FOR_REVIEW = "waiting_for_review"
@@ -153,6 +155,8 @@ async def attach_stages(session: AsyncSession, responses: list, *, project_id: s
         if isinstance(data, dict) and data.get("task_id") in ids:
             held_back[data["task_id"]] = (at, data.get("reason"))
 
+    preparing = workspace_preparation.preparing_task_ids(project_id)
+
     held_on = {
         landing.waits_on
         for landing in landings.values()
@@ -214,6 +218,9 @@ async def attach_stages(session: AsyncSession, responses: list, *, project_id: s
         elif r.id in running:
             stage = WORKING
             since = running[r.id]
+        elif r.id in preparing:
+            stage = PREPARING_CHECKOUT
+            since = preparing[r.id]
         else:
             stage = NOT_STARTED
             if unfinished:

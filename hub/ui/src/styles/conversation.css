@@ -8,8 +8,10 @@
   padding: 0 12px 0 18px;
   border-bottom: 1px solid var(--border-region);
 }
+/* The agent's name gives way only once the title has none left (a near-zero shrink factor), so a
+   long name can never push the bar's controls under the side panel. */
 .aw-convbar-agent {
-  display: inline-flex; align-items: center; gap: 7px; flex: none;
+  display: inline-flex; align-items: center; gap: 7px; flex: 0 0.001 auto; min-width: 0;
   font-size: 13px; font-weight: 600; color: var(--text);
 }
 .aw-convbar-dot { width: 8px; height: 8px; border-radius: 999px; background: var(--agent-accent); }
@@ -44,8 +46,39 @@
 @media (max-width: 1100px) {
   .aw-convbar-end .context-usage-label { display: none; }
 }
+/* Compaction by the bar's own width (F1201), set by ConversationBar as `data-compact`, one step
+   at a time: 1 the context label becomes its percentage, 2 Checkpoint is icon-only (its
+   accessible name stays), 3 Checkpoint is an item in ⋯. */
+.aw-convbar:not([data-compact="0"]) .aw-convbar-end .context-usage-label { display: none; }
+.aw-convbar:not([data-compact="0"]) .aw-convbar-end .context-usage-short { display: inline; }
+.aw-convbar[data-compact="2"] .aw-convbar-checkpoint-label,
+.aw-convbar[data-compact="3"] .aw-convbar-checkpoint-label { display: none; }
+.aw-convbar[data-compact="3"] [data-testid="conversation-handoff"] { display: none; }
+/* The last step also takes the bar's slack, so a Running bar at a 380px column still leaves the
+   title its minimum: tighter gaps and padding, and no room held for the rename pencil (which only
+   shows on hover; the title's tooltip still says it renames). */
+.aw-convbar[data-compact="3"] { gap: 4px; padding-left: 10px; padding-right: 6px; }
+.aw-convbar[data-compact="3"] .aw-convbar-title { padding: 0 3px; margin-left: -2px; }
+.aw-convbar[data-compact="3"] .aw-convbar-end { gap: 4px; padding-left: 4px; }
+.aw-convbar[data-compact="3"] .aw-convbar-status { margin-left: 0; }
+.aw-convbar[data-compact="3"] .aw-convbar-end .context-usage-control { margin-right: 0; }
+.aw-convbar[data-compact="3"] .aw-convbar-title-pencil { display: none; }
 @media (prefers-reduced-motion: reduce) {
   .aw-convbar-status[data-running="true"]::before { animation: none; }
+}
+
+/* ── Composer controls ───────────────────────────────────────────────── */
+/* By the row's own width (F1201). 560px holds every control with its prefix on one line; below
+   it the prefixes go (the accessible names keep them); below 440px Explore is icon-only and the
+   controls flow as one run, so the row takes at most two lines with send at its end. */
+.aw-composer-controls { container: aw-composer-controls / inline-size; }
+@container aw-composer-controls (max-width: 559px) {
+  .aw-composer-prefix { display: none; }
+  .aw-composer-control-row { justify-content: flex-start; column-gap: 4px; }
+  .aw-composer-control-row [data-slot="composer-control-row-leading"] { display: contents; }
+}
+@container aw-composer-controls (max-width: 439px) {
+  .aw-composer-explore-text { display: none; }
 }
 
 /* ── Peer messages ───────────────────────────────────────────────────── */

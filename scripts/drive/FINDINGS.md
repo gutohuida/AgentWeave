@@ -42117,3 +42117,14 @@ Authoring slice 1 of `profiles-rollout-ui-ux-and-flow-fixes` on 2026-11-21, a sa
 **Source:** found by driving
 **Theme:** spec documents
 **Ready:** yes
+## F1200 (A) -- a git that times out preparing a turn's checkout wedges the queue, and a flow reads it as "being worked"
+
+**Number collision:** filed on master while another branch also filed an F1200 ("no way to make a runner", above), which the profiles-rollout specs cite. Both keep the number; name this one "F1200 (checkout timeout)" when citing it.
+
+**Status:** fixed 2026-11-21 (Tier 0, Architect, by the operator's request in-thread, no task). `agent_trigger` turns a `subprocess.SubprocessError` from `resolve_turn_workspace` into a 409 `TriggerAgentError(retry_later=True)`: the entry records the reason, the attempt is counted (given up at `DELIVERY_ATTEMPT_LIMIT`, so a git that never finishes says so), and `turn_scheduler.retry_refused_later` tries again after 30 s, since no run's end would. `git worktree add` gets `_WORKTREE_ADD_TIMEOUT_SECONDS = 300` (the stale-lock age follows it). **Test:** `hub/tests/test_a_git_that_does_not_finish_preparing_a_checkout.py` (the scheduler test raised `TimeoutExpired` out of `schedule_agent` before the fix). Also new: the app shows a checkout being prepared (`workspace_preparation`, `GET /workspace/preparing`, task stage `preparing_checkout`, the thread's "Preparing this thread's checkout" line).
+**Source:** found by the operator on `:8000`, 2026-11-21 ("every task on this loop's queue is already being worked", nothing running); diagnosed from `trace_spans` and `inbound_queue_entries`.
+**Theme:** flows and the turn queue
+**Ready:** yes
+**Tier:** 0
+
+A flow handed TPBCD-1 to Developer at 14:35:00; `git worktree add -b agentweave/task/task-09dd80eb9515 ... master` ran past 30 s and raised `TimeoutExpired`, which is not a `GitCommandError`, so it escaped the trigger. `schedule_accepted` logged it as non-transient and left the entry `queued` with no reason and no count; nothing re-drained it. The flow's walk counted the queued briefing as attendance and answered "already being worked ... nothing is wrong" for a turn that never existed. Git finished on its own after the kill. **Not covered:** any other non-`TriggerAgentError` raised inside a trigger still lands in `schedule_accepted`'s log-and-keep branch with nothing to re-drain it.

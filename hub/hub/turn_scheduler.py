@@ -564,6 +564,32 @@ def retry_schedule(project_id: str, agent: str) -> None:
     task.add_done_callback(lambda _t, key=key: _pending_retries.pop(key, None))
 
 
+#: How long a refusal that asked to be retried (`TriggerAgentError.retry_later`) waits first.
+REFUSAL_RETRY_DELAY_SECONDS = 30.0
+
+_pending_refusal_retries: Dict[Tuple[str, str], "asyncio.Task[None]"] = {}
+
+
+def retry_refused_later(project_id: str, agent: str) -> None:
+    """Try the agent's queue once more after `REFUSAL_RETRY_DELAY_SECONDS`, unless already pending.
+
+    For a refusal about the machine rather than the input -- a git that did not finish preparing a
+    checkout. Each retry that is refused again counts a delivery attempt, so the input is given up
+    on, and says why, at `DELIVERY_ATTEMPT_LIMIT` rather than retried forever.
+    """
+    key = (project_id, agent)
+    if key in _pending_refusal_retries:
+        return
+
+    async def _later() -> None:
+        await asyncio.sleep(REFUSAL_RETRY_DELAY_SECONDS)
+        # Released before the attempt, so a refusal of this very retry can schedule the next one.
+        _pending_refusal_retries.pop(key, None)
+        await schedule_accepted(project_id, agent)
+
+    _pending_refusal_retries[key] = asyncio.get_running_loop().create_task(_later())
+
+
 async def _retry(project_id: str, agent: str) -> None:
     """Try again after each delay; stop at the first call that does not raise a transient error.
 
@@ -1029,6 +1055,9 @@ async def _attempt_turn(
             if getattr(exc, "request_level", False) and not transient
             else None
         )
+        if getattr(exc, "retry_later", False) and len(abandoned) < len(selected):
+            # Nothing else asks again: no run is going whose end re-drains this queue.
+            retry_refused_later(project_id, agent)
         return _Attempt(
             ScheduleResult(
                 waiting_reason=exc.detail,

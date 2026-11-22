@@ -5,6 +5,7 @@ import { NewConversationSurface } from '@/components/agents/NewConversationSurfa
 import { useConfigStore } from '@/store/configStore'
 import { setComposerText, composerText } from './testUtils/composerField'
 
+vi.mock('@/hooks/useSSE', () => ({ useSSE: () => {} }))
 vi.mock('@/api/agents', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/api/agents')>()),
   useAgents: () => ({
