@@ -6,11 +6,12 @@ import { TopBar } from '@/components/layout/TopBar'
 
 const mutate = vi.fn()
 
-/** The Provider list is a menu (`MenuSelect`): open it, then choose a row. */
-async function pickProvider(name: RegExp) {
-  await userEvent.click(screen.getByRole('button', { name: 'Provider' }))
+/** Provider, Model and Charter are menus (`MenuSelect`): open one, then choose a row. */
+async function pick(menu: 'Provider' | 'Model' | 'Charter', name: RegExp | string) {
+  await userEvent.click(screen.getByRole('button', { name: menu }))
   await userEvent.click(screen.getByRole('menuitemradio', { name }))
 }
+const pickProvider = (name: RegExp) => pick('Provider', name)
 let mutationError: Error | null = null
 
 vi.mock('@/api/agents', () => ({
@@ -85,8 +86,8 @@ describe('operator agent creation dialog', () => {
     await userEvent.click(screen.getByRole('menuitemradio', { name: /Codex CLI/ }))
 
     fireEvent.change(screen.getByLabelText('Profile name'), { target: { value: 'codex-gamma' } })
-    fireEvent.change(screen.getByLabelText('Model'), { target: { value: 'gpt-5.6-sol' } })
-    fireEvent.change(screen.getByLabelText('Charter'), { target: { value: 'charter-reviewer' } })
+    await pick('Model', 'GPT-5.6-Sol')
+    await pick('Charter', 'Code Reviewer')
     fireEvent.click(screen.getByRole('button', { name: 'Create profile' }))
     expect(mutate).toHaveBeenCalledWith(
       { name: 'codex-gamma', provider: 'codex', model: 'gpt-5.6-sol', charter_id: 'charter-reviewer' },
@@ -105,7 +106,7 @@ describe('operator agent creation dialog', () => {
 
     expect(screen.getByLabelText('Profile name')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Provider' })).toBeInTheDocument()
-    expect(screen.getByLabelText('Charter')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Charter' })).toBeInTheDocument()
 
     for (const absent of [/timeout/i, /threshold/i, /permission/i, /access/i, /checkpoint/i, /worktree/i]) {
       expect(screen.queryByLabelText(absent)).not.toBeInTheDocument()
@@ -132,7 +133,17 @@ describe('operator agent creation dialog', () => {
   it('selects the catalog default model when the provider changes', async () => {
     render(<AgentCreateDialog open onClose={vi.fn()} onCreated={vi.fn()} />)
     await pickProvider(/Codex CLI/)
-    expect(screen.getByLabelText('Model')).toHaveValue('gpt-5.6-sol')
+    expect(screen.getByRole('button', { name: 'Model' })).toHaveTextContent('GPT-5.6-Sol')
+  })
+
+  it('renders no native select, and its name placeholder names the chosen provider (F1204)', async () => {
+    render(<AgentCreateDialog open onClose={vi.fn()} onCreated={vi.fn()} />)
+    expect(document.querySelector('select')).toBeNull()
+    await pickProvider(/Codex CLI/)
+    expect(screen.getByLabelText('Profile name')).toHaveAttribute('placeholder', 'codex-reviewer')
+    await pickProvider(/Future CLI/)
+    expect(screen.getByLabelText('Profile name')).toHaveAttribute('placeholder', 'future-cli-reviewer')
+    expect(document.querySelector('select')).toBeNull()
   })
 
   it('shows the selected provider as the trigger label and closes the picker on choice', async () => {
@@ -149,24 +160,24 @@ describe('operator agent creation dialog', () => {
     expect(option).not.toHaveAttribute('aria-disabled', 'true')
     await userEvent.click(option)
     expect(screen.getByRole('button', { name: 'Provider' })).toHaveTextContent('Future CLI')
-    expect(screen.getByLabelText('Model')).toHaveValue('future-1')
+    expect(screen.getByRole('button', { name: 'Model' })).toHaveTextContent('Future One')
   })
 
   it('offers a declared alias as its own "Latest" choice, labelled with its current target (a-model-alias-is-a-model-choice)', async () => {
     render(<AgentCreateDialog open onClose={vi.fn()} onCreated={vi.fn()} />)
     await pickProvider(/Future CLI/)
 
-    const modelSelect = screen.getByLabelText('Model') as HTMLSelectElement
-    const optionTexts = [...modelSelect.querySelectorAll('option')].map((o) => o.textContent)
+    await userEvent.click(screen.getByRole('button', { name: 'Model' }))
+    const optionTexts = screen.getAllByRole('menuitemradio').map((o) => o.querySelector('.truncate')?.textContent)
     expect(optionTexts).toEqual(['Future One', 'future-latest — latest (now Future One)'])
 
-    fireEvent.change(modelSelect, { target: { value: 'future-latest' } })
-    expect(modelSelect.value).toBe('future-latest')
+    await userEvent.click(screen.getByRole('menuitemradio', { name: /future-latest/ }))
+    expect(screen.getByRole('button', { name: 'Model' })).toHaveTextContent('future-latest — latest (now Future One)')
   })
 
   it('does not offer a model select before a provider is chosen', () => {
     render(<AgentCreateDialog open onClose={vi.fn()} onCreated={vi.fn()} />)
-    expect(screen.queryByLabelText('Model')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Model' })).not.toBeInTheDocument()
   })
 
   it('preserves fields and shows a typed API failure inline', () => {

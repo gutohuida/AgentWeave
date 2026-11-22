@@ -10,7 +10,7 @@ from typing import Any, Dict, List, Literal, NamedTuple, Optional, Sequence, Tup
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field, model_validator
-from sqlalchemy import func, literal_column, select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 
@@ -30,7 +30,14 @@ from ...agent_fold import apply_fold, plan_fold
 from ...agent_lifecycle import archivable as agent_archivable
 from ...agent_lifecycle import archive as archive_agent_row
 from ...agent_lifecycle import unarchive as unarchive_agent_row
-from ...agent_pool import PoolRefusalError, bind_default, pool_out, pools_by_agent, replace_pool
+from ...agent_pool import (
+    PoolRefusalError,
+    bind_default,
+    plain_runner_for,
+    pool_out,
+    pools_by_agent,
+    replace_pool,
+)
 from ...agent_pool import serialize_pool as serialize_agent_pool
 from ...agent_roster import require_agent_row, require_known_agent
 from ...agent_status import effective_heartbeat_status
@@ -64,9 +71,7 @@ from ...launchability import (
 )
 from ...model_catalog import (
     FULL_ACCESS_PERMISSION_MODE,
-    get_provider,
     permission_mode_values,
-    undeclared_model_reason,
 )
 from ...output_recording import record_agent_output
 from ...project_setup import publish_setup_changed
@@ -74,7 +79,7 @@ from ...reach import validated_grants
 from ...review_turn import ReviewContext, verdict_evidence_sentence
 from ...runner_adapters import get_adapter, resolve_access_axes
 from ...runner_commands import posture_needs_approver
-from ...runner_provider import has_provider, runner_probe_config
+from ...runner_provider import runner_probe_config
 from ...schemas.agents import (
     AgentHeartbeatCreate,
     AgentOutputCreate,
@@ -653,51 +658,11 @@ COPILOT_REVIEW_AGENTS = ("code-review", "security-review", "rubber-duck")
 async def _plain_runner_for(
     session: AsyncSession, project_id: str, provider: Optional[str], model: Optional[str]
 ) -> Runner:
-    """The project's plain runner for a provider and model: reused when there is one, else added to
-    the session (not committed). `model` None is the provider's own default. Raises 400 for a
-    provider or model the catalog does not declare."""
-    provider_entry = get_provider(provider)
-    model_entry = provider_entry.model(model) if provider_entry is not None and model else None
-    if provider_entry is None or (model and model_entry is None):
-        raise HTTPException(status_code=400, detail=undeclared_model_reason(provider, model))
-    existing_runner = await session.execute(
-        select(Runner).where(
-            Runner.project_id == project_id,
-            Runner.cli == provider,
-            Runner.model == model,
-        )
-        # Oldest first, and the rowid breaks a created_at tie (F177's order).
-        .order_by(Runner.created_at, literal_column("runners.rowid"))
-    )
-    # Only a plain runner is what the dialog promises (F600): one with flags or a model
-    # provider runs differently from "Claude Code, Haiku" -- it bound a permission-bypassing
-    # runner in the 2026-10-15 sweep. `None`, `[]` and a provider config of `None` are plain.
-    runner = next(
-        (
-            candidate
-            for candidate in existing_runner.scalars().all()
-            if not candidate.flags and not has_provider(candidate.provider_config)
-        ),
-        None,
-    )
-    if runner is None:
-        # An alias is named by what was chosen, not by its current target (design.md D1): a
-        # runner named for today's target would be a new F268 once the alias moves on.
-        if model_entry is None:
-            name_suffix = "default"
-        elif model_entry.id != model:
-            name_suffix = f"{model} (latest)"
-        else:
-            name_suffix = model_entry.label
-        runner = Runner(
-            id=f"runner-{short_id()}",
-            project_id=project_id,
-            name=f"{provider_entry.label} — {name_suffix}",
-            cli=provider,
-            model=model,
-        )
-        session.add(runner)
-    return runner
+    """`agent_pool.plain_runner_for`, its refusal answered as the 400 it names."""
+    try:
+        return await plain_runner_for(session, project_id, provider, model)
+    except PoolRefusalError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.message) from exc
 
 
 @router.post("", response_model=OperatorAgentResponse, status_code=status.HTTP_201_CREATED)

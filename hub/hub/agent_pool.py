@@ -8,7 +8,8 @@ predates pools — the launch path, launchability, dashboards — keeps reading 
 Every write of a pool, and every write of `Agent.runner_id` by a door that binds a runner, goes
 through this module: `replace_pool` for the agents API's `pool` field, `bind_default` for the
 legacy binding (`runner_id`, or `provider` and `model`) and for the doors that create an agent.
-Keeping both writes here is what keeps the two agreeing.
+Keeping both writes here is what keeps the two agreeing. `plain_runner_for` is the one way a model
+named by provider becomes a runner: the project's plain runner for it, reused, or a new one.
 """
 
 from __future__ import annotations
@@ -16,17 +17,22 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, literal_column, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .db.models import Agent, AgentPoolEntry, Runner
-from .model_catalog import get_provider
+from .model_catalog import get_provider, undeclared_model_reason
+from .runner_provider import has_provider
 from .utils import short_id
 
-#: What a pool entry in a request may carry. `runner_id`, `effort` and `default` are read; the rest
-#: are the read shape's own fields (`hub/ui/src/api/agentPool.ts`), accepted so a caller may send
-#: back the entries it read, and ignored, because the runner is what decides them.
-_ENTRY_FIELDS = frozenset({"id", "runner_id", "runner_name", "cli", "model", "effort", "default"})
+#: What a pool entry in a request may carry. An entry names its runner by `runner_id`, or, without
+#: one, names a model by `provider` and `model` (F1200): the project's plain runner for that model
+#: is used, or made. `effort` and `default` are read either way. The rest are the read shape's own
+#: fields (`hub/ui/src/api/agentPool.ts`), accepted so a caller may send back the entries it read,
+#: and ignored beside a `runner_id`, because the runner is what decides them.
+_ENTRY_FIELDS = frozenset(
+    {"id", "runner_id", "runner_name", "cli", "provider", "model", "effort", "default"}
+)
 
 _CLI_LABEL = {"claude": "Claude Code", "codex": "Codex", "copilot": "Copilot"}
 
@@ -88,6 +94,61 @@ def effort_refusal(runner: Runner, effort: Optional[str]) -> Optional[str]:
         f"{model_label(runner)} does not offer the effort {effort!r}; it offers "
         f"{', '.join(offered)}."
     )
+
+
+async def plain_runner_for(
+    session: AsyncSession, project_id: str, provider: object, model: object
+) -> Runner:
+    """The project's plain runner for a provider and model: reused when there is one, else added to
+    the session (not committed). `model` None is the provider's own default. Raises
+    `PoolRefusalError` naming the provider or model when the catalog does not declare it.
+
+    Only a runner with no flags and no model provider is reused (F600): one with either runs
+    differently from "Claude Code, Haiku", and reusing it bound a permission-bypassing runner in
+    the 2026-10-15 sweep. So adding the same model twice, to one profile or two, makes one runner.
+    """
+    if model is not None and not isinstance(model, str):
+        raise PoolRefusalError("model must be a string or null")
+    provider_entry = get_provider(provider) if isinstance(provider, str) else None
+    model_entry = provider_entry.model(model) if provider_entry is not None and model else None
+    if provider_entry is None or (model and model_entry is None):
+        raise PoolRefusalError(undeclared_model_reason(str(provider), str(model)))
+    assert isinstance(provider, str)
+    found = await session.execute(
+        select(Runner).where(
+            Runner.project_id == project_id,
+            Runner.cli == provider,
+            Runner.model == model,
+        )
+        # Oldest first, and the rowid breaks a created_at tie (F177's order).
+        .order_by(Runner.created_at, literal_column("runners.rowid"))
+    )
+    runner = next(
+        (
+            candidate
+            for candidate in found.scalars().all()
+            if not candidate.flags and not has_provider(candidate.provider_config)
+        ),
+        None,
+    )
+    if runner is None:
+        # An alias is named by what was chosen, not by its current target (design.md D1): a
+        # runner named for today's target would be a new F268 once the alias moves on.
+        if model_entry is None:
+            name_suffix = "default"
+        elif model_entry.id != model:
+            name_suffix = f"{model} (latest)"
+        else:
+            name_suffix = model_entry.label
+        runner = Runner(
+            id=f"runner-{short_id()}",
+            project_id=project_id,
+            name=f"{provider_entry.label} — {name_suffix}",
+            cli=provider,
+            model=model,
+        )
+        session.add(runner)
+    return runner
 
 
 async def pool_rows(session: AsyncSession, agent_id: str) -> List[AgentPoolEntry]:
@@ -194,10 +255,18 @@ async def bind_default(session: AsyncSession, agent: Agent, runner_id: Optional[
     agent.runner_id = runner_id
 
 
-def _parsed_entries(raw: object) -> List[Tuple[str, Optional[str], bool]]:
+@dataclass(frozen=True)
+class _ByModel:
+    """A request's entry named by provider and model instead of by a runner id."""
+
+    provider: object
+    model: object
+
+
+def _parsed_entries(raw: object) -> List[Tuple[str | _ByModel, Optional[str], bool]]:
     if not isinstance(raw, list):
         raise PoolRefusalError("pool must be a list of entries")
-    parsed: List[Tuple[str, Optional[str], bool]] = []
+    parsed: List[Tuple[str | _ByModel, Optional[str], bool]] = []
     for index, item in enumerate(raw):
         if not isinstance(item, dict):
             raise PoolRefusalError(f"pool[{index}] must be an object")
@@ -208,8 +277,17 @@ def _parsed_entries(raw: object) -> List[Tuple[str, Optional[str], bool]]:
                 f"Valid: {', '.join(sorted(_ENTRY_FIELDS))}"
             )
         runner_id = item.get("runner_id")
-        if not isinstance(runner_id, str) or not runner_id:
-            raise PoolRefusalError(f"pool[{index}] needs a runner_id")
+        target: str | _ByModel
+        if runner_id is None and "provider" in item:
+            # Named by model: resolved to a runner by `replace_pool`, before anything is written.
+            provider, model = item.get("provider"), item.get("model") or None
+            if not isinstance(provider, str) or not (model is None or isinstance(model, str)):
+                raise PoolRefusalError(f"pool[{index}]: provider and model must be strings")
+            target = _ByModel(provider, model)
+        elif isinstance(runner_id, str) and runner_id:
+            target = runner_id
+        else:
+            raise PoolRefusalError(f"pool[{index}] needs a runner_id, or a provider and model")
         effort = item.get("effort")
         if effort == "":
             effort = None
@@ -218,7 +296,7 @@ def _parsed_entries(raw: object) -> List[Tuple[str, Optional[str], bool]]:
         is_default = item.get("default", False)
         if not isinstance(is_default, bool):
             raise PoolRefusalError(f"pool[{index}]: default must be true or false")
-        parsed.append((runner_id, effort, is_default))
+        parsed.append((target, effort, is_default))
     return parsed
 
 
@@ -226,16 +304,29 @@ async def replace_pool(session: AsyncSession, agent: Agent, raw: object) -> None
     """Replace the agent's pool with *raw*, the agents API's `pool` (FR-3).
 
     The whole list is the new pool: an entry left out is removed, one not there is added, and
-    `default` names the default. Refused, with nothing written, when an entry names a runner the
-    project does not have, an effort its runner's CLI and model do not offer, the same runner and
-    effort twice, or more than one default; and when the default is removed from a pool that keeps
-    other entries without another being named default. A pool that names no default keeps the
-    current one when it is still listed, and a first pool of one entry makes that entry the default.
-    An empty list empties the pool, which unbinds the agent's runner.
+    `default` names the default. An entry may name a model by `provider` and `model` instead of a
+    runner (F1200): it runs on the project's plain runner for that model, made when there is none.
+    Refused, with nothing written, when an entry names a runner the project does not have, a
+    provider or model the catalog does not declare, an effort its runner's CLI and model do not
+    offer, the same runner and effort twice, or more than one default; and when the default is
+    removed from a pool that keeps other entries without another being named default. A pool that
+    names no default keeps the current one when it is still listed, and a first pool of one entry
+    makes that entry the default. An empty list empties the pool, which unbinds the agent's runner.
     """
-    parsed = _parsed_entries(raw)
+    # An entry named by model becomes the project's plain runner for it (`plain_runner_for`),
+    # made here when there is none: a refusal below leaves it uncommitted with everything else.
+    made: Dict[_ByModel, Runner] = {}
+    parsed: List[Tuple[str, Optional[str], bool]] = []
+    for target, effort, is_default in _parsed_entries(raw):
+        if isinstance(target, _ByModel):
+            if target not in made:
+                made[target] = await plain_runner_for(
+                    session, agent.project_id, target.provider, target.model
+                )
+            target = made[target].id
+        parsed.append((target, effort, is_default))
     existing = await pool_rows(session, agent.id)
-    runners: Dict[str, Runner] = {}
+    runners: Dict[str, Runner] = {runner.id: runner for runner in made.values()}
     for runner_id, _, _ in parsed:
         if runner_id in runners:
             continue

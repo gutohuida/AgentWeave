@@ -133,11 +133,13 @@ export function AgentSettingsBody({
             <PoolEditor
               agentName={agent.name}
               pool={pool}
-              runners={POOL_RUNNERS}
               catalog={POOL_CATALOG}
               error={poolError}
               onAdd={(choice) => {
-                const entry = poolEntry(choice.runner_id, choice.effort, pool.length === 0)
+                const runner = POOL_RUNNERS.find((r) => r.cli === choice.provider && r.model === choice.model)
+                const entry = runner
+                  ? poolEntry(runner.id, choice.effort, pool.length === 0)
+                  : { id: `pool-${choice.provider}-${choice.model}-${choice.effort ?? ''}`, runner_id: `runner-${choice.model}`, runner_name: choice.model, cli: choice.provider, model: choice.model, effort: choice.effort, default: pool.length === 0 }
                 setPool((p) => [...p, entry])
                 setPoolError(null)
                 say(`${agent.name} may run on ${label(entry)}`)
@@ -152,7 +154,6 @@ export function AgentSettingsBody({
                 setPoolError(null)
                 say(`${agent.name} runs on ${label(entry)} unless a task chooses another`)
               }}
-              onOpenRunners={() => go({ kind: 'settings', section: 'runners' })}
             />
           }
           model={model}
