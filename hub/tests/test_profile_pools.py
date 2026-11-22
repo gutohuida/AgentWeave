@@ -449,3 +449,121 @@ def test_migration_seeds_pools_when_create_all_already_made_the_table(tmp_path) 
     _upgrade_to(db_url, "0186")
 
     assert _pool_rows(db_file) == [("agent-bound", "proj-m", "runner-h", None, 1)]
+
+
+# ------------------------------------------- pool-add-by-model (spec a-profile-s-pool-and-a-new-
+# chat-can-use-any-model-of-any-provider, FR-2): an entry named by provider and model
+
+
+async def _runner_ids() -> list:
+    from sqlalchemy import select
+
+    from hub.db.models import Runner
+
+    async with async_session_factory() as session:
+        rows = await session.execute(select(Runner.id).where(Runner.project_id == "proj-test"))
+        return sorted(rows.scalars().all())
+
+
+@pytest.mark.asyncio
+async def test_pool_add_by_model_reuses_the_projects_runner_for_two_profiles(
+    app, auth_headers, add_agent
+):
+    """ac-api-reuse: Sonnet 5.5 by provider and model, to two profiles' pools, names the runner the
+    project already has for it, and the runner count does not change."""
+    haiku = await _runner(app, auth_headers, "Haiku", "claude-haiku-5-5")
+    sonnet = await _runner(app, auth_headers, "Sonnet", "claude-sonnet-5-5")
+    before = await _runner_ids()
+    for name in ("builder", "checker"):
+        await add_agent(name)
+        resp = await _set_pool(
+            app,
+            auth_headers,
+            name,
+            [
+                {"runner_id": haiku, "default": True},
+                {"provider": "claude", "model": "claude-sonnet-5-5", "effort": "high"},
+            ],
+        )
+        assert resp.status_code == 200, resp.text
+        assert _shape(resp.json()["pool"]) == [(haiku, None, True), (sonnet, "high", False)]
+        assert _shape((await _agent(app, auth_headers, name))["pool"]) == _shape(
+            resp.json()["pool"]
+        )
+    assert await _runner_ids() == before
+
+
+@pytest.mark.asyncio
+async def test_pool_add_by_model_makes_one_runner_for_a_model_no_runner_uses(
+    app, auth_headers, add_agent
+):
+    """ac-pool-adds-unused at the API: Opus 5.5 at High, which no runner uses, is added; the Hub
+    makes one plain runner for it, and adding it to a second profile makes no second one."""
+    haiku = await _runner(app, auth_headers, "Haiku", "claude-haiku-5-5")
+    before = await _runner_ids()
+    made = set()
+    for name in ("builder", "checker"):
+        await add_agent(name)
+        resp = await _set_pool(
+            app,
+            auth_headers,
+            name,
+            [
+                {"runner_id": haiku, "default": True},
+                {"provider": "claude", "model": "claude-opus-5-5", "effort": "high"},
+            ],
+        )
+        assert resp.status_code == 200, resp.text
+        opus = next(e for e in resp.json()["pool"] if e["model"] == "claude-opus-5-5")
+        assert (opus["cli"], opus["effort"], opus["default"]) == ("claude", "high", False)
+        made.add(opus["runner_id"])
+    assert len(made) == 1
+    assert await _runner_ids() == sorted([*before, *made])
+
+
+@pytest.mark.asyncio
+async def test_pool_add_by_model_the_same_model_twice_in_one_edit_is_one_runner(
+    app, auth_headers, add_agent
+):
+    await add_agent("builder")
+    resp = await _set_pool(
+        app,
+        auth_headers,
+        "builder",
+        [
+            {"provider": "codex", "model": "gpt-6-luna", "default": True},
+            {"provider": "codex", "model": "gpt-6-luna", "effort": "high"},
+        ],
+    )
+    assert resp.status_code == 200, resp.text
+    pool = resp.json()["pool"]
+    assert len({e["runner_id"] for e in pool}) == 1
+    assert (await _agent(app, auth_headers, "builder"))["runner_id"] == pool[0]["runner_id"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "entry, named",
+    [
+        ({"provider": "claude", "model": "not-a-model"}, "not-a-model"),
+        ({"provider": "not-a-cli", "model": "claude-opus-5-5"}, "not-a-cli"),
+        ({"provider": "claude", "model": "claude-opus-5-5", "effort": "ludicrous"}, "ludicrous"),
+    ],
+)
+async def test_pool_add_by_model_an_unknown_model_is_refused_and_changes_nothing(
+    app, auth_headers, haiku_sonnet, entry, named
+):
+    """ac-api-unknown: a 4xx naming what the catalog does not hold; the pool and the project's
+    runners are as they were."""
+    haiku, _ = haiku_sonnet
+    pool_before = (await _agent(app, auth_headers, "builder"))["pool"]
+    runners_before = await _runner_ids()
+
+    resp = await _set_pool(
+        app, auth_headers, "builder", [{"runner_id": haiku, "default": True}, entry]
+    )
+
+    assert 400 <= resp.status_code < 500, resp.text
+    assert named in resp.json()["detail"]
+    assert (await _agent(app, auth_headers, "builder"))["pool"] == pool_before
+    assert await _runner_ids() == runners_before

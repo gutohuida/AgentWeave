@@ -1,6 +1,5 @@
 import type { AgentPoolEntry, PoolEntryChoice } from '@/api/agentPool'
 import type { ModelCatalogResponse } from '@/api/modelCatalog'
-import type { Runner } from '@/api/runners'
 
 /**
  * The pool's pure rules (spec `a-profile-runs-each-task-on-a-runner-and-model-chosen-from-its-pool`):
@@ -61,18 +60,22 @@ export function defaultEntry(pool: AgentPoolEntry[]): AgentPoolEntry | undefined
   return pool.find((e) => e.default) ?? pool[0]
 }
 
-/** Why adding this entry would be refused (FR-3), or null when it would not be. */
+/** Why adding this catalog model at this effort would be refused, or null when it would not be.
+ *  The pool already holding the model at that effort is refused here, whichever runner holds it:
+ *  the operator chose a model, not a runner. */
 export function addRefusal(
   catalog: ModelCatalogResponse | undefined,
   pool: AgentPoolEntry[],
-  runner: Runner | undefined,
+  choice: { provider: string; model: string } | null,
   effort: string | null,
 ): string | null {
-  if (!runner) return 'Choose a runner.'
-  if (effort && !effortsFor(catalog, runner.cli).some((v) => v.id === effort)) {
-    return `${modelLabel(catalog, runner.cli, runner.model ?? null)} does not offer ${effort} effort.`
+  if (!choice) return 'Choose a model.'
+  if (effort && !effortsFor(catalog, choice.provider).some((v) => v.id === effort)) {
+    return `${modelLabel(catalog, choice.provider, choice.model)} does not offer ${effort} effort.`
   }
-  if (findEntry(pool, { runner_id: runner.id, effort })) return 'It is already in the list.'
+  if (pool.some((e) => e.cli === choice.provider && e.model === choice.model && (e.effort ?? null) === effort)) {
+    return 'It is already in the list.'
+  }
   return null
 }
 

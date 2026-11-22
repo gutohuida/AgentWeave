@@ -343,12 +343,13 @@ export function useSetupDismissal(projectId: string) {
   })
 }
 
-/** One of the setup offer's two profiles. `charter_id` null is no charter. */
-export interface OfferedProfileInput {
-  name: string
-  charter_id: string | null
-  runner_id: string
-}
+/** One of the setup offer's two profiles. `charter_id` null is no charter. It runs on a runner of
+ *  the project's, or on a catalog model named by provider and model, whose runner the Hub reuses
+ *  or makes (`a-profile-s-pool-and-a-new-chat-can-use-any-model-of-any-provider`, FR-9). */
+export type OfferedProfileInput = { name: string; charter_id: string | null } & (
+  | { runner_id: string }
+  | { provider: string; model: string }
+)
 
 export interface OfferedProfileCreated {
   id: string

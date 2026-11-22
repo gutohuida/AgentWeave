@@ -110,7 +110,7 @@ CLASSIFIED: list[tuple[str, str, int, str, str, str]] = [
     ('components/activity/ActivityLog.tsx', 'useAgents', 1, 'BLANK', '', 'agents only build a colour map (:62)'),
     ('components/agents/AgentCreateDialog.tsx', 'useModelCatalog', 1, 'MISREPORT', 'PICKER', '`providers = catalog?.providers ?? []` (:168) — the create dialog offers no provider'),
     ('components/agents/AgentCreateDialog.tsx', 'useProviderLaunchability', 1, 'SUPPRESSED', '', '`launchability?.[…]` (:84, :171) only decides whether a warning verdict is shown'),
-    ('components/agents/AgentCreateDialog.tsx', 'useCharters', 1, 'MISREPORT', 'PICKER', '`charters.map` into `<option>` (:231)'),
+    ('components/agents/AgentCreateDialog.tsx', 'useCharters', 1, 'MISREPORT', 'PICKER', '`charters.map` into the Charter menu'),
     ('components/agents/AgentOutputPanel.tsx', 'useAgentOutput', 1, 'BLANK', '', 'only `isLoading` is taken and `lines` is deliberately unread (:148-152)'),
     ('components/agents/AgentOutputPanel.tsx', 'usePendingPermissionRequests', 1, 'SUPPRESSED', '', '`permissionRequests = []` (:1127): a run waiting on an approval renders no card'),
     ('components/agents/AgentOutputPanel.tsx', 'useQuestions', 1, 'SUPPRESSED', '', '`pendingQuestion` null (:206) and `questions={[]}` (:1129): a run waiting on an answer renders no ask'),

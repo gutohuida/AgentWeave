@@ -2,10 +2,10 @@ import { useEffect, useRef, useState } from 'react'
 import { useCreateAgent } from '@/api/agents'
 import { useCharters } from '@/api/charters'
 import { useProviderLaunchability, type RunnerLaunchability } from '@/api/runners'
-import { useModelCatalog, catalogModelLabel, type ProviderDescriptor } from '@/api/modelCatalog'
+import { useModelCatalog, type ProviderDescriptor } from '@/api/modelCatalog'
 import { Button } from '@/components/ui/button'
-import { ProviderMark } from '@/components/common/Icon'
 import { MenuSelect } from '@/components/ui/menu'
+import { defaultModel, modelOptions, namePlaceholder, providerOptions } from './pool/catalogOptions'
 import { useDialogFocus } from '@/hooks/useDialogFocus'
 
 function errorDetail(error: unknown): string {
@@ -43,16 +43,7 @@ function ProviderPicker({
         onChange={onChange}
         maxWidth={9999}
         placeholder="Select a provider"
-        options={providers.map((entry) => {
-          const verdict = launchability?.[entry.provider]
-          return {
-            value: entry.provider,
-            label: entry.label,
-            icon: <ProviderMark provider={entry.provider} label={entry.label} />,
-            disabled: verdict?.runnable !== true,
-            detail: verdict && !verdict.runnable && verdict.reason ? verdict.reason : undefined,
-          }
-        })}
+        options={providerOptions(providers, launchability ?? {})}
       />
     </div>
   )
@@ -109,8 +100,6 @@ export function AgentCreateDialog({
 
   const providers = catalog?.providers ?? []
   const selectedProvider = providers.find((p) => p.provider === provider)
-  const models = selectedProvider?.models ?? []
-  const aliasModels = models.flatMap((model) => model.aliases.map((alias) => ({ alias, model })))
   const selectedVerdict = launchability?.providers[provider]
   const canSubmit = /^[a-zA-Z0-9_-]{1,32}$/.test(name.trim())
     && !!provider
@@ -119,8 +108,7 @@ export function AgentCreateDialog({
 
   const handleProviderChange = (nextProvider: string) => {
     setProvider(nextProvider)
-    const entry = providers.find((p) => p.provider === nextProvider)
-    setModel(entry?.models.find((m) => m.default)?.id ?? entry?.models[0]?.id ?? '')
+    setModel(defaultModel(providers.find((p) => p.provider === nextProvider)))
   }
 
   const submit = () => {
@@ -144,7 +132,7 @@ export function AgentCreateDialog({
 
         <label className="mt-4 block text-xs">
           Profile name
-          <input data-dialog-initial-focus value={name} onChange={(event) => setName(event.target.value)} placeholder="codex-reviewer" className="mt-1 block w-full rounded-md px-3 py-2" style={{ background: 'var(--surface-2)', border: '1px solid var(--border)' }} />
+          <input data-dialog-initial-focus value={name} onChange={(event) => setName(event.target.value)} placeholder={namePlaceholder(provider)} className="mt-1 block w-full rounded-md px-3 py-2" style={{ background: 'var(--surface-2)', border: '1px solid var(--border)' }} />
         </label>
         {name && !/^[a-zA-Z0-9_-]{1,32}$/.test(name.trim()) && <p className="mt-1 text-[11px]" style={{ color: 'var(--red)' }}>Use 1–32 letters, numbers, hyphens, or underscores.</p>}
 
@@ -159,28 +147,27 @@ export function AgentCreateDialog({
         </div>
 
         {provider && (
-          <label className="mt-3 block text-xs">
+          <div className="mt-3 text-xs">
             Model
-            <select aria-label="Model" value={model} onChange={(event) => setModel(event.target.value)} className="mt-1 block w-full rounded-md px-3 py-2" style={{ background: 'var(--surface-2)', border: '1px solid var(--border)' }}>
-              {models.map((entry) => <option key={entry.id} value={entry.id}>{entry.label}</option>)}
-              {aliasModels.length > 0 && (
-                <optgroup label="Latest">
-                  {aliasModels.map(({ alias, model: target }) => (
-                    <option key={alias} value={alias}>{catalogModelLabel(target, alias)}</option>
-                  ))}
-                </optgroup>
-              )}
-            </select>
-          </label>
+            <div className="mt-1 [&_.aw-select-trigger]:w-full">
+              <MenuSelect label="Model" value={model} onChange={setModel} maxWidth={9999} placeholder="Choose a model" options={modelOptions(selectedProvider, { aliases: true })} />
+            </div>
+          </div>
         )}
 
-        <label className="mt-3 block text-xs">
+        <div className="mt-3 text-xs">
           Charter <span style={{ color: 'var(--text-3)' }}>(optional)</span>
-          <select aria-label="Charter" value={charterId} onChange={(event) => setCharterId(event.target.value)} disabled={chartersLoading} className="mt-1 block w-full rounded-md px-3 py-2" style={{ background: 'var(--surface-2)', border: '1px solid var(--border)' }}>
-            <option value="">No charter</option>
-            {charters.map((charter) => <option key={charter.id} value={charter.id}>{charter.name}</option>)}
-          </select>
-        </label>
+          <div className="mt-1 [&_.aw-select-trigger]:w-full">
+            <MenuSelect
+              label="Charter"
+              value={charterId}
+              onChange={setCharterId}
+              maxWidth={9999}
+              disabled={chartersLoading}
+              options={[{ value: '', label: 'No charter' }, ...charters.map((charter) => ({ value: charter.id, label: charter.name }))]}
+            />
+          </div>
+        </div>
 
         {createAgent.error && <div role="alert" className="mt-3 rounded-md px-3 py-2 text-xs" style={{ background: 'var(--error-cont)', color: 'var(--red)' }}>{errorDetail(createAgent.error)}</div>}
         <div className="mt-5 flex justify-end gap-2">

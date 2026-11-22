@@ -1402,11 +1402,23 @@ async def _setup_dismissal(project_id: str, item: str, session: AsyncSession, un
 
 
 class OfferedProfile(RequestModel):
-    """One of the setup offer's two profiles: a name, an optional charter, and a runner."""
+    """One of the setup offer's two profiles: a name, an optional charter, and what it runs on:
+    a runner of the project's, or a catalog model by `provider` and `model`, whose plain runner is
+    reused or made as `POST /agents` does (F1204)."""
 
     name: str = Field(min_length=1, max_length=32)
     charter_id: Optional[str] = Field(default=None, min_length=1, max_length=64)
-    runner_id: str = Field(min_length=1, max_length=64)
+    runner_id: Optional[str] = Field(default=None, min_length=1, max_length=64)
+    provider: Optional[str] = Field(default=None, min_length=1, max_length=16)
+    model: Optional[str] = Field(default=None, min_length=1, max_length=256)
+
+    @model_validator(mode="after")
+    def _one_way_to_run(self) -> "OfferedProfile":
+        if self.model is not None and self.provider is None:
+            raise ValueError("provider is required when model is given")
+        if (self.runner_id is None) == (self.provider is None):
+            raise ValueError("Give runner_id, or provider and model, not both or neither")
+        return self
 
 
 class OfferedProfilesCreate(RequestModel):
@@ -1441,7 +1453,8 @@ async def create_offered_profiles(
     profile, created in one transaction, after which the offer is gone.
 
     409 naming the problem when the two names are equal, a name is taken (archived and folded
-    profiles keep theirs), or a runner or charter is not the project's; nothing is created then.
+    profiles keep theirs), a runner or charter is not the project's, or a model is not in the
+    catalog; nothing is created then.
     """
     from ... import project_workspace
     from .agents import add_operator_agent, announce_agent_created
@@ -1470,6 +1483,8 @@ async def create_offered_profiles(
                         project_id,
                         name=entry.name,
                         runner_id=entry.runner_id,
+                        provider=entry.provider,
+                        model=entry.model,
                         charter_id=entry.charter_id,
                         taken=[agent.name for agent in created],
                     )

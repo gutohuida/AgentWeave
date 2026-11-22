@@ -21,7 +21,7 @@ import { useBindAgentCharter, useCharters } from '@/api/charters'
 import { permissionModeValues, useModelCatalog } from '@/api/modelCatalog'
 import { useProjectSettings } from '@/api/projects'
 import { useBindAgentModel, useProviderLaunchability, useRunners, useUpdateAgentWaiting } from '@/api/runners'
-import type { AgentPoolEntry } from '@/api/agentPool'
+import type { AgentPoolEntry, PoolEntryWrite } from '@/api/agentPool'
 import { PoolEditor } from './pool/PoolEditor'
 import { entryLabel } from './pool/poolModel'
 import { Button } from '@/components/ui/button'
@@ -314,7 +314,7 @@ function RunningSection({ agent }: { agent: AgentSummary }) {
     default: entry.default,
   })
   // The Hub applies the whole list or none of it; its refusal is shown where the change was asked for.
-  const writePool = (next: Array<{ runner_id: string; effort: string | null; default: boolean }>, said: string) => {
+  const writePool = (next: PoolEntryWrite[], said: string) => {
     setPoolError(null)
     updatePool.mutate(
       { agent: agent.name, pool: next },
@@ -334,17 +334,16 @@ function RunningSection({ agent }: { agent: AgentSummary }) {
           <PoolEditor
             agentName={agent.name}
             pool={current}
-            runners={runners}
             catalog={catalog}
             error={poolError}
             pending={updatePool.isPending}
-            onAdd={(choice) => {
-              const runner = runners.find((r) => r.id === choice.runner_id)
+            onAdd={(choice) =>
+              // Named by model: the Hub uses the project's runner for it, or makes one (FR-2).
               writePool(
-                [...current.map(asWrite), { runner_id: choice.runner_id, effort: choice.effort, default: current.length === 0 }],
-                runner ? `${agent.name} may run on ${poolLabel({ cli: runner.cli, model: runner.model ?? null, effort: choice.effort })}` : `${agent.name}'s models saved`,
+                [...current.map(asWrite), { ...choice, default: current.length === 0 }],
+                `${agent.name} may run on ${poolLabel({ cli: choice.provider, model: choice.model, effort: choice.effort })}`,
               )
-            }}
+            }
             onRemove={(entry) =>
               writePool(current.filter((e) => e.id !== entry.id).map(asWrite), `${agent.name} no longer runs on ${poolLabel(entry)}`)
             }
