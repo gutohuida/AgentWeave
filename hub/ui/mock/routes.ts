@@ -4,9 +4,13 @@ import type { OverviewNextState } from './overviewNextMock'
 
 /** Where the mock is. Mirrors the app's own destinations (lib/navigation.ts) closely enough that a
  *  screen's navigation calls map one to one when it is wired in. */
+/** The app's tabs plus the three leaner-navigation retired, which the mock still shows as the
+ *  "before" side of its comparison. */
+export type MockTab = ProjectTab | 'checkpoints' | 'jobs' | 'activity'
+
 export type MockRoute =
   /** `profile` is the Profiles tab's selected profile (it also rides in the hash's query). */
-  | { kind: 'tab'; tab: ProjectTab; profile?: string }
+  | { kind: 'tab'; tab: MockTab; profile?: string }
   | { kind: 'conversation'; agent: string; conversationId: string | null; panel?: 'spec' | 'specs' | SidePanelTab }
   | { kind: 'settings'; section: SettingsSection }
   | { kind: 'agent-settings'; agent: string; section: AgentSettingsSection }

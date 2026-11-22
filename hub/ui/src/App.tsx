@@ -25,7 +25,8 @@ import { useSSE } from '@/hooks/useSSE'
 import { useNotifications } from '@/hooks/useNotifications'
 import { useWorkspaceNavigation } from '@/hooks/useWorkspaceNavigation'
 import {
-  PROJECT_TABS,
+  TOP_BAR_TABS,
+  type GoToName,
   type ProjectTab,
   agentDestination,
   agentSettingsDestination,
@@ -38,10 +39,15 @@ import {
   newConversationDestination,
   projectDestination,
   evidenceDestination,
+  projectAddress,
   resolveConversationSelection,
+  threadCheckpointsDestination,
   threadDestination,
+  topBarTabFor,
   withDocument,
 } from '@/lib/navigation'
+import { findCheckpointOwner } from '@/api/checkpoints'
+import { toast } from '@/lib/toast'
 import { applyColorMode } from '@/lib/colorMode'
 import { linkTarget } from '@/lib/threadKnots'
 import { useProjectConversations } from '@/api/agentChat'
@@ -51,17 +57,14 @@ import { useBoardScopeStore } from '@/store/boardScopeStore'
 import { useTaskFilterStore } from '@/store/taskFilterStore'
 import { usePanelTabsStore, loopTabId } from '@/store/panelTabsStore'
 import { CheckpointStatusBanner } from '@/components/checkpoints/CheckpointStatusBanner'
-import { CheckpointsScreen } from '@/components/checkpoints/CheckpointsScreen'
 import { LoadingThread } from '@/components/common/LoadingThread'
 import {
-  ActivityScreen,
   AgentCreateDialog,
   AppSettingsScreen,
   ArchivedAgentNotice,
   BuildViewContainer,
   ConversationView,
   EvidenceBrowser,
-  JobsScreen,
   DashboardsScreen,
   NewConversationSurface,
   ProfilesScreen,
@@ -112,8 +115,6 @@ export default function App() {
   const [projectManagerMode, setProjectManagerMode] = useState<ProjectManagerMode | null>(null)
   const [agentCreateProjectId, setAgentCreateProjectId] = useState<string | null>(null)
   const [overviewQuestionsOpen, setOverviewQuestionsOpen] = useState(false)
-  // The ledger leads (slice project-ledger): what the project did, before the live stream of it.
-  const [activitySubview, setActivitySubview] = useState<'ledger' | 'activity' | 'logs' | 'traces'>('ledger')
   const { destination, navigate: navigateTo } = useWorkspaceNavigation({
     availableProjectIds: projects ? projects.map((project) => project.id) : null,
     lastOpenedProjectId: projectId,
@@ -259,6 +260,35 @@ export default function App() {
     )
   }, [destination, resolvedConversationId, navigateTo])
 
+  // A checkpoint address that does not name its thread (the retired Checkpoints tab's): look the
+  // owner up, then replace the address with that thread and its Checkpoints panel tab. A lookup
+  // that finds nothing, or fails, lands on the Overview and says so, never on a blank page (D2).
+  useEffect(() => {
+    if (destination.kind !== 'checkpoint-lookup') return
+    let cancelled = false
+    const { projectId: pid, checkpoint, conversation } = destination
+    const notFound = () => {
+      toast({ title: checkpoint ? 'That checkpoint could not be found' : 'That thread could not be found', tone: 'error' })
+      navigateTo(projectDestination(pid), { replace: true })
+    }
+    findCheckpointOwner(pid, { checkpoint, conversation }).then(
+      (owner) => {
+        if (cancelled) return
+        if (!owner) return notFound()
+        navigateTo(
+          threadCheckpointsDestination(pid, owner.agent, owner.conversationId, checkpoint ?? undefined),
+          { replace: true },
+        )
+      },
+      () => {
+        if (!cancelled) notFound()
+      },
+    )
+    return () => {
+      cancelled = true
+    }
+  }, [destination, navigateTo])
+
   useSSE()
   // A notification's Open goes to the project's overview, where its questions and stalls are; a
   // reply's goes to its conversation. A reply in the conversation on screen calls nobody.
@@ -337,18 +367,14 @@ export default function App() {
       navigateTo(projectDestination(currentProjectId))
       return
     }
-    if (value === 'thread' || value === 'tasks' || value === 'spec' || value === 'jobs' || value === 'activity') {
-      navigateTo(projectDestination(currentProjectId, value))
+    // A tab by name, retired ones included (Activity, Jobs, Logs, Traces open where they now live).
+    if (['thread', 'tasks', 'spec', 'jobs', 'activity', 'ledger', 'logs', 'traces'].includes(value)) {
+      navigateTo(projectAddress(currentProjectId, value))
       return
     }
     if (value === 'questions') {
       setOverviewQuestionsOpen(true)
       navigateTo(projectDestination(currentProjectId, 'overview'))
-      return
-    }
-    if (value === 'logs' || value === 'traces') {
-      setActivitySubview(value)
-      navigateTo(projectDestination(currentProjectId, 'activity'))
       return
     }
     navigateTo(environmentDestination(currentProjectId, value as Parameters<typeof environmentDestination>[1]))
@@ -441,7 +467,7 @@ export default function App() {
         onOpenTasks={(taskIds, specDocumentId) =>
           openTasksFor(destination.projectId, taskIds, specDocumentId)
         }
-        onOpenJobs={() => navigateTo(projectDestination(destination.projectId, 'jobs'))}
+        onOpenJobs={() => navigateTo(environmentDestination(destination.projectId, 'jobs'))}
         onOpenQuestions={() => {
           setOverviewQuestionsOpen(true)
           navigateTo(projectDestination(destination.projectId, 'overview'))
@@ -526,7 +552,7 @@ export default function App() {
             else if (target.to === 'conversation') {
               navigateTo(agentDestination(pid, target.agent, target.conversation))
             } else if (target.to === 'evidence') navigateTo(evidenceDestination(pid, target.focus))
-            else navigateTo(projectDestination(pid, target.tab))
+            else navigateTo(projectAddress(pid, target.tab))
           }}
         />
       )
@@ -605,39 +631,10 @@ export default function App() {
           {specView}
         </SpecPage>
       )
-    } else if (destination.tab === 'checkpoints') {
-      projectContent = (
-        <CheckpointsScreen
-          destination={destination}
-          onNavigate={navigateTo}
-          onOpenConversation={openConversation}
-        />
-      )
     } else if (destination.tab === 'vault') {
       projectContent = <VaultScreen />
-    } else if (destination.tab === 'jobs') {
-      projectContent = (
-        <JobsScreen
-          // A loop's queue/current-item link, clicked: same cross-tab filter mechanism as the
-          // spec coverage bar's task-count link above — switch to Tasks, filtered.
-          onOpenTasks={(taskIds) => {
-            useTaskFilterStore.getState().setActiveTaskIds(taskIds)
-            navigateTo(projectDestination(destination.projectId, 'tasks'))
-          }}
-        />
-      )
     } else if (destination.tab === 'dashboards') {
       projectContent = <DashboardsScreen />
-    } else if (destination.tab === 'activity') {
-      projectContent = (
-        <ActivityScreen
-          // The palette's `logs` route and the tab's reset to the ledger (F718) arrive through
-          // this; the screen follows a changed value while mounted.
-          initialView={activitySubview}
-          onOpenTask={openTask}
-          onOpenConversation={openConversation}
-        />
-      )
     } else if (destination.tab === 'environment') {
       projectContent = (
         <ProjectSettingsScreen
@@ -649,8 +646,8 @@ export default function App() {
         />
       )
     }
-    // Workspaces (Tasks, Spec, Vault) and screens that lay out and scroll themselves (Activity,
-    // Project settings) take the whole area. Reading pages sit in `workspace-content`'s centred
+    // Workspaces (Tasks, Spec, Vault) and screens that lay out and scroll themselves (Project
+    // settings) take the whole area. Reading pages sit in `workspace-content`'s centred
     // column. Putting the board in that column once made each card narrow before the board had
     // even reached the viewport edge.
     const fills =
@@ -658,7 +655,6 @@ export default function App() {
       destination.tab === 'spec' ||
       destination.tab === 'tasks' ||
       destination.tab === 'vault' ||
-      destination.tab === 'activity' ||
       destination.tab === 'environment')
     content = (
       <div className="flex h-full flex-col" data-testid="active-page-wrapper">
@@ -669,6 +665,9 @@ export default function App() {
         </div>
       </div>
     )
+  } else if (destination.kind === 'checkpoint-lookup') {
+    // Brief: the effect above replaces this with the checkpoint's thread, or the Overview.
+    content = <LoadingThread label="Opening checkpoint" minHeight={240} />
   } else {
     content = (
       <div className="flex h-full items-center justify-center text-sm" style={{ color: 'var(--text-3)' }}>
@@ -678,13 +677,11 @@ export default function App() {
   }
 
 
-  /** A project tab, from the top bar or the palette's Go to group: one way in, so both land alike. */
-  const openProjectTab = (projectId: string, tab: ProjectTab) => {
+  /** A project tab, from the top bar or the palette's Go to group: one way in, so both land alike.
+   *  The palette also names retired tabs, which resolve to where they now live. */
+  const openProjectTab = (projectId: string, tab: ProjectTab | GoToName) => {
     setOverviewQuestionsOpen(false)
-    // The tab opens on the ledger, which leads (F718: this reset to the live stream, so
-    // the ledger was never what a click on Activity showed).
-    if (tab === 'activity') setActivitySubview('ledger')
-    navigateTo(projectDestination(projectId, tab))
+    navigateTo(projectAddress(projectId, tab))
   }
   return (
     <div className="flex h-screen flex-col overflow-hidden" style={{ background: 'var(--bg)' }}>
@@ -743,12 +740,12 @@ export default function App() {
               <TopBar
                 project={{ id: currentProject.id, name: currentProject.name, path: currentProject.path_display ?? '' }}
                 projects={(projects ?? []).map((project) => ({ id: project.id, name: project.name, path: project.path_display ?? '' }))}
-                tabs={PROJECT_TABS}
+                tabs={TOP_BAR_TABS}
                 active={
                   destination.kind === 'agent-settings'
                     ? 'profiles'
                     : destination.kind === 'project' && destination.tab !== 'environment'
-                      ? destination.tab
+                      ? topBarTabFor(destination.tab)
                       : null
                 }
                 counts={{ tasks: awaitingReview }}

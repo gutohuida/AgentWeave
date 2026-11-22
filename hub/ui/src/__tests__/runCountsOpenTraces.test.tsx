@@ -92,7 +92,7 @@ describe('a count asks for its runs', () => {
     render(<WorkView tally={TALLY} grouping="spec" onGrouping={vi.fn()} since="" onSince={vi.fn()} />)
     await userEvent.click(within(screen.getByTestId('work-build-b-a1')).getByTestId('work-runs-open'))
     expect(useTracesRequestStore.getState().request).toMatchObject({ build: 'b-a1' })
-    expect(window.location.search).toContain('tab=activity')
+    expect(window.location.search).toContain('tab=environment&section=traces')
   })
 
   it('an agent’s row asks for that agent’s runs since the chosen day, and the total row for the project’s', async () => {

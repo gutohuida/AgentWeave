@@ -99,15 +99,16 @@ describe('per-agent checkpoint policy', () => {
     roster = [agent()]
   })
 
-  it('opens the Checkpoints tab narrowed to this agent (FR-5)', () => {
+  // The Checkpoints tab is gone (leaner-navigation): an agent's checkpoints are its own page's.
+  it("opens this agent's checkpoint list on its own page (FR-5)", () => {
     useConfigStore.setState({ selectedProjectId: 'proj-test' })
     window.history.replaceState(null, '', '/')
     render(<QueryClientProvider client={new QueryClient()}><AgentSettingsPage agent="claude-1" section="checkpoints" /></QueryClientProvider>)
     fireEvent.click(screen.getByTestId('agent-checkpoints-link'))
     const params = new URLSearchParams(window.location.search)
-    expect(params.get('tab')).toBe('checkpoints')
-    expect(params.get('ckptAgent')).toBe('claude-1')
-    expect(params.has('ckptConversation')).toBe(false)
+    expect(params.get('tab')).toBe('profiles')
+    expect(params.get('profile')).toBe('claude-1')
+    expect(params.get('section')).toBe('checkpoints')
   })
 
   it('names the project’s mode when the agent has none of its own (ac-unset-shows-project)', () => {
