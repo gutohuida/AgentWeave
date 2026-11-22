@@ -1,4 +1,4 @@
-import { Fragment, memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { format } from 'date-fns'
 import { Icon } from '@/components/common/Icon'
 import { MarkdownMessage } from '@/components/agents/MarkdownMessage'
@@ -60,6 +60,18 @@ interface AgentTimelineProps {
    *  `run_id` to show what it cost beside "Worked for Xs". Absent (not just empty) while
    *  accounting hasn't loaded yet, so no turn briefly claims "0 tokens". */
   recentTurns?: TurnUsage[]
+  /** Quiet lines drawn under the message of the run that caused them, such as the offer of a
+   *  specification an agent created in that turn (F1208). A note whose run is not among the
+   *  rendered turns (no run, or one that has aged out of the window) sits after the last turn,
+   *  still in the transcript, never above the composer. In the order given. */
+  turnNotes?: TurnNote[]
+}
+
+/** A line drawn under one run's turn. */
+export interface TurnNote {
+  key: string
+  runId: string | null
+  node: ReactNode
 }
 
 /** Every lifecycle status that means "this run is over", whatever the outcome. `started` is
@@ -140,6 +152,7 @@ export function AgentTimeline({
   onRelease,
   foldAllSignal,
   recentTurns,
+  turnNotes,
 }: AgentTimelineProps) {
   const colorByName: ColorLookup = useMemo(() => {
     const map = new Map<string, number | null | undefined>()
@@ -156,6 +169,20 @@ export function AgentTimeline({
     return { turns: stable, pending: grouped.pending }
   }, [entries])
   const usageByRun = useMemo(() => usageByRunId(recentTurns ?? []), [recentTurns])
+  // Each note under its run's turn; the rest after the last turn.
+  const { notesByRun, unplacedNotes } = useMemo(() => {
+    const rendered = new Set(turns.filter((turn) => !turn.abandoned).map((turn) => turn.runId))
+    const byRun = new Map<string, TurnNote[]>()
+    const rest: TurnNote[] = []
+    for (const note of turnNotes ?? []) {
+      if (note.runId && rendered.has(note.runId)) {
+        byRun.set(note.runId, [...(byRun.get(note.runId) ?? []), note])
+      } else {
+        rest.push(note)
+      }
+    }
+    return { notesByRun: byRun, unplacedNotes: rest }
+  }, [turns, turnNotes])
 
   // `isRunning` is `agent.status === 'running'` — a POLLED roster field, so it stays true for a
   // beat after the run has actually ended. The response text and the run's terminal lifecycle
@@ -335,9 +362,18 @@ export function AgentTimeline({
             usage={turn.runId ? usageByRun[turn.runId] : undefined}
             live={runVisiblyActive && turn === lastTurn}
             hideDiagnostics={diagnosticsHidden}
+            notes={turn.runId ? notesByRun.get(turn.runId) : undefined}
           />
         )
       })}
+
+      {unplacedNotes.length > 0 && (
+        <div className="flex flex-col" style={{ paddingLeft: 26 }} data-testid="timeline-unplaced-notes">
+          {unplacedNotes.map((note) => (
+            <Fragment key={note.key}>{note.node}</Fragment>
+          ))}
+        </div>
+      )}
 
       {/* Where the answer is about to appear, not down in the composer. Operator, 2026-08-18:
           "I think the working should be on the composer screen not the chat box. Right where the
@@ -446,6 +482,7 @@ const TurnSection = memo(function TurnSection({
   usage,
   live,
   hideDiagnostics,
+  notes,
 }: {
   turn: TimelineTurn
   turnKey: string
@@ -457,6 +494,7 @@ const TurnSection = memo(function TurnSection({
   usage?: TurnUsageFigure
   live: boolean
   hideDiagnostics: boolean
+  notes?: TurnNote[]
 }) {
   if (folded) {
     return <FoldedTurnPill turn={turn} onClick={() => onFold(turnKey, false)} />
@@ -519,6 +557,14 @@ const TurnSection = memo(function TurnSection({
         </div>
       )}
       <OutsideWritesLine writes={turn.runId ? facts?.outside_workspace_writes : undefined} />
+      {notes && notes.length > 0 && (
+        // Close under the message it belongs to, aligned with the message text.
+        <div className="flex flex-col" style={{ paddingLeft: 26, marginTop: -13 }} data-testid="turn-notes">
+          {notes.map((note) => (
+            <Fragment key={note.key}>{note.node}</Fragment>
+          ))}
+        </div>
+      )}
     </div>
   )
 })

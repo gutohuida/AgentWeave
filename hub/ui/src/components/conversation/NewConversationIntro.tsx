@@ -11,6 +11,8 @@ export interface ConversationStarter {
   /** The message it puts in the composer (not sent: the operator edits and sends). */
   message: string
   icon?: string
+  /** Picking it also turns Explore on, so its first message starts the thread's own spec. */
+  explore?: boolean
 }
 
 export function NewConversationIntro({
@@ -24,7 +26,7 @@ export function NewConversationIntro({
   /** e.g. "Claude Code"; null when no runner is bound (the intro then says it cannot run). */
   runnerLabel: string | null
   starters: ConversationStarter[]
-  onPick: (message: string) => void
+  onPick: (message: string, starter: ConversationStarter) => void
   headlineTestId?: string
 }) {
   const color = agentColorVars(agent.color_index)
@@ -49,7 +51,7 @@ export function NewConversationIntro({
               role="listitem"
               data-slot="conversation-starter"
               className="aw-newconv-starter"
-              onClick={() => onPick(starter.message)}
+              onClick={() => onPick(starter.message, starter)}
             >
               <Icon name={starter.icon ?? 'chat'} size={14} className="aw-newconv-starter-icon" />
               <span className="min-w-0">

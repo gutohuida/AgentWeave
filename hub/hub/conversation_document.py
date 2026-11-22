@@ -55,11 +55,17 @@ async def offers(session: AsyncSession, conversation: Conversation) -> List[Dict
 
     Derived from creation events by runs of this conversation (FR-7). A roadmap has no journey, so
     it is never offered; nor is the conversation's own open document, an archived one, or one the
-    operator already answered here (Open or Not now). Oldest first.
+    operator already answered here (Open or Not now). Oldest first. Each names the run that
+    created it (`run_id`) and that run's agent (`created_by`).
     """
     created = (
         await session.execute(
-            select(SpecDocumentEvent.document_id)
+            select(
+                SpecDocumentEvent.document_id,
+                SpecDocumentEvent.run_id,
+                SpecDocumentEvent.created_at,
+                Run.agent,
+            )
             .join(Run, Run.id == SpecDocumentEvent.run_id)
             .where(
                 SpecDocumentEvent.project_id == conversation.project_id,
@@ -69,7 +75,7 @@ async def offers(session: AsyncSession, conversation: Conversation) -> List[Dict
             )
             .order_by(SpecDocumentEvent.created_at)
         )
-    ).scalars()
+    ).all()
     answered = {
         row.document_id
         for row in (
@@ -84,7 +90,7 @@ async def offers(session: AsyncSession, conversation: Conversation) -> List[Dict
     }
     out: List[Dict[str, Any]] = []
     seen = set()
-    for document_id in created:
+    for document_id, run_id, created_at, agent in created:
         if document_id in seen or document_id in answered:
             continue
         seen.add(document_id)
@@ -103,6 +109,11 @@ async def offers(session: AsyncSession, conversation: Conversation) -> List[Dict
                 "title": document.title,
                 "phase": document.phase,
                 "step": document.step,
+                # The run whose turn created it, so the offer is drawn under that turn's message
+                # rather than above the composer (F1208), and the agent that ran it.
+                "run_id": run_id,
+                "created_by": agent,
+                "created_at": created_at.isoformat() if created_at else None,
             }
         )
     return out
