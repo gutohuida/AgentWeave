@@ -5,6 +5,7 @@ Prints console errors. Needs the mock dev server on :5199 (npx vite --config vit
 An optional action after `::` clicks a selector before the shot, e.g. `tab/vault::text=Add`.
 """
 
+import os
 import pathlib
 import re
 import sys
@@ -13,6 +14,7 @@ from playwright.sync_api import sync_playwright
 
 args = [a for a in sys.argv[1:] if not a.startswith("--")]
 flags = {a for a in sys.argv[1:] if a.startswith("--")}
+PORT = os.environ.get('AW_MOCK_PORT', '5199')
 out = pathlib.Path(args[0])
 out.mkdir(parents=True, exist_ok=True)
 modes = ["dark", "light"] if "--light" in flags else ["dark"]
@@ -31,7 +33,7 @@ with sync_playwright() as p:
                 page.on("pageerror", lambda e, errors=errors: errors.append(str(e)))
                 page.on("console", lambda m, errors=errors: errors.append(m.text) if m.type == "error" else None)
                 page.add_init_script(f"try {{ document.documentElement.dataset.mode = '{mode}' }} catch (e) {{}}")
-                page.goto(f"http://localhost:5199/mock.html#{route}")
+                page.goto(f"http://localhost:{PORT}/mock.html#{route}")
                 page.wait_for_load_state("networkidle")
                 page.wait_for_timeout(900)
                 page.evaluate(f"document.documentElement.classList.add('no-transitions'); document.documentElement.dataset.mode = '{mode}'")
