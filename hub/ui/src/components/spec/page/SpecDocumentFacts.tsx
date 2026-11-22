@@ -24,6 +24,7 @@ import { SpecCoverageBar } from '../SpecCoverageBar'
 import { SpecDriftPanel } from '../SpecDriftPanel'
 import { SpecHealthLine, type HealthFactKey } from '../SpecHealthLine'
 import { SpecVaultWarnings } from '../SpecVaultWarnings'
+import { firstTaskId } from './model'
 import '@/styles/spec-header.css'
 
 const DETAIL_TITLE: Record<HealthFactKey, string> = {
@@ -50,8 +51,9 @@ function approvalHistory(outcome: SpecApprovalOutcome | undefined): string[] {
 }
 
 /** A spec's acronym, and the way to change it until its first task exists; the Hub's refusal is
- *  shown in its own words (FR-11). */
-export function AcronymEditor({ path, acronym }: { path: string; acronym: string }) {
+ *  shown in its own words (FR-11). `example` is the id its first task is shown by; `locked` once
+ *  tasks are named by it, when the Hub refuses any change and the control is not offered. */
+export function AcronymEditor({ path, acronym, example, locked = false }: { path: string; acronym: string; example?: string; locked?: boolean }) {
   const [draft, setDraft] = useState<string | null>(null)
   const [refusal, setRefusal] = useState<string | null>(null)
   const setAcronym = useSetDocumentAcronym()
@@ -71,10 +73,14 @@ export function AcronymEditor({ path, acronym }: { path: string; acronym: string
       <span>Task ids</span>
       {draft === null ? (
         <>
-          <code data-testid="spec-acronym-value">{acronym}-N</code>
-          <Button variant="ghost" size="xs" data-testid="spec-acronym-edit" onClick={() => { setRefusal(null); setDraft(acronym) }}>
-            Change
-          </Button>
+          <code data-testid="spec-acronym-value" title={`Tasks of this spec are named ${acronym}-1, ${acronym}-2, …`}>
+            {example ?? `${acronym}-1`}
+          </code>
+          {locked ? null : (
+            <Button variant="ghost" size="xs" data-testid="spec-acronym-edit" onClick={() => { setRefusal(null); setDraft(acronym) }}>
+              Change
+            </Button>
+          )}
         </>
       ) : (
         <>
@@ -153,7 +159,14 @@ export function SpecDocumentFacts({
       {record?.kind === 'change-spec' ? <ChangeCapabilities record={record} onOpenDocument={onOpenDocument} /> : null}
       {record?.kind === 'capability' ? <CapabilityTouchedList record={record} onOpenDocument={onOpenDocument} /> : null}
       {record?.kind === 'system-map' ? <MapCapabilities path={path} onOpenDocument={onOpenDocument} /> : null}
-      {record?.acronym ? <AcronymEditor path={path} acronym={record.acronym} /> : null}
+      {record?.acronym ? (
+        <AcronymEditor
+          path={path}
+          acronym={record.acronym}
+          example={firstTaskId(record.acronym, (documentTasks ?? []).map((task) => task.readable_id))}
+          locked={(documentTasks ?? []).some((task) => task.readable_id?.startsWith(`${record.acronym}-`))}
+        />
+      ) : null}
       {unread ? (
         <p className="aw-spec-message" data-tone="warn" data-testid="spec-facts-unread">
           <span className="aw-spec-message-text">Some of this document's facts could not be read, so the line below may be missing some.</span>

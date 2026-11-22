@@ -313,6 +313,7 @@ export function useSpecSurface(path: string, host: SpecSurfaceHost): SpecSurface
   }
   // Everything the phase controls offer that the page's own buttons do not draw (one source).
   const chrome: HeaderChrome = {
+    journey: controls?.journey,
     moreItems: (
       <>
         {controls?.menu}

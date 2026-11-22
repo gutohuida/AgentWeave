@@ -190,6 +190,11 @@ export interface SpecBuild {
   level: BuildLevel
   builders: string[]
   reviewers: string[]
+  /** The default builder and checker, and each task's own by key (`one-checker`); absent from an
+   *  older Hub. */
+  builder?: string | null
+  checker?: string | null
+  tasks?: Record<string, { builder?: string | null; checker?: string | null }>
   lead: string | null
   budget_cap_usd: number | null
   spent_usd: number | null
@@ -439,6 +444,9 @@ export interface SpecDocument {
   updated_at?: string
   /** Gaps somebody chose to leave, read with the document so the page shows them on load. */
   acknowledged?: SpecAcknowledgedGap[]
+  /** While it is being written, every open gap and note its save reports, so the header lists
+   *  them on load (`one-message-count`). Absent once approved, and from an older Hub. */
+  open_gaps?: SpecBlockingFinding[]
   delivery_status?: SpecDeliveryStatus
   fold_state?: SpecFoldState
   approval_outcome?: SpecApprovalOutcome

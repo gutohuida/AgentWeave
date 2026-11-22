@@ -253,15 +253,30 @@ describe('every document page', () => {
     const lines = Array.from({ length: 7 }, (_, i) => `${i + 1}. point ${i + 1}`).join('\n')
     renderBody(change({ title: 'C', kind: 'change-spec', problem: `Operator said:\n${lines}`, evidence: { checked: ['one.py:1', 'two.py:2'], limits: ['UI not run'] } }))
     expect(screen.getByText('Operator said:')).toBeInTheDocument()
-    expect(within(screen.getByTestId('problem-list')).getAllByRole('listitem')).toHaveLength(7)
+    const problem = document.getElementById('section-problem')!
+    expect(within(problem).getAllByRole('list')).toHaveLength(1)
+    expect(within(problem).getAllByRole('listitem')).toHaveLength(7)
     const evidence = screen.getByTestId('document-evidence')
     expect(within(evidence).getByText('one.py:1')).toBeInTheDocument()
     expect(within(evidence).getByText('UI not run')).toBeInTheDocument()
   })
 
+  it('renders the summary and problem as Markdown, showing no backtick, ** or leading - (ac-markdown)', () => {
+    renderBody(change({ title: 'C', kind: 'change-spec', summary: 'Adds a `--shout` flag, **loudly**, in _italics_ and [a link](https://example.com).', problem: 'Today:\n- it whispers\n- it mumbles' }))
+    const summary = document.getElementById('section-summary')!
+    expect(summary.querySelectorAll('code')).toHaveLength(1)
+    expect(summary.querySelector('strong')).toHaveTextContent('loudly')
+    expect(summary.querySelector('em')).toHaveTextContent('italics')
+    expect(within(summary).getByRole('link', { name: 'a link' })).toHaveAttribute('href', 'https://example.com')
+    expect(summary.textContent).not.toMatch(/`|\*\*/)
+    const problem = document.getElementById('section-problem')!
+    expect(within(within(problem).getByRole('list')).getAllByRole('listitem').map((li) => li.textContent)).toEqual(['it whispers', 'it mumbles'])
+    expect(problem.textContent).not.toMatch(/^- /m)
+  })
+
   it('keeps a plain problem as one paragraph and shows no evidence section when there is none', () => {
     renderBody(change({ title: 'C', kind: 'change-spec', problem: 'Just a sentence.' }))
-    expect(screen.queryByTestId('problem-list')).toBeNull()
+    expect(within(document.getElementById('section-problem')!).queryByRole('list')).toBeNull()
     expect(screen.queryByTestId('document-evidence')).toBeNull()
   })
 })
