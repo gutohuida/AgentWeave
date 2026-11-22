@@ -1,0 +1,82 @@
+/* The Briefing Overview (mock "overview-briefing"). Tokens only. Every button carries a data-slot,
+   so index.css's baseline button rule does not apply and these rules own the look. */
+
+.aw-ob {
+  width: min(100%, 760px); margin-inline: auto;
+  padding: 40px clamp(16px, 4vw, 32px) 96px;
+  display: flex; flex-direction: column; gap: 34px;
+  color: var(--text);
+}
+.aw-ob button { font: inherit; color: inherit; background: none; border: 0; padding: 0; text-align: left; cursor: pointer; }
+.aw-ob button:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--ring); border-radius: var(--radius-sm); }
+
+.aw-ob-head { display: flex; flex-direction: column; gap: 10px; }
+.aw-ob-kicker { margin: 0; font-size: 12.5px; color: var(--text-2); letter-spacing: 0.01em; }
+.aw-ob-level {
+  --tone: var(--green);
+  margin: 0; display: inline-flex; align-items: center; gap: 6px; align-self: flex-start;
+  font-size: 12.5px; font-weight: 600; color: var(--text);
+}
+.aw-ob[data-level="attention"] .aw-ob-level { --tone: var(--amber); }
+.aw-ob[data-level="trouble"] .aw-ob-level { --tone: var(--red); }
+.aw-ob-level svg { color: var(--tone); }
+.aw-ob-headline { margin: 0; font-size: clamp(26px, 4.2vw, 36px); line-height: 1.18; font-weight: 650; letter-spacing: -0.02em; text-wrap: balance; }
+.aw-ob-summary { margin: 0; font-size: 17px; line-height: 1.6; color: var(--text-2); text-wrap: pretty; }
+
+.aw-ob-sec { display: flex; flex-direction: column; gap: 10px; padding-top: 18px; border-top: 1px solid var(--border-region); }
+.aw-ob-sec h2 { margin: 0; font-size: 12px; font-weight: 650; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-2); }
+.aw-ob-muted { margin: 0; font-size: 15.5px; line-height: 1.6; color: var(--text-2); }
+.aw-ob-prose { margin: 0; font-size: 16px; line-height: 1.65; color: var(--text); text-wrap: pretty; }
+.aw-ob-prose strong, .aw-ob-sentence strong { font-weight: 650; }
+
+.aw-ob-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 14px; }
+.aw-ob-list-tight { gap: 8px; }
+.aw-ob-list li { font-size: 16px; line-height: 1.55; min-width: 0; }
+.aw-ob-sentence { text-wrap: pretty; }
+
+/* Links read as links by underline, not by colour alone. */
+.aw-ob .aw-ob-link { display: inline; text-decoration: underline; text-decoration-color: var(--border-hi); text-underline-offset: 3px; text-decoration-thickness: 1.5px; }
+.aw-ob .aw-ob-link:hover { text-decoration-color: var(--text); }
+.aw-ob .aw-ob-action { display: inline-flex; align-items: center; gap: 3px; font-weight: 600; white-space: nowrap; }
+.aw-ob .aw-ob-more { display: inline-flex; align-items: center; gap: 2px; align-self: flex-start; font-size: 13.5px; color: var(--text-2); margin-top: 4px; }
+.aw-ob .aw-ob-more:hover { color: var(--text); }
+.aw-ob-when { margin-left: 10px; font-size: 12.5px; color: var(--text-2); white-space: nowrap; }
+.aw-ob-meta { margin-left: 8px; font-size: 13px; color: var(--text-2); }
+.aw-ob-flag { display: inline-flex; align-items: center; gap: 3px; margin-left: 8px; font-size: 13px; font-weight: 600; }
+.aw-ob-flag svg { color: var(--amber); }
+
+.aw-ob-progress { display: block; height: 3px; margin-top: 7px; border-radius: 2px; background: var(--surface-3); overflow: hidden; max-width: 420px; }
+.aw-ob-progress-fill { display: block; height: 100%; border-radius: 2px; background: var(--blue); }
+
+.aw-ob-marker { display: flex; align-items: center; gap: 12px; margin: 2px 0 6px; font-size: 12.5px; font-weight: 600; color: var(--text-2); }
+.aw-ob-marker-rule { flex: 1; height: 0; border-top: 1px dashed var(--border-hi); }
+
+.aw-ob-group { display: flex; flex-direction: column; gap: 6px; }
+.aw-ob-group h3 { margin: 0; display: flex; align-items: center; gap: 6px; font-size: 13.5px; font-weight: 650; }
+.aw-ob-group[data-outcome="landed"] h3 svg { color: var(--green); }
+.aw-ob-group[data-outcome="sent_back"] h3 svg { color: var(--amber); }
+.aw-ob-group[data-outcome="failed"] h3 svg { color: var(--red); }
+.aw-ob-count { font-weight: 500; color: var(--text-2); }
+
+.aw-ob-meter { display: block; height: 3px; max-width: 420px; border-radius: 2px; background: var(--surface-3); overflow: hidden; }
+.aw-ob-meter > span { display: block; height: 100%; background: var(--blue); }
+.aw-ob-meter[data-near="true"] > span { background: var(--red); }
+
+.aw-ob-chart { margin-top: 6px; width: 100%; max-width: 280px; }
+.aw-ob-bars { display: flex; align-items: flex-end; gap: 6px; height: 56px; padding-top: 16px; border-bottom: 1px solid var(--border-hi); }
+.aw-ob-bar-col { position: relative; flex: 1; height: 100%; display: flex; align-items: flex-end; justify-content: center; }
+.aw-ob-bar { display: block; width: 100%; max-width: 22px; border-radius: 4px 4px 0 0; background: color-mix(in oklab, var(--blue) 55%, transparent); }
+.aw-ob-bar[data-today="true"] { background: var(--blue); }
+.aw-ob-bar-unknown { height: 8px; background: transparent; border: 1.5px dashed var(--text-3); border-bottom: 0; }
+.aw-ob-bar-value { position: absolute; top: -14px; left: 50%; transform: translateX(-50%); font-size: 11.5px; font-weight: 600; color: var(--text); white-space: nowrap; }
+.aw-ob-axis { display: flex; justify-content: space-between; margin-top: 4px; font-size: 11.5px; color: var(--text-2); }
+
+.aw-ob-foot { display: flex; flex-wrap: wrap; gap: 6px; border-top: 1px solid var(--border-region); padding-top: 16px; }
+.aw-ob .aw-ob-foot button { display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 12px; border-radius: var(--radius-md); border: 1px solid var(--border); font-size: 13px; color: var(--text-2); }
+.aw-ob .aw-ob-foot button:hover { background: var(--row-hover); color: var(--text); }
+
+@media (max-width: 520px) {
+  .aw-ob { padding-top: 24px; gap: 26px; }
+  .aw-ob-summary { font-size: 16px; }
+  .aw-ob-when { display: block; margin-left: 0; }
+}

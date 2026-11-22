@@ -1,4 +1,11 @@
 import * as React from 'react'
+import { JobsView } from '@/components/jobs/JobsView'
+import { LogsView } from '@/components/logs/LogsView'
+import { TracesPage } from '@/components/traces/TracesPage'
+import { ProjectLedger } from '@/components/activity/ProjectLedger'
+import type { Job } from '@/api/jobs'
+import { LEANER_ACCOUNTING, LEANER_JOBS, useMockRoutes } from '../leanerMock'
+import '@/styles/activity.css'
 import { SettingsNavLayout } from '@/components/settings/SettingsNavLayout'
 import {
   AgentBudgetRow,
@@ -42,10 +49,11 @@ import instructionsJson from '../fixtures/instructions.json'
 import statusJson from '../fixtures/status.json'
 import worktreesJson from '../fixtures/worktrees.json'
 
-const runners = runnersJson as unknown as Runner[]
-const charters = chartersJson as unknown as Charter[]
+// A fresh checkout's fixtures are stubs (`{}`); an empty list keeps the screen rendering.
+const runners = (Array.isArray(runnersJson) ? runnersJson : []) as unknown as Runner[]
+const charters = (Array.isArray(chartersJson) ? chartersJson : []) as unknown as Charter[]
 const catalog = catalogJson as unknown as ModelCatalogResponse
-const firings = (managerActivityJson as unknown as { firings: ManagerFiring[] }).firings
+const firings = (managerActivityJson as unknown as { firings?: ManagerFiring[] }).firings ?? []
 const instructions = instructionsJson as unknown as { content: string; max_chars?: number }
 const status = statusJson as unknown as {
   message_counts: { pending: number; total: number }
@@ -68,11 +76,13 @@ const SECTIONS: Array<{ id: SettingsSection; label: string; icon: string; group:
   { id: 'charters', label: 'Charters', icon: 'menu_book', group: 'Agents' },
   { id: 'checkpoints', label: 'Checkpoints', icon: 'book_marked', group: 'Agents' },
   { id: 'manager', label: 'Manager', icon: 'memory', group: 'Agents' },
+  { id: 'jobs', label: 'Jobs', icon: 'schedule', group: 'Agents' },
   { id: 'checks', label: 'Checks', icon: 'verified_user', group: 'Landing work' },
   { id: 'landing', label: 'Landing', icon: 'git_merge', group: 'Landing work' },
   { id: 'worktrees', label: 'Worktrees', icon: 'call_split', group: 'Landing work' },
   { id: 'spec-steps', label: 'Spec steps', icon: 'list_tree', group: 'Specs and records' },
   { id: 'traces', label: 'Traces', icon: 'timeline', group: 'Specs and records' },
+  { id: 'logs', label: 'Logs', icon: 'description', group: 'Specs and records' },
   { id: 'diagnostics', label: 'Diagnostics', icon: 'monitoring', group: 'Specs and records' },
 ]
 
@@ -115,19 +125,22 @@ const TRACE_SETTINGS: TraceSettings = {
 /** The container a real Project settings route would be: it holds the fetched values, applies a
  *  patch (here to local state, in the app through the settings mutation) and says so in a toast. */
 export default function Settings({ route, go, now }: ScreenProps) {
+  useMockRoutes() // the Ledger, Logs and Traces below read through the app's own hooks; see leanerMock.ts
   const section: SettingsSection = route.kind === 'settings' && SECTIONS.some((s) => s.id === route.section) ? route.section : 'general'
   // mock state: the recorded project has no checks; two show what the list looks like.
   const [settings, setSettings] = React.useState<ProjectSettings>(() => ({
     ...(settingsJson as unknown as ProjectSettings),
+    agent_budget: (settingsJson as unknown as Partial<ProjectSettings>).agent_budget ?? 8,
     checks: [
       { name: 'Unit tests', command: 'py -3.11 -m pytest tests/ -q', timeout_seconds: 900, fast: false, phase: 'both', paths: ['src/**', 'tests/**'] },
       { name: 'Lint', command: 'ruff check src/ tests/', timeout_seconds: 60, fast: true, phase: 'review' },
     ] as ProjectSettings['checks'],
     generated_files: { paths: ['package-lock.json', 'hub/hub/static/ui/**'], command: 'npm install --package-lock-only && npm run build', timeout_seconds: 600 },
   }))
-  const [jobs, setJobs] = React.useState<ManagerJob[]>((managerJobsJson as unknown as { jobs: ManagerJob[] }).jobs)
-  const [accounting, setAccounting] = React.useState<AccountingSnapshot>(accountingJson as unknown as AccountingSnapshot)
+  const [jobs, setJobs] = React.useState<ManagerJob[]>(((managerJobsJson as unknown as { jobs?: ManagerJob[] }).jobs ?? []))
+  const [accounting, setAccounting] = React.useState<AccountingSnapshot>((accountingJson as unknown as AccountingSnapshot).project ? (accountingJson as unknown as AccountingSnapshot) : LEANER_ACCOUNTING)
   const [instructionText, setInstructionText] = React.useState(instructions.content)
+  const [jobList, setJobList] = React.useState<Job[]>(LEANER_JOBS)
   const [steps, setSteps] = React.useState<JourneyStep[]>(STEPS)
   const [traces, setTraces] = React.useState<TraceSettings>(TRACE_SETTINGS)
   const [traceRange, setTraceRange] = React.useState<TraceRange>('week')
@@ -189,6 +202,7 @@ export default function Settings({ route, go, now }: ScreenProps) {
       break
     case 'traces':
       body = (
+        <>
         <TracesSettings
           settings={traces}
           now={now}
@@ -210,6 +224,38 @@ export default function Settings({ route, go, now }: ScreenProps) {
           onDownload={() => say('Download started')}
           onClear={() => toast({ title: 'Clear traces', description: 'Opens the type-to-confirm dialog (unchanged in this mock).' })}
         />
+        <div className="aw-settings-embed">
+          <TracesPage />
+        </div>
+        </>
+      )
+      break
+    case 'jobs':
+      body = (
+        <JobsView
+          jobs={jobList}
+          colorIndexOf={(name) => agents.find((a) => a.name === name)?.color_index}
+          onToggle={(j, enabled) => {
+            setJobList((all) => all.map((x) => (x.id === j.id ? { ...x, enabled } : x)))
+            say(enabled ? `${j.name} is active` : `${j.name} is paused`)
+          }}
+          onRunNow={(j) => toast({ title: `${j.name} fired`, description: `${j.agent} starts a turn now.` })}
+          onEdit={() => undefined}
+          onArchive={(j) => {
+            setJobList((all) => all.filter((x) => x.id !== j.id))
+            toast({ title: `${j.name} archived`, action: { label: 'Undo', onClick: () => setJobList((all) => [j, ...all]) } })
+          }}
+          onNew={() => undefined}
+          onOpenTasks={() => go({ kind: 'tab', tab: 'tasks' })}
+          now={now}
+        />
+      )
+      break
+    case 'logs':
+      body = (
+        <div className="aw-settings-logs" style={{ height: 'min(640px, 70vh)', minHeight: 360, border: '1px solid var(--border)', borderRadius: 10, overflow: 'auto' }}>
+          <LogsView />
+        </div>
       )
       break
     case 'manager':
@@ -253,6 +299,7 @@ export default function Settings({ route, go, now }: ScreenProps) {
       break
     case 'budgets':
       body = (
+        <>
         <BudgetsSettings
           accounting={accounting}
           agentBudget={<AgentBudgetRow settings={settings} onChange={general.onChange} />}
@@ -262,6 +309,10 @@ export default function Settings({ route, go, now }: ScreenProps) {
             say(said)
           }}
         />
+        <div className="aw-settings-embed">
+          <ProjectLedger onOpenTask={() => go({ kind: 'tab', tab: 'tasks' })} />
+        </div>
+        </>
       )
       break
     case 'worktrees':

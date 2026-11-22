@@ -1,0 +1,133 @@
+/* The Team-lanes Overview (mock "overview-lanes"). Tokens only. Every button carries a data-slot, so
+   index.css's baseline button rule does not apply and these rules own the look. A lane's name button
+   stretches over the whole lane (its ::after), so a click anywhere opens the thread; the questions
+   button sits above it. */
+
+.aw-ol {
+  width: min(100%, 1180px); margin-inline: auto;
+  padding: 18px clamp(16px, 3vw, 32px) 80px;
+  display: flex; flex-direction: column; gap: 18px;
+  container-type: inline-size; container-name: ol;
+}
+.aw-ol button { font: inherit; color: inherit; background: none; border: 0; padding: 0; text-align: left; cursor: pointer; }
+.aw-ol button:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--ring); }
+
+/* The strip: the verdict, then five counts, each a button. */
+.aw-ol-strip {
+  --tone: var(--green);
+  display: flex; align-items: stretch; gap: 14px; flex-wrap: wrap;
+  padding: 10px 12px 10px 14px; border: 1px solid var(--border); border-left: 4px solid var(--tone);
+  border-radius: var(--radius-lg); background: color-mix(in oklab, var(--tone) 5%, var(--surface));
+}
+.aw-ol[data-level="attention"] .aw-ol-strip { --tone: var(--amber); }
+.aw-ol[data-level="trouble"] .aw-ol-strip { --tone: var(--red); }
+.aw-ol-verdict { display: flex; align-items: center; gap: 12px; flex: 1 1 280px; min-width: 0; }
+.aw-ol-verdict-icon { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 32px; height: 32px; border-radius: 999px; background: color-mix(in oklab, var(--tone) 16%, transparent); color: var(--tone); }
+.aw-ol-verdict-text { display: flex; flex-direction: column; min-width: 0; }
+.aw-ol-project { font-size: 12px; color: var(--text-2); }
+.aw-ol-sentence { font-size: 15px; line-height: 1.35; color: var(--text); text-wrap: pretty; }
+.aw-ol-sentence strong { font-weight: 650; }
+.aw-ol-counts { display: flex; gap: 4px; flex-wrap: wrap; flex: 0 1 auto; }
+.aw-ol .aw-ol-count {
+  --tone: var(--text-3);
+  display: flex; flex-direction: column; justify-content: center; min-width: 96px; padding: 4px 10px; gap: 0;
+  border-radius: var(--radius-md); border-bottom: 2px solid var(--tone);
+}
+.aw-ol-count[data-tone="amber"] { --tone: var(--amber); }
+.aw-ol-count[data-tone="red"] { --tone: var(--red); }
+.aw-ol-count[data-tone="blue"] { --tone: var(--blue); }
+.aw-ol .aw-ol-count:hover { background: var(--row-hover); }
+.aw-ol-count-value { font-size: 20px; line-height: 1.2; font-weight: 650; color: var(--text); }
+.aw-ol-count-label { font-size: 12px; color: var(--text-2); white-space: nowrap; }
+.aw-ol-count-hint { font-size: 11.5px; color: var(--text-2); white-space: nowrap; }
+
+/* Sections */
+.aw-ol-sec { border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--surface); padding: 12px 8px 8px; }
+.aw-ol-sec-head { display: flex; align-items: center; gap: 8px; margin: 0 8px 8px; min-height: 24px; }
+.aw-ol-sec-head h2 { margin: 0; font-size: 13.5px; font-weight: 600; }
+.aw-ol-sub { font-size: 12px; color: var(--text-2); }
+.aw-ol-badge { display: inline-flex; align-items: center; justify-content: center; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px; font-size: 11px; font-weight: 600; background: var(--surface-3); color: var(--text-2); }
+.aw-ol .aw-ol-more { margin-left: auto; display: inline-flex; align-items: center; gap: 2px; height: 24px; padding: 0 6px; border-radius: var(--radius-sm); font-size: 12px; color: var(--text-2); }
+.aw-ol .aw-ol-more:hover { background: var(--row-hover); color: var(--text); }
+
+/* Lanes: one grid row per profile; the column head shares its columns. */
+.aw-ol-colhead, .aw-ol-lane {
+  display: grid; align-items: center; column-gap: 16px;
+  grid-template-columns: minmax(150px, 1fr) minmax(0, 2fr) minmax(0, 1.7fr) 112px 108px;
+}
+.aw-ol-colhead { padding: 0 10px 6px; font-size: 11px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--text-2); border-bottom: 1px solid var(--border-region); }
+.aw-ol-lanes { list-style: none; margin: 0; padding: 0; }
+.aw-ol-lane { position: relative; padding: 10px; border-radius: var(--radius-md); border-bottom: 1px solid var(--border-region); }
+.aw-ol-lane:last-child { border-bottom: 0; }
+.aw-ol-lane:hover { background: var(--row-hover); }
+.aw-ol-lane[data-asks="true"] { box-shadow: inset 3px 0 0 var(--amber); }
+.aw-ol-lane[data-status="stalled"] { box-shadow: inset 3px 0 0 var(--red); }
+.aw-ol-who { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.aw-ol-avatar { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 32px; height: 32px; border-radius: 999px; border: 1.5px solid; font-size: 13px; font-weight: 650; color: var(--text); }
+.aw-ol-who-text { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.aw-ol .aw-ol-open { font-size: 14px; font-weight: 600; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.aw-ol .aw-ol-open::after { content: ""; position: absolute; inset: 0; border-radius: var(--radius-md); }
+.aw-ol .aw-ol-open:focus-visible { box-shadow: none; }
+.aw-ol .aw-ol-open:focus-visible::after { box-shadow: 0 0 0 2px var(--ring); }
+.aw-ol-status { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 500; color: var(--text); white-space: nowrap; }
+.aw-ol-status[data-status="waiting"] svg { color: var(--amber); }
+.aw-ol-status[data-status="stalled"] svg { color: var(--red); }
+.aw-ol-status[data-status="working"] svg { color: var(--blue); }
+.aw-ol-status[data-status="idle"] { color: var(--text-2); font-weight: 400; }
+.aw-ol-cell { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.aw-ol-text { font-size: 13px; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.aw-ol-sub-line { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; color: var(--text-2); white-space: nowrap; }
+.aw-ol-outcome { color: var(--text); font-weight: 500; }
+.aw-ol-sub-line[data-outcome="landed"] svg { color: var(--green); }
+.aw-ol-sub-line[data-outcome="sent_back"] svg { color: var(--amber); }
+.aw-ol-sub-line[data-outcome="failed"] svg { color: var(--red); }
+.aw-ol-muted { font-size: 12.5px; color: var(--text-2); }
+.aw-ol .aw-ol-ask {
+  position: relative; z-index: 1; display: inline-flex; align-items: center; gap: 5px; align-self: flex-start; height: 26px; padding: 0 9px;
+  border-radius: var(--radius-md); border: 1px solid var(--border-hi); font-size: 12px; font-weight: 500; color: var(--text); white-space: nowrap;
+}
+.aw-ol-ask svg { color: var(--amber); }
+.aw-ol .aw-ol-ask:hover { background: var(--surface-3); }
+.aw-ol-money { font-size: 13px; color: var(--text); }
+.aw-ol-bar { display: block; height: 4px; border-radius: 2px; background: var(--surface-3); overflow: hidden; }
+.aw-ol-bar > span { display: block; height: 100%; border-radius: 2px; background: var(--blue); }
+
+/* Builds: one line each */
+.aw-ol-builds { list-style: none; margin: 0; padding: 0; }
+.aw-ol .aw-ol-build { display: grid; grid-template-columns: minmax(120px, 1.2fr) minmax(100px, 2fr) 40px minmax(110px, 0.9fr); align-items: center; column-gap: 14px; width: 100%; padding: 6px 10px; border-radius: var(--radius-md); font-size: 13px; }
+.aw-ol .aw-ol-build:hover { background: var(--row-hover); }
+.aw-ol-build-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.aw-ol-progress { height: 5px; border-radius: 3px; background: var(--surface-3); overflow: hidden; }
+.aw-ol-progress > span { display: block; height: 100%; border-radius: 3px; background: var(--blue); }
+.aw-ol-build-count { font-size: 12px; color: var(--text-2); text-align: right; }
+.aw-ol-build-stage { display: inline-flex; align-items: center; gap: 5px; font-size: 12.5px; color: var(--text-2); min-width: 0; }
+.aw-ol-build-stage[data-needs="true"] { color: var(--text); font-weight: 600; }
+.aw-ol-build-stage[data-needs="true"] svg { color: var(--amber); }
+
+.aw-ol-foot { display: flex; flex-wrap: wrap; gap: 6px; border-top: 1px solid var(--border-region); padding-top: 14px; }
+.aw-ol .aw-ol-foot button { display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 12px; border-radius: var(--radius-md); border: 1px solid var(--border); font-size: 13px; color: var(--text-2); }
+.aw-ol .aw-ol-foot button:hover { background: var(--row-hover); color: var(--text); }
+
+/* Narrower: a lane becomes two lines. Line one is who, what now and the ask; line two is the last
+   result and the spend. */
+@container ol (max-width: 1040px) {
+  .aw-ol-colhead { display: none; }
+  .aw-ol-lane {
+    grid-template-columns: minmax(150px, 0.9fr) minmax(0, 2fr) auto;
+    grid-template-areas: "who doing asks" "who last spend";
+    row-gap: 4px;
+  }
+  .aw-ol-who { grid-area: who; }
+  .aw-ol-doing { grid-area: doing; }
+  .aw-ol-asks { grid-area: asks; justify-self: end; }
+  .aw-ol-last { grid-area: last; }
+  .aw-ol-spend { grid-area: spend; flex-direction: row; align-items: center; gap: 8px; justify-self: end; min-width: 108px; }
+  .aw-ol-spend .aw-ol-bar { flex: 1; min-width: 40px; }
+}
+@container ol (max-width: 820px) {
+  .aw-ol .aw-ol-build { grid-template-columns: minmax(0, 1fr) 40px minmax(90px, auto); row-gap: 4px; }
+  .aw-ol-progress { grid-column: 1 / -1; grid-row: 2; }
+}
+@container ol (max-width: 620px) {
+  .aw-ol-lane { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "who asks" "doing doing" "last spend"; }
+}

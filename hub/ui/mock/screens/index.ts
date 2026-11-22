@@ -6,6 +6,9 @@ type ScreenComponent = React.ComponentType<ScreenProps>
 const Gallery = React.lazy(() => import('./Gallery'))
 const TaskRedesign = React.lazy(() => import('./TaskRedesign'))
 const Overview = React.lazy(() => import('./Overview'))
+const OverviewNext = React.lazy(() => import('./OverviewNext'))
+const OverviewBriefing = React.lazy(() => import('./OverviewBriefing'))
+const OverviewLanes = React.lazy(() => import('./OverviewLanes'))
 const Tasks = React.lazy(() => import('./Tasks'))
 const Spec = React.lazy(() => import('./Spec'))
 const Vault = React.lazy(() => import('./Vault'))
@@ -46,6 +49,12 @@ export function screenFor(route: MockRoute): ScreenComponent {
       return SpecThreadUi
     case 'first-run-polish':
       return FirstRunPolish
+    case 'overview-next':
+      return OverviewNext
+    case 'overview-briefing':
+      return OverviewBriefing
+    case 'overview-lanes':
+      return OverviewLanes
     case 'thread':
       return Thread
     case 'traces':
@@ -75,6 +84,15 @@ export function screenFor(route: MockRoute): ScreenComponent {
 export const SCREENS: Array<{ id: string; label: string; route: MockRoute }> = [
   { id: 'gallery', label: 'Primitives & motion', route: { kind: 'gallery' } },
   { id: 'overview', label: 'Overview', route: { kind: 'tab', tab: 'overview' } },
+  { id: 'overview-next', label: 'Overview, redrawn as a dashboard', route: { kind: 'overview-next', state: 'busy' } },
+  { id: 'overview-next-quiet', label: 'Overview, redrawn: quiet', route: { kind: 'overview-next', state: 'quiet' } },
+  { id: 'overview-next-trouble', label: 'Overview, redrawn: trouble', route: { kind: 'overview-next', state: 'trouble' } },
+  { id: 'overview-briefing', label: 'Overview B, a morning briefing', route: { kind: 'overview-briefing', state: 'busy' } },
+  { id: 'overview-briefing-quiet', label: 'Overview B, briefing: quiet', route: { kind: 'overview-briefing', state: 'quiet' } },
+  { id: 'overview-briefing-trouble', label: 'Overview B, briefing: trouble', route: { kind: 'overview-briefing', state: 'trouble' } },
+  { id: 'overview-lanes', label: 'Overview C, team lanes', route: { kind: 'overview-lanes', state: 'busy' } },
+  { id: 'overview-lanes-quiet', label: 'Overview C, lanes: quiet', route: { kind: 'overview-lanes', state: 'quiet' } },
+  { id: 'overview-lanes-trouble', label: 'Overview C, lanes: trouble', route: { kind: 'overview-lanes', state: 'trouble' } },
   { id: 'tasks', label: 'Tasks', route: { kind: 'tab', tab: 'tasks' } },
   { id: 'task-redesign', label: 'Tasks · Card and story redesign', route: { kind: 'task-redesign' } },
   { id: 'spec', label: 'Spec', route: { kind: 'tab', tab: 'spec' } },
@@ -108,6 +126,10 @@ export const SCREENS: Array<{ id: string; label: string; route: MockRoute }> = [
   { id: 'settings-spec-steps', label: 'Settings · Spec steps', route: { kind: 'settings', section: 'spec-steps' } },
   { id: 'settings-traces', label: 'Settings · Traces', route: { kind: 'settings', section: 'traces' } },
   { id: 'settings-instructions', label: 'Settings · Instructions', route: { kind: 'settings', section: 'instructions' } },
+  { id: 'settings-jobs', label: 'Settings · Jobs (moved here)', route: { kind: 'settings', section: 'jobs' } },
+  { id: 'settings-logs', label: 'Settings · Logs (moved here)', route: { kind: 'settings', section: 'logs' } },
+  { id: 'conversation-checkpoints', label: 'Conversation · Checkpoints tab', route: { kind: 'conversation', agent: 'Builder', conversationId: 'conv-e3aba2c5956a', panel: 'checkpoints' } },
+  { id: 'conversation-trace-tab', label: 'Conversation · Trace tab', route: { kind: 'conversation', agent: 'Builder', conversationId: 'conv-e3aba2c5956a', panel: 'trace' } },
   { id: 'settings-manager', label: 'Settings · Manager', route: { kind: 'settings', section: 'manager' } },
   { id: 'settings-charters', label: 'Settings · Charters', route: { kind: 'settings', section: 'charters' } },
   { id: 'settings-runners', label: 'Settings · Runners', route: { kind: 'settings', section: 'runners' } },

@@ -10,12 +10,14 @@ import { beforeKey, type MockRoute } from './routes'
 import { SCREENS, screenFor } from './screens'
 import { useSetupTitles } from './setupMock'
 import { SIDEBAR_MOCK_STATES, setSidebarMockState, useBuildsNeedingYou, useSidebarMock, useSidebarProjectBody, type SidebarMockState } from './sidebarMock'
+import { LEANER_TABS } from './leanerMock'
 import { NOTICE_LEVELS } from './specBanner'
 import { SPEC_MOCK_STATES, setSpecMockControls, useSpecMockControls } from './specMock'
 import { setTasksMockControls, useTasksMockControls } from './tasksMock'
 
 /** The tabs the mock's top bar lists: the app's own, with Profiles after Tasks (operator, 2026-11-21).
  *  Profiles is not in the app's PROJECT_TABS until the page is wired in. */
+/** Every tab a hash may name; the top bar lists only LEANER_TABS (leaner-navigation: the others moved into a thread's side panel, a profile's page and project settings). */
 const MOCK_TABS: readonly ProjectTab[] = PROJECT_TABS.flatMap((t): ProjectTab[] => (t === 'tasks' ? [t, 'profiles'] : [t]))
 
 const BEFORE = import.meta.glob('./before/*.webp', { eager: true, query: '?url', import: 'default' }) as Record<string, string>
@@ -24,6 +26,10 @@ function parseHash(): MockRoute {
   // A query after the route (`?state=…&layout=…&at=…`) presets a screen's mock controls.
   const raw = decodeURIComponent(window.location.hash.replace(/^#/, '')).split('?')[0]!
   const [kind, a, b, c] = raw.split('/')
+  if (kind === 'tab' && (a === 'overview-next' || a === 'overview-briefing' || a === 'overview-lanes')) {
+    const state = new URLSearchParams(decodeURIComponent(window.location.hash).split('?')[1] ?? '').get('state')
+    return { kind: a, state: state === 'quiet' || state === 'trouble' ? state : 'busy' }
+  }
   if (kind === 'tab' && (MOCK_TABS as readonly string[]).includes(a ?? '')) return { kind: 'tab', tab: a as ProjectTab }
   if (kind === 'conversation' && a) return { kind: 'conversation', agent: a, conversationId: b || null, ...(c && PANELS.has(c) ? { panel: c as NonNullable<Extract<MockRoute, { kind: 'conversation' }>['panel']> } : {}) }
   if (kind === 'settings') return { kind: 'settings', section: (a as never) || 'general' }
@@ -74,6 +80,10 @@ function toHash(route: MockRoute): string {
       return 'spec-thread-ui'
     case 'first-run-polish':
       return 'first-run-polish'
+    case 'overview-next':
+    case 'overview-briefing':
+    case 'overview-lanes':
+      return route.state === 'busy' ? `tab/${route.kind}` : `tab/${route.kind}?state=${route.state}`
     case 'thread':
       return 'thread'
     case 'traces':
@@ -89,7 +99,7 @@ function toHash(route: MockRoute): string {
   }
 }
 
-const PANELS = new Set(['spec', 'specs', 'running', 'changes', 'files', 'terminal', 'terminal-full', 'terminal-remote', 'terminal-docker', 'watch'])
+const PANELS = new Set(['spec', 'specs', 'running', 'changes', 'files', 'terminal', 'terminal-full', 'terminal-remote', 'terminal-docker', 'watch', 'checkpoints', 'trace'])
 
 export function MockApp() {
   const [route, setRoute] = React.useState<MockRoute>(parseHash)
@@ -157,8 +167,8 @@ export function MockApp() {
         <TopBar
           project={{ id: project.id, name: project.name, path: project.working_directory }}
           projects={projects.map((p) => ({ id: p.id, name: p.name, path: p.working_directory }))}
-          tabs={MOCK_TABS}
-          active={route.kind === 'tab' ? route.tab : route.kind === 'traces' ? 'activity' : null}
+          tabs={LEANER_TABS}
+          active={route.kind === 'tab' ? route.tab : route.kind === 'traces' ? 'activity' : route.kind === 'overview-next' || route.kind === 'overview-briefing' || route.kind === 'overview-lanes' ? 'overview' : null}
           // Overview's count is what its "Needs you" section lists (QA1's question and the unmerged task).
           counts={{ tasks: awaitingReview, overview: 2 }}
           onSelectTab={(tab) => go({ kind: 'tab', tab })}

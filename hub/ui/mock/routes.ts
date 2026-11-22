@@ -1,5 +1,6 @@
 import type { SidePanelTab } from './screens/SidePanel'
 import type { AppSettingsSection, ProjectTab } from '@/lib/navigation'
+import type { OverviewNextState } from './overviewNextMock'
 
 /** Where the mock is. Mirrors the app's own destinations (lib/navigation.ts) closely enough that a
  *  screen's navigation calls map one to one when it is wired in. */
@@ -20,6 +21,11 @@ export type MockRoute =
   /** The Spec home, with three ways of showing how documents relate (operator, 2026-11-17). */
   | { kind: 'spec-home' }
   | { kind: 'thread' }
+  /** The Overview redrawn as a dashboard (operator, 2026-11-22); ?state=quiet|trouble shows the other states. */
+  | { kind: 'overview-next'; state: OverviewNextState }
+  /** The Overview as a morning briefing, and by team lane: two more designs to compare (operator, 2026-11-22). */
+  | { kind: 'overview-briefing'; state: OverviewNextState }
+  | { kind: 'overview-lanes'; state: OverviewNextState }
   /** How a thread shows the spec it is working on: the header's phase badge with its step, and three
    *  ways to offer a document an agent created in the thread (operator, 2026-11-22). */
   | { kind: 'spec-thread-ui' }
@@ -49,6 +55,8 @@ export type SettingsSection =
   | 'checkpoints'
   | 'spec-steps'
   | 'traces'
+  | 'jobs'
+  | 'logs'
   | 'agents-defaults' | 'runners' | 'manager' | 'charters' | 'instructions' | 'budgets' | 'worktrees' | 'diagnostics'
 export type AgentSettingsSection = 'agent' | 'running' | 'permissions' | 'checkpoints' | 'workspace'
 

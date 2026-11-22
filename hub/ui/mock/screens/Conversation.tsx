@@ -188,6 +188,12 @@ function ConversationMock({ route, go }: ScreenProps) {
         onOpenCheckpoints={conversation ? () => undefined : undefined}
         onOpenTrace={chat ? () => undefined : undefined}
         onOpenAgentSettings={() => go({ kind: 'agent-settings', agent: agent.name, section: 'running' })}
+        // The side panel's toggle, now a button in the bar (leaner-navigation): opens on Running, closes the panel.
+        panelOpen={route.kind === 'conversation' && Boolean(route.panel)}
+        onTogglePanel={() => {
+          if (route.kind !== 'conversation') return
+          go(route.panel ? { ...route, panel: undefined } : { ...route, panel: 'running' })
+        }}
         onArchive={() => toast({ title: 'Conversation archived', action: { label: 'Undo', onClick: () => undefined } })}
       />
 
