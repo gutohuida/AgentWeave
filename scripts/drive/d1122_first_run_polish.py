@@ -77,9 +77,14 @@ def poll(fn, secs=15.0):
     return False
 
 
-def verdict(key, ok, detail=""):
+def verdict(key, ok, detail="", reached=True):
     results.append((key, bool(ok)))
-    print(f"check {key}: {'PASS' if ok else 'FAIL'} -- {detail}", flush=True)
+    print(
+        f"check {key}: reached={'yes' if reached else 'no'} "
+        f"failed_at_assertion={'yes' if reached and not ok else 'no'} -- "
+        f"{'PASS' if ok else 'FAIL'}: {detail}",
+        flush=True,
+    )
 
 
 def guarded(key, fn):
@@ -87,7 +92,7 @@ def guarded(key, fn):
     try:
         fn()
     except Exception as exc:  # noqa: BLE001
-        verdict(key, False, f"drive error {type(exc).__name__}: {str(exc)[:300]}")
+        verdict(key, False, f"drive error {type(exc).__name__}: {str(exc)[:300]}", reached=False)
 
 
 def start_hub():
@@ -410,15 +415,18 @@ def check_threads_and_pool(pg, pair_pid):
         if not any(t.startswith("Chapters") for t in top):
             problems.append(f"top bar has no Chapters: {top}")
         pg.go("tab=overview", "dark", 900)
+        narrow = [t.split("\n")[0].strip() for t in p.locator("[data-slot=topbar-tab]:not([aria-hidden=true])").all_inner_texts()]
+        menu = ""
         more = p.locator("[data-testid=project-tab-more]")
         if more.count():
             more.click()
             menu = p.locator("[role=menu]").inner_text()
-            if "Chapters" not in menu or "Thread" in menu.split():
-                problems.append(f"overflow menu: {menu!r}")
             p.keyboard.press("Escape")
-        elif not any(t.startswith("Chapters") for t in top):
-            problems.append("no overflow menu and no tab")
+        # Chapters may sit in the bar or in the overflow at 900 px; Thread in neither
+        if not (any(t.startswith("Chapters") for t in narrow) or "Chapters" in menu):
+            problems.append(f"900 px: no Chapters in bar {narrow} or overflow {menu!r}")
+        if "Thread" in narrow or "Thread" in menu.split():
+            problems.append(f"900 px: Thread in bar {narrow} or overflow {menu!r}")
         p.keyboard.press("Control+k")
         p.wait_for_timeout(500)
         p.keyboard.type("chapters")
