@@ -1,10 +1,10 @@
-"""A chat picks only from its profile's pool (`a-profile-runs-each-task-on-a-runner-and-model-chosen-
-from-its-pool`, FR-9, task chats-and-holds).
+"""A chat's choice of runner (`a-profile-runs-each-task-on-a-runner-and-model-chosen-from-its-pool`,
+FR-9, task chats-and-holds; its pool bound reversed by `a-profile-s-pool-and-a-new-chat-can-use-any-
+model-of-any-provider`, FR-10, whose own criteria are in `test_chat_any_model`).
 
-A conversation override naming a runner, a model or an effort the pool does not hold is refused,
-naming it. A new chat starts on the default and may choose any entry; once it has a turn, only an
-entry on the CLI it started on, and one on another CLI is refused saying a new chat is needed. An
-entry on another runner than the default's launches on that runner.
+A new chat starts on the default and may choose any runner of the project or any catalog model;
+once it has a turn, only one on the CLI it started on, and one on another CLI is refused saying a
+new chat is needed. A choice on another runner than the default's launches on that runner.
 
 Driven through `POST /agent/trigger`, the route the composer sends with, with the CLI stubbed.
 """
@@ -87,27 +87,28 @@ def _model_flag(spawn) -> str:
     return command[command.index("--model") + 1]
 
 
-async def test_chat_picker_bounded_an_override_naming_opus_is_refused_naming_it(
+async def test_a_chat_may_choose_a_runner_the_pool_does_not_hold_but_not_another_projects(
     app, auth_headers, bind_runner
 ):
-    """Criterion chat-picker-bounded, the route's half: a pool of Haiku and Sonnet, and an
-    override naming Opus, by model or by its runner, is refused naming Opus; nothing starts."""
+    """Reversed by `a-profile-s-pool-and-a-new-chat-can-use-any-model-of-any-provider` (FR-10): a
+    pool of Haiku and Sonnet no longer bounds a chat, so Opus, by its runner or by its model, and an
+    effort no entry carries all run. A runner id this project does not have is refused naming it."""
     runners = await _profile(app, auth_headers, bind_runner)
 
-    by_model, spawn = await _send(app, auth_headers, overrides={"model": "opus"})
-    assert by_model.status_code == 400, by_model.text
-    assert "opus" in by_model.json()["detail"]
-    spawn.assert_not_called()
-
     by_runner, spawn = await _send(app, auth_headers, overrides={"runner_id": runners["opus"]})
-    assert by_runner.status_code == 400, by_runner.text
-    assert "Opus" in by_runner.json()["detail"]
-    spawn.assert_not_called()
+    assert by_runner.status_code == 200, by_runner.text
+    assert _model_flag(spawn) == "opus"
 
-    # An effort no entry carries is outside the pool too.
+    by_model, spawn = await _send(app, auth_headers, overrides={"model": "opus"})
+    assert by_model.status_code == 200, by_model.text
+    assert _model_flag(spawn) == "opus"
+
     effort, spawn = await _send(app, auth_headers, overrides={"effort": "high"})
-    assert effort.status_code == 400, effort.text
-    assert "'high'" in effort.json()["detail"]
+    assert effort.status_code == 200, effort.text
+
+    unknown, spawn = await _send(app, auth_headers, overrides={"runner_id": "runner-nope"})
+    assert unknown.status_code == 400, unknown.text
+    assert "runner-nope" in unknown.json()["detail"]
     spawn.assert_not_called()
 
 

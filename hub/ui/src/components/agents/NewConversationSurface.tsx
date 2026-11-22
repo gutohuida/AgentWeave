@@ -81,7 +81,7 @@ export function NewConversationSurface({
 }: NewConversationSurfaceProps) {
   const { apiKey } = useConfigStore()
   const { data: roster = [] } = useAgents()
-  const { data: runners = [] } = useRunners()
+  const { data: runners = [], refetch: refetchRunners } = useRunners()
   const { data: workspacePaths = [] } = useWorkspacePaths()
   // The project's documents: the composer's `@` menu lists them as specs, most recently updated
   // first. This surface is mounted outside ConversationView, so it subscribes to `spec_updated`
@@ -216,6 +216,9 @@ export function NewConversationSurface({
       throw refusal
     }
     const result = (await response.json()) as { conversation_id: string }
+    // A model outside the pool may have made the project a runner for it (FR-10); the thread's
+    // picker names the stored choice by that runner.
+    if (sentOverrides.provider) void refetchRunners()
     open(result.conversation_id)
   }
 
@@ -326,6 +329,7 @@ export function NewConversationSurface({
           onPendingOverridesChange: setPendingOverrides,
           // A new chat starts on the default and may choose any entry (FR-9).
           pool: agentRow?.pool,
+          runners,
           poolStartedOn: null,
           specDocumentLabel: null,
           specArmed: exploring,

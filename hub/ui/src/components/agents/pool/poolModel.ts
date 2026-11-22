@@ -88,24 +88,108 @@ export function removeRefusal(pool: AgentPoolEntry[], entry: AgentPoolEntry): st
  *  entry on the default's runner without it, so the chat follows the default. */
 export const CHAT_RUNNER_KEY = 'runner_id'
 
-/**
- * The entry a chat's next turn runs on, read from its overrides (FR-9): the runner it chose, else
- * the default's, with the effort it chose. A choice the pool no longer holds reads as the default,
- * which is what the Hub launches.
- */
-export function chatEntry(pool: AgentPoolEntry[], overrides: Record<string, string>): AgentPoolEntry | undefined {
-  const fallback = defaultEntry(pool)
-  const runnerId = overrides[CHAT_RUNNER_KEY] ?? fallback?.runner_id
-  if (!runnerId) return fallback
-  return findEntry(pool, { runner_id: runnerId, effort: overrides.effort ?? null }) ?? fallback
+/** The override naming which catalog provider a chat's `model` is (`a-profile-s-pool-and-a-new-
+ *  chat-can-use-any-model-of-any-provider`, FR-10). Sent, never stored: the Hub answers it with the
+ *  runner it launches on. */
+export const CHAT_PROVIDER_KEY = 'provider'
+
+/** What a chat's next turn runs on: a CLI, a model, an effort, and the pool entry it is when it is
+ *  one. */
+export interface ChatChoice {
+  cli: string
+  model: string | null
+  effort: string | null
+  entry?: AgentPoolEntry
 }
 
-/** The overrides that choose *entry* in a chat: its runner and its effort replace whatever model,
- *  runner and effort were chosen before; every other control stays. */
-export function chatChoiceOverrides(overrides: Record<string, string>, entry: AgentPoolEntry): Record<string, string> {
+/** A choice in the chat's model picker: one of the pool's entries, or any catalog model. */
+export type ChatPick = { kind: 'entry'; entry: AgentPoolEntry } | { kind: 'model'; provider: string; model: string }
+
+/** Whether two model names are one catalog model of `cli` (an id and its alias are). */
+export function sameModel(catalog: ModelCatalogResponse | undefined, cli: string, left: string | null, right: string | null): boolean {
+  if (!left || !right) return left === right
+  if (left === right) return true
+  const models = catalog?.providers.find((p) => p.provider === cli)?.models ?? []
+  const find = (name: string) => models.find((m) => m.id === name || m.aliases.includes(name))
+  const a = find(left)
+  return Boolean(a && a === find(right))
+}
+
+/**
+ * What a chat's next turn runs on, read from its overrides (FR-3, FR-10): a catalog model it named,
+ * else the runner it chose (a pool entry's, or one the Hub made for a model outside the pool, read
+ * from `runners`), else the pool's default. The effort is the chat's own where it chose one (FR-6);
+ * the default's effort otherwise, which the Hub fills in.
+ */
+export function chatChoice(
+  catalog: ModelCatalogResponse | undefined,
+  pool: AgentPoolEntry[],
+  overrides: Record<string, string>,
+  runners?: Array<{ id: string; cli: string; model?: string | null }>,
+): ChatChoice | undefined {
+  const chosenEffort = overrides.effort ?? null
+  const entryFor = (cli: string, model: string | null, runnerId?: string) => {
+    const same = pool.filter((e) => (runnerId ? e.runner_id === runnerId : e.cli === cli && sameModel(catalog, cli, e.model, model)))
+    return same.find((e) => (e.effort ?? null) === chosenEffort) ?? same[0]
+  }
+  const provider = overrides[CHAT_PROVIDER_KEY]
+  if (provider && overrides.model) {
+    return { cli: provider, model: overrides.model, effort: chosenEffort, entry: entryFor(provider, overrides.model) }
+  }
+  const runnerId = overrides[CHAT_RUNNER_KEY]
+  if (runnerId) {
+    const held = entryFor('', null, runnerId)
+    if (held) return { cli: held.cli, model: held.model, effort: chosenEffort, entry: held }
+    const runner = runners?.find((r) => r.id === runnerId)
+    if (runner) return { cli: runner.cli, model: runner.model ?? null, effort: chosenEffort }
+  }
+  const fallback = defaultEntry(pool)
+  if (!fallback) return undefined
+  const effort = 'effort' in overrides ? chosenEffort : (fallback.effort ?? null)
+  if (overrides.model && !sameModel(catalog, fallback.cli, overrides.model, fallback.model)) {
+    return { cli: fallback.cli, model: overrides.model, effort, entry: entryFor(fallback.cli, overrides.model) }
+  }
+  return { cli: fallback.cli, model: fallback.model, effort, entry: fallback }
+}
+
+/**
+ * The overrides that make *pick* the chat's choice (FR-3, FR-6). An entry is chosen by its runner
+ * and brings its effort; a catalog model by its provider and id, keeping the chosen effort where
+ * its provider offers it. Whatever model, runner and provider were chosen before are replaced;
+ * every other control stays.
+ */
+export function chatPickOverrides(
+  catalog: ModelCatalogResponse | undefined,
+  overrides: Record<string, string>,
+  pick: ChatPick,
+): Record<string, string> {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const { model, effort, [CHAT_RUNNER_KEY]: runner, ...rest } = overrides
-  return { ...rest, [CHAT_RUNNER_KEY]: entry.runner_id, ...(entry.effort ? { effort: entry.effort } : {}) }
+  const { model, effort, [CHAT_RUNNER_KEY]: runner, [CHAT_PROVIDER_KEY]: provider, ...rest } = overrides
+  if (pick.kind === 'entry') {
+    const entry = pick.entry
+    return { ...rest, [CHAT_RUNNER_KEY]: entry.runner_id, ...(entry.effort ? { effort: entry.effort } : {}) }
+  }
+  const out: Record<string, string> = { ...rest, [CHAT_PROVIDER_KEY]: pick.provider, model: pick.model }
+  if (effort && effortsFor(catalog, pick.provider).some((v) => v.id === effort)) out.effort = effort
+  return out
+}
+
+/** The overrides with the chat's effort set to *effort*, or cleared back to the usual one (FR-6).
+ *  The runner the chat is on is not moved. */
+export function chatEffortOverrides(overrides: Record<string, string>, effort: string | null): Record<string, string> {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { effort: _was, ...rest } = overrides
+  return effort ? { ...rest, effort } : rest
+}
+
+/** The entry a chat's next turn runs on, when it is one of the pool's (FR-9). */
+export function chatEntry(pool: AgentPoolEntry[], overrides: Record<string, string>): AgentPoolEntry | undefined {
+  return chatChoice(undefined, pool, overrides)?.entry
+}
+
+/** The overrides that choose *entry* in a chat. */
+export function chatChoiceOverrides(overrides: Record<string, string>, entry: AgentPoolEntry): Record<string, string> {
+  return chatPickOverrides(undefined, overrides, { kind: 'entry', entry })
 }
 
 /** The CLI a conversation started on, for the picker's greyed-out entries: the one its latest run

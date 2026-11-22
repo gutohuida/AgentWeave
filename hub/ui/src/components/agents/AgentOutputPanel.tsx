@@ -469,7 +469,7 @@ export function AgentOutputPanel({
       : null
 
   const { data: roster = [] } = useAgents()
-  const { data: runners = [] } = useRunners()
+  const { data: runners = [], refetch: refetchRunners } = useRunners()
   const targetAgentRow = roster.find((a) => a.name === agent.name)
   const targetRunnerRow = runners.find((r) => r.id === targetAgentRow?.runner_id)
   // What the run will do at rest, from the agent rather than from the catalog. The Composer
@@ -1262,6 +1262,10 @@ export function AgentOutputPanel({
         explorationPath,
       )
       accepted = true
+      // A chat on a model outside the pool may have made the project a runner for it (FR-10 of
+      // `a-profile-s-pool-and-a-new-chat-can-use-any-model-of-any-provider`); the picker names
+      // the chat's stored choice by that runner.
+      if (pendingOverrides.provider) void refetchRunners()
       if (explorationPath) onExplorationStarted?.(explorationPath)
       if (result.conversation_id !== currentConversationId) moveTo(result.conversation_id)
       if (startsFresh) {
@@ -1489,6 +1493,7 @@ export function AgentOutputPanel({
           pendingOverrides,
           onPendingOverridesChange: setPendingOverrides,
           pool: targetAgentRow?.pool,
+          runners,
           poolStartedOn: startingFresh
             ? null
             : chatStartedOn(
