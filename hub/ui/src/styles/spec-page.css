@@ -199,6 +199,10 @@ button.aw-sp-check-pill:focus-visible { outline: none; box-shadow: 0 0 0 2px var
 .aw-sp-link { width: 22px; height: 22px; }
 .aw-sp-lede { font-size: 15px; line-height: 1.6; color: var(--text); max-width: 72ch; text-wrap: pretty; }
 .aw-sp-prose { font-size: 13.5px; line-height: 1.65; color: var(--text-2); max-width: 76ch; text-wrap: pretty; }
+/* The summary and problem are Markdown (`summary-problem-markdown`): a list keeps its markers. */
+.aw-sp-lede .markdown-message ul, .aw-sp-prose .markdown-message ul { list-style: disc; }
+.aw-sp-lede .markdown-message ol, .aw-sp-prose .markdown-message ol { list-style: decimal; }
+.aw-sp-lede .markdown-message li::marker, .aw-sp-prose .markdown-message li::marker { color: var(--text-3); }
 .aw-sp-muted { color: var(--text-3); }
 .aw-sp-textbutton {
   display: inline-flex; align-items: center; gap: 4px; height: 24px; padding: 0 6px; margin-left: 4px;

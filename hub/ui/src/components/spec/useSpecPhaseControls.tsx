@@ -9,6 +9,7 @@ import { RetireCapabilityDialog } from '@/components/spec/RetireCapabilityDialog
 import { StartFlowDialog } from '@/components/spec/StartFlowDialog'
 import { BuildPlanDialog, type BuildPlanPools } from '@/components/spec/BuildPlanDialog'
 import { parsePayload } from '@/components/spec/page/adapt'
+import { checkerOf } from '@/components/spec/page/model'
 import { BuildStatusStrip } from '@/components/spec/BuildStatusStrip'
 import { ReconcileSummary } from '@/components/spec/ReconcileSummary'
 import { CloseAlreadyBuilt } from '@/components/spec/CloseAlreadyBuilt'
@@ -26,7 +27,7 @@ import { Segmented } from '@/components/ui/segmented'
 import { formatAgoLong } from '@/lib/format'
 import { toast } from '@/lib/toast'
 import type { SpecPrimaryAction } from './SpecDocumentHeader'
-import { NOTE_GAP_CODES } from './gapWords'
+import { NOTE_GAP_CODES, plainGap } from './gapWords'
 import { AcknowledgeGapControls, AcknowledgedGapLines, GapLines, ReviewerLine } from './SpecPhaseParts'
 import { NextSliceOfferNotice } from './NextSliceOfferNotice'
 import type { HeaderNotice } from './page/SpecNotices'
@@ -167,8 +168,12 @@ export interface SpecPhaseControls {
    *  messages: they are `buildActions`, drawn in the body's builds section; who reviews, when nobody
    *  needs warning about it, is a fact (`facts`). */
   notices: HeaderNotice[]
-  /** Beside the phase in the redesigned header: who reviews the document's work. */
+  /** Beside the phase in the redesigned header: who checks the document's work (`header-names-
+   *  checker`). */
   facts: React.ReactNode
+  /** The journey step and size control, while a change is written: the redesigned header opens it
+   *  from the phase badge, which names the step, so it is not one of the messages. */
+  journey: React.ReactNode
   /** Above the builds in the body: the newest build's strip (Stop, Raise cap) and Close the open
    *  tasks as already built. */
   buildActions: React.ReactNode
@@ -278,6 +283,8 @@ export function useSpecPhaseControls(
   const buildOpenedAt = useMemo(() => new Date(), [building])
 
   const acknowledged = acknowledgedAnswer ?? (specDocError ? [] : (specDoc?.acknowledged ?? []))
+  // The open gaps the page's own read carries, before Check or an approval answers.
+  const loadedGaps = specDocError ? [] : (specDoc?.open_gaps ?? [])
   const inline = options.inlineFindings === true
   const document = data?.documents.find((entry) => entry.path === path)
   const flow = useDocumentFlow(document?.id)
@@ -686,15 +693,15 @@ export function useSpecPhaseControls(
           className="aw-spec-chip aw-spec-flow-chip"
           data-testid="spec-flow-link"
           onClick={() => onOpenLoop(flow)}
-          title="Open the flow working this document's tasks"
+          title={`Open the flow working this document's tasks: ${flow.label}`}
         >
           <Icon name="sync" size={11} />
-          Flow: {flow.label}
+          Flow
         </button>
       ) : (
-        <span className="aw-spec-chip aw-spec-flow-chip" data-static="true" data-testid="spec-flow-link">
+        <span className="aw-spec-chip aw-spec-flow-chip" data-static="true" data-testid="spec-flow-link" title={`The flow working this document's tasks: ${flow.label}`}>
           <Icon name="sync" size={11} />
-          Flow: {flow.label}
+          Flow
         </span>
       )
     ) : null
@@ -978,14 +985,19 @@ export function useSpecPhaseControls(
   if (reviewer && reviewerStale) {
     notices.push({ id: 'reviewer', tone: 'warn', summary: `Reviewed by @${reviewerStatus?.reviewer}: its reviews will come to you`, body: reviewer })
   }
-  if (journey) {
-    notices.push({
-      id: 'journey',
-      tone: 'info',
-      summary: `Step ${document.step}${document.size ? ` · ${document.size}` : ''}: move the step or change the size`,
-      body: journey,
-      defaultOpen: true,
-    })
+  // Every open gap the Hub reports, one message each, from the page's own read until Check or an
+  // approval answers (`one-message-count`); after that Check's findings list them.
+  if (!checkedOnce && !gaps.length && !blocking.length) {
+    for (const gap of loadedGaps) {
+      const acknowledgeable = document.phase === 'exploring' && !NOTE_GAP_CODES.has(gap.code)
+      notices.push({
+        id: `open-gap-${gap.code}-${gap.where}`,
+        tone: 'warn',
+        testId: `spec-notice-gap-${gap.code}`,
+        summary: `${gap.where ? `${gap.where} — ` : ''}${plainGap(gap.code, [gap])}`,
+        body: acknowledgeable ? <AcknowledgeGapControls gaps={[gap]} onAcknowledge={onAcknowledge} /> : undefined,
+      })
+    }
   }
   if (journeyRefused && journeyRefusal) notices.push({ id: 'journey-refusal', tone: 'error', summary: journeyRefusal })
   if (gapList) {
@@ -1032,10 +1044,32 @@ export function useSpecPhaseControls(
   }
   if (retiredText) notices.push({ id: 'retired-note', tone: 'info', summary: retiredText })
 
+  // Who checks the work (`header-names-checker`): the newest build's checkers once it is built,
+  // the recommendation before, the delivery's reviewer when neither names any.
+  const newestBuild = specDocError ? undefined : specDoc?.builds?.[0]
+  const recommendedBuild = specDocError ? undefined : specDoc?.recommended_build
+  const checker = newestBuild
+    ? checkerOf(declaredTasks.map((t) => t.key), newestBuild.checker, Object.fromEntries(Object.entries(newestBuild.tasks ?? {}).map(([key, t]) => [key, t.checker])))
+    : recommendedBuild
+      ? checkerOf(declaredTasks.map((t) => t.key), recommendedBuild.checker, recommendedBuild.task_checkers ?? {})
+      : null
+  // A stale reviewer is a warning among the messages, not a fact.
+  const checkerWords =
+    checker?.kind === 'one'
+      ? `Checked by @${checker.name}`
+      : checker?.kind === 'per-task'
+        ? 'Checker set per task'
+        : reviewerStale
+          ? null
+          : reviewerStatus?.reviewer
+            ? `Checked by @${reviewerStatus.reviewer}`
+            : checker || reviewerStatus
+              ? 'Checked by any free profile'
+              : null
   const facts =
-    reviewerStatus && !reviewerStale ? (
+    checkerWords ? (
       <span className="aw-sp-meta-fact" data-testid="delivery-reviewer">
-        {reviewerStatus.reviewer ? `Reviewed by @${reviewerStatus.reviewer}` : 'Reviewed by any free profile'}
+        {checkerWords}
       </span>
     ) : null
 
@@ -1148,6 +1182,7 @@ export function useSpecPhaseControls(
     messages,
     notices,
     facts,
+    journey,
     buildActions,
     dialogs,
   }

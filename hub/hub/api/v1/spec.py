@@ -438,16 +438,19 @@ async def get_spec(
             payload["recommended_build"] = recommended
         # The gaps somebody chose to leave, so the page shows them on load, not only after Check
         # (`ready-means-the-same-thing`, FR-5).
+        # The open gaps too, while it is being written: the header's messages list every one the
+        # save reports, on load (`one-message-count`).
         if stored_payload is not None and document.phase != spec_lifecycle.ARCHIVED:
             try:
-                payload["acknowledged"] = (
-                    await spec_service.readiness(
-                        session,
-                        workspace,
-                        document,
-                        spec_service._stored_payload(workspace, document),
-                    )
-                ).acknowledged
+                report = await spec_service.readiness(
+                    session,
+                    workspace,
+                    document,
+                    spec_service._stored_payload(workspace, document),
+                )
+                payload["acknowledged"] = report.acknowledged
+                if document.phase == spec_lifecycle.EXPLORING:
+                    payload["open_gaps"] = report.warnings
             except spec_service.SaveRefusedError:
                 payload["acknowledged"] = []
         # Every build of this document, newest first: how it was built, by whom, within what.

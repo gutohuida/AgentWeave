@@ -29,6 +29,8 @@ export interface HeaderChrome {
   badges?: React.ReactNode
   /** Before the actions: the Draft the next slice switch. */
   draftNext?: React.ReactNode
+  /** The journey step and size control, opened from the phase badge while a change is written. */
+  journey?: React.ReactNode
 }
 
 export interface SpecPageHeaderProps {
@@ -168,18 +170,30 @@ export function SpecPageHeader(props: SpecPageHeaderProps) {
           <h1 className="aw-sp-title">{doc.title}</h1>
           <div className="aw-sp-meta">
             {/* The phase, not the check: a clean check makes a document ready, still being written. */}
-            <span className="aw-sp-phase" data-state={shownState} key={doc.shown}>
-              {phaseLabel(doc, shownState)}
-            </span>
+            {props.chrome?.journey ? (
+              <PhaseWithJourney label={phaseLabel(doc, shownState)} state={shownState} key={doc.shown}>
+                {props.chrome.journey}
+              </PhaseWithJourney>
+            ) : (
+              <span className="aw-sp-phase" data-state={shownState} key={doc.shown}>
+                {phaseLabel(doc, shownState)}
+              </span>
+            )}
             {doc.state === 'current' ? null : <MiniJourney state={doc.state === 'ready' ? doc.state : doc.shown} />}
-            <span className="aw-sp-meta-fact">{kindLabel(doc.kind)}</span>
+            {/* The crumb names the kind when the document sits in no roadmap: said once. */}
+            {doc.roadmap ? <span className="aw-sp-meta-fact">{kindLabel(doc.kind)}</span> : null}
             {props.chrome?.badges}
             <span className="aw-sp-meta-fact" title={doc.updatedAt}>
               Changed {formatAgo(doc.updatedAt, now)}
             </span>
             <CheckResult check={check} onJump={props.onJumpToFindings} />
           </div>
-          {props.health}
+          {/* One line under the title (`header-fits`): what does not fit scrolls sideways. */}
+          {props.health ? (
+            <div className="aw-sp-head-factline" data-testid="spec-header-factline">
+              {props.health}
+            </div>
+          ) : null}
         </div>
       )}
     </header>
@@ -395,6 +409,50 @@ function SplitButton({ icon, label, title, onClick, menu }: { icon: string; labe
             ))}
           </MenuContent>
         </Menu>
+      ) : null}
+    </span>
+  )
+}
+
+/** The phase badge, while a change is written: it names the step, and opens the control that moves
+ *  the step or changes the size. The list floats over the body, so it adds no height. */
+function PhaseWithJourney({ label, state, children }: { label: string; state: ShownState; children: React.ReactNode }) {
+  const [open, setOpen] = React.useState(false)
+  const root = React.useRef<HTMLSpanElement>(null)
+  React.useEffect(() => {
+    if (!open) return
+    const onDown = (e: MouseEvent) => {
+      const target = e.target as Element | null
+      if (!root.current || root.current.contains(target)) return
+      if (target?.closest?.('[role="dialog"], [role="menu"], [role="listbox"]')) return
+      setOpen(false)
+    }
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setOpen(false)
+    document.addEventListener('mousedown', onDown)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('mousedown', onDown)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [open])
+  return (
+    <span className="aw-sp-phase-wrap" ref={root}>
+      <button
+        type="button"
+        className="aw-sp-phase"
+        data-state={state}
+        data-testid="spec-phase-journey"
+        aria-expanded={open}
+        aria-haspopup="true"
+        onClick={() => setOpen((o) => !o)}
+        title="Move the step or change the size"
+      >
+        {label}
+      </button>
+      {open ? (
+        <div className="aw-notice-pop aw-pop aw-sp-phase-pop" data-state="open" role="region" aria-label="Journey step and size">
+          <div className="aw-notice-body">{children}</div>
+        </div>
       ) : null}
     </span>
   )

@@ -96,7 +96,9 @@ describe('the phase bar and the flow', () => {
     const open = vi.fn()
     renderBar(open)
     const link = await screen.findByTestId('spec-flow-link')
-    expect(link).toHaveTextContent('Flow: Demo flow')
+    // The chip does not repeat the title (`header-fits`); the flow's name is its tooltip.
+    expect(link).toHaveTextContent(/^Flow$/)
+    expect(link).toHaveAttribute('title', expect.stringContaining('Demo flow'))
     fireEvent.click(link)
     expect(open).toHaveBeenCalledWith(expect.objectContaining({ id: 'loop-1' }))
     expect(screen.queryByTestId('spec-start-flow')).not.toBeInTheDocument()

@@ -348,3 +348,28 @@ async def test_check_approve_and_the_rendered_document_show_the_acknowledged_gap
     approved = await _phase(app, auth_headers, "approved")
     assert approved.status_code == 200, approved.text
     assert [a["code"] for a in approved.json()["acknowledged"]] == ["criterion_without_check"]
+
+
+@pytest.mark.asyncio
+async def test_the_page_read_lists_the_open_gaps_the_save_reported(
+    app, auth_headers, run_headers  # noqa: F811
+):
+    """`one-message-count` (FR-11): the page's own read carries every open gap the save reported,
+    so the header lists them on load, without a Check; an acknowledged one moves to `acknowledged`.
+    """
+    await _created(app, auth_headers)
+    saved = (await _submit(app, run_headers, _document())).json()
+    page = (await app.get(f"{BASE}/spec", params={"path": PATH}, headers=auth_headers)).json()
+    assert _gaps(page["open_gaps"]) == _gaps(saved["warnings"]) != []
+    assert _notes(page["open_gaps"]) == _notes(saved["warnings"])
+
+    gap = next(w for w in saved["warnings"] if w["code"] == "criterion_without_check")
+    await _ack_agent(app, run_headers, gap["code"], gap["where"], "by hand")
+    page = (await app.get(f"{BASE}/spec", params={"path": PATH}, headers=auth_headers)).json()
+    assert (gap["code"], gap["where"]) not in _gaps(page["open_gaps"])
+    assert [a["code"] for a in page["acknowledged"]] == ["criterion_without_check"]
+
+    approved = await _phase(app, auth_headers, "approved")
+    assert approved.status_code == 200, approved.text
+    page = (await app.get(f"{BASE}/spec", params={"path": PATH}, headers=auth_headers)).json()
+    assert "open_gaps" not in page
