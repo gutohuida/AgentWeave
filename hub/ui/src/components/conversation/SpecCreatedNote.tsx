@@ -7,12 +7,15 @@ import '@/styles/conversation.css'
  *  stays true at any later step (it says what happened, never what the document is doing now).
  *  Presentational: the offer's facts in, callbacks out. */
 export function SpecCreatedNote({
+  path,
   title,
   createdBy,
   onOpen,
   onDismiss,
   busy = false,
 }: {
+  /** The document's path, carried as `data-path` so the line is found by what it offers. */
+  path?: string
   title: string
   /** The agent that created it; left out when the Hub did not record who. */
   createdBy?: string | null
@@ -21,7 +24,7 @@ export function SpecCreatedNote({
   busy?: boolean
 }) {
   return (
-    <div className="aw-spec-created-note" data-testid="spec-created-note">
+    <div className="aw-spec-created-note" data-testid="spec-created-note" data-path={path}>
       <Icon name="article" size={13} className="shrink-0" />
       <span className="aw-spec-created-note-text" title={title}>
         {createdBy ? `${createdBy} created ` : 'Created '}

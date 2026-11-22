@@ -35,7 +35,9 @@ const STARTERS: ConversationStarter[] = [
 /** What fits a project with no task and no specification: there is nothing to pick up, catch up on
  *  or review yet (`useProjectHasNoWork`). */
 const EMPTY_PROJECT_STARTERS: ConversationStarter[] = [
-  { label: 'Describe a change you want', message: 'I want to change this project. Interview me about what I want, then write it up as a specification for me to approve.', icon: 'edit_note' },
+  // Arms Explore (F1205): the starter exists to start a spec, and without Explore the first turn
+  // only interviewed and the spec that followed was not the thread's own.
+  { label: 'Describe a change you want', message: 'I want to change this project. Interview me about what I want, then write it up as a specification for me to approve.', icon: 'edit_note', explore: true },
   { label: 'Explain this codebase to me', message: 'Explain how this codebase is laid out and what it does, so I know where a change would go.', icon: 'travel_explore' },
 ]
 
@@ -286,10 +288,12 @@ export function NewConversationSurface({
             postureLabel={postureLabel}
             starters={hasNoWork ? EMPTY_PROJECT_STARTERS : STARTERS}
             headlineTestId="new-conversation-headline"
-            onPick={(message) => {
+            onPick={(message, starter) => {
               if (!agent) return
               setComposerDraft(projectId, agent, null, message)
               setComposerKey((key) => key + 1)
+              // Turned off again before sending, the message goes as an ordinary one.
+              if (starter.explore) setExploring(true)
             }}
           />
         ) : (

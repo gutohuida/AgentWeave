@@ -15,6 +15,9 @@ export interface SpecDocumentOffer {
   path: string
   title: string
   step: string | null
+  /** The run whose turn created it: the offer is drawn under that turn's message. Absent from an
+   *  older Hub. */
+  run_id?: string | null
   created_by: string | null
   created_at: string | null
 }
