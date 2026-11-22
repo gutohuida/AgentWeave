@@ -22,8 +22,8 @@ import { findSpecReferences, formatSpecReference, type SpecReference } from '@/l
 import { ComposerTriggerMenu, type ComposerTriggerMenuItem } from './ComposerTriggerMenu'
 import { ComposerModelControls } from './ComposerModelControls'
 import '@/styles/conversation.css'
-import { chatChoiceOverrides, chatEntry } from './pool/poolModel'
 import type { AgentPoolEntry } from '@/api/agentPool'
+import type { Runner } from '@/api/runners'
 import { ComposerSpecControl } from './ComposerSpecControl'
 
 export const COMPOSER_MIN_ROWS = 3
@@ -77,11 +77,13 @@ export interface ComposerProps {
    * message only when non-empty. */
   pendingOverrides?: Record<string, string>
   onPendingOverridesChange?: (overrides: Record<string, string>) => void
-  /** The agent's pool: given and not empty, the composer offers only its entries (FR-9 of
-   *  `a-profile-runs-each-task-on-a-runner-and-model-chosen-from-its-pool`). */
+  /** The agent's pool: given and not empty, the composer offers its entries first, then every
+   *  catalog model (FR-3 of `a-profile-s-pool-and-a-new-chat-can-use-any-model-of-any-provider`). */
   pool?: AgentPoolEntry[]
   /** The CLI this conversation started on; null before its first turn. */
   poolStartedOn?: string | null
+  /** The project's runners, naming a chat's choice outside the pool (FR-10). */
+  runners?: Array<Pick<Runner, 'id' | 'cli' | 'model'>>
   /** Why this composer cannot send yet. Set on the new-conversation surface started from the
    *  recency view, where the message cannot go anywhere until an agent is chosen. Stated rather
    *  than left to a silently dead button. */
@@ -136,6 +138,7 @@ export function Composer({
   onPendingOverridesChange = () => undefined,
   pool,
   poolStartedOn = null,
+  runners,
   disabledReason,
   onOpenSpecPicker,
   onStartExploration,
@@ -556,9 +559,10 @@ export function Composer({
             }
             pool={pool}
             agentName={agent}
-            currentEntry={pool && pool.length > 0 ? chatEntry(pool, pendingOverrides) : undefined}
+            chatOverrides={pendingOverrides}
             poolStartedOn={poolStartedOn}
-            onChooseEntry={(entry) => onPendingOverridesChange(chatChoiceOverrides(pendingOverrides, entry))}
+            onChangeChatOverrides={onPendingOverridesChange}
+            runners={runners}
           />
           {onOpenSpecPicker && onStartExploration && onStopExploring && (
             <ComposerSpecControl

@@ -1,8 +1,8 @@
 import * as React from 'react'
 import { Button } from '@/components/ui/button'
 import { Icon } from '@/components/common/Icon'
-import { PoolPicker } from '@/components/agents/pool/PoolPicker'
-import { defaultEntry, entryLabel } from '@/components/agents/pool/poolModel'
+import { ChatModelPicker } from '@/components/agents/pool/ChatModelPicker'
+import { chatChoice, chatPickOverrides, entryLabel, modelLabel } from '@/components/agents/pool/poolModel'
 import { BuildPlanDialog } from '@/components/spec/BuildPlanDialog'
 import { toast } from '@/lib/toast'
 import type { AgentPoolEntry } from '@/api/agentPool'
@@ -74,22 +74,24 @@ function ChatPickers() {
 }
 
 function Composer({ agentName, pool, startedOn, initial, title }: { agentName: string; pool: AgentPoolEntry[]; startedOn: string | null; initial?: AgentPoolEntry; title: string }) {
-  const [current, setCurrent] = React.useState<AgentPoolEntry | undefined>(initial ?? defaultEntry(pool))
+  const [overrides, setOverrides] = React.useState<Record<string, string>>(initial ? { runner_id: initial.runner_id, ...(initial.effort ? { effort: initial.effort } : {}) } : {})
+  const current = chatChoice(POOL_CATALOG, pool, overrides)
   return (
     <section className="mock-pool-composer" aria-label={title}>
       <h3 className="mock-pool-composer-title">{title}</h3>
       <div className="mock-pool-composer-box">
         <p className="mock-pool-composer-placeholder">Message {agentName}…</p>
         <div className="mock-pool-composer-bar">
-          <PoolPicker
+          <ChatModelPicker
             agentName={agentName}
             pool={pool}
             catalog={POOL_CATALOG}
             current={current}
             startedOn={startedOn}
-            onChoose={(entry) => {
-              setCurrent(entry)
-              toast({ title: `This chat runs on ${entryLabel(POOL_CATALOG, entry)}`, tone: 'success' })
+            onPick={(pick) => {
+              setOverrides(chatPickOverrides(POOL_CATALOG, overrides, pick))
+              const label = pick.kind === 'entry' ? entryLabel(POOL_CATALOG, pick.entry) : modelLabel(POOL_CATALOG, pick.provider, pick.model)
+              toast({ title: `This chat runs on ${label}`, tone: 'success' })
             }}
           />
         </div>

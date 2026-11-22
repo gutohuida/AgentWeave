@@ -2,10 +2,11 @@ import { useEffect, useRef, useState } from 'react'
 import { Icon } from '@/components/common/Icon'
 import { Button } from '@/components/ui/button'
 import { ModelPicker } from './ModelPicker'
-import { PoolPicker } from './pool/PoolPicker'
-import { isEntryControl } from './pool/poolModel'
+import { ChatChoiceControls } from './pool/ChatModelPicker'
+import { chatChoice, isEntryControl } from './pool/poolModel'
 import type { AgentPoolEntry } from '@/api/agentPool'
 import { useModelCatalog, providerForRunner, type ControlDescriptor } from '@/api/modelCatalog'
+import type { Runner } from '@/api/runners'
 import { providerRunnerModelLabel, withheldStoredModel } from '@/lib/runnerProvider'
 
 /** The AgentWeave counterpart of t3code's `composerControlClassName` (design.md Decision
@@ -40,16 +41,19 @@ interface ComposerModelControlsProps {
    * the bound CLI does not offer (`rebinding-an-agents-runner-starts-clean`, FR-10). Omitted, the
    * stored model is shown as it always was. */
   runnerModel?: string | null
-  /** The agent's pool (`a-profile-runs-each-task-on-a-runner-and-model-chosen-from-its-pool`,
-   *  FR-9). Given and not empty, the pool picker takes the model picker's and the Effort pill's
-   *  place: a chat chooses only among these entries, and an entry carries its effort. */
+  /** The agent's pool. Given and not empty, the chat's model picker lists it first and then every
+   *  catalog model (`a-profile-s-pool-and-a-new-chat-can-use-any-model-of-any-provider`, FR-3),
+   *  with the effort as its own control (FR-6). */
   pool?: AgentPoolEntry[]
   agentName?: string
-  /** The entry the next turn runs on (`chatEntry`). */
-  currentEntry?: AgentPoolEntry
+  /** The chat's overrides as the composer will send them: what the next turn runs on is read
+   *  from these (`chatChoice`). */
+  chatOverrides?: Record<string, string>
   /** The CLI the conversation started on; null before its first turn. */
   poolStartedOn?: string | null
-  onChooseEntry?: (entry: AgentPoolEntry) => void
+  onChangeChatOverrides?: (overrides: Record<string, string>) => void
+  /** The project's runners, to name a stored choice on a runner the pool does not hold. */
+  runners?: Array<Pick<Runner, 'id' | 'cli' | 'model'>>
 }
 
 /** A compact "Label: Value ▾" trigger + popover listbox — the one interaction shape every
@@ -218,27 +222,32 @@ export function ComposerModelControls({
   runnerModel,
   pool,
   agentName,
-  currentEntry,
+  chatOverrides = {},
   poolStartedOn = null,
-  onChooseEntry,
+  onChangeChatOverrides,
+  runners,
 }: ComposerModelControlsProps) {
   const { data: catalog } = useModelCatalog()
-  const providerId = providerForRunner(currentEntry?.cli ?? runner)
+  const usePool = Boolean(pool && pool.length > 0 && onChangeChatOverrides)
+  const choice = usePool ? chatChoice(catalog, pool!, chatOverrides, runners) : undefined
+  const providerId = providerForRunner(choice?.cli ?? runner)
   const provider = catalog?.providers.find((p) => p.provider === providerId)
   if (!provider) return null
 
-  if (pool && pool.length > 0 && onChooseEntry) {
-    // The pool's entries replace the model list and the Effort pill; the CLI's other controls
-    // (the posture) stay, read from the entry's CLI.
+  if (usePool && onChangeChatOverrides) {
+    // The chat's own choice: the pool first, then the catalog, beside its own effort pill
+    // (FR-3, FR-6); the CLI's other controls (the posture) stay, read from the chosen CLI.
     return (
       <>
-        <PoolPicker
+        <ChatChoiceControls
           agentName={agentName ?? 'This profile'}
-          pool={pool}
+          pool={pool!}
           catalog={catalog}
-          current={currentEntry}
+          provider={provider}
+          current={choice}
+          chatOverrides={chatOverrides}
           startedOn={poolStartedOn}
-          onChoose={onChooseEntry}
+          onChange={onChangeChatOverrides}
           openRequest={modelPickerRequest}
         />
         {provider.controls

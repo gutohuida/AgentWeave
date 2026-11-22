@@ -260,8 +260,8 @@ Awaiting the operator's look.
 
 Spec `spec/changes/a-profile-runs-each-task-on-a-runner-and-model-chosen-from-its-pool`. The components
 are `src/components/agents/pool/` (`PoolEditor` for the agent's Running page, which takes the single
-Model choice's place through `AgentRunningSettings`' `pool` prop; `PoolPicker` for the composer, which
-replaces the model picker and the Effort pill; the pure rules in `poolModel.ts`) and the Build dialog's
+Model choice's place through `AgentRunningSettings`' `pool` prop; `ChatModelPicker` for the composer, which
+lists the pool first and then the catalog, beside its own Effort pill (since `a-profile-s-pool-and-a-new-chat-can-use-any-model-of-any-provider`); the pure rules in `poolModel.ts`) and the Build dialog's
 per-task model under each agent (`BuildPlanDialog`'s optional `pools`); `src/styles/profile-pool.css`
 styles them. The types the agents API is to return are in `src/api/agentPool.ts`; the Build payload
 and recommendation gain `task_builder_entries`/`task_checker_entries`. Every pool, runner and the
