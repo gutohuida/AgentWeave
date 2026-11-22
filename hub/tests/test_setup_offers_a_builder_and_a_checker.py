@@ -162,3 +162,43 @@ async def test_setup_offer_refuses_a_runner_that_is_not_the_projects(app, auth_h
     assert refused.status_code == 409, refused.text
     assert "checker" in refused.json()["detail"]
     assert await _agents() == []
+
+
+@pytest.mark.asyncio
+async def test_setup_offer_creates_both_on_catalog_models_no_runner_uses(app, auth_headers) -> None:
+    """dialogs-agree, ac-setup-unused-model: a builder on Opus 5.5 and a checker on Sonnet 5.5,
+    named by provider and model, each get the plain runner for their model, made because none
+    existed, and that model as their pool default."""
+    created = await app.post(
+        "/api/v1/projects/proj-test/setup/profiles",
+        json={
+            "builder": {"name": "Builder", "provider": "claude", "model": "claude-opus-5-5"},
+            "checker": {"name": "Checker", "provider": "claude", "model": "claude-sonnet-5-5"},
+        },
+        headers=auth_headers,
+    )
+
+    assert created.status_code == 201, created.text
+    roster = (await app.get("/api/v1/projects/proj-test/agents", headers=auth_headers)).json()
+    defaults = {
+        a["name"]: next(e for e in a["pool"] if e["default"])["model"]
+        for a in roster
+        if a["name"] in {"Builder", "Checker"}
+    }
+    assert defaults == {"Builder": "claude-opus-5-5", "Checker": "claude-sonnet-5-5"}
+
+
+@pytest.mark.asyncio
+async def test_setup_offer_refuses_a_model_the_catalog_does_not_hold(app, auth_headers) -> None:
+    refused = await app.post(
+        "/api/v1/projects/proj-test/setup/profiles",
+        json={
+            "builder": {"name": "Builder", "provider": "claude", "model": "claude-opus-5-5"},
+            "checker": {"name": "Checker", "provider": "claude", "model": "not-a-model"},
+        },
+        headers=auth_headers,
+    )
+
+    assert refused.status_code == 409, refused.text
+    assert "checker" in refused.json()["detail"] and "not-a-model" in refused.json()["detail"]
+    assert await _agents() == []

@@ -1,24 +1,28 @@
 import * as React from 'react'
 import { useCharters } from '@/api/charters'
 import { readableApiError } from '@/api/client'
+import { useModelCatalog, type ProviderDescriptor } from '@/api/modelCatalog'
 import { useCreateOfferedProfiles } from '@/api/projects'
-import { useRunners } from '@/api/runners'
+import { useProviderLaunchability, type RunnerLaunchability } from '@/api/runners'
+import { defaultModel, modelOptions, namePlaceholder, providerOptions } from '@/components/agents/pool/catalogOptions'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogClose, DialogContent } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { MenuSelect } from '@/components/ui/menu'
 import { Field } from '@/components/ui/settings'
-import { environmentDestination, goTo } from '@/lib/navigation'
 import { toast } from '@/lib/toast'
 
 /**
  * The setup offer (`profiles-threads-and-builds-everywhere` D6, FR-8): a builder and a checker,
- * named by the operator, each with a runner of the project's and, if wanted, a charter. One
- * profile can never check its own work, so a first build needs two; nothing is created until
- * Create both is pressed, and then both are created or neither is.
+ * named by the operator, each with a provider and one of its catalog models and, if wanted, a
+ * charter. One profile can never check its own work, so a first build needs two; nothing is
+ * created until Create both is pressed, and then both are created or neither is.
  *
- * No charter is preselected and none is required. No runner is preselected either: which runner
- * builds and which checks is the operator's choice, not the first row's.
+ * The provider and model are chosen as Create profile chooses them
+ * (`a-profile-s-pool-and-a-new-chat-can-use-any-model-of-any-provider`, FR-9): any catalog model,
+ * whether or not a runner of the project uses it yet; the Hub reuses or makes the runner. No
+ * charter is preselected and none is required. No provider is preselected either: what builds and
+ * what checks is the operator's choice.
  */
 
 const NAME_RE = /^[a-zA-Z0-9_-]{1,32}$/
@@ -29,7 +33,8 @@ type Role = 'builder' | 'checker'
 interface Draft {
   name: string
   charterId: string
-  runnerId: string
+  provider: string
+  model: string
 }
 
 const ROLE_LABEL: Record<Role, string> = { builder: 'Builder', checker: 'Checker' }
@@ -48,18 +53,23 @@ function ProfileFields({
   role,
   draft,
   onChange,
-  runnerOptions,
+  providers,
+  launchability,
   charterOptions,
   sameName,
 }: {
   role: Role
   draft: Draft
   onChange: (next: Draft) => void
-  runnerOptions: { value: string; label: string }[]
+  providers: ProviderDescriptor[]
+  /** Which providers can run here; undefined until known, or when the check failed, and then
+   *  every provider is choosable and the Hub's refusal at creation names one that cannot run. */
+  launchability: Record<string, RunnerLaunchability> | undefined
   charterOptions: { value: string; label: string }[]
   sameName: boolean
 }) {
   const label = ROLE_LABEL[role]
+  const provider = providers.find((p) => p.provider === draft.provider)
   const nameError = draft.name ? nameProblem(draft.name) : null
   return (
     <fieldset className="mt-3 first:mt-0" data-testid={`setup-profiles-${role}`}>
@@ -78,20 +88,34 @@ function ProfileFields({
           <Input
             id={`setup-profiles-${role}-name`}
             value={draft.name}
+            placeholder={namePlaceholder(draft.provider, role)}
             aria-invalid={Boolean(nameError) || sameName}
             onChange={(event) => onChange({ ...draft, name: event.target.value })}
           />
         </Field>
-        <Field label="Runner" htmlFor={`setup-profiles-${role}-runner`} hint="What it runs on: a coding CLI and a model.">
+        <Field label="Provider" htmlFor={`setup-profiles-${role}-provider`} hint="The coding CLI it runs on.">
           <MenuSelect
-            id={`setup-profiles-${role}-runner`}
-            testId={`setup-profiles-${role}-runner`}
-            label={`${label} runner`}
-            value={draft.runnerId}
-            onChange={(runnerId) => onChange({ ...draft, runnerId })}
+            id={`setup-profiles-${role}-provider`}
+            testId={`setup-profiles-${role}-provider`}
+            label={`${label} provider`}
+            value={draft.provider}
+            onChange={(next) => onChange({ ...draft, provider: next, model: defaultModel(providers.find((p) => p.provider === next)) })}
             maxWidth={9999}
-            placeholder="Choose a runner…"
-            options={runnerOptions}
+            placeholder="Choose a provider…"
+            options={providerOptions(providers, launchability)}
+          />
+        </Field>
+        <Field label="Model" htmlFor={`setup-profiles-${role}-model`}>
+          <MenuSelect
+            id={`setup-profiles-${role}-model`}
+            testId={`setup-profiles-${role}-model`}
+            label={`${label} model`}
+            value={draft.model}
+            onChange={(model) => onChange({ ...draft, model })}
+            maxWidth={9999}
+            disabled={!provider}
+            placeholder={provider ? 'Choose a model…' : 'Choose a provider first'}
+            options={modelOptions(provider, { aliases: true })}
           />
         </Field>
         <Field label="Charter (optional)" htmlFor={`setup-profiles-${role}-charter`} hint="Instructions added to each of its runs.">
@@ -111,22 +135,24 @@ function ProfileFields({
 }
 
 function useOfferBody({ projectId, onDone }: { projectId: string; onDone: () => void }) {
-  const runners = useRunners()
+  const catalog = useModelCatalog()
+  const launchability = useProviderLaunchability()
   const charters = useCharters()
   const create = useCreateOfferedProfiles(projectId)
-  const [builder, setBuilder] = React.useState<Draft>({ name: 'Builder', charterId: NO_CHARTER, runnerId: '' })
-  const [checker, setChecker] = React.useState<Draft>({ name: 'Checker', charterId: NO_CHARTER, runnerId: '' })
+  const [builder, setBuilder] = React.useState<Draft>({ name: 'Builder', charterId: NO_CHARTER, provider: '', model: '' })
+  const [checker, setChecker] = React.useState<Draft>({ name: 'Checker', charterId: NO_CHARTER, provider: '', model: '' })
 
   const sameName = !!builder.name.trim() && builder.name.trim().toLowerCase() === checker.name.trim().toLowerCase()
   const ready =
-    !nameProblem(builder.name) && !nameProblem(checker.name) && !sameName && !!builder.runnerId && !!checker.runnerId
+    !nameProblem(builder.name) && !nameProblem(checker.name) && !sameName && !!builder.model && !!checker.model
 
   const submit = () => {
     if (!ready || create.isPending) return
     const entry = (draft: Draft) => ({
       name: draft.name.trim(),
       charter_id: draft.charterId === NO_CHARTER ? null : draft.charterId,
-      runner_id: draft.runnerId,
+      provider: draft.provider,
+      model: draft.model,
     })
     create.mutate(
       { builder: entry(builder), checker: entry(checker) },
@@ -140,22 +166,22 @@ function useOfferBody({ projectId, onDone }: { projectId: string; onDone: () => 
   }
 
   let body: React.ReactNode
-  if (runners.isLoading || charters.isLoading) {
+  if (catalog.isLoading || charters.isLoading) {
     body = (
       <p className="text-xs" role="status" style={{ color: 'var(--text-2)' }}>
-        Reading the project’s runners and charters…
+        Reading the model catalog and the project’s charters…
       </p>
     )
-  } else if (runners.error || charters.error) {
+  } else if (catalog.error || charters.error) {
     body = (
       <div role="alert" className="text-xs" data-testid="setup-profiles-read-error" style={{ color: 'var(--text)' }}>
-        <p>{readableApiError(runners.error ?? charters.error, 'Could not read the project’s runners and charters.')}</p>
+        <p>{readableApiError(catalog.error ?? charters.error, 'Could not read the model catalog and the project’s charters.')}</p>
         <Button
           className="mt-2"
           variant="outline"
           size="sm"
           onClick={() => {
-            void runners.refetch()
+            void catalog.refetch()
             void charters.refetch()
           }}
         >
@@ -163,25 +189,9 @@ function useOfferBody({ projectId, onDone }: { projectId: string; onDone: () => 
         </Button>
       </div>
     )
-  } else if (!(runners.data ?? []).length) {
-    body = (
-      <div className="text-xs" data-testid="setup-profiles-no-runners" style={{ color: 'var(--text)' }}>
-        <p>This project has no runners yet. Each profile needs one to run its turns.</p>
-        <Button
-          className="mt-2"
-          variant="outline"
-          size="sm"
-          onClick={() => {
-            onDone()
-            goTo(environmentDestination(projectId, 'general'))
-          }}
-        >
-          Add a runner in Project settings
-        </Button>
-      </div>
-    )
   } else {
-    const runnerOptions = (runners.data ?? []).map((runner) => ({ value: runner.id, label: runner.name }))
+    const providers = catalog.data?.providers ?? []
+    const runnable = launchability.data?.providers
     const charterOptions = (charters.data ?? []).map((charter) => ({ value: charter.id, label: charter.name }))
     body = (
       <form
@@ -195,7 +205,8 @@ function useOfferBody({ projectId, onDone }: { projectId: string; onDone: () => 
           role="builder"
           draft={builder}
           onChange={setBuilder}
-          runnerOptions={runnerOptions}
+          providers={providers}
+          launchability={runnable}
           charterOptions={charterOptions}
           sameName={false}
         />
@@ -203,10 +214,16 @@ function useOfferBody({ projectId, onDone }: { projectId: string; onDone: () => 
           role="checker"
           draft={checker}
           onChange={setChecker}
-          runnerOptions={runnerOptions}
+          providers={providers}
+          launchability={runnable}
           charterOptions={charterOptions}
           sameName={sameName}
         />
+        {launchability.error ? (
+          <p role="status" className="mt-3 text-xs" data-testid="setup-profiles-launchability-error" style={{ color: 'var(--text-2)' }}>
+            Could not check which coding CLIs are installed, so every provider is listed.
+          </p>
+        ) : null}
         {create.error ? (
           <p role="alert" className="mt-3 text-xs" data-testid="setup-profiles-error" style={{ color: 'var(--red)' }}>
             {readableApiError(create.error, 'The profiles could not be created.')}

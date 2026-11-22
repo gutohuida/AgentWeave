@@ -7,7 +7,7 @@ import { hubDate } from '@/lib/hubTime'
 import { BACKSTOP_MS } from '@/lib/backstopPoll'
 import { PERMISSION_MODE_CONTROL } from './modelCatalog'
 import type { ReachGrants } from './projects'
-import type { AgentPoolEntry, PoolEntryChoice } from './agentPool'
+import type { AgentPoolEntry, PoolEntryWrite } from './agentPool'
 
 /** One of an agent's running runs (`AgentSummary.running_runs`). */
 export interface RunningRun {
@@ -400,7 +400,7 @@ export function useUpdateAgentPool() {
   const queryClient = useQueryClient()
   const { selectedProjectId: projectId } = useConfigStore()
   return useMutation({
-    mutationFn: ({ agent, pool }: { agent: string; pool: Array<PoolEntryChoice & { default?: boolean }> }) =>
+    mutationFn: ({ agent, pool }: { agent: string; pool: PoolEntryWrite[] }) =>
       patchJson(`/api/v1/projects/${projectId}/agents/${agent}`, { pool }),
     onSuccess: () => {
       queryClient.invalidateQueries({
