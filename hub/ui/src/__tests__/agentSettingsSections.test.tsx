@@ -1,9 +1,9 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { render, screen, within } from '@testing-library/react'
+import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { AgentSettingsPage } from '@/components/agents/AgentSettingsPage'
-import { AGENT_SETTINGS_SECTIONS, type AgentSettingsSection } from '@/lib/navigation'
+import { AGENT_SETTINGS_SECTIONS, AGENT_SETTINGS_SECTION_LABELS, type AgentSettingsSection } from '@/lib/navigation'
 import type { AgentSummary } from '@/api/agents'
 import { MODEL_CATALOG_FIXTURE } from './support/modelCatalogFixture'
 import { menuSelect, openMenuSelect } from './support/menuSelect'
@@ -64,7 +64,7 @@ function agent(overrides: Partial<AgentSummary> = {}): AgentSummary {
 function open(section: AgentSettingsSection) {
   return render(
     <QueryClientProvider client={new QueryClient()}>
-      <AgentSettingsPage agent="worker" section={section} onSelectSection={vi.fn()} onBack={vi.fn()} />
+      <AgentSettingsPage agent="worker" section={section} />
     </QueryClientProvider>,
   )
 }
@@ -77,15 +77,18 @@ beforeEach(() => {
 })
 
 describe('an agent settings page has five sections (FR-8)', () => {
-  it('lists exactly Agent, Running, Permissions, Checkpoints and Workspace', () => {
-    open('agent')
-    const wanted = ['Profile', 'Running', 'Permissions', 'Checkpoints', 'Workspace']
-    const nav = screen.getByRole('navigation')
-    const listed = within(nav)
-      .getAllByRole('button')
-      .map((b) => b.textContent?.trim() ?? '')
-      .filter((text) => wanted.includes(text))
-    expect(listed).toEqual(wanted)
+  it.each(AGENT_SETTINGS_SECTIONS.filter((section) => section !== 'runs'))(
+    "%s is headed as its tab on the profile's page is labelled (FR-13)",
+    (section) => {
+      open(section)
+      expect(screen.getAllByRole('heading')[0]).toHaveTextContent(AGENT_SETTINGS_SECTION_LABELS[section])
+    },
+  )
+
+  it('labels the tabs Profile, Models, Permissions, Checkpoints, Workspace and Runs', () => {
+    expect(AGENT_SETTINGS_SECTIONS.map((section) => AGENT_SETTINGS_SECTION_LABELS[section])).toEqual([
+      'Profile', 'Models', 'Permissions', 'Checkpoints', 'Workspace', 'Runs',
+    ])
   })
 
   it.each(AGENT_SETTINGS_SECTIONS)('%s has no Save button, native checkbox, date input or select (FR-4, FR-5)', (section) => {

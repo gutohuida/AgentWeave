@@ -33,6 +33,7 @@ import { ReopeningWarnings } from './ReopeningWarnings'
 import { ProjectSetupList } from './ProjectSetupList'
 import { ProjectFirstRun } from './ProjectFirstRun'
 import { OverviewView, type AgentStripItem, type FinishedItem, type NeedItem, type RunningItem } from './OverviewView'
+import { profileHref } from '@/lib/navigation'
 
 /** The Hub's own agent for stalled work (`hub/hub/stalls.py`, `MENDER`). */
 const MENDER = 'mender'
@@ -399,6 +400,10 @@ export function OverviewScreen({
                 : `Last active ${a.last_seen ? formatAgoLong(a.last_seen, now) : 'never'}`,
       usd: usdByAgent.get(a.name) ?? (accounting?.agents ? null : 0),
       extra: <AgentPostureChips agent={a} onNavigate={onNavigate} />,
+      // The name and the settings control both lead to the profile's page (FR-15).
+      profile: projectId
+        ? { href: profileHref(projectId, a.name), onOpen: () => onNavigate(`agent-settings:${a.name}:agent`) }
+        : undefined,
       onOpen: () => onNavigate(`agent:${a.name}`),
     }
   })

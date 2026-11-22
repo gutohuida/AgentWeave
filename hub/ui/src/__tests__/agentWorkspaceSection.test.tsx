@@ -74,7 +74,7 @@ function renderWorkspace(data: AgentWorkspaceInfo | undefined, loading = false) 
   roster = [
     { name: 'codex-1', status: 'idle', message_count: 0, active_task_count: 0, lifecycle: 'open' },
   ]
-  return render(<QueryClientProvider client={new QueryClient()}><AgentSettingsPage agent="codex-1" section="workspace" onSelectSection={vi.fn()} onBack={vi.fn()} /></QueryClientProvider>)
+  return render(<QueryClientProvider client={new QueryClient()}><AgentSettingsPage agent="codex-1" section="workspace" /></QueryClientProvider>)
 }
 
 describe('where an agent works on disk', () => {

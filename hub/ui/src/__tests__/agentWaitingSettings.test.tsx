@@ -39,7 +39,7 @@ vi.mock('@/api/agents', async (importOriginal) => {
 /** The page resolves its agent from the roster, so a test supplies one and names it. */
 function renderInteraction(summary: AgentSummary) {
   roster = [summary]
-  return render(<QueryClientProvider client={new QueryClient()}><AgentSettingsPage agent={summary.name} section="running" onSelectSection={vi.fn()} onBack={vi.fn()} /></QueryClientProvider>)
+  return render(<QueryClientProvider client={new QueryClient()}><AgentSettingsPage agent={summary.name} section="running" /></QueryClientProvider>)
 }
 
 function agent(overrides: Partial<AgentSummary> = {}): AgentSummary {
@@ -132,19 +132,19 @@ describe('per-agent waiting settings', () => {
 
   it('puts each binding in its own section', () => {
     roster = [agent()]
-    const { unmount } = render(<QueryClientProvider client={new QueryClient()}><AgentSettingsPage agent="codex-1" section="permissions" onSelectSection={vi.fn()} onBack={vi.fn()} /></QueryClientProvider>)
+    const { unmount } = render(<QueryClientProvider client={new QueryClient()}><AgentSettingsPage agent="codex-1" section="permissions" /></QueryClientProvider>)
     expect(screen.getByLabelText('Default permissions for codex-1')).toBeInTheDocument()
     expect(screen.queryByLabelText('Model for codex-1')).not.toBeInTheDocument()
     unmount()
 
-    render(<QueryClientProvider client={new QueryClient()}><AgentSettingsPage agent="codex-1" section="agent" onSelectSection={vi.fn()} onBack={vi.fn()} /></QueryClientProvider>)
+    render(<QueryClientProvider client={new QueryClient()}><AgentSettingsPage agent="codex-1" section="agent" /></QueryClientProvider>)
     expect(screen.getByLabelText('Charter for codex-1')).toBeInTheDocument()
     expect(screen.queryByLabelText('Model for codex-1')).not.toBeInTheDocument()
   })
 
   it('says so when the agent is not in the roster, rather than rendering an empty page', () => {
     roster = []
-    render(<QueryClientProvider client={new QueryClient()}><AgentSettingsPage agent="codex-1" section="running" onSelectSection={vi.fn()} onBack={vi.fn()} /></QueryClientProvider>)
+    render(<QueryClientProvider client={new QueryClient()}><AgentSettingsPage agent="codex-1" section="running" /></QueryClientProvider>)
     expect(screen.getByTestId('agent-settings-empty')).toHaveTextContent(/no longer in the roster/i)
   })
 })

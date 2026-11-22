@@ -205,12 +205,11 @@ describe('each settings page names whose settings it holds, and links to App set
     expectAppSettingsOpen()
   })
 
-  it('an agent’s settings is that agent’s, and its section list ends with a link that goes there', () => {
+  it('an agent’s old settings address opens its page under the Profiles tab, with no second settings screen (FR-14)', async () => {
     window.history.pushState(null, '', '/?project=proj-test&agent=claude&settings=identity')
     mount(<App />)
-    const nav = screen.getByRole('navigation', { name: 'Profiles' })
-    const link = within(nav).getByRole('button', { name: /App settings/ })
-    fireEvent.click(link)
-    expectAppSettingsOpen()
+    expect(screen.getByTestId('project-tab-profiles')).toHaveAttribute('aria-current', 'page')
+    expect(await screen.findByTestId('profile-page')).toBeInTheDocument()
+    expect(screen.queryByRole('navigation', { name: 'Profiles' })).toBeNull()
   })
 })

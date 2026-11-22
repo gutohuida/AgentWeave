@@ -1,6 +1,7 @@
 import * as React from 'react'
 import { Icon } from '@/components/common/Icon'
 import type { Task } from '@/api/tasks'
+import { ProfileNameLink } from '@/components/profiles/ProfileNameLink'
 import { agentColorVars } from '@/lib/agentColors'
 import { formatDateTime } from '@/lib/format'
 import { Menu, MenuContent, MenuTrigger } from '@/components/ui/menu'
@@ -173,22 +174,23 @@ export function TaskCard({
             ) : null}
           </span>
         </span>
-
-        <span className="aw-tcard-line aw-tcard-people">
-          {specTag ? (
-            <span className="aw-tcard-tag" title={`Spec: ${specTag}`}>
-              {specTag}
-            </span>
-          ) : null}
-          {builder ? <Agent name={builder} index={colorOf?.(builder)} title={`Built by ${builder}`} /> : <span className="aw-tcard-nobody">Nobody yet</span>}
-          {reviewer ? (
-            <>
-              <Icon name="arrow_forward" size={10} className="aw-tcard-arrow" />
-              <Agent name={reviewer} index={colorOf?.(reviewer)} title={`Reviewed by ${reviewer}`} icon="visibility" />
-            </>
-          ) : null}
-        </span>
       </button>
+      {/* Outside the button, so each name can be a link to its profile's page (FR-15); a click
+          beside the names still opens the task, as the rest of the card does. */}
+      <span className="aw-tcard-line aw-tcard-people" onClick={() => onOpen(task.id)}>
+        {specTag ? (
+          <span className="aw-tcard-tag" title={`Spec: ${specTag}`}>
+            {specTag}
+          </span>
+        ) : null}
+        {builder ? <Agent name={builder} index={colorOf?.(builder)} title={`Built by ${builder}`} /> : <span className="aw-tcard-nobody">Nobody yet</span>}
+        {reviewer ? (
+          <>
+            <Icon name="arrow_forward" size={10} className="aw-tcard-arrow" />
+            <Agent name={reviewer} index={colorOf?.(reviewer)} title={`Reviewed by ${reviewer}`} icon="visibility" />
+          </>
+        ) : null}
+      </span>
       {retry || canStart ? (
         <span className="aw-tcard-actions">
           {retry ? (
@@ -221,7 +223,7 @@ function Agent({ name, index, title, icon }: { name: string; index: number | nul
   return (
     <span className="aw-tcard-agent" title={title}>
       {icon ? <Icon name={icon} size={10} style={{ color: color.accent }} /> : <span className="aw-tcard-agent-dot" style={{ background: color.accent }} />}
-      <span className="aw-tcard-agent-name">{name}</span>
+      <ProfileNameLink name={name} className="aw-tcard-agent-name aw-profile-link-quiet" />
     </span>
   )
 }

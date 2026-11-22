@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { ProfileNameLink } from '@/components/profiles/ProfileNameLink'
 import { Icon } from '@/components/common/Icon'
 import { StatePill, type Tone } from '@/components/common/StatePill'
 import { Timeline, TimelineItem } from '@/components/common/Timeline'
@@ -337,7 +338,7 @@ function renderEvent(event: StoryEvent, index: number, fresh: boolean, runs: Run
           live={running}
           head={
             <span>
-              <strong>{event.agent}</strong>
+              <strong><ProfileNameLink name={event.agent} className="aw-profile-link-quiet" /></strong>
               {running ? ' is working' : ''}
             </span>
           }
@@ -573,9 +574,15 @@ function renderEvent(event: StoryEvent, index: number, fresh: boolean, runs: Run
           icon="person_add"
           head={
             <span>
-              {event.declared
-                ? `${event.reviewer ?? 'A profile'} reviews it, as its named checker`
-                : `The Hub picked ${event.reviewer ?? 'a profile'} to review it: nobody was declared`}
+              {event.declared ? (
+                <>
+                  {event.reviewer ? <ProfileNameLink name={event.reviewer} className="aw-profile-link-quiet" /> : 'A profile'} reviews it, as its named checker
+                </>
+              ) : (
+                <>
+                  The Hub picked {event.reviewer ? <ProfileNameLink name={event.reviewer} className="aw-profile-link-quiet" /> : 'a profile'} to review it: nobody was declared
+                </>
+              )}
             </span>
           }
           meta={<Time value={event.at} />}

@@ -131,7 +131,7 @@ describe('charter management UI', () => {
 
   it('reassigns a charter from the agent settings page', async () => {
     const user = userEvent.setup()
-    render(<QueryClientProvider client={new QueryClient()}><AgentSettingsPage agent="claude" section="agent" onSelectSection={vi.fn()} onBack={vi.fn()} /></QueryClientProvider>)
+    render(<QueryClientProvider client={new QueryClient()}><AgentSettingsPage agent="claude" section="agent" /></QueryClientProvider>)
 
     await chooseMenuOption(user, 'Charter for claude', /Release Guardian/)
     expect(bindMutate).toHaveBeenCalledWith({ agent: 'claude', charterId: 'charter-one' }, expect.any(Object))

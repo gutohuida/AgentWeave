@@ -387,32 +387,48 @@ export function OverviewView({
             {agents.map((a) => {
               const color = agentColorVars(a.colorIndex)
               return (
-                <li key={a.name} data-testid={`agent-card-${a.name}`} className={a.profile ? 'aw-ov-agent-item' : undefined}>
-                  <button
-                    data-slot="agent-row"
-                    type="button"
-                    className="aw-ov-row aw-ov-agent-row"
-                    data-state={a.state}
-                    onClick={a.onOpen}
-                    aria-label={a.statusLabel ? `Open ${a.name}, ${a.statusLabel}` : undefined}
-                    style={{ '--agent-accent': color.accent } as React.CSSProperties}
-                  >
+                <li key={a.name} data-testid={`agent-card-${a.name}`} className="aw-ov-agent-item" style={{ '--agent-accent': color.accent } as React.CSSProperties}>
+                  {/* The row opens the conversation from anywhere on it; the name (a link to the
+                      profile's page) and the settings control sit above it (FR-15). */}
+                  <div data-slot="agent-row" className="aw-ov-row aw-ov-agent-row" data-state={a.state}>
+                    <button
+                      data-slot="agent-row-open"
+                      type="button"
+                      className="aw-ov-agent-cover"
+                      onClick={a.onOpen}
+                      aria-label={a.statusLabel ? `Open ${a.name}, ${a.statusLabel}` : `Open ${a.name}`}
+                    />
                     <span className={['aw-agent-dot', a.state === 'running' ? 'aw-pulse' : ''].join(' ')} aria-hidden="true" />
                     <span className="aw-ov-row-text">
-                      <span className="aw-ov-row-title">{a.name}</span>
+                      <span className="aw-ov-row-title">
+                        {a.profile ? (
+                          <ProfileLink name={a.name} href={a.profile.href} onOpen={a.profile.onOpen} className="aw-ov-agent-name aw-profile-link-quiet">
+                            {a.name}
+                          </ProfileLink>
+                        ) : (
+                          a.name
+                        )}
+                      </span>
                       <span className="aw-ov-row-detail" data-state={a.state}>
                         {a.doing}
                       </span>
                     </span>
                     <span className="aw-ov-row-end tabular" title="Spent so far">
                       {a.usd != null ? formatMoney(a.usd) : '—'}
+                      {a.profile ? (
+                        <button
+                          type="button"
+                          data-slot="icon-button"
+                          className="aw-icon-button aw-ov-profile-settings"
+                          aria-label={`${a.name} settings`}
+                          title={`${a.name} settings`}
+                          onClick={a.profile.onOpen}
+                        >
+                          <Icon name="settings" size={14} />
+                        </button>
+                      ) : null}
                     </span>
-                  </button>
-                  {a.profile ? (
-                    <ProfileLink name={a.name} href={a.profile.href} onOpen={a.profile.onOpen} className="aw-ov-profile-link">
-                      <Icon name="settings" size={14} />
-                    </ProfileLink>
-                  ) : null}
+                  </div>
                   {a.extra ? <div className="aw-ov-agent-extra">{a.extra}</div> : null}
                 </li>
               )
