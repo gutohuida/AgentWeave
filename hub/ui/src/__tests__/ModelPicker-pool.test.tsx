@@ -3,16 +3,16 @@ import { describe, expect, it, vi } from 'vitest'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
 import { ComposerModelControls } from '@/components/agents/ComposerModelControls'
-import { chatChoiceOverrides, chatEntry, chatStartedOn } from '@/components/agents/pool/poolModel'
+import { chatChoice, chatEffortOverrides, chatPickOverrides, chatStartedOn } from '@/components/agents/pool/poolModel'
 import type { AgentPoolEntry } from '@/api/agentPool'
 import type { ModelCatalogResponse } from '@/api/modelCatalog'
 
 /**
- * The chat composer under a pool (`a-profile-runs-each-task-on-a-runner-and-model-chosen-from-its-
- * pool`, FR-9, criterion chat-picker-bounded): the model choice lists only the profile's entries,
- * the Effort pill is gone because an entry carries its effort, and once a chat has a turn the
- * entries on another CLI are listed but not choosable. The pool is in the order the agents route
- * returns it, the operator's order.
+ * The chat composer's model choice (`a-profile-s-pool-and-a-new-chat-can-use-any-model-of-any-
+ * provider`, FR-3, FR-6, FR-11; it reverses FR-9 of the pool change, which bounded a chat to its
+ * pool): the profile's pool first under its name, then every other catalog model by provider,
+ * always a picker, with the effort as its own pill. Once a chat has a turn, another CLI's models
+ * are listed but not choosable. The pool is in the order the agents route returns it.
  */
 
 const CATALOG: ModelCatalogResponse = {
@@ -59,6 +59,9 @@ const CATALOG: ModelCatalogResponse = {
   ],
 }
 
+/** The project's runners as the runners route returns them: one the Hub made for a chat on Opus. */
+const RUNNERS = [{ id: 'runner-opus-chat', cli: 'claude' as const, model: 'claude-opus-5-5' }]
+
 vi.mock('@/api/modelCatalog', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/api/modelCatalog')>()
   return { ...actual, useModelCatalog: () => ({ data: CATALOG }) }
@@ -98,7 +101,7 @@ const CODEX: AgentPoolEntry = {
 }
 
 function renderControls(pool: AgentPoolEntry[], overrides: Record<string, string> = {}, startedOn: string | null = null) {
-  const onChooseEntry = vi.fn()
+  const onChange = vi.fn()
   render(
     <ComposerModelControls
       runner="claude"
@@ -108,77 +111,109 @@ function renderControls(pool: AgentPoolEntry[], overrides: Record<string, string
       onChangeControl={vi.fn()}
       pool={pool}
       agentName="Builder"
-      currentEntry={chatEntry(pool, overrides)}
+      chatOverrides={overrides}
       poolStartedOn={startedOn}
-      onChooseEntry={onChooseEntry}
+      onChangeChatOverrides={onChange}
+      runners={RUNNERS}
     />,
     { wrapper },
   )
-  return { onChooseEntry }
+  return { onChange }
 }
 
 function open() {
   fireEvent.click(screen.getByRole('button', { name: /^Model:/ }))
-  return screen.getByRole('listbox', { name: 'Models Builder may run on' })
+  return screen.getByRole('listbox', { name: 'Models for this chat with Builder' })
 }
 
-describe('ComposerModelControls under a pool (FR-9)', () => {
-  it('chat-picker-bounded: the picker lists only the pool’s Haiku and Sonnet', () => {
-    renderControls([HAIKU, SONNET])
+function groups(listbox: HTMLElement) {
+  return within(listbox)
+    .getAllByRole('group')
+    .map((group) => [
+      group.getAttribute('aria-label'),
+      within(group)
+        .getAllByRole('option')
+        .map((option) => option.getAttribute('aria-label')),
+    ])
+}
+
+describe('the chat model picker: the pool first, then the catalog (FR-3)', () => {
+  it('ac-picker-single-pool: a pool of one entry still opens a picker, its entry under the profile, then every other model', () => {
+    renderControls([HAIKU])
     const listbox = open()
-    const labels = within(listbox)
-      .getAllByRole('option')
-      .map((option) => option.getAttribute('aria-label'))
-    expect(labels).toEqual(['Haiku 5.5, the default', 'Sonnet 5.5 · High'])
-    expect(within(listbox).queryByText(/Opus/)).toBeNull()
-    // The pill reads the default entry before anything is chosen.
+    expect(groups(listbox)).toEqual([
+      ['Builder', ['Haiku 5.5, the default']],
+      ['Claude Code', ['Sonnet 5.5', 'Opus 5.5']],
+      ['Codex', ['GPT-6.1-Sol']],
+    ])
+    expect(screen.getByText(/This choice is for this chat only/)).toHaveTextContent(
+      'This choice is for this chat only. Tasks and reviews run on Builder’s own models and do not follow it.',
+    )
+    // The pill reads the pool's default before anything is chosen.
     expect(screen.getByRole('button', { name: /^Model:/ })).toHaveTextContent('Haiku 5.5')
   })
 
-  it('replaces the Effort pill, keeping the CLI’s other controls', () => {
+  it('a model the pool holds is listed once, under the profile', () => {
     renderControls([HAIKU, SONNET])
-    expect(screen.queryByTitle(/^Effort:/)).toBeNull()
-    expect(screen.getByTitle(/^Permissions:/)).toBeInTheDocument()
+    expect(groups(open())[1]).toEqual(['Claude Code', ['Opus 5.5']])
   })
 
-  it('choosing an entry hands it back, and its overrides name its runner and effort', () => {
-    const { onChooseEntry } = renderControls([HAIKU, SONNET], { permission_mode: 'acceptEdits', model: 'opus' })
+  it('choosing a catalog model sends its provider and model; choosing an entry its runner and effort', () => {
+    const { onChange } = renderControls([HAIKU, SONNET], { permission_mode: 'acceptEdits', effort: 'high' })
+    fireEvent.click(within(open()).getByRole('option', { name: 'Opus 5.5' }))
+    expect(onChange).toHaveBeenLastCalledWith({ permission_mode: 'acceptEdits', provider: 'claude', model: 'claude-opus-5-5', effort: 'high' })
+
     fireEvent.click(within(open()).getByRole('option', { name: 'Sonnet 5.5 · High' }))
-    expect(onChooseEntry).toHaveBeenCalledWith(SONNET)
-    expect(chatChoiceOverrides({ permission_mode: 'acceptEdits', model: 'opus' }, SONNET)).toEqual({
-      permission_mode: 'acceptEdits',
-      runner_id: 'runner-sonnet',
-      effort: 'high',
-    })
+    expect(onChange).toHaveBeenLastCalledWith({ permission_mode: 'acceptEdits', runner_id: 'runner-sonnet', effort: 'high' })
     // Back to the default: its effort is none, so none is sent.
-    expect(chatChoiceOverrides({ runner_id: 'runner-sonnet', effort: 'high' }, HAIKU)).toEqual({
+    expect(chatPickOverrides(CATALOG, { runner_id: 'runner-sonnet', effort: 'high' }, { kind: 'entry', entry: HAIKU })).toEqual({
       runner_id: 'runner-haiku',
     })
+    // An effort the chosen provider does not offer is dropped.
+    expect(chatPickOverrides(CATALOG, { effort: 'high' }, { kind: 'model', provider: 'codex', model: 'gpt-6.1-sol' })).toEqual({
+      provider: 'codex',
+      model: 'gpt-6.1-sol',
+    })
   })
 
-  it('shows the chosen entry, read from the overrides the conversation stores', () => {
-    renderControls([HAIKU, SONNET], { runner_id: 'runner-sonnet', effort: 'high' })
-    expect(screen.getByRole('button', { name: /^Model:/ })).toHaveTextContent('Sonnet 5.5 · High')
+  it('shows a stored choice outside the pool by the runner the Hub made for it', () => {
+    renderControls([HAIKU], { runner_id: 'runner-opus-chat' })
+    expect(screen.getByRole('button', { name: /^Model:/ })).toHaveTextContent('Opus 5.5')
+    const opus = within(open()).getByRole('option', { name: 'Opus 5.5' })
+    expect(opus).toHaveAttribute('aria-selected', 'true')
   })
 
-  it('a started chat lists another CLI’s entries as not choosable, saying a new chat is needed', () => {
-    const { onChooseEntry } = renderControls([HAIKU, SONNET, CODEX], {}, 'claude')
+  it('ac-other-cli-refused: a started chat lists another CLI’s models as not choosable, saying a new chat is needed', () => {
+    const { onChange } = renderControls([HAIKU, SONNET, CODEX], {}, 'claude')
     const listbox = open()
     const codex = within(listbox).getByRole('option', { name: 'GPT-6.1-Sol' })
     expect(codex).toHaveAttribute('aria-disabled', 'true')
     expect(codex).toHaveTextContent('This chat runs on Claude Code; start a new chat for Codex')
     fireEvent.click(codex)
-    expect(onChooseEntry).not.toHaveBeenCalled()
-    // Before its first turn every entry is choosable.
-    expect(within(listbox).getByRole('option', { name: 'Sonnet 5.5 · High' })).not.toHaveAttribute('aria-disabled')
+    expect(onChange).not.toHaveBeenCalled()
+    // Its own CLI's models stay choosable, in the pool or not.
+    const opus = within(listbox).getByRole('option', { name: 'Opus 5.5' })
+    expect(opus).not.toHaveAttribute('aria-disabled')
+    fireEvent.click(opus)
+    expect(onChange).toHaveBeenCalledWith({ provider: 'claude', model: 'claude-opus-5-5' })
   })
 
-  it('a new chat may choose an entry on any CLI', () => {
-    const { onChooseEntry } = renderControls([HAIKU, SONNET, CODEX], {}, null)
+  it('a new chat may choose a model on any CLI', () => {
+    const { onChange } = renderControls([HAIKU], {}, null)
     const codex = within(open()).getByRole('option', { name: 'GPT-6.1-Sol' })
     expect(codex).not.toHaveAttribute('aria-disabled')
     fireEvent.click(codex)
-    expect(onChooseEntry).toHaveBeenCalledWith(CODEX)
+    expect(onChange).toHaveBeenCalledWith({ provider: 'codex', model: 'gpt-6.1-sol' })
+  })
+
+  it('the filter narrows the list, and the keyboard chooses', () => {
+    const { onChange } = renderControls([HAIKU])
+    open()
+    const input = screen.getByRole('combobox', { name: 'Find a model' })
+    fireEvent.change(input, { target: { value: 'opus' } })
+    expect(groups(screen.getByRole('listbox'))).toEqual([['Claude Code', ['Opus 5.5']]])
+    fireEvent.keyDown(input, { key: 'Enter' })
+    expect(onChange).toHaveBeenCalledWith({ provider: 'claude', model: 'claude-opus-5-5' })
   })
 
   it('reads the CLI a chat started on from the conversation the route returns', () => {
@@ -188,6 +223,30 @@ describe('ComposerModelControls under a pool (FR-9)', () => {
     expect(chatStartedOn(pool, { started_cli: 'codex', provider_session_id: 's' })).toBe('codex')
     // A session from before runs recorded their runner ran on the default.
     expect(chatStartedOn(pool, { started_cli: null, provider_session_id: 's' })).toBe('claude')
+  })
+})
+
+describe('the chat effort is its own control (FR-6)', () => {
+  it('offers the usual effort and the provider’s efforts, preselected with the entry’s', () => {
+    renderControls([HAIKU, SONNET], { runner_id: 'runner-sonnet', effort: 'high' })
+    fireEvent.click(screen.getByRole('button', { name: 'Effort: High' }))
+    const options = within(screen.getByRole('listbox', { name: 'Effort' })).getAllByRole('option')
+    expect(options.map((o) => o.textContent)).toEqual(['Usual', 'Medium', 'High'])
+    expect(screen.getByTitle(/^Permissions:/)).toBeInTheDocument()
+  })
+
+  it('ac-effort-changes: changing it keeps the runner, and Usual clears it', () => {
+    const { onChange } = renderControls([HAIKU], { runner_id: 'runner-opus-chat' }, 'claude')
+    fireEvent.click(screen.getByRole('button', { name: 'Effort: Usual' }))
+    fireEvent.click(screen.getByRole('option', { name: 'High' }))
+    expect(onChange).toHaveBeenCalledWith({ runner_id: 'runner-opus-chat', effort: 'high' })
+    expect(chatEffortOverrides({ runner_id: 'r', effort: 'high' }, null)).toEqual({ runner_id: 'r' })
+  })
+
+  it('reads the default entry’s effort when the chat chose none', () => {
+    const highDefault = { ...HAIKU, effort: 'high' }
+    expect(chatChoice(CATALOG, [highDefault], {})?.effort).toBe('high')
+    expect(chatChoice(CATALOG, [highDefault], { effort: 'medium' })?.effort).toBe('medium')
   })
 
   it('without a pool, the model picker and the Effort pill are as before', () => {

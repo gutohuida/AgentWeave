@@ -8,7 +8,10 @@ Every run starts on an entry of its profile's pool: a runner plus an optional ef
   fixes it, from the operator's Build choice for the task, else the document's recommendation when
   the pool holds it, else the pool's default; every later run of that role by the same agent uses
   the fixed entry, re-reviews after a send-back included (FR-7).
-- Every other run — a chat, a job firing, a peer message, a mend turn — uses the pool's default.
+- An operator's chat turn uses the runner the chat chose, which may be any catalog model, in the
+  pool or not (`a-profile-s-pool-and-a-new-chat-can-use-any-model-of-any-provider`, FR-10).
+- Every other run — a job firing, a peer message, a mend turn, a chat that chose nothing — uses
+  the pool's default; a chat's choice never reaches it (FR-7).
 
 A fixed or chosen entry no longer in the pool when a run starts falls back to the default, and the
 run's trace says so (FR-8), unless the run continues a conversation whose last run launched on that
@@ -30,6 +33,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from . import agent_pool, blocking, builds, project_workspace, spec_documents
 from . import spec_payload as spec_payload_module
 from .db.models import Agent, AgentPoolEntry, Run, Runner, SpecDocument, Task
+from .runner_provider import has_provider
 
 logger = logging.getLogger(__name__)
 
@@ -47,7 +51,11 @@ FALLBACK_EVENT = "pool_entry_removed"
 #: the entry's `effort` beside it; never passed to a CLI as a control.
 CHAT_RUNNER_KEY = "runner_id"
 
-_CHAT_ENTRY_KEYS = frozenset({CHAT_RUNNER_KEY, "model", "effort"})
+#: The key naming which catalog provider a chat's `model` is (FR-10); read, never stored.
+CHAT_PROVIDER_KEY = "provider"
+
+#: The keys a chat names its runner by; its effort is its own and never moves it (FR-6).
+_CHAT_RUNNER_KEYS = frozenset({CHAT_RUNNER_KEY, CHAT_PROVIDER_KEY, "model"})
 
 
 @dataclass
@@ -170,8 +178,10 @@ async def resolve(
     if role is None:
         role = role_for(agent_row.name, task, review=review)
     if role is None or task is None:
-        if chat_runner_id and any(runner_id == chat_runner_id for runner_id, _ in held):
-            # The chat's own effort travels in its overrides (`entry_overrides`).
+        if chat_runner_id and await session.get(Runner, chat_runner_id) is not None:
+            # A chat runs on the runner it chose, in the pool or not (FR-10 of `a-profile-s-pool-
+            # and-a-new-chat-can-use-any-model-of-any-provider`); its effort travels in its
+            # overrides (`entry_overrides`). Only an operator's chat turn passes one (FR-7).
             return LaunchEntry(chat_runner_id, None, "chat")
         return LaunchEntry(default["runner_id"], default["effort"], "default")
 
@@ -318,92 +328,124 @@ async def bound_chat_overrides(
     stored: Dict[str, Any],
     conversation_id: Optional[str],
 ) -> "tuple[Dict[str, Any], Optional[Runner]]":
-    """*overrides* bound to the profile's pool (FR-9), and the runner of the entry they name.
+    """*overrides* as a chat's choice (`a-profile-s-pool-and-a-new-chat-can-use-any-model-of-any-
+    provider`, FR-10, FR-11), and the runner the chat's turn launches on.
 
-    A chat chooses an entry: by its runner (`runner_id`, with the entry's `effort`), or, as a
-    composer did before pools, by `model` and `effort`, which name the entry on a runner of that
-    model. Either is refused unless the pool holds exactly that pair, and, once the conversation
-    has a turn, unless the entry is on the CLI it started on. An entry on another runner than the
-    default's is answered by its runner, without `model`: the runner decides the model. One on the
-    default's runner is answered as sent, so the chat follows the default, as a chat followed a
-    rebound agent before pools. Overrides naming none of the three,
-    or re-sending the conversation's stored ones unchanged, are left as they are. Raises
-    `ChatChoiceRefusalError`.
+    A chat names any catalog model: by `provider` and `model` (the composer), by `model` alone (as
+    a composer did before pools; read on the CLI the chat is on first), or by a runner of the
+    project (`runner_id`). The pool is never changed: a model on a runner the chat is on or the
+    pool holds launches on that runner, any other on the project's plain runner for it, reused or
+    created (`agent_pool.plain_runner_for`). Once the conversation has a turn, only a model of the
+    CLI it started on is accepted. The effort is the chat's own and never decides the runner.
+
+    A choice on another runner than the default's is answered by its runner, without `model`: the
+    runner decides the model. One on the default's runner is answered as sent, so the chat follows
+    the default, as a chat followed a rebound agent before pools. Overrides naming none of these,
+    or re-sending the conversation's stored ones unchanged, are left as they are. `provider` is
+    never stored. Raises `ChatChoiceRefusalError`.
     """
-    held, default = await _pool(session, agent_row)
-    stored_runner = stored.get(CHAT_RUNNER_KEY)
+    as_sent = {key: value for key, value in overrides.items() if key != CHAT_PROVIDER_KEY}
+    _, default = await _pool(session, agent_row)
     if default is None:
-        return dict(overrides), None
-    current_runner_id = (
-        stored_runner
-        if stored_runner and any(runner_id == stored_runner for runner_id, _ in held)
-        else default["runner_id"]
-    )
-    chosen_keys = {key: overrides[key] for key in _CHAT_ENTRY_KEYS if key in overrides}
-    stored_keys = {key: stored[key] for key in _CHAT_ENTRY_KEYS if key in stored}
-    if not chosen_keys or chosen_keys == stored_keys:
-        # Nothing about the entry is being chosen: the composer sends the stored overrides back
-        # with every message, and a stored choice keeps working where it is stored.
-        runner = await session.get(Runner, stored_runner or current_runner_id)
-        return dict(overrides), runner
+        return as_sent, None
+    default_runner = await session.get(Runner, default["runner_id"])
+    stored_runner = stored.get(CHAT_RUNNER_KEY)
+    current = await _project_runner(session, agent_row, stored_runner) if stored_runner else None
+    current = current or default_runner
+    chosen_keys = {key: overrides[key] for key in _CHAT_RUNNER_KEYS if key in overrides}
+    stored_keys = {key: stored[key] for key in _CHAT_RUNNER_KEYS if key in stored}
+    if current is None or not chosen_keys or chosen_keys == stored_keys:
+        # Nothing about the runner is being chosen: the composer sends the stored overrides back
+        # with every message, and a stored choice keeps working where it is stored. The effort
+        # alone never moves the chat off its runner (FR-6).
+        return as_sent, current
 
-    runners: Dict[str, Runner] = {}
-    for runner_id, _ in held:
-        row = await session.get(Runner, runner_id)
-        if row is not None:
-            runners[runner_id] = row
-    entries = [(runners[r], effort) for r, effort in held if r in runners]
-
-    async def named_entries() -> "tuple[List[tuple[Runner, Optional[str]]], str]":
-        effort = overrides.get("effort") or None
-        if CHAT_RUNNER_KEY in overrides:
-            runner_id = str(overrides[CHAT_RUNNER_KEY])
-            # A runner the pool does not hold is still named by its model, as the picker names it.
-            row = runners.get(runner_id) or await session.get(Runner, runner_id)
-            label = (
-                agent_pool.entry_label(row, effort)
-                if row is not None
-                else f"the runner {runner_id!r}" + (f" with effort {effort!r}" if effort else "")
-            )
-            return [(r, e) for r, e in entries if r.id == runner_id and e == effort], label
-        if "model" in overrides:
-            model = str(overrides["model"])
-            matches = [
-                (r, e) for r, e in entries if _same_model(r.cli, model, r.model) and e == effort
-            ]
-            return matches, f"{model} with effort {effort!r}" if effort else model
-        current = runners.get(current_runner_id)
-        model = agent_pool.model_label(current) if current is not None else "Its model"
-        matches = [(r, e) for r, e in entries if r.id == current_runner_id and e == effort]
-        return matches, f"{model} with effort {effort!r}" if effort else f"{model} with no effort"
-
-    matches, label = await named_entries()
-    if not matches:
-        offered = ", ".join(sorted(agent_pool.entry_label(r, e) for r, e in entries)) or "nothing"
-        raise ChatChoiceRefusalError(
-            f"{label} is not among the models {agent_row.name} may run on ({offered}); "
-            f"add it to {agent_row.name}'s models in its settings to choose it."
-        )
     started = await started_cli(session, conversation_id, agent_row)
-    if started is not None:
-        same_cli = [(r, e) for r, e in matches if r.cli == started]
-        if not same_cli:
-            other = matches[0][0].cli
-            raise ChatChoiceRefusalError(
-                f"This conversation runs on {agent_pool.cli_label(started)}, and {label} runs on "
-                f"{agent_pool.cli_label(other)}: start a new chat to use it."
-            )
-        matches = same_cli
-    # The current runner first, so a model or effort change keeps the runner the chat is on.
-    matches.sort(key=lambda pair: (pair[0].id != current_runner_id, pair[0].name))
-    runner, effort = matches[0]
-    if runner.id == default["runner_id"]:
-        # An entry on the default's runner is stored as a chat's choice always was, so the
+    runner, label = await _chosen_runner(
+        session, agent_row, overrides, stored=stored, current=current, started=started
+    )
+    if started is not None and runner.cli != started:
+        raise ChatChoiceRefusalError(
+            f"This conversation runs on {agent_pool.cli_label(started)}, and {label} runs on "
+            f"{agent_pool.cli_label(runner.cli)}: start a new chat to use it."
+        )
+    accepted = {key: value for key, value in overrides.items() if key not in _CHAT_RUNNER_KEYS}
+    if default_runner is not None and runner.id == default_runner.id:
+        # A choice on the default's runner is stored as a chat's choice always was, so the
         # conversation follows the default, as it did before pools when the agent was rebound.
-        accepted = {key: value for key, value in overrides.items() if key != CHAT_RUNNER_KEY}
+        if "model" in overrides and CHAT_PROVIDER_KEY not in overrides:
+            accepted["model"] = overrides["model"]
         return accepted, runner
-    accepted = {key: value for key, value in overrides.items() if key not in _CHAT_ENTRY_KEYS}
     accepted[CHAT_RUNNER_KEY] = runner.id
-    if effort:
-        accepted["effort"] = effort
     return accepted, runner
+
+
+async def _project_runner(
+    session: AsyncSession, agent_row: Agent, runner_id: object
+) -> Optional[Runner]:
+    row = await session.get(Runner, str(runner_id))
+    return row if row is not None and row.project_id == agent_row.project_id else None
+
+
+async def _chosen_runner(
+    session: AsyncSession,
+    agent_row: Agent,
+    overrides: Dict[str, Any],
+    *,
+    stored: Dict[str, Any],
+    current: Runner,
+    started: Optional[str],
+) -> "tuple[Runner, str]":
+    """The runner a chat's choice names, and the choice as a refusal names it (FR-10)."""
+    from .model_catalog import get_provider, providers, undeclared_model_reason
+
+    if CHAT_RUNNER_KEY in overrides:
+        runner_id = overrides[CHAT_RUNNER_KEY]
+        row = await _project_runner(session, agent_row, runner_id)
+        if row is None:
+            raise ChatChoiceRefusalError(f"There is no runner {runner_id!r} in this project.")
+        return row, agent_pool.model_label(row)
+    if "model" not in overrides:
+        return current, agent_pool.model_label(current)
+
+    model = str(overrides["model"])
+    provider = overrides.get(CHAT_PROVIDER_KEY)
+    if provider is None and model == stored.get("model"):
+        # A stored model keeps working where it is stored, also once the catalog dropped it.
+        return current, model
+    if provider is not None:
+        clis = [str(provider)]
+    else:
+        # The CLI the chat is on first, so an id two catalogs share stays on it.
+        clis = []
+        for cli in [started, current.cli, *(entry.provider for entry in providers())]:
+            if cli and cli not in clis:
+                clis.append(cli)
+    found: Optional["tuple[str, str]"] = None
+    for cli in clis:
+        entry = get_provider(cli)
+        declared = entry.model(model) if entry is not None else None
+        if declared is not None:
+            found = (cli, declared.label)
+            break
+    if found is None:
+        raise ChatChoiceRefusalError(undeclared_model_reason(clis[0], model))
+    cli, label = found
+    # A runner the chat is on, or the pool holds, for this model first: no runner is made for it.
+    candidates = [current]
+    for pool_entry in await agent_pool.pool_rows(session, agent_row.id):
+        row = await session.get(Runner, pool_entry.runner_id)
+        if row is not None and row not in candidates:
+            candidates.append(row)
+    for row in candidates:
+        if (
+            row.cli == cli
+            and not has_provider(row.provider_config)
+            and _same_model(cli, model, row.model)
+        ):
+            return row, label
+    try:
+        runner = await agent_pool.plain_runner_for(session, agent_row.project_id, cli, model)
+    except agent_pool.PoolRefusalError as refusal:
+        raise ChatChoiceRefusalError(refusal.message) from refusal
+    return runner, label

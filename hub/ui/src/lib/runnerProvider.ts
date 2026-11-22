@@ -50,7 +50,8 @@ export function overridesForRunner(
   overrides: Record<string, string>,
   runner: Pick<Runner, 'provider_config'> | null | undefined,
 ): Record<string, string> {
-  if (!runnerSetsModel(runner) || !('model' in overrides)) return overrides
+  // A model named with its provider is a chat's catalog choice on its own runner, not this one's.
+  if (!runnerSetsModel(runner) || !('model' in overrides) || 'provider' in overrides) return overrides
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const { model, ...rest } = overrides
   return rest

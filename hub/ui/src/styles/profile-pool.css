@@ -37,6 +37,12 @@
 }
 @keyframes aw-pool-pop { from { opacity: 0; transform: translateY(4px); } }
 @media (prefers-reduced-motion: reduce) { .aw-pool-popover { animation: none; } }
+.aw-pool-filter {
+  display: flex; align-items: center; gap: 6px; padding: 6px 10px; border-bottom: 1px solid var(--border); color: var(--text-3);
+}
+.aw-pool-filter input { flex: 1; min-width: 0; background: none; border: 0; outline: none; font-size: 12.5px; color: var(--text); }
+.aw-pool-filter:focus-within { box-shadow: inset 0 -2px 0 var(--ring); }
+.aw-pool-none { padding: 8px; }
 .aw-pool-options { max-height: 260px; overflow-y: auto; padding: 4px; outline: none; }
 .aw-pool-options:focus-visible { box-shadow: inset 0 0 0 2px var(--ring); border-radius: 8px; }
 .aw-pool-group-head {

@@ -2972,15 +2972,21 @@ async def trigger_agent(
             )
         stored_overrides = dict(conversation.runtime_overrides or {})
         bound_runner = await session.get(Runner, agent_row.runner_id)
-        if bound_runner is not None and has_provider(bound_runner.provider_config):
-            # Before the pool and the catalog: on a provider runner the per-run model is refused
-            # outright, whatever the pool holds (design D7).
+        if (
+            bound_runner is not None
+            and has_provider(bound_runner.provider_config)
+            and launch_entry.CHAT_PROVIDER_KEY not in body.overrides
+        ):
+            # Before the catalog: on a provider runner a bare per-run model is refused outright
+            # (design D7). A model named with its provider is a catalog model on its own plain
+            # runner, never the provider runner, so it is judged below like any other.
             problem = provider_override_problem(body.overrides)
             if problem is not None:
                 raise HTTPException(status_code=400, detail=problem)
-        # Bounded to the profile's pool (FR-9): a chat chooses one of its entries, and once
-        # it has a turn only one on the CLI it started on. The answer names the entry's runner,
-        # which is the one the rest is judged against.
+        # Any catalog model, in the pool or not, and once the chat has a turn only one of the CLI
+        # it started on (`a-profile-s-pool-and-a-new-chat-can-use-any-model-of-any-provider`,
+        # FR-10, FR-11). The pool is not changed. The answer names the chosen runner, which is
+        # the one the rest is judged against.
         try:
             requested, runner_row = await launch_entry.bound_chat_overrides(
                 session,

@@ -487,8 +487,10 @@ class Drive:
                 return
             chose = self.choose(pg, control.first, "High")
             before = {r[0] for r in self.runs(conv)}
-            box = comp.locator("textarea").first
-            box.fill("Reply with just the word ok.")
+            # The composer's field is a contenteditable textbox, not a textarea.
+            box = comp.get_by_test_id("composer-input").first
+            box.click()
+            pg.keyboard.type("Reply with just the word ok.")
             box.press("Enter")
             pg.wait_for_timeout(1500)
             if not [r for r in self.runs(conv) if r[0] not in before]:
