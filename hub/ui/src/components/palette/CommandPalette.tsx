@@ -11,6 +11,7 @@ import { agentColorVars } from '@/lib/agentColors'
 import { useModalLayer } from '@/hooks/useDialogFocus'
 import { hubDate } from '@/lib/hubTime'
 import { SCOPE_LABEL, searchSettings, type SettingEntry } from '@/lib/settingsIndex'
+import { PROJECT_TABS, TAB_LABELS, type ProjectTab } from '@/lib/navigation'
 
 /** What every per-setting item's cmdk value starts with. */
 const SETTING_VALUE = 'setting-'
@@ -38,6 +39,8 @@ interface CommandPaletteProps {
   /** Without an open project there are no project or agent settings to offer. */
   onOpenProjectSettings?: () => void
   onOpenAgentSettings?: (agent: string) => void
+  /** Open one of the project's tabs, by the name the top bar gives it; absent with no project open. */
+  onOpenTab?: (tab: ProjectTab) => void
 }
 
 /**
@@ -62,6 +65,7 @@ export function CommandPalette({
   onOpenSetting,
   onOpenProjectSettings,
   onOpenAgentSettings,
+  onOpenTab,
 }: CommandPaletteProps) {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
@@ -184,6 +188,27 @@ export function CommandPalette({
           <span className="block font-medium" style={{ color: 'var(--text-2)' }}>No matches</span>
           <span className="mt-1 block">Try a profile, task, document, or thread name.</span>
         </Command.Empty>
+
+        {/* Like settings, the views are offered once something is typed, not as ten rows up front. */}
+        {onOpenTab && query.trim() && (
+          <Command.Group heading="Go to">
+            {PROJECT_TABS.map((tab) => (
+              <Command.Item
+                key={tab}
+                // The tab's id is searchable too, so a word from an old link ("thread") still finds it.
+                value={`tab-${TAB_LABELS[tab]}`}
+                keywords={[tab]}
+                onSelect={() => {
+                  onOpenTab(tab)
+                  close()
+                }}
+              >
+                <Icon name="arrow_forward" size={14} className="palette-row-icon" style={{ color: 'var(--text-3)' }} />
+                <span className="palette-row-main"><span className="palette-row-title">{highlight(TAB_LABELS[tab])}</span></span>
+              </Command.Item>
+            ))}
+          </Command.Group>
+        )}
 
         {agents.length > 0 && (
           <Command.Group heading="Profiles">

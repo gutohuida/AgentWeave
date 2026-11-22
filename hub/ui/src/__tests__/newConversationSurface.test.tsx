@@ -18,8 +18,9 @@ vi.mock('@/api/agents', async (importOriginal) => ({
 vi.mock('@/api/runners', () => ({
   useRunners: () => ({
     data: [
-      { id: 'runner-claude', cli: 'claude', model: 'claude-opus-5' },
-      { id: 'runner-codex', cli: 'codex', model: 'gpt-5' },
+      // Named as the operator names them, after the model: the intro must not read that name (FR-7).
+      { id: 'runner-claude', name: 'Opus 5', cli: 'claude', model: 'claude-opus-5' },
+      { id: 'runner-codex', name: 'GPT-5', cli: 'codex', model: 'gpt-5' },
     ],
   }),
 }))
@@ -73,6 +74,16 @@ function renderSurface(agent: string | null, onStarted = vi.fn()) {
 }
 
 describe('considered new-conversation state', () => {
+  it("names the profile's CLI in the intro, not its runner's name (FR-7)", () => {
+    renderSurface('claude')
+    const intro = screen.getByTestId('new-conversation-surface')
+    expect(intro).toHaveTextContent('Runs on Claude Code')
+    expect(intro).not.toHaveTextContent('Opus 5')
+    cleanup()
+    renderSurface('codex')
+    expect(screen.getByTestId('new-conversation-surface')).toHaveTextContent('Runs on Codex')
+  })
+
   it('offers recent agents as real pressed-state controls, not decorative suggestions', () => {
     renderSurface('claude')
     expect(screen.getByText('Start with a recent profile, or choose another before you send.')).toBeInTheDocument()

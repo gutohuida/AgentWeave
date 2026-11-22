@@ -26,6 +26,7 @@ import { useNotifications } from '@/hooks/useNotifications'
 import { useWorkspaceNavigation } from '@/hooks/useWorkspaceNavigation'
 import {
   PROJECT_TABS,
+  type ProjectTab,
   agentDestination,
   agentSettingsDestination,
   resolveAgentSettingsSection,
@@ -676,6 +677,15 @@ export default function App() {
     )
   }
 
+
+  /** A project tab, from the top bar or the palette's Go to group: one way in, so both land alike. */
+  const openProjectTab = (projectId: string, tab: ProjectTab) => {
+    setOverviewQuestionsOpen(false)
+    // The tab opens on the ledger, which leads (F718: this reset to the live stream, so
+    // the ledger was never what a click on Activity showed).
+    if (tab === 'activity') setActivitySubview('ledger')
+    navigateTo(projectDestination(projectId, tab))
+  }
   return (
     <div className="flex h-screen flex-col overflow-hidden" style={{ background: 'var(--bg)' }}>
       <div className="workspace-shell aw-app">
@@ -743,13 +753,7 @@ export default function App() {
                 }
                 counts={{ tasks: awaitingReview }}
                 directoryAvailable={currentProject.directory_state === 'available'}
-                onSelectTab={(tab) => {
-                  setOverviewQuestionsOpen(false)
-                  // The tab opens on the ledger, which leads (F718: this reset to the live stream, so
-                  // the ledger was never what a click on Activity showed).
-                  if (tab === 'activity') setActivitySubview('ledger')
-                  navigateTo(projectDestination(currentProject.id, tab))
-                }}
+                onSelectTab={(tab) => openProjectTab(currentProject.id, tab)}
                 onSelectProject={(id) => navigateTo(projectDestination(id))}
                 onAddProject={() => setProjectManagerMode('open')}
                 onOpenSetup={() => setSetupOpen(true)}
@@ -817,6 +821,7 @@ export default function App() {
         onOpenAgentSettings={
           currentProject ? (agent) => navigateTo(agentSettingsDestination(currentProject.id, agent)) : undefined
         }
+        onOpenTab={currentProject ? (tab) => openProjectTab(currentProject.id, tab) : undefined}
       />
       <CheckpointStatusBanner />
       <Toaster />

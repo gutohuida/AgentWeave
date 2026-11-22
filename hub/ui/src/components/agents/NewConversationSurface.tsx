@@ -5,6 +5,7 @@ import { overridesForRunner, runnerSetsModel } from '@/lib/runnerProvider'
 import { useWorkspacePaths } from '@/api/workspace'
 import { useSpecDocuments, useSpecEvents } from '@/api/spec'
 import { Icon } from '@/components/common/Icon'
+import { cliLabel } from '@/components/agents/pool/poolModel'
 import { Button } from '@/components/ui/button'
 import { ApiError, deleteJson, postJson, readableRefusal } from '@/api/client'
 import { ConversationComposerDock } from '@/components/conversation/ConversationComposerDock'
@@ -268,7 +269,7 @@ export function NewConversationSurface({
         {agentRow ? (
           <NewConversationIntro
             agent={agentRow}
-            runnerLabel={runnerRow?.name ?? null}
+            runnerLabel={runnerRow ? cliLabel(runnerRow.cli) : null}
             starters={hasNoWork ? EMPTY_PROJECT_STARTERS : STARTERS}
             headlineTestId="new-conversation-headline"
             onPick={(message, starter) => {
