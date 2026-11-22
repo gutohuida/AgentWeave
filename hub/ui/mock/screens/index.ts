@@ -23,6 +23,7 @@ const ConversationTrace = React.lazy(() => import('./ConversationTrace'))
 const TaskThreads = React.lazy(() => import('./TaskThreads'))
 const Roadmap = React.lazy(() => import('./Roadmap'))
 const SpecHome = React.lazy(() => import('./SpecHome'))
+const SpecThreadUi = React.lazy(() => import('./SpecThreadUi'))
 const BuildView = React.lazy(() => import('./BuildView'))
 const BuildSummaries = React.lazy(() => import('./BuildSummaries'))
 const ProfilePools = React.lazy(() => import('./ProfilePools'))
@@ -40,6 +41,8 @@ export function screenFor(route: MockRoute): ScreenComponent {
       return Roadmap
     case 'spec-home':
       return SpecHome
+    case 'spec-thread-ui':
+      return SpecThreadUi
     case 'thread':
       return Thread
     case 'traces':
@@ -73,6 +76,7 @@ export const SCREENS: Array<{ id: string; label: string; route: MockRoute }> = [
   { id: 'task-redesign', label: 'Tasks · Card and story redesign', route: { kind: 'task-redesign' } },
   { id: 'spec', label: 'Spec', route: { kind: 'tab', tab: 'spec' } },
   { id: 'task-threads', label: 'Spec · Task threads, three ways', route: { kind: 'task-threads' } },
+  { id: 'spec-thread-ui', label: 'Spec · In a thread: phase badge and the created-document offer', route: { kind: 'spec-thread-ui' } },
   { id: 'roadmap', label: 'Spec · A roadmap’s own page', route: { kind: 'roadmap' } },
   { id: 'spec-home', label: 'Spec · Home, three ways to relate', route: { kind: 'spec-home' } },
   { id: 'profiles', label: 'Profiles · Every profile and its settings', route: { kind: 'tab', tab: 'profiles' } },

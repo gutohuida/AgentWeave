@@ -30,6 +30,13 @@ interface ComposerSpecControlProps {
    */
   armed?: boolean
   busy?: boolean
+  /**
+   * A document an agent created in this thread that is not open here: one click opens it, and the
+   * x clears the suggestion (the document is kept). Shown in place of Explore while there is one,
+   * so the question lives in the composer instead of a card above it. Ignored while a document is
+   * open.
+   */
+  suggestion?: { title: string; onOpen: () => void; onDismiss: () => void } | null
 }
 
 /**
@@ -66,7 +73,41 @@ export function ComposerSpecControl({
   onOpenExisting,
   armed = false,
   busy = false,
+  suggestion = null,
 }: ComposerSpecControlProps) {
+  if (!documentLabel && suggestion) {
+    return (
+      <span className="flex min-w-0 items-center">
+        <Button
+          type="button"
+          variant="ghost"
+          size="pill"
+          data-testid="composer-spec-suggestion"
+          onClick={suggestion.onOpen}
+          disabled={busy}
+          className={`${composerControlClassName} min-w-0 max-w-full`}
+          title={`Open ${suggestion.title} in this thread`}
+          aria-label={`Open ${suggestion.title} in this thread?`}
+        >
+          <span className="aw-composer-suggest-dot" aria-hidden="true" />
+          <span className="min-w-0 max-w-[15rem] truncate">Open {suggestion.title}?</span>
+        </Button>
+        <Button
+          type="button"
+          variant="ghost"
+          size="pill"
+          data-testid="composer-spec-suggestion-dismiss"
+          onClick={suggestion.onDismiss}
+          disabled={busy}
+          className="shrink-0 px-1"
+          title="Not here — the document is kept"
+          aria-label={`Do not open ${suggestion.title} here`}
+        >
+          <Icon name="close" size={14} />
+        </Button>
+      </span>
+    )
+  }
   if (!documentLabel) {
     return (
       <span className="flex min-w-0 items-center gap-1">

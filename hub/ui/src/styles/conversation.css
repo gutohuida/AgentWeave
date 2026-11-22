@@ -143,3 +143,22 @@
 .aw-newconv-starter-icon { margin-top: 2px; flex: none; color: var(--text-3); }
 .aw-newconv-starter-label { display: block; font-size: 13px; font-weight: 500; color: var(--text); }
 .aw-newconv-starter-message { display: block; margin-top: 2px; font-size: 12px; line-height: 1.45; color: var(--text-3); }
+
+/* ── A specification document created in this thread (quiet note, and the composer's suggestion) ── */
+.aw-spec-created-note {
+  display: flex; align-items: center; gap: 6px; min-width: 0; padding: 3px 0;
+  font-size: 11.5px; color: var(--text-3);
+}
+.aw-spec-created-note-text { min-width: 0; flex: 0 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.aw-spec-created-note-title { color: var(--text-2); }
+.aw-spec-created-note-link, .aw-spec-created-note-dismiss {
+  flex: none; background: transparent; border: 0; cursor: pointer; color: var(--text-2);
+  border-radius: var(--radius-sm); transition: color var(--dur-fast) ease, background-color var(--dur-fast) ease;
+}
+.aw-spec-created-note-link { padding: 1px 4px; font: inherit; text-decoration: underline; text-underline-offset: 2px; }
+.aw-spec-created-note-dismiss { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; padding: 0; }
+.aw-spec-created-note-link:hover, .aw-spec-created-note-dismiss:hover { color: var(--text); background: var(--row-hover); }
+.aw-spec-created-note-link:focus-visible, .aw-spec-created-note-dismiss:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--ring); }
+.aw-spec-created-note-link:disabled, .aw-spec-created-note-dismiss:disabled { opacity: .5; cursor: default; }
+
+.aw-composer-suggest-dot { width: 6px; height: 6px; flex: none; border-radius: 999px; background: var(--ring); }

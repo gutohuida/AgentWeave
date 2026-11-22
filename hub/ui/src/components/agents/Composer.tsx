@@ -99,6 +99,8 @@ export interface ComposerProps {
   onOpenExistingSpec?: () => void
   specArmed?: boolean
   specBusy?: boolean
+  /** A document an agent created here that is not open: the Explore control offers it instead. */
+  specSuggestion?: { title: string; onOpen: () => void; onDismiss: () => void } | null
   /** The open document's display name, for the Spec pill. `null` means none is open. */
   specDocumentLabel?: string | null
   /** The one way in for what the side panel puts into the composer (design D8): the files tab's
@@ -146,6 +148,7 @@ export function Composer({
   onOpenExistingSpec,
   specArmed = false,
   specBusy = false,
+  specSuggestion = null,
   specDocumentLabel = null,
   insertRequest = null,
   specDocuments = EMPTY_SPECS,
@@ -573,6 +576,7 @@ export function Composer({
               onOpenExisting={onOpenExistingSpec}
               armed={specArmed}
               busy={specBusy}
+              suggestion={specSuggestion}
             />
           )}
         </div>

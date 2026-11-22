@@ -175,6 +175,7 @@ export function documentView(input: DocumentInputs): SpecDocumentView {
     phase: PHASES.includes(record.phase as SpecPhase) ? (record.phase as SpecPhase) : 'approved',
     state: stateOf(record.phase, building, input.checkedClean),
     shown: shownOf(stateOf(record.phase, building, input.checkedClean), record.display_phase),
+    step: record.step ?? null,
     summary: payload.summary ?? '',
     problem: payload.problem ?? '',
     inScope: payload.scope?.in_scope ?? [],

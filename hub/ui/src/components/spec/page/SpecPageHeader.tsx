@@ -9,6 +9,7 @@ import { SpecNoticeBadge, type HeaderNotice } from './SpecNotices'
 import {
   actionsFor,
   JOURNEY,
+  phaseLabel,
   journeyIndex,
   SHOWN_LABEL,
   type ShownState,
@@ -101,7 +102,7 @@ export function SpecPageHeader(props: SpecPageHeaderProps) {
           <button type="button" className="aw-sp-head-condensed-title" data-testid="spec-header-condensed" onClick={props.onExpand} title="Show the whole header">
             <strong>{doc.title}</strong>
             <span className="aw-sp-phase" data-state={shownState}>
-              {SHOWN_LABEL[shownState]}
+              {phaseLabel(doc, shownState)}
             </span>
           </button>
         ) : null}
@@ -168,7 +169,7 @@ export function SpecPageHeader(props: SpecPageHeaderProps) {
           <div className="aw-sp-meta">
             {/* The phase, not the check: a clean check makes a document ready, still being written. */}
             <span className="aw-sp-phase" data-state={shownState} key={doc.shown}>
-              {SHOWN_LABEL[shownState]}
+              {phaseLabel(doc, shownState)}
             </span>
             {doc.state === 'current' ? null : <MiniJourney state={doc.state === 'ready' ? doc.state : doc.shown} />}
             <span className="aw-sp-meta-fact">{kindLabel(doc.kind)}</span>

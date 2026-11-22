@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { listEntries } from '@/components/spec/page/adapt'
-import { arrangeList, DEFAULT_LIST_PREFERENCES, SHOWN_LABEL } from '@/components/spec/page/model'
+import { arrangeList, DEFAULT_LIST_PREFERENCES, phaseLabel, SHOWN_LABEL } from '@/components/spec/page/model'
 import type { SpecDocumentRecord, SpecEntry } from '@/api/spec'
 
 // The shapes `GET /specs` and `GET /documents` return: `display_phase` rides next to `phase`.
@@ -42,5 +42,15 @@ describe('a built spec reads Building or Done (F1089)', () => {
   it('Not archived keeps writing, approved, building and done, and hides archived', () => {
     const groups = arrangeList(listEntries(specs, records), { ...DEFAULT_LIST_PREFERENCES, order: 'changed', phase: 'unarchived' })
     expect(groups.flatMap((g) => g.entries.map((e) => e.path)).sort()).toEqual(['a', 'b', 'c', 'e'])
+  })
+})
+
+describe('the phase badge names the step while the spec is being written', () => {
+  it('reads Writing with the step, and the phase alone once approved', () => {
+    expect(phaseLabel({ state: 'writing', step: 'intake' }, 'writing')).toBe('Writing · Intake')
+    expect(phaseLabel({ state: 'ready', step: 'build' }, 'writing')).toBe('Writing · Build')
+    expect(phaseLabel({ state: 'writing', step: null }, 'writing')).toBe('Writing')
+    expect(phaseLabel({ state: 'approved', step: 'build' }, 'approved')).toBe('Approved')
+    expect(phaseLabel({ state: 'building', step: null }, 'building')).toBe('Building')
   })
 })

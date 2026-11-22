@@ -20,6 +20,9 @@ export type MockRoute =
   /** The Spec home, with three ways of showing how documents relate (operator, 2026-11-17). */
   | { kind: 'spec-home' }
   | { kind: 'thread' }
+  /** How a thread shows the spec it is working on: the header's phase badge with its step, and three
+   *  ways to offer a document an agent created in the thread (operator, 2026-11-22). */
+  | { kind: 'spec-thread-ui' }
   /** The traces view: a fourth view inside Activity (operator, 2026-11-02). */
   | { kind: 'traces' }
   /** A whole conversation's trace (spec a-trace-of-a-whole-conversation). */

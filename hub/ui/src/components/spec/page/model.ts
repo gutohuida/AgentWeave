@@ -7,6 +7,7 @@
 
 import type { BuildChecks, BuildLanding } from '@/api/buildFigures'
 import type { BuildCaught } from '@/api/spec'
+import { stepKeyLabel } from '@/components/settings/stepLabels'
 import type { BuildSummaryModel } from '@/components/builds/buildViewModel'
 
 export type SpecKind = 'change-spec' | 'roadmap' | 'capability' | 'baseline' | 'system-map'
@@ -130,6 +131,9 @@ export interface SpecDocumentView {
     next?: { path: string; title: string } | null
   } | null
   updatedAt: string
+  /** The journey step a document still being written has reached (`intake`, `build`, a project's
+   *  own). Null on every other document and on a Hub that does not report it. */
+  step?: string | null
 }
 
 /** What one press of Check found. `target` names what it concerns: a requirement's identifier, a
@@ -314,6 +318,14 @@ export const STATE_LABEL: Record<DocState, string> = {
 export type ShownState = DocState | 'done'
 
 export const SHOWN_LABEL: Record<ShownState, string> = { ...STATE_LABEL, done: 'Done' }
+
+/** The phase badge's words. While the document is still being written it also names the journey
+ *  step it has reached ("Writing · Build"), so the badge never says "Writing" over a document that
+ *  is at Build; once approved it is the phase alone. The words, not the colour, carry the status. */
+export function phaseLabel(doc: Pick<SpecDocumentView, 'state' | 'step'>, shown: ShownState): string {
+  const writing = doc.state === 'writing' || doc.state === 'ready'
+  return writing && doc.step && shown === 'writing' ? `Writing · ${stepKeyLabel(doc.step)}` : SHOWN_LABEL[shown]
+}
 
 export function shownOf(state: DocState, displayPhase?: string | null): ShownState {
   if (state !== 'approved' && state !== 'building') return state
