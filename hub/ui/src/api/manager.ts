@@ -123,6 +123,30 @@ export interface BuildRetrospective {
   report: RetrospectiveReport | null
 }
 
+/** One firing of the pre-mortem (`the-spec-journey-spends-the-operator-s-attention-only-on-their-decisions`,
+ *  FR-11): a fresh reader assumed the change shipped and failed, and wrote down how. `findings` is
+ *  empty on a firing that wrote nothing. */
+export interface PreMortem {
+  id: string
+  at: string
+  /** `requested`: the Run a pre-mortem button; `criteria_written`: the document left the step that
+   *  writes its acceptance criteria while the job fires automatically. */
+  trigger: string
+  model: string | null
+  outcome: ManagerFiring['outcome']
+  detail: string | null
+  cost_usd_micros: number | null
+  findings: PreMortemFinding[]
+}
+
+/** One way the change failed: the story, the requirement it breaks when it names one, and what the
+ *  reader cites for it (a file:line, a criterion, an earlier decision). */
+export interface PreMortemFinding {
+  story: string
+  requirement: string | null
+  cites: string[]
+}
+
 export interface RetrospectiveFinding {
   text: string
   cites: string[]

@@ -53,6 +53,24 @@ import worktreesJson from '../fixtures/worktrees.json'
 const runners = (Array.isArray(runnersJson) ? runnersJson : []) as unknown as Runner[]
 const charters = (Array.isArray(chartersJson) ? chartersJson : []) as unknown as Charter[]
 const catalog = catalogJson as unknown as ModelCatalogResponse
+// mock state: the Pre-mortem job as the Hub's registry would list it once it ships (spec
+// the-spec-journey-spends-the-operator-s-attention-only-on-their-decisions, FR-11). Off, as a job
+// with no row is.
+const PRE_MORTEM_JOB: ManagerJob = {
+  key: 'pre-mortem',
+  title: 'Pre-mortem',
+  description:
+    "Reads a change document's drafted requirements and acceptance criteria and the code, assumes the change shipped and failed, and writes down how. Fires when a document's acceptance criteria are written (automatic), and when you press Run a pre-mortem on its page. The author reads the findings in its next turn on the document, fixes what it can and asks you about the rest. Needs a runner. Off: nothing reads a draft for how it fails.",
+  trigger: 'criteria_written',
+  needs_runner: true,
+  enabled: false,
+  runner_id: null,
+  model: null,
+  mode: 'automatic',
+  firing_choice: { button: 'Run a pre-mortem', where: "a spec document's page", automatic: "when a document's acceptance criteria are written" },
+  usage_total: { firings: 0 },
+}
+
 const firings = (managerActivityJson as unknown as { firings?: ManagerFiring[] }).firings ?? []
 const instructions = instructionsJson as unknown as { content: string; max_chars?: number }
 const status = statusJson as unknown as {
@@ -137,7 +155,7 @@ export default function Settings({ route, go, now }: ScreenProps) {
     ] as ProjectSettings['checks'],
     generated_files: { paths: ['package-lock.json', 'hub/hub/static/ui/**'], command: 'npm install --package-lock-only && npm run build', timeout_seconds: 600 },
   }))
-  const [jobs, setJobs] = React.useState<ManagerJob[]>(((managerJobsJson as unknown as { jobs?: ManagerJob[] }).jobs ?? []))
+  const [jobs, setJobs] = React.useState<ManagerJob[]>([...((managerJobsJson as unknown as { jobs?: ManagerJob[] }).jobs ?? []), PRE_MORTEM_JOB])
   const [accounting, setAccounting] = React.useState<AccountingSnapshot>((accountingJson as unknown as AccountingSnapshot).project ? (accountingJson as unknown as AccountingSnapshot) : LEANER_ACCOUNTING)
   const [instructionText, setInstructionText] = React.useState(instructions.content)
   const [jobList, setJobList] = React.useState<Job[]>(LEANER_JOBS)

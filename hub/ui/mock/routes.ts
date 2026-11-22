@@ -29,6 +29,9 @@ export type MockRoute =
   /** How a thread shows the spec it is working on: the header's phase badge with its step, and three
    *  ways to offer a document an agent created in the thread (operator, 2026-11-22). */
   | { kind: 'spec-thread-ui' }
+  /** The spec page's Pre-mortem section in each of its states (spec
+   *  the-spec-journey-spends-the-operator-s-attention-only-on-their-decisions, FR-11). */
+  | { kind: 'pre-mortem' }
   /** First run and the Overview read cleanly: six small polish items, each today next to proposed
    *  (operator, 2026-11-22). */
   | { kind: 'first-run-polish' }

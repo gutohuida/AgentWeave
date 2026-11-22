@@ -27,6 +27,7 @@ const TaskThreads = React.lazy(() => import('./TaskThreads'))
 const Roadmap = React.lazy(() => import('./Roadmap'))
 const SpecHome = React.lazy(() => import('./SpecHome'))
 const SpecThreadUi = React.lazy(() => import('./SpecThreadUi'))
+const PreMortem = React.lazy(() => import('./PreMortem'))
 const FirstRunPolish = React.lazy(() => import('./FirstRunPolish'))
 const BuildView = React.lazy(() => import('./BuildView'))
 const BuildSummaries = React.lazy(() => import('./BuildSummaries'))
@@ -47,6 +48,8 @@ export function screenFor(route: MockRoute): ScreenComponent {
       return SpecHome
     case 'spec-thread-ui':
       return SpecThreadUi
+    case 'pre-mortem':
+      return PreMortem
     case 'first-run-polish':
       return FirstRunPolish
     case 'overview-next':
@@ -98,6 +101,7 @@ export const SCREENS: Array<{ id: string; label: string; route: MockRoute }> = [
   { id: 'spec', label: 'Spec', route: { kind: 'tab', tab: 'spec' } },
   { id: 'task-threads', label: 'Spec · Task threads, three ways', route: { kind: 'task-threads' } },
   { id: 'spec-thread-ui', label: 'Spec · In a thread: phase badge and the created-document offer', route: { kind: 'spec-thread-ui' } },
+  { id: 'pre-mortem', label: 'Spec · Pre-mortem section, every state', route: { kind: 'pre-mortem' } },
   { id: 'first-run-polish', label: 'First run and the Overview read cleanly', route: { kind: 'first-run-polish' } },
   { id: 'roadmap', label: 'Spec · A roadmap’s own page', route: { kind: 'roadmap' } },
   { id: 'spec-home', label: 'Spec · Home, three ways to relate', route: { kind: 'spec-home' } },
