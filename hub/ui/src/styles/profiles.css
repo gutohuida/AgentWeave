@@ -76,8 +76,6 @@
 .aw-pf-note-icon { flex: none; margin-top: 2px; color: var(--amber); }
 .aw-pf-note-title { margin: 0 0 2px; font-weight: 600; color: var(--text); }
 .aw-pf-note-body { margin: 0 0 10px; max-width: 34em; color: var(--text-3); line-height: 1.45; }
-.aw-pf-skeleton { display: flex; flex-direction: column; gap: 8px; padding: 8px 10px; }
-.aw-pf-skeleton-row { height: 38px; border-radius: var(--radius-md); background: var(--surface-2); }
 
 /* ---- a profile's page ---- */
 .aw-pf-page { width: min(100%, 1100px); margin-inline: auto; padding: 12px clamp(20px, 3vw, 32px) 96px; }
