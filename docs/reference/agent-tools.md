@@ -45,6 +45,7 @@ carry **outbound intent only**. There is no tool for reading an inbox.
 | `get_task(task_id)` | Read one task. |
 | `task_history(task_id)` | Who moved a task, when, and between which statuses. |
 | `update_task(task_id, status?, notes?, requirement_ids?, spec_document?)` | Move a task, add notes, or link the requirements it serves. Nothing else about a task is the profile's to change. |
+| `hand_out_task(task_id, agent, review?)` | **A build's lead only.** Hand one of the build's tasks to one of its builders, or with `review` true hand completed work to its reviewer pool, and start that profile's run on it. Anyone else is refused. |
 
 ## Asking you
 
@@ -69,6 +70,9 @@ carry **outbound intent only**. There is no tool for reading an inbox.
 | `amend_spec_document(path, op, reason, how_to_check, …)` | Tester turns only: add a task, or add or change a scenario, from what testing found. Amendments wait for your review. |
 | `report_cannot_satisfy(path, criterion, reason)` | Say a criterion cannot be met as written, and why. |
 | `record_reconcile(path, summary, gaps?)` | Record what comparing an approved change with its code found. Advisory. |
+| `acknowledge_spec_gap(path, code, where, reason)` | Leave one gap of a document the profile wrote open on purpose, with a reason. It shows as acknowledged and counts as handled for readiness, until the gap is fixed. Not for refusals, unreviewed amendments or vault warnings. |
+| `confirm_acceptance_criteria(path, confirmations)` | Record, for each acceptance criterion, that it was checked against the current code as `new` or `guard`. Approval is refused until every criterion has a current confirmation. Allowed only while the document is exploring; all entries or none. |
+| `tidy_spec_document(path, op, reason, …)` | **Needs the *Keep the specs true* switch on the profile.** Fold a built change into a capability, create or edit a capability, mark a document superseded, or fix roadmap links. Each act applies at once and is listed for you with its reason. Approving, archiving and deciding amendments or evidence stay yours. |
 
 ## Checkpoints and recall
 
@@ -87,6 +91,35 @@ carry **outbound intent only**. There is no tool for reading an inbox.
 | `vault_read(entry_id, offset?)` | Read one entry, up to 50,000 characters per page. |
 | `vault_report(entry_id, message)` | Report an entry that looks wrong. |
 | `vault_add(paths, distil, visibility?, type?, dated?)` | Add files to the vault by path. |
+| `vault_append(entry_id, text)` | Add text to the end of a text source. It is distilled again. |
+| `vault_replace_passage(entry_id, old, new)` | Replace one passage of a text source. `old` must occur exactly once. |
+| `vault_replace_file(entry_id, path)` | Replace the file of a PDF or image source. |
+| `vault_archive(entry_id)` | Archive a source: it and the facts citing only archived sources leave the map, and stay readable by id. |
+| `vault_restore(entry_id)` | Restore an archived source. |
+
+The write tools record the change under the profile's name and run.
+
+## Dashboards
+
+| Tool | Purpose |
+|---|---|
+| `dashboard_query_reference(tables?)` | Every table and column a dashboard query can read, with the query rules, known traps and limits. Without `tables`, columns are listed by name only. |
+| `run_dashboard_query(sql)` | Run one read-only query over the current project's data. Stopped after 10 seconds, cut at 10,000 rows. |
+| `save_dashboard(name, description, panels, dashboard_id?, base_version?)` | Save a new dashboard of panels, each a query and one of five chart kinds. |
+| `list_dashboards()` | The project's dashboards, most recently saved first. |
+| `read_dashboard(dashboard_id)` | One dashboard with its panels and version. |
+| `edit_dashboard(dashboard_id, base_version, operations)` | Change a dashboard in place: add, remove, change or move panels, rename it or change its description. All operations or none. |
+| `run_dashboard(dashboard_id)` | Run a saved dashboard and see each panel's rows or error. |
+| `undo_dashboard(dashboard_id)` | Restore the dashboard's previous version. |
+
+See [Dashboards](../guides/dashboards.md).
+
+## The project's record
+
+| Tool | Purpose |
+|---|---|
+| `read_model_record()` | Per model: tasks built and approved, send-backs by reason, runs, and API-equivalent cost over priced runs. A run with no price is counted as unpriced, never as zero. |
+| `read_shells()` | What the shells in this thread's Terminal tab show now. Read only: it types into nothing. |
 
 ## Thread chapters
 
@@ -109,6 +142,19 @@ carry **outbound intent only**. There is no tool for reading an inbox.
 
 Creating, running and archiving scheduled work needs **Agents may start jobs, flows and loops** to
 be on in the project's settings. It is off by default.
+
+### The mender
+
+These tools are served to every run but answered only for the Hub's own `mender` profile, which is
+woken by a stall. Any other caller is refused.
+
+| Tool | Purpose |
+|---|---|
+| `mend_stalls()` | The project's open stalls, newest first. |
+| `mend_task_branch(task_id, commit?)` | Land an approved task's work whose merge is stuck. With `commit`, a resolution made in the mend's scratch checkout: the Hub runs the project's checks on it and merges it. Without, it only retries the merge. |
+| `mend_withdraw_input(entry_id)` | Withdraw input waiting in another profile's queue, so its next firing briefs it again. |
+| `mend_reset_task(task_id, status, assignee?)` | Hand a stuck task back: to `assigned`, back to `pending`, or to `under_review`. |
+| `mend_end_stall(stall_id, outcome, summary)` | End the mender's stall as `fixed` or `gave_up`, with a plain summary for you. |
 
 ## Intentionally absent
 

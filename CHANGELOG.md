@@ -9,6 +9,107 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ---
+## [2.3.0] - 2026-11-22
+
+Profiles become what you manage. A profile owns a pool of runners and models, a chat can use any
+model of any provider, and duplicate profiles fold into one with their history kept. Landing gets
+cheaper and fairer: slow checks run once per landing batch, flaky tests are quarantined, and a
+failure is held against a task only when it reproduces there. AgentWeave also updates itself, and a
+Hub run from a git checkout updates the same way.
+
+### Added
+
+- **A profile has a pool of runners and models.** A task's builder and checker runs take an entry
+  from the pool: the Build choice first, then the spec's recommendation, then the default. They keep
+  that entry for every later run and re-review, and each run records what it launched with (`0186`,
+  `0187`). A pool entry can name any catalog model by provider and model, and the Hub makes the
+  runner for it.
+- **A chat can pick any model of any provider.** Only its CLI is fixed after the first run.
+- **A Profiles tab, and a page for each profile.** A held profile shows the queue's reason. Profile
+  and thread names link to that page from the thread bar, task cards, the build page and the
+  Overview. The agent settings screen now lives inside the Profiles tab.
+- **Fold duplicate profiles into one.** You see a preview first. Their pools are merged, open work is
+  re-pointed and history is kept (`0189`).
+- **One profile can run several tasks at once.** This is a per-project switch, off by default. A chat
+  opened with it on works in its own worktree on `thread/<agent>/<lineage>` (`0183`, `0184`).
+- **Slow checks run once per landing.** Approved work lands in batches, and the landing checks run
+  once on the whole batch. A check can run *before review and at landing*, *before review only* or
+  *at landing only*. How many checks the Hub runs at once is a Hub setting (default 2) (`0180`).
+- **Flaky tests are quarantined.** The Hub keeps a flake rate for each test. A test whose rate is
+  above the project's threshold (default 0.05) is quarantined: it still runs, but its failures count
+  against no gate. It is released after a run of consecutive passes (default 20). You can mark a
+  test *Never quarantine*, and the Overview lists the quarantined tests (`0182`).
+- **Landing time is measured.** Each landing batch records when it was ready, when its checks got a
+  slot, when they ended and how many runs it took. Every project gets a *Landing time and flaky
+  tests* dashboard (`0181`).
+- **A check that cannot run says so.** *Could not run* is a result of its own. It is not a pass, it
+  is not held against the work, and it lists what was missing.
+- **A landing failure is held against a task only when it reproduces there.** A disturbed landing run
+  is run again. A failure that reproduces on no task is listed as flaky rather than sent back.
+- **The build view** shows every task and run of a build: totals, a timeline per task, checks and
+  loops folded in, and the trace, with live updates.
+- **The spec home** shows what is being built, what was built and how it relates. A project with no
+  specs is offered a start, and a system map proposes capabilities as draft changes.
+- **Roadmaps have their own page,** with per-slice progress. A slice drafted from any entry point
+  opens at the journey's intake step.
+- **Reference a spec from the composer.** Typing `@` lists the project's specs above files, newest
+  first. Picking one inserts a box that deletes as a single character and is sent as
+  `[spec: <title>](<id>)`.
+- **Every spec entry point leads into the journey.** A thread owns the document open in it (`0188`),
+  and an agent that creates a document in a thread without one opens it there.
+- **A gap left open on purpose.** The author or the operator can acknowledge a gap with a reason,
+  and *ready to approve* counts it as handled (`acknowledge_spec_gap`, `0179`).
+- **Acceptance criteria are checked against today's code before the build.** An agent confirms each
+  criterion as new behaviour or as a guard on behaviour that already holds
+  (`confirm_acceptance_criteria`, `0185`).
+- **AgentWeave updates itself.** The app checks for a newer release, backs up the database, upgrades
+  with pip and verifies the new Hub. If anything fails, it rolls back to the previous version and
+  database. The Update button and *Update automatically when I open AgentWeave* are in App settings.
+  A Hub run from a git checkout updates from local `master` the same way, and runs the migrations on
+  a copy of the database first.
+- **Dismiss a build from the sidebar** while it needs you. A new stall, question or stop brings it
+  back (`0190`).
+- **A thread shows when its checkout is being prepared**, and a new thread opens as soon as it
+  exists.
+
+### Changed
+
+- **New words in the app: profile, thread and run** replace agent, conversation and turn, in the app
+  and in what agents are told. Tool parameter names such as `to_agent` and `assignee` are
+  unchanged.
+- **A build with two profiles can no longer deadlock.** Authority goes by profile, and independence
+  goes by thread. A builder profile never reviews its own task. Another thread of the checker profile
+  may review work that an earlier thread of the same profile completed. A stall names its cause and
+  offers its remedies, and a check that is still running is not a stall.
+- **The mender wakes only for real stalls.**
+- **A chat's model and effort stay in the chat.** They no longer carry into task, review, job or
+  peer-message runs.
+
+### Fixed
+
+- **A run whose prompt is too long for the command line still launches.** A prompt over 24,000
+  characters is written to a file, and the run is pointed to it. Since 2026-11-18, every mender run
+  had failed with "The filename or extension is too long".
+- **A git that times out preparing a checkout** is a refusal that is retried. It used to wedge the
+  queue while a flow read it as being worked (F1200).
+- `--hub-only` started from the Hub folder opened the wrong database (F1181).
+- On an editable or checkout install, the window's Update button ran a pip install (F1182).
+- An expired Claude sign-in that cannot be renewed was reported as runnable (F1183).
+- Creating or opening a project no longer does file and git work on the Hub's event loop (F1198).
+- The trace drawer scrolls in the app.
+
+### Upgrade notes
+
+- **Migrations `0179`–`0190` run at the next Hub start.** All are additive: new tables and nullable
+  columns, with no existing data rewritten. Two of them also insert rows:
+  - `0186` seeds one pool entry for each agent that has a runner, so every agent runs as before.
+  - `0181` adds the *Landing time and flaky tests* dashboard to every project.
+- **Approving a change document now needs confirmed criteria.** An exploring change document with
+  acceptance criteria is refused at approval until every criterion has a current confirmation.
+- **Parallel runs of one profile are off** for every project, existing ones included.
+- **Quarantine starts empty.**
+
+---
 ## [2.2.0] - 2026-11-15
 
 A conversation you can work from: a side panel that shows what is running, what the agent changed,

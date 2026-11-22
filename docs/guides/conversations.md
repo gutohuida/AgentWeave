@@ -114,10 +114,22 @@ text box, each run can be set to:
 - **Spec.** **Explore** starts a new specification document with your first message. The folder
   button attaches an existing one. See [Specifications](specifications.md).
 
-Type `@` to mention a file and `/` for commands. While a run is going in this thread, your message
+Type `@` to mention a file or a specification. The list shows **Specs** above
+**Files**. Choosing a spec inserts a box with its title instead of text; the message carries it as
+`[spec: <title>](<id>)`, so the profile knows it is a spec and which one, even if the document is
+renamed later. In a sent message the box opens the document in the side panel, and is marked *no
+longer available* if the document is gone. Type `/` for commands. While a run is going in this thread, your message
 queues and is delivered when that run ends. With [parallel runs](agents.md#parallel-runs) off, a
 message also waits for the profile's runs in other threads. You can withdraw a queued message
 before it is delivered.
+
+## Preparing the checkout
+
+In a git project a run works in its own checkout. A large repository can take git tens of seconds to
+write one, so while the Hub is preparing it the thread says *Preparing this thread's checkout* (or
+*Preparing the task's checkout* for a run on a task), with a count of how long it has waited, and
+names the profile that starts once git has written it. A task in this stage reads *Preparing its
+checkout*.
 
 ## The timeline
 

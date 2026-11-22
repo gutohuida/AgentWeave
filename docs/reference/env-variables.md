@@ -47,6 +47,7 @@ credentials.
 | `AW_LOG_FILE` | unset (stderr) | Write CLI logs to a file. |
 | `AW_KEY` | the local instance's key | Operator key for `agentweave vault add`. |
 | `DATABASE_URL` | per profile | Passed through to the Hub, and overrides `--profile`. |
+| `AW_UPDATE_INDEX_URL` | PyPI (`https://pypi.org/simple/`) | The package index the app's [update check](../getting-started/installation.md#the-app-updates-itself) reads, a PEP 503 simple index. |
 
 ## UI development
 

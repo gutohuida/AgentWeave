@@ -64,6 +64,15 @@ duration and outcome, its send-backs and its evidence. Any run opens its trace a
 the build runs and after it has finished or stopped. Those runs are not in the sidebar's threads:
 the build is how you reach them.
 
+The view's totals show the build's tasks, cost, runs and send-backs, and how many **Need you**. Each
+task opens a timeline of its runs and the send-backs between them, and the **Needs you** filter
+narrows the list to the tasks that want your attention.
+
+When a document's last task is approved, the manager can write a **build retrospective**, and you
+can ask for one with **Review this build** on the document. Its *Where the time went* section lists,
+for each task, the time spent building, waiting for review, in the check gate and waiting to start.
+Those figures are computed from the build's own records, never by the model.
+
 The sidebar lists a build while it is running, and while it **needs you**: stopped before it
 finished, or with a task that stalled, that the mender gave up on, or that has a question for you.
 The build view's **Needs you** count reads the same rule. See
@@ -91,7 +100,7 @@ agent, and each one opens to its proof: command, output, commit and diff.
 
 ## Checks
 
-Under **Project settings → General → Integration → Checks** you can list commands, such as your
+Under **Project settings → Checks** you can list commands, such as your
 test suite or linters, with a time limit each. When configured, they run in the background, in a
 scratch worktree holding **exactly what approval would produce**: your main branch plus the task's
 work. They run when a task completes and again before approval if the last result is stale. A
@@ -100,6 +109,109 @@ task's **Checks** row shows the result, with **Re-run**.
 With checks configured, **approval is refused until they pass**. You can override a failure with a
 reason, which is recorded on the approval. Agents cannot override. A check that fails on main
 too is marked as pre-existing, and comes to you rather than back to the author.
+
+Each check can also say:
+
+- **Paths**: it runs only when the work changes a file that matches one. Otherwise it is skipped and
+  counts as passed.
+- **Fast**: it runs when a profile completes its task, before anyone reviews it, so the profile can
+  fix a failure in the same run. A fast check may have a time limit of at most 120 seconds.
+- **Runs**: *before review and at landing*, *before review only*, or *at landing only*. Use
+  *at landing only* for a slow suite, so that review and approval do not wait for it.
+- **Report path** and **Re-run command**: see [Reports and known failures](#reports-and-known-failures).
+- **Command for a change**: runs in a task's check before review in place of the full command, given
+  a file listing what the task changed. Landings and main still run the whole command.
+
+**Checks give way to me** runs the processes a check starts below normal priority, so your own work
+on this machine comes first. Fast checks keep normal priority.
+
+How many checks the Hub runs at once is a Hub-wide setting, not a project one. The default is 2. It
+is read and changed with `GET` and `PUT /api/v1/hub-settings` (`check_concurrency`), which need
+your operator credential. A landing batch's checks take a free slot before other checks do.
+
+### A check that could not run
+
+A check whose command cannot start, for example because a program it needs is not installed, is
+recorded as **could not run**. It is a result of its own: not a pass, and not a failure of the work.
+The task's Checks row says *Checks could not run* and names what was missing, nothing is sent back to
+the author for it, and the Overview lists it under *Needs you* until the check runs again. A landing
+batch in which any check could not run does not land and sends nobody back: its tasks stay approved
+and are queued again for the next batch.
+
+### Reports and known failures
+
+A check can name the **JUnit XML report** its command writes. The Hub reads that file after every
+run to see which tests failed, and never reads a test runner's console output. With a **re-run
+command** that takes the failed test ids (where `{tests}` stands), a failure is confirmed by running
+only those tests again before it is held against the task. A failure that passes the second time is
+a flake: the run goes on, and the test goes on the project's known-failing list.
+
+The Overview's **Known failing tests** lists tests that fail on main or flake, each with the fix task
+that owns it. A failure already on the list is not the task's: approval and landing go past it, and
+a landing names the entries it went past.
+
+If a run fails at least the check's **disturbed threshold** of tests (3 unless set, and at least 2)
+and every one passes when re-run, the run is recorded as **disturbed**. No test is listed and no fix
+task is filed: the machine was disturbed, and the tests are not flaky.
+
+### Flaky tests are quarantined
+
+The Hub keeps a flake rate for each test from the runs it has been in. When a check run records a
+flip for a test and its flake rate, counting that flip, is above the project's **Quarantine
+threshold**, the test is **quarantined**. The threshold is a rate above 0 and at most 1, and the
+default is 0.05. A test with too few runs to have a rate is not quarantined.
+
+A quarantined test still runs, and its history is still recorded, but its failures count against no
+gate: they are not re-run to confirm, they do not fail a task's checks or a landing batch, and they
+are not added to the known-failing list. A result or landing names the quarantined tests it excused.
+Entering quarantine files one fix task for the test, unless an open one already names it. If the
+work changes the test file the report names, the failure still counts.
+
+A test leaves quarantine after **Passes to leave quarantine** consecutive passes, 20 by default; a
+failure starts the count again. Both numbers are under **Project settings → Checks**, apply from the
+next decision, and admit or release no test by themselves.
+
+The Overview's **Quarantined tests** lists each test with its flake rate on entry, when it entered,
+how many of its passes it has, and its fix task. **Never quarantine**, on a row or by naming a
+check and test in the *Never quarantined* form below, takes the test out of quarantine and keeps it
+out: its failures always count.
+
+### Slow checks run once per landing
+
+When the project has checks, approved work does not land one task at a time. Landings are queued and
+land in **batches**, one batch at a time per project. The oldest queued landing waits up to a minute
+for others to join, up to 8 tasks are taken together, and each task's work is merged onto main's tip
+in order. The checks that run at landing run **once**, on the whole batch. When they pass, main moves
+to exactly the commit that was checked; if main moved meanwhile, the batch is built again on the new
+tip. A task's card shows where its landing is: queued, checking, landed or sent back.
+
+When a batch fails, the Hub checks it task by task to find the first task whose part breaks it, and
+only that task goes back to its author. A landing failure is **blamed on a task only when it
+reproduces there**:
+
+- A run that fails a disturbed number of tests, in files no task of the batch changed, is run once
+  more on a quiet Hub before it is judged.
+- A failure that reproduces on no task's part is held against nobody. The batch's checks run once
+  more, and if it then passes, the batch lands and says which failures it went past. Those tests are
+  listed as flaky.
+
+### Pull request landing
+
+With **Project settings → Landing → Land builds as pull requests** on, a build can put its approved
+work on one GitHub pull request instead of merging into main. It is off until you turn it on, because
+pushing publishes the work, and it needs a GitHub remote and a logged-in GitHub CLI (`gh`): the Hub
+uses no token of its own. The Build dialog then offers *A pull request* under *Lands on*.
+
+The first push opens a draft pull request against your main branch. Each approved task is merged
+onto the build branch and pushed once the landing checks pass. The pull request is marked ready when
+every task is pushed, and returned to draft if one is sent back. The Hub never merges the pull
+request, approves it or changes its base: you merge it on GitHub. Two more settings sit beside it:
+
+- **One commit per build** puts the whole build in a single commit instead of one per task.
+- **The PR's CI is the full check** pushes without running the landing checks here, and lets the
+  checks that count on GitHub decide whether the pull request is ready or the latest task goes back.
+  Those are the checks GitHub marks required on the base branch, else the names you list under
+  *CI check names*.
 
 ## Review
 

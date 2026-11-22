@@ -23,8 +23,8 @@ profile are reached through their build, flow or profile, not here. See
 - A project row offers **+** (a new profile) and **Project settings** (gear). If its folder has
   gone missing, it says *Directory unavailable*.
 - **Builds** lists the builds needing you first (*Stopped*, *Stalled*, *Given up*, *Question*),
-  then the running ones. Choosing one opens its build view; one that is not running can be
-  dismissed.
+  then the running ones. Choosing one opens its build view. One that is not running can be
+  dismissed with its **×**: it leaves the list, and a new stall, question or stop brings it back.
 - **Threads** lists the threads you started or wrote in, those waiting for you first, then by
   most recent activity. **New thread** in its header asks which profile to talk to. Archived threads
   are behind **Show archived**.
@@ -92,6 +92,17 @@ The gear in the top bar opens the project's settings:
 ![Project settings, General section: collaboration, reach, integration and checkpointing](../assets/screenshots/project-settings-light.webp#only-light)
 ![Project settings, General section: collaboration, reach, integration and checkpointing](../assets/screenshots/project-settings-dark.webp#only-dark)
 </figure>
+
+## App settings
+
+The gear at the foot of the sidebar opens **App settings**, which belong to you on this Hub and not
+to one project: sound and notifications, appearance (light or dark), and **Hub connection**. That page holds the
+Hub's address and key, its version, **Updates** and what closing the window does. **Updates**, in the
+app window only, shows when a newer release is available, with an **Update to *version*** button
+and **Update automatically when I open AgentWeave**, which is on by default. The update saves a
+copy of your database, upgrades, checks the new version is healthy, and puts the old version and
+database back if it is not. A Hub run from a git checkout updates from its local master instead. See
+[Installation](../getting-started/installation.md#the-app-updates-itself).
 
 ## Search and shortcuts
 

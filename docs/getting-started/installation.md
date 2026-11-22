@@ -96,6 +96,40 @@ agentweave
 The next start runs any new database migrations against your existing state. Your projects and
 their history stay where they are.
 
+### The app updates itself
+
+In the app window, AgentWeave also checks PyPI (at most once a day, and quietly if it cannot reach it)
+for a newer final release. When one exists, **App settings → Hub connection → Updates** offers
+**Update to *version***. The window is the part that does the updating, so the settings appear only
+there, not in a browser tab.
+
+An update goes in this order:
+
+1. If work is running, the button names it and asks you to confirm, because updating stops it.
+2. The Hub is stopped, and a copy of its database is saved under
+   `~/.agentweave/hub/update-backups/`. The newest three copies are kept.
+3. `agentweave-ai` and `agentweave-hub` are upgraded with pip.
+4. The Hub is started again, and must report the new version within two minutes.
+
+If any step after the copy fails, the previous version is installed again, the database copy is put
+back, the old Hub is started, and the window says why the update failed. Nothing is left half
+applied. Only one update runs at a time, and an update is refused while another Hub of the same
+installation is running on another port.
+
+**Update automatically when I open AgentWeave** is on by default. With it on, opening the app
+upgrades it first when a newer release exists, nothing is running, and no other window or Hub of the
+installation is open. The Update button stays either way. To check a different package index, set
+[`AW_UPDATE_INDEX_URL`](../reference/env-variables.md#the-cli).
+
+A Hub run from a git checkout, as the AgentWeave project's own developers do, is not upgraded with
+pip. Its updates come from the checkout's **local master**: it counts the commits master has that the
+running Hub lacks, and never fetches. The Update button restarts the Hub onto master, only while the
+checkout is on master, and lists any uncommitted files before asking you to confirm. Before it stops
+the Hub, it runs the new migrations on a copy of the database as a rehearsal, and a failure there
+leaves the running Hub untouched. If the restarted Hub does not come up healthy, the database is
+restored and the previous commit is started. The checkout's own switch, **Restart onto master
+automatically when I open AgentWeave**, is off by default.
+
 ## Docker
 
 To run the Hub in a container, for example on a shared or headless machine, see

@@ -26,6 +26,29 @@ Documents live in `spec/` in your project as `spec.json` files: the structured c
 `hub` block with phase and rigor. The Hub renders them for reading, so diffs stay clean. Commit
 `spec/` like any other source. See [Project files](../reference/project-files.md).
 
+## The Spec home
+
+With documents in the project, the **Spec** tab opens on a home page above the document list. It shows
+what is **Building now**, what was **Recently built**, a map of how roadmaps, changes and capabilities
+relate (hover a build to light up what it touches), and the project's **Capabilities**, each with a
+count of changes waiting on it. Open anything from it.
+
+### Starting a project with no specs
+
+A project with no specification documents is offered a start instead of an empty page. There are two,
+and the Hub marks the one it recommends:
+
+- **Write down what the existing code does.** A profile reads the code and writes a **system map**:
+  its areas, and the capabilities it proposes, with one capability draft each. You
+  review every draft. Only approving it and folding it makes it a capability.
+- **Plan a new project.** A profile interviews you about the problem, its users, scope and
+  non-goals, then writes a roadmap of slices.
+
+Choosing **Start…** asks which profile does it, and opens that profile's new thread. With no profile
+in the project there is nothing to start, and the page offers to add one. A system map lists its
+proposed capabilities, each with the state of its draft: no draft yet, exploring, approved, current or
+declined.
+
 ## Writing one with an agent
 
 You never fill in a form. You describe the change in a conversation:
@@ -46,6 +69,19 @@ A change moves through a short **journey** of steps. Its length follows its size
 | **Large** | intake → requirements → acceptance → approach → tasks → delivery |
 
 A project can add its own steps under **Project settings → General → Spec steps**.
+
+### Confirming acceptance criteria
+
+Before a change can be approved, each of its acceptance criteria must be **confirmed** against the
+current code. The author reads the code each criterion is about and records, for each, whether it is
+**new** (the behaviour does not exist yet, so the acceptance drive's check for it must fail on
+today's code) or a **guard** (it already holds, and the document marks the criterion as a guard).
+This is what stops a change from being built for behaviour that already exists. Any profile may
+confirm, while the document is still being explored.
+
+A confirmation stops counting when its criterion is reworded or its guard flag changes; it must then
+be confirmed again. **Approval is refused until every criterion has a current confirmation, and
+*Approve anyway* does not pass it.** The refusal, `criteria_unconfirmed`, names the criteria left.
 
 ### Requirements and scenarios
 
@@ -100,6 +136,13 @@ cycle or a task depending on something that does not exist.
 ![Approval refused for gaps, with Approve anyway](../assets/screenshots/approve-anyway-light.webp#only-light)
 ![Approval refused for gaps, with Approve anyway](../assets/screenshots/approve-anyway-dark.webp#only-dark)
 </figure>
+
+A gap you judge acceptable can be **acknowledged** instead of fixed. The author, or you, gives a
+reason; the gap stays visible, listed apart from the open ones with the reason, who acknowledged it
+and when, and no longer counts as open when the Hub says whether the document is ready to approve.
+An acknowledgement holds only while the same gap is still reported: fix it and it is dropped, and a
+gap that comes back is open again. Refusals, unreviewed amendments and vault warnings cannot be
+acknowledged by an agent.
 
 Approving again after edits is safe. It refreshes the open tasks instead of duplicating them.
 
@@ -173,3 +216,10 @@ change" with a reason, so current behaviour never silently falls behind what shi
 For work too large for one change, write a **roadmap**: ordered slices, each with its own change
 document. When you approve a slice, **Draft the next slice** asks the slice's author to draft the
 next one as soon as this one's tasks have closed.
+
+A roadmap shows each slice's progress. A slice is **Not drafted**, **Drafting**, **Approved**,
+**Building** or **Built**, and the roadmap shows the tasks on main out of the slice's total, what it
+has cost so far (building, review, landing and mending), when it was built, and a link to its
+build retrospective once one is written. A slice that is not drafted but whose earlier slices are
+built is offered with **Draft this slice**, or **Not now**. One whose earlier slices are not built
+shows what it waits for, and can be drafted early.

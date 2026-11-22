@@ -96,6 +96,7 @@ Each coverage entry also carries **integration**: `integrated`, `not_integrated`
 
 - `depends_on_unresolved`, `dependency_cycle`, `unknown_field`;
 - `roadmap_not_approved`, `roadmap_slice_unknown`, `roadmap_without_slices`;
+- `criteria_unconfirmed`: an acceptance criterion with no current confirmation (see below);
 - a payload that does not validate.
 
 **Gaps** are listed, and *approve anyway* records them as overridden:
@@ -105,6 +106,21 @@ Each coverage entry also carries **integration**: `integrated`, `not_integrated`
 - `no_acceptance_drive`, where the first task is not a failing end-to-end check;
 - a requirement no task serves and no accepted evidence verifies;
 - `steps_skipped`, empty non-goals, unresolved questions, unreviewed amendments.
+
+A gap can be **acknowledged** with a reason (`acknowledge_spec_gap`, or from the approval
+refusal). The record holds `code`, `where`, `reason`, who and when, and lasts only while a gap with
+the same `code` and `where` is still reported. It is shown apart from the open gaps and counts as
+handled for readiness. `amendments_unreviewed` and `vault_warning` are the operator's to clear and
+are never acknowledged by an agent.
+
+## Criterion confirmations
+
+Each acceptance criterion needs a current confirmation before approval (`criteria_unconfirmed`).
+`confirm_acceptance_criteria` records one per criterion as `new` or `guard`, and the kind must agree
+with the criterion's `guard` flag. A confirmation is tied to the criterion's text and flag, so
+rewording it or changing the flag voids it. Confirming is allowed while the document is exploring,
+and is refused on an approved document until you reopen it. It is all or none: one refused entry
+records nothing.
 
 ## Evidence review states
 
