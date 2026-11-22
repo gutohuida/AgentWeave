@@ -43,7 +43,7 @@ export function summary(input: {
     const n = input.finished.length
     out.push(`Since you last looked ${input.lastSeenWords}, ${n} ${plural(n, 'task has', 'tasks have')} finished: ${sinceWords(input.finished)}.`)
   }
-  if (input.working.length === 0) out.push('No agent is working right now.')
+  if (input.working.length === 0) out.push('No profile is working right now.')
   else {
     const first = input.working[0]!
     const more = input.working.length - 1
