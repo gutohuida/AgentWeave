@@ -29,7 +29,8 @@ The setup:
 What the rows assume of the built change, where the criteria leave it open (the tasks that turn
 this green may adjust a selector, never an assertion):
   - the offer line is `[data-testid=spec-created-note]`, carrying `data-path=<spec path>`, with a
-    button named "Open here" and a button whose name says dismiss (or Not now);
+    button named "Open here" (or "Open <title> in this thread") and a button whose name says
+    dismiss (or Not now, or "Do not open <title> here");
   - the old card is `[data-testid=conversation-spec-offer]` (today's ConversationSpecOffers);
   - the composer's Explore control is `[data-testid=composer-start-exploration]` with aria-pressed,
     and an open spec shows `[data-testid=composer-spec-control]`;
@@ -64,6 +65,10 @@ STEP_WORDS = ("Intake", "Requirements", "Acceptance", "Approach", "Tasks", "Buil
 LINE = "[data-testid=spec-created-note]"
 CARD = "[data-testid=conversation-spec-offer]"
 EXPLORE = "[data-testid=composer-start-exploration]"
+# SpecCreatedNote.tsx (master c3937a1) labels its buttons "Open <title> in this thread" and
+# "Do not open <title> here"; the visible text is "Open here" and a dismiss mark.
+OPEN_NAME = re.compile(r"^Open (here|.+ in this thread)")
+DISMISS_NAME = re.compile(r"dismiss|not now|do not open", re.I)
 
 # The on-screen box of the transcript's copy of a message: the text node holding `marker` that
 # sits furthest right (the rail's truncated thread title sits left of the transcript).
@@ -364,9 +369,9 @@ class Drive:
             else:
                 if not re.search(r"Architect created Add a shout flag", facts["text"]):
                     bad.append(f"line reads {facts['text']!r}")
-                if not facts["line"].get_by_role("button", name=re.compile(r"^Open here")).count():
+                if not facts["line"].get_by_role("button", name=OPEN_NAME).count():
                     bad.append("no Open here")
-                if not facts["line"].get_by_role("button", name=re.compile(r"dismiss|not now", re.I)).count():
+                if not facts["line"].get_by_role("button", name=DISMISS_NAME).count():
                     bad.append("no dismiss")
                 if not facts["under"]:
                     bad.append("the line is not under the creating turn")
@@ -411,7 +416,7 @@ class Drive:
         def open_here():
             self.goto(pg, self.url("spt-main", agent="Architect", conversation=a_conv), 3500)
             line = pg.locator(LINE)
-            button = line.get_by_role("button", name=re.compile(r"^Open here"))
+            button = line.get_by_role("button", name=OPEN_NAME)
             if not button.count():
                 self.row("ac-offer-open", "Open here", True, False,
                          f"no Open here on an offer line ({line.count()} lines, {pg.locator(CARD).count()} cards)")
@@ -439,7 +444,7 @@ class Drive:
             before = (self.content_version("spt-main", b_path), self.step("spt-main", b_path))
             self.goto(pg, self.url("spt-main", agent="Architect", conversation=b_conv), 3500)
             line = pg.locator(LINE)
-            button = line.get_by_role("button", name=re.compile(r"dismiss|not now", re.I))
+            button = line.get_by_role("button", name=DISMISS_NAME)
             if not button.count():
                 self.row("ac-offer-dismiss", "dismiss", True, False,
                          f"no dismiss on an offer line ({line.count()} lines, {pg.locator(CARD).count()} cards)")
