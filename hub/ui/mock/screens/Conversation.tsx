@@ -215,8 +215,6 @@ function ConversationMock({ route, go }: ScreenProps) {
             <NewConversationIntro
               agent={agent}
               runnerLabel={RUNNER.label}
-              modelLabel={RUNNER.modelLabel}
-              postureLabel={RUNNER.posture}
               starters={STARTERS}
               onPick={(message) => {
                 setComposerDraft(PROJECT_ID, agent.name, null, message)

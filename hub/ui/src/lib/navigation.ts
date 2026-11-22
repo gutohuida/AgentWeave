@@ -31,7 +31,7 @@ export type ProjectTab = (typeof PROJECT_TABS)[number]
 /** What each project tab is called on screen (the top bar). */
 export const TAB_LABELS: Record<ProjectTab, string> = {
   overview: 'Overview',
-  thread: 'Thread',
+  thread: 'Chapters',
   tasks: 'Tasks',
   spec: 'Spec',
   checkpoints: 'Checkpoints',

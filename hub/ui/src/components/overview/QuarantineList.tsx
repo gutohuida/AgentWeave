@@ -1,5 +1,7 @@
 import * as React from 'react'
 import { Icon } from '@/components/common/Icon'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { formatAgoLong, formatDateTime } from '@/lib/format'
 import type { NeverQuarantineMark, QuarantinedTest } from '@/api/quarantine'
 
@@ -33,7 +35,7 @@ export function QuarantineList({
   const [check, setCheck] = React.useState('')
   const [test, setTest] = React.useState('')
   return (
-    <section className="aw-ov-section" aria-labelledby="ov-quarantine" data-testid="quarantine-list">
+    <section className="aw-ov-section aw-ov-q" aria-labelledby="ov-quarantine" data-testid="quarantine-list">
       <h2 id="ov-quarantine" className="aw-ov-heading">
         Quarantined tests {quarantined.length ? <span className="aw-ov-count" data-tone="amber">{quarantined.length}</span> : null}
       </h2>
@@ -44,7 +46,7 @@ export function QuarantineList({
       ) : (
         <ul className="aw-ov-list">
           {quarantined.map((entry) => (
-            <li key={entry.id} data-testid={`quarantined-${entry.id}`} className="aw-ov-row aw-ov-kf-row">
+            <li key={entry.id} data-testid={`quarantined-${entry.id}`} className="aw-ov-row aw-ov-kf-row aw-ov-q-row">
               <span className="aw-ov-row-icon" data-kind="flaky" aria-hidden="true">
                 <Icon name="block" size={13} />
               </span>
@@ -95,14 +97,17 @@ export function QuarantineList({
           ))}
         </ul>
       )}
-      <div data-testid="never-quarantine-marks" className="aw-ov-kf-disturbed">
-        <h3 className="aw-ov-row-detail">Never quarantined</h3>
+      <div data-testid="never-quarantine-marks" className="aw-ov-q-marks">
+        <h3 className="aw-ov-q-sub">Never quarantined</h3>
         {marks.length === 0 ? (
-          <p className="aw-ov-row-detail">No test is marked.</p>
+          <p className="aw-ov-q-empty">No test is marked. Name one below and its failures always count.</p>
         ) : (
           <ul className="aw-ov-list">
             {marks.map((mark) => (
-              <li key={mark.id} data-testid={`never-quarantine-${mark.id}`} className="aw-ov-row">
+              <li key={mark.id} data-testid={`never-quarantine-${mark.id}`} className="aw-ov-row aw-ov-kf-row aw-ov-q-row">
+                <span className="aw-ov-row-icon" aria-hidden="true">
+                  <Icon name="lock" size={13} />
+                </span>
                 <span className="aw-ov-row-text">
                   <span className="aw-ov-row-title" title={mark.test}>{mark.test}</span>
                   <span className="aw-ov-row-detail">{mark.check}</span>
@@ -117,7 +122,7 @@ export function QuarantineList({
           </ul>
         )}
         <form
-          className="aw-ov-row-detail"
+          className="aw-ov-q-form"
           onSubmit={(event) => {
             event.preventDefault()
             if (!check.trim() || !test.trim()) return
@@ -125,13 +130,19 @@ export function QuarantineList({
             setTest('')
           }}
         >
-          <input aria-label="Check name" placeholder="check" value={check} onChange={(e) => setCheck(e.target.value)} />{' '}
-          <input aria-label="Test id" placeholder="test id" value={test} onChange={(e) => setTest(e.target.value)} />{' '}
-          <button type="submit" className="aw-overview-link" disabled={busy || !check.trim() || !test.trim()}>
+          <label className="aw-ov-q-field">
+            <span>Check</span>
+            <Input aria-label="Check name" placeholder="e.g. hub-tests" value={check} onChange={(e) => setCheck(e.target.value)} />
+          </label>
+          <label className="aw-ov-q-field" data-grow="true">
+            <span>Test id</span>
+            <Input aria-label="Test id" placeholder="e.g. tests/test_x.py::test_name" value={test} onChange={(e) => setTest(e.target.value)} />
+          </label>
+          <Button type="submit" variant="outline" size="sm" disabled={busy || !check.trim() || !test.trim()}>
             Never quarantine a test
-          </button>
+          </Button>
         </form>
-        {error ? <p role="alert" className="aw-ov-row-detail">{error}</p> : null}
+        {error ? <p role="alert" className="aw-ov-q-error">{error}</p> : null}
       </div>
     </section>
   )

@@ -47,10 +47,9 @@
 .aw-settings-setup + .aw-settings-page { padding-top: 20px; }
 .aw-settings-setup .aw-setup { margin-bottom: 0; }
 
-/* The first-run welcome (`FirstRunPanel`): the path as one row, the next step as a button. */
-.aw-firstrun { padding-bottom: 14px; }
+/* The first-run path (`FirstRunPath`): one quiet row under the set-up card's title. */
 .aw-firstrun-path {
-  display: flex; flex-wrap: wrap; gap: 4px 6px; margin: 8px 0 12px; padding: 0; list-style: none;
+  display: flex; flex-wrap: wrap; gap: 4px 6px; margin: 2px 0 6px; padding: 0; list-style: none;
   counter-reset: aw-firstrun; font-size: 12.5px; color: var(--text-3);
 }
 .aw-firstrun-path li { counter-increment: aw-firstrun; display: inline-flex; align-items: center; gap: 6px; }
@@ -64,4 +63,5 @@
 .aw-firstrun-path li[data-state="next"] { color: var(--text); font-weight: 600; }
 .aw-firstrun-path li[data-state="next"]::before { background: var(--tone); color: var(--bg, #fff); }
 .aw-firstrun-path li[data-state="done"] { color: var(--text-2); }
-.aw-firstrun-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 14px; }
+/* What stays once nothing is left to set up. */
+.aw-quickstart { margin: 0 0 20px; font-size: 12.5px; }

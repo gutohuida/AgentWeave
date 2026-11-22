@@ -142,9 +142,8 @@ function PoolRow({
       <ProviderMark provider={entry.cli} label={cliLabel(entry.cli)} size={16} />
       <span className="aw-pool-entry-text">
         <span className="aw-pool-entry-label">{label}</span>
-        <span className="aw-pool-entry-detail">
-          {entry.runner_name} · {cliLabel(entry.cli)}
-        </span>
+        {/* The CLI once: the label names the model and effort, and a runner's name only repeats them. */}
+        <span className="aw-pool-entry-detail">{cliLabel(entry.cli)}</span>
       </span>
       {entry.default ? (
         <span className="aw-pool-default">

@@ -104,4 +104,12 @@ describe('the pool editor offers the whole catalog', () => {
     ])
     expect(screen.getByRole('list', { name: 'Models Builder may run on' })).toHaveTextContent('Opus 5.5 · High')
   })
+
+  it('names the CLI once in a row’s detail, not the runner’s name again', () => {
+    renderEditor(vi.fn(), [
+      { id: 'pool-2', runner_id: 'runner-opus', runner_name: 'Claude Code — Opus 5.5', cli: 'claude', model: 'claude-opus-5-5', effort: 'high', default: false },
+    ])
+    const row = screen.getByRole('list', { name: 'Models Builder may run on' }).querySelector('li')!
+    expect(row.querySelector('.aw-pool-entry-detail')).toHaveTextContent(/^Claude Code$/)
+  })
 })

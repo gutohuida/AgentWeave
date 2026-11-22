@@ -2,6 +2,8 @@ import type { ProjectSetupItem } from '@/api/projects'
 import { agentSettingsDestination, environmentDestination, goTo, projectDestination } from '@/lib/navigation'
 import type { SetupItem } from './SetupList'
 
+export const QUICKSTART_URL = 'https://gutohuida.github.io/AgentWeave/getting-started/quickstart/'
+
 /** Scroll an element into view once its screen has rendered it (the navigation is asynchronous). */
 export function scrollToAnchor(id: string): void {
   let tries = 0

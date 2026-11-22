@@ -1,5 +1,6 @@
 import { Icon } from '@/components/common/Icon'
 import { Button } from '@/components/ui/button'
+import { FirstRunPath } from './FirstRunPath'
 import '@/styles/setup.css'
 
 /**
@@ -34,6 +35,7 @@ export function SetupList({
   items,
   dismissed = [],
   place,
+  path,
   onDismiss,
   onRestore,
 }: {
@@ -41,6 +43,9 @@ export function SetupList({
   /** Items the operator dismissed; listed (with a way back) only in settings. */
   dismissed?: SetupItem[]
   place: 'overview' | 'settings'
+  /** While the project has no work yet: the first-run path, as a quiet line under the title, at
+   *  this step. One card says what is left and where it leads (no second welcome card). */
+  path?: { current: number }
   onDismiss?: (item: SetupItem) => void
   onRestore?: (item: SetupItem) => void
 }) {
@@ -55,6 +60,7 @@ export function SetupList({
               {items.length === 1 ? 'One thing before this project can work' : `${items.length} things before this project can work`}
             </h2>
           </header>
+          {path ? <FirstRunPath current={path.current} /> : null}
           <ul className="aw-setup-items">
             {items.map((item) => (
               <li key={item.id} className="aw-setup-item" data-testid={`setup-item-${item.id}`} data-key={item.key}>

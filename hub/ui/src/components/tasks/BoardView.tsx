@@ -185,6 +185,7 @@ export function BoardView({
           />
           Show finished
         </label>
+        <div className="aw-board-find">
         <label className="aw-board-search">
           <Icon name="search" size={13} />
           <Input
@@ -210,6 +211,7 @@ export function BoardView({
         >
           Select
         </button>
+        </div>
       </div>
 
       {selecting && picked.size > 0 ? (

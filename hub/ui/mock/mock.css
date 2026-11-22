@@ -75,3 +75,35 @@
 .mock-pool-composer-box { border: 1px solid var(--border-hi); border-radius: 12px; background: var(--surface); padding: 10px 10px 6px; margin-top: 250px; }
 .mock-pool-composer-placeholder { font-size: 13px; color: var(--text-2); padding: 2px 4px 10px; }
 .mock-pool-composer-bar { display: flex; align-items: center; gap: 4px; }
+
+/* First run and the Overview read cleanly (`first-run-polish`): the screen's own layout, and the
+   one "today" that is CSS: the tasks toolbar as it was, so the old clipping can be shown beside the
+   new. Nothing here ships. */
+.mock-frp { display: flex; flex-direction: column; gap: 40px; max-width: 1240px; width: 100%; margin: 0 auto; padding: 24px; height: 100%; overflow-y: auto; }
+.mock-frp-panel { display: flex; flex-direction: column; gap: 14px; flex: none; }
+.mock-frp-panel > h2 { margin: 0; font-size: 15px; font-weight: 600; }
+.mock-frp-panel > p { margin: 0; font-size: 12.5px; color: var(--text-3); max-width: 78ch; }
+.mock-frp-pair { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 440px), 1fr)); gap: 16px; align-items: start; }
+.mock-frp-cap { margin: 0 0 6px; font-size: 11px; font-weight: 500; letter-spacing: .04em; text-transform: uppercase; color: var(--text-3); }
+.mock-frp-cap[data-kind="proposed"] { color: var(--green); }
+.mock-frp-box { min-width: 0; }
+.mock-frp-scroll { overflow-x: auto; padding-bottom: 4px; }
+.mock-frp-frame { border: 1px solid var(--border); border-radius: var(--radius-md); overflow: hidden; background: var(--bg); }
+.mock-frp-board { height: 300px; }
+.mock-frp-board .aw-board { height: 100%; }
+.mock-frp-note { margin: 6px 0 0; font-size: 12px; color: var(--text-3); }
+.mock-today-board .aw-board-toolbar { flex-wrap: nowrap; min-height: 0; height: 48px; padding: 0 16px; gap: 12px; }
+.mock-today-board .aw-board-filters { flex-wrap: nowrap; min-width: 160px; overflow-x: auto; scrollbar-width: none; }
+.mock-today-board .aw-filter-chip { white-space: normal; }
+.mock-today-board .aw-board-finished-switch { flex: initial; white-space: normal; }
+.mock-today-board .aw-board-find { flex: 0 1 auto; max-width: none; margin-left: auto; flex-wrap: nowrap; }
+.mock-today-board .aw-board-search { flex: 0 1 220px; min-width: 120px; }
+.mock-today-board .aw-board-hidden-count { padding: 2px 4px 6px; }
+/* The new-thread intro as it was: its "runs on" line named the runner, model and posture. */
+.mock-frp-today-intro .aw-newconv-runs { font-size: 0; }
+.mock-frp-today-intro .aw-newconv-runs::after { content: "Claude Code — Haiku 5.5 · Haiku 5.5 · Workspace only"; font-size: 12.5px; }
+.mock-frp-pair[data-stack="true"] { grid-template-columns: minmax(0, 1fr); }
+.mock-frp .aw-newconv { padding-top: 28px; }
+/* The profiles count as it was: the archived profile counted in. */
+.mock-frp-today-count .aw-pf-order { font-size: 0; }
+.mock-frp-today-count .aw-pf-order::after { content: "2 profiles · working first, then A to Z"; font-size: 12px; }

@@ -138,6 +138,7 @@ import {
   Trophy,
   Download,
   ChartGantt,
+  Ban,
 } from 'lucide-react'
 
 /**
@@ -236,6 +237,7 @@ const ICONS: Record<string, LucideIcon> = {
   light_mode: Sun,
   link: Link2,
   lock: Lock,
+  block: Ban,
   list_alt: ClipboardList,
   memory: Cpu,
   psychology: Brain,

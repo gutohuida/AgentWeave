@@ -4,12 +4,6 @@ import { useRunners } from '@/api/runners'
 import { overridesForRunner, runnerSetsModel } from '@/lib/runnerProvider'
 import { useWorkspacePaths } from '@/api/workspace'
 import { useSpecDocuments, useSpecEvents } from '@/api/spec'
-import {
-  permissionModeValues,
-  providerForRunner,
-  resolveCatalogModel,
-  useModelCatalog,
-} from '@/api/modelCatalog'
 import { Icon } from '@/components/common/Icon'
 import { Button } from '@/components/ui/button'
 import { ApiError, deleteJson, postJson, readableRefusal } from '@/api/client'
@@ -93,20 +87,11 @@ export function NewConversationSurface({
   /** Bumped when a starter writes the draft, so the composer remounts and reads it. Not keyed by
    *  agent: retargeting is a change of recipient, and a half-written message survives it. */
   const [composerKey, setComposerKey] = useState(0)
-  const { data: catalog } = useModelCatalog()
   const hasNoWork = useProjectHasNoWork()
 
   const agentRow = roster.find((candidate) => candidate.name === agent)
   const runnerRow = runners.find((runner) => runner.id === agentRow?.runner_id)
-  // What the intro says it runs on, in the catalog's words: the runner's name, its model's label,
-  // and the posture its next run gets.
-  const runnerProvider = catalog?.providers.find(
-    (provider) => provider.provider === providerForRunner(runnerRow?.cli),
-  )
-  const modelLabel = resolveCatalogModel(runnerProvider, runnerRow?.model)?.label ?? null
   const posture = postureAtRest(agentRow)
-  const postureLabel =
-    permissionModeValues(catalog).find((value) => Object.values(posture).includes(value.id))?.label ?? null
 
   /* Declaring an exploration before the first message is the one case where the intent
    * genuinely precedes the document: there is no conversation to attach one to and no title to
@@ -282,8 +267,6 @@ export function NewConversationSurface({
           <NewConversationIntro
             agent={agentRow}
             runnerLabel={runnerRow?.name ?? null}
-            modelLabel={modelLabel}
-            postureLabel={postureLabel}
             starters={hasNoWork ? EMPTY_PROJECT_STARTERS : STARTERS}
             headlineTestId="new-conversation-headline"
             onPick={(message) => {

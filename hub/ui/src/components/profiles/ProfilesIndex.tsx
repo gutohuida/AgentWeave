@@ -58,6 +58,9 @@ export function ProfilesIndex({
   const rows = listOrder(groups, open)
   const total = items.length
   const matched = groups.active.length + groups.rest.length + groups.archived.length
+  // The quiet count is of the profiles in play: an archived one has its own counted group below.
+  const live = items.filter((i) => !i.archived).length
+  const liveMatched = groups.active.length + groups.rest.length
   const filterRef = React.useRef<HTMLInputElement>(null)
   const bodyRef = React.useRef<HTMLDivElement>(null)
   const tabStop = (focusProfile && rows.find((r) => r.name === focusProfile)?.name) || rows[0]?.name || null
@@ -117,9 +120,9 @@ export function ProfilesIndex({
         </Button>
       </header>
 
-      {state === 'ready' && total > 0 ? (
+      {state === 'ready' && live > 0 ? (
         <p className="aw-pf-order" aria-live="polite">
-          {countLine(matched, total)} · working first, then A to Z
+          {countLine(liveMatched, live)} · working first, then A to Z
         </p>
       ) : null}
 

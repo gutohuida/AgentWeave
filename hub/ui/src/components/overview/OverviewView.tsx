@@ -120,7 +120,6 @@ export function OverviewView({
   onOpenTasks,
   notice,
   setup,
-  firstRun,
   knownFailing,
   quarantine,
   loading,
@@ -154,10 +153,9 @@ export function OverviewView({
   onOpenTasks?: () => void
   /** A project-wide condition worth one line above everything (a paused budget). */
   notice?: React.ReactNode
-  /** What the project still needs (`SetupList`), above everything else. */
+  /** What the project still needs (`SetupList`), above everything else; with the first-run path
+   *  while the project has no work, and a quiet quickstart link once nothing is left. */
   setup?: React.ReactNode
-  /** The first-run welcome (`FirstRunPanel`), below the set-up list while the project has no work. */
-  firstRun?: React.ReactNode
   /** The project's known-failing list (`KnownFailingList`), below what is running. */
   knownFailing?: React.ReactNode
   /** The project's quarantined tests (`QuarantineList`), beside the known-failing list. */
@@ -177,7 +175,6 @@ export function OverviewView({
   return (
     <div className="aw-overview">
       {setup}
-      {firstRun}
       {notice ? <div className="aw-overview-notice">{notice}</div> : null}
       <div className="aw-overview-summary">
         <p className="aw-overview-status">

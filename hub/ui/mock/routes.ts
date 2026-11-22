@@ -23,6 +23,9 @@ export type MockRoute =
   /** How a thread shows the spec it is working on: the header's phase badge with its step, and three
    *  ways to offer a document an agent created in the thread (operator, 2026-11-22). */
   | { kind: 'spec-thread-ui' }
+  /** First run and the Overview read cleanly: six small polish items, each today next to proposed
+   *  (operator, 2026-11-22). */
+  | { kind: 'first-run-polish' }
   /** The traces view: a fourth view inside Activity (operator, 2026-11-02). */
   | { kind: 'traces' }
   /** A whole conversation's trace (spec a-trace-of-a-whole-conversation). */

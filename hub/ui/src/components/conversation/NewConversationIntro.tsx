@@ -16,8 +16,6 @@ export interface ConversationStarter {
 export function NewConversationIntro({
   agent,
   runnerLabel,
-  modelLabel,
-  postureLabel,
   starters,
   onPick,
   headlineTestId,
@@ -25,15 +23,13 @@ export function NewConversationIntro({
   agent: AgentSummary
   /** e.g. "Claude Code"; null when no runner is bound (the intro then says it cannot run). */
   runnerLabel: string | null
-  modelLabel?: string | null
-  /** The permission posture its next run gets, e.g. "Workspace only". */
-  postureLabel?: string | null
   starters: ConversationStarter[]
   onPick: (message: string) => void
   headlineTestId?: string
 }) {
   const color = agentColorVars(agent.color_index)
-  const runsOn = runnerLabel ? [runnerLabel, modelLabel, postureLabel].filter(Boolean).join(' · ') : null
+  // The CLI only: the composer's chips below already say the model, effort and permissions (P27).
+  const runsOn = runnerLabel ? `Runs on ${runnerLabel}` : null
   return (
     <div className="aw-newconv">
       <span className="aw-newconv-avatar" style={{ background: color.tint, color: color.accent, boxShadow: `inset 0 0 0 1px ${color.border}` }} aria-hidden="true">
