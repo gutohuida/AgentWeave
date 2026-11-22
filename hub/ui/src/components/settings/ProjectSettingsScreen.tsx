@@ -17,6 +17,9 @@ import { SpecStepsSection } from './sections/SpecStepsSection'
 import { TracesSection } from './sections/TracesSection'
 import { WorktreesSection } from './sections/WorktreesSection'
 import { ProjectSetupList } from '@/components/overview/ProjectSetupList'
+import { JobsScreen } from '@/components/jobs/JobsScreen'
+import { LogsView } from '@/components/logs/LogsView'
+import { useTaskFilterStore } from '@/store/taskFilterStore'
 
 /** The section list, grouped as the operator approved it (`settings-in-the-app-s-style-where-you-expect-them`).
  *  General is gone: its groups are sections of their own, and its old id lands on Project. */
@@ -29,11 +32,13 @@ const SECTIONS: ReadonlyArray<{ id: EnvironmentSection; label: string; icon: str
   { id: 'charters', label: 'Charters', icon: 'menu_book', group: 'Profiles' },
   { id: 'checkpoints', label: 'Checkpoints', icon: 'book_marked', group: 'Profiles' },
   { id: 'manager', label: 'Manager', icon: 'memory', group: 'Profiles' },
+  { id: 'jobs', label: 'Jobs', icon: 'schedule', group: 'Profiles' },
   { id: 'checks', label: 'Checks', icon: 'verified_user', group: 'Landing work' },
   { id: 'landing', label: 'Landing', icon: 'git_merge', group: 'Landing work' },
   { id: 'worktrees', label: 'Worktrees', icon: 'call_split', group: 'Landing work' },
   { id: 'spec-steps', label: 'Spec steps', icon: 'list_tree', group: 'Specs and records' },
   { id: 'traces', label: 'Traces', icon: 'timeline', group: 'Specs and records' },
+  { id: 'logs', label: 'Logs', icon: 'description', group: 'Specs and records' },
   { id: 'diagnostics', label: 'Diagnostics', icon: 'monitoring', group: 'Specs and records' },
 ]
 
@@ -97,6 +102,24 @@ export function ProjectSettingsScreen({
       break
     case 'manager':
       body = <ManagerSection />
+      break
+    // The Jobs and Logs views, hosted as they were on their retired tabs (leaner-navigation D3).
+    case 'jobs':
+      body = (
+        <JobsScreen
+          onOpenTasks={(taskIds) => {
+            useTaskFilterStore.getState().setActiveTaskIds(taskIds)
+            onNavigate?.('tasks')
+          }}
+        />
+      )
+      break
+    case 'logs':
+      body = (
+        <div className="aw-settings-logs" style={{ height: 'min(640px, 70vh)', minHeight: 360, border: '1px solid var(--border)', borderRadius: 10, overflow: 'auto' }}>
+          <LogsView />
+        </div>
+      )
       break
     case 'charters':
       body = <ChartersSection />

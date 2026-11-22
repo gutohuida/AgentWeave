@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, beforeAll } from 'vitest'
 import { loadAllScreens } from '@/lib/lazyScreens'
-import { render, screen, fireEvent, cleanup } from '@testing-library/react'
+import { render, screen, fireEvent, cleanup, within } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
 import { useConfigStore } from '@/store/configStore'
@@ -97,6 +97,8 @@ vi.mock('@/components/overview/OverviewScreen', () => ({
       <button onClick={() => onNavigate?.('tasks')}>go to tasks</button>
       <button onClick={() => onNavigate?.('questions')}>Answer</button>
       <button onClick={() => onNavigate?.('logs')}>open logs</button>
+      <button onClick={() => onNavigate?.('activity')}>open ledger</button>
+      <button onClick={() => onNavigate?.('thread')}>Chapters</button>
     </div>
   ),
 }))
@@ -125,10 +127,14 @@ vi.mock('@/components/jobs/JobsScreen', () => ({
 vi.mock('@/components/questions/QuestionsPanel', () => ({
   QuestionsPanel: () => <div data-testid="page-questions-inline" />,
 }))
-vi.mock('@/components/activity/ActivityScreen', () => ({
-  ActivityScreen: ({ initialView }: { initialView?: string }) => (
-    <div data-testid="page-activity" data-view={initialView} />
-  ),
+vi.mock('@/components/thread/ThreadScreen', () => ({
+  ThreadScreen: ({ knot }: { knot: string | null }) => <div data-testid="page-thread" data-knot={knot ?? ''} />,
+}))
+// The owner lookup behind a retired checkpoint address (leaner-navigation D2).
+const findCheckpointOwner = vi.fn()
+vi.mock('@/api/checkpoints', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/api/checkpoints')>()),
+  findCheckpointOwner: (...args: unknown[]) => findCheckpointOwner(...args),
 }))
 vi.mock('@/components/settings/ProjectSettingsScreen', () => ({
   ProjectSettingsScreen: ({ section, onSelectSection }: { section: string; onSelectSection: (s: string) => void }) => (
@@ -185,7 +191,7 @@ describe('phase 5 App.tsx: rail-only navigation, tabs own project content', () =
 
   it('does not mount any project page not selected', () => {
     render(withQueryClient(<App />))
-    for (const id of ['page-tasks', 'page-spec', 'page-jobs', 'page-activity']) {
+    for (const id of ['page-tasks', 'page-spec', 'page-settings', 'page-thread']) {
       expect(screen.queryByTestId(id)).not.toBeInTheDocument()
     }
   })
@@ -207,9 +213,38 @@ describe('phase 5 App.tsx: rail-only navigation, tabs own project content', () =
     expect(screen.queryByTestId('page-overview')).not.toBeInTheDocument()
     expect(screen.getByTestId('page-tasks')).toBeInTheDocument()
 
-    fireEvent.click(screen.getByTestId('project-tab-jobs'))
+    fireEvent.click(screen.getByTestId('project-tab-overview'))
     expect(screen.queryByTestId('page-tasks')).not.toBeInTheDocument()
-    expect(screen.getByTestId('page-jobs')).toBeInTheDocument()
+    expect(screen.getByTestId('page-overview')).toBeInTheDocument()
+  })
+
+  // leaner-navigation FR-1 (tabs-exact).
+  it("draws exactly Overview, Tasks, Profiles, Spec, Vault, Dashboards as the bar's tabs, in order", () => {
+    render(withQueryClient(<App />))
+    const bar = screen.getByRole('navigation', { name: 'Project views' })
+    const tabs = within(bar)
+      .getAllByRole('button', { hidden: true })
+      .filter((button) => button.getAttribute('data-slot') === 'topbar-tab' && button.getAttribute('data-testid') !== 'project-tab-more')
+    // The label is the button's first text; a count badge may follow it.
+    expect(tabs.map((tab) => tab.firstChild?.textContent)).toEqual(['Overview', 'Tasks', 'Profiles', 'Spec', 'Vault', 'Dashboards'])
+    for (const gone of ['activity', 'jobs', 'checkpoints', 'thread']) {
+      expect(screen.queryByTestId(`project-tab-${gone}`)).not.toBeInTheDocument()
+    }
+  })
+
+  // leaner-navigation FR-3: Chapters is reached from the Overview, which stays highlighted there.
+  it("opens Chapters from the Overview's link, with Overview the current tab", () => {
+    render(withQueryClient(<App />))
+    fireEvent.click(screen.getByText('Chapters'))
+    expect(screen.getByTestId('page-thread')).toBeInTheDocument()
+    expect(window.location.search).toContain('tab=thread')
+    expect(screen.getByTestId('project-tab-overview')).toHaveAttribute('aria-current', 'page')
+  })
+
+  it('opens a knot address on the chapters view with that knot', () => {
+    window.history.pushState(null, '', '?project=proj-test&tab=thread&knot=k-4')
+    render(withQueryClient(<App />))
+    expect(screen.getByTestId('page-thread')).toHaveAttribute('data-knot', 'k-4')
   })
 
   it('reflects the active tab in the URL', () => {
@@ -281,17 +316,49 @@ describe('phase 5 App.tsx: rail-only navigation, tabs own project content', () =
     expect(screen.getByTestId('project-tab-tasks')).toHaveAttribute('aria-current', 'page')
   })
 
-  // Ledger, Activity and Logs are the Activity screen's own views (activityScreen.test.tsx); the
-  // App decides which one it opens on.
-  it('Activity opens on the ledger, and the logs route opens it on Logs', () => {
+  // leaner-navigation FR-2: Activity's views live in Project settings now.
+  it('the logs route opens Settings › Logs, and the ledger route Settings › Budgets', () => {
     render(withQueryClient(<App />))
     fireEvent.click(screen.getByText('open logs'))
-    expect(window.location.search).toContain('tab=activity')
-    expect(screen.getByTestId('page-activity')).toHaveAttribute('data-view', 'logs')
-    fireEvent.click(screen.getByTestId('project-tab-tasks'))
-    fireEvent.click(screen.getByTestId('project-tab-activity'))
-    // F718: the ledger leads, whichever view was open before the tab was clicked.
-    expect(screen.getByTestId('page-activity')).toHaveAttribute('data-view', 'ledger')
+    expect(screen.getByTestId('page-settings')).toHaveAttribute('data-section', 'logs')
+    expect(window.location.search).toContain('section=logs')
+    fireEvent.click(screen.getByTestId('project-tab-overview'))
+    fireEvent.click(screen.getByText('open ledger'))
+    expect(screen.getByTestId('page-settings')).toHaveAttribute('data-section', 'budgets')
+  })
+
+  it.each([
+    ['tab=activity', 'budgets'],
+    ['tab=activity&view=logs', 'logs'],
+    ['tab=traces', 'traces'],
+    ['tab=jobs', 'jobs'],
+    ['tab=checkpoints', 'checkpoints'],
+  ])('opens a saved %s link on its new home in Project settings (%s)', (query, section) => {
+    window.history.pushState(null, '', `?project=proj-test&${query}`)
+    render(withQueryClient(<App />))
+    expect(screen.getByTestId('page-settings')).toHaveAttribute('data-section', section)
+  })
+
+  it("opens a saved checkpoint link on its thread, once the checkpoint's owner is looked up", async () => {
+    // An earlier case leaves a flow's tab open in this project's side panel; this one is about the address.
+    usePanelTabsStore.setState({ projects: {} })
+    findCheckpointOwner.mockResolvedValueOnce({ agent: 'claude', conversationId: 'conv-1' })
+    window.history.pushState(null, '', '?project=proj-test&tab=checkpoints&checkpoint=ckpt-7')
+    render(withQueryClient(<App />))
+    expect(await screen.findByTestId('page-conversation')).toBeInTheDocument()
+    expect(findCheckpointOwner).toHaveBeenCalledWith('proj-test', { checkpoint: 'ckpt-7', conversation: null })
+    const params = new URLSearchParams(window.location.search)
+    expect(params.get('agent')).toBe('claude')
+    expect(params.get('conversation')).toBe('conv-1')
+    expect(params.get('checkpoint')).toBe('ckpt-7')
+  })
+
+  it('lands on the Overview, not a blank page, when the checkpoint cannot be found', async () => {
+    findCheckpointOwner.mockResolvedValueOnce(null)
+    window.history.pushState(null, '', '?project=proj-test&tab=checkpoints&checkpoint=ckpt-gone')
+    render(withQueryClient(<App />))
+    expect(await screen.findByTestId('page-overview')).toBeInTheDocument()
+    expect(window.location.search).toContain('tab=overview')
   })
 
   it('opens Project settings at General from the top bar and from a project row, with its own section nav', () => {

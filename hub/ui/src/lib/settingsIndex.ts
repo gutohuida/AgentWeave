@@ -44,11 +44,13 @@ const PROJECT: Record<EnvironmentSection, string> = {
   charters: 'Charters',
   checkpoints: 'Checkpoints',
   manager: 'Manager',
+  jobs: 'Jobs',
   checks: 'Checks',
   landing: 'Landing',
   worktrees: 'Worktrees',
   'spec-steps': 'Spec steps',
   traces: 'Traces',
+  logs: 'Logs',
   diagnostics: 'Diagnostics',
 }
 

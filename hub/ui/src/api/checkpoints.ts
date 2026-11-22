@@ -275,3 +275,33 @@ export function useRenderedCheckpoint(checkpointId: string | null) {
     enabled: isConfigured && !!projectId && !!checkpointId,
   })
 }
+
+/** The thread a checkpoint address belongs to, when the address does not say (leaner-navigation
+ *  D2): a checkpoint id is looked up in the project's list, and a conversation is matched to its
+ *  agent through its own checkpoints, then through the project's open and archived threads.
+ *  Null when nothing owns it, so the caller can land somewhere rather than on a blank page. */
+export async function findCheckpointOwner(
+  projectId: string,
+  address: { checkpoint: string | null; conversation: string | null },
+): Promise<{ agent: string; conversationId: string } | null> {
+  const base = `/api/v1/projects/${projectId}`
+  if (address.checkpoint) {
+    const { checkpoints } = await getJson<ProjectCheckpointList>(`${base}/checkpoints`)
+    const found = checkpoints.find((row) => row.id === address.checkpoint)
+    return found ? { agent: found.agent, conversationId: found.conversation_id } : null
+  }
+  const conversationId = address.conversation
+  if (!conversationId) return null
+  const { checkpoints } = await getJson<ProjectCheckpointList>(
+    `${base}/checkpoints?conversation_id=${encodeURIComponent(conversationId)}`,
+  )
+  if (checkpoints[0]) return { agent: checkpoints[0].agent, conversationId }
+  for (const lifecycle of ['open', 'archived']) {
+    const { conversations } = await getJson<{ conversations: Array<{ id: string; agent: string }> }>(
+      `${base}/conversations?lifecycle=${lifecycle}`,
+    )
+    const match = conversations.find((row) => row.id === conversationId)
+    if (match) return { agent: match.agent, conversationId }
+  }
+  return null
+}
