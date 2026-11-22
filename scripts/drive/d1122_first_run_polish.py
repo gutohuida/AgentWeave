@@ -364,7 +364,10 @@ def check_first_run(browser, pid):
     def done():
         pg.go("tab=overview", "dark", 1300, wait=".aw-overview")
         item = pg.page.locator("[data-testid^=setup-item-]", has_text="Start your specifications")
-        item.get_by_role("button", name="Not for this project").click()
+        # Wait for the dismissal to land: read() reloads the page, which would cancel the PUT.
+        with pg.page.expect_response(lambda r: "/setup/dismissed/" in r.url and r.request.method == "PUT") as put:
+            item.get_by_role("button", name="Not for this project").click()
+        assert put.value.ok, (put.value.status, put.value.text()[:300])
         s = read()
         ok = s["cards"] == 0 and s["quick"] == 1
         verdict("ac-first-run-done", ok, f"cards={s['cards']} quickstart links={s['quick']}")
