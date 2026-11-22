@@ -118,6 +118,7 @@ export function OverviewView({
   taskTotal,
   heldByBudget,
   onOpenTasks,
+  onOpenChapters,
   notice,
   setup,
   knownFailing,
@@ -151,6 +152,8 @@ export function OverviewView({
   /** Turns waiting only for the budget: they need the operator, so they are not "nothing" (F953). */
   heldByBudget?: number
   onOpenTasks?: () => void
+  /** The way to the project's chapters, now that Chapters is no longer a top-bar tab (leaner-navigation). */
+  onOpenChapters?: () => void
   /** A project-wide condition worth one line above everything (a paused budget). */
   notice?: React.ReactNode
   /** What the project still needs (`SetupList`), above everything else; with the first-run path
@@ -200,6 +203,14 @@ export function OverviewView({
               <span aria-hidden="true">·</span>
               <button data-slot="overview-tasks" type="button" className="aw-overview-link" onClick={onOpenTasks}>
                 {taskTotal} {taskTotal === 1 ? 'task' : 'tasks'}
+              </button>
+            </>
+          ) : null}
+          {onOpenChapters ? (
+            <>
+              <span aria-hidden="true">·</span>
+              <button data-slot="overview-chapters" type="button" className="aw-overview-link" data-testid="overview-chapters" onClick={onOpenChapters}>
+                Chapters <Icon name="arrow_forward" size={11} />
               </button>
             </>
           ) : null}

@@ -267,6 +267,7 @@ export function AgentCheckpointsSettings({
   notices,
   onChange,
   onShowCheckpoints,
+  list,
 }: {
   agent: AgentSummary
   /** What the project's Checkpoints section says, so "the project's" reads as a value. */
@@ -278,6 +279,9 @@ export function AgentCheckpointsSettings({
   notices?: React.ReactNode
   onChange: (patch: Partial<Pick<AgentSummary, 'checkpoint_mode' | 'checkpoint_threshold_mode' | 'checkpoint_threshold_value'>>, said: string) => void
   onShowCheckpoints: () => void
+  /** The profile's own checkpoints, listed here with one openable in place (`CheckpointsPanel`). Given, it
+   *  replaces the link out to the project's Checkpoints tab (leaner-navigation). */
+  list?: React.ReactNode
 }) {
   // The unit is kept here: with no point of its own the agent stores none, so the choice would
   // otherwise snap back to percent the moment it was made.
@@ -355,6 +359,9 @@ export function AgentCheckpointsSettings({
         />
       </SettingsGroup>
       {note ? <p className="aw-row-note">{note}</p> : null}
+      {list ? (
+        <SettingsGroup title={taken != null ? `Its checkpoints · ${taken}` : 'Its checkpoints'}>{list}</SettingsGroup>
+      ) : (
       <SettingsGroup title="Taken">
         <SettingsRow
           label="Its checkpoints"
@@ -366,6 +373,7 @@ export function AgentCheckpointsSettings({
           }
         />
       </SettingsGroup>
+      )}
     </SettingsPage>
   )
 }

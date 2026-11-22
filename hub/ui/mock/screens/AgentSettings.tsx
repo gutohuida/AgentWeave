@@ -10,6 +10,8 @@ import {
   type ModelChoice,
 } from '@/components/agents/settings/AgentSettingsPages'
 import { toast } from '@/lib/toast'
+import { CheckpointsPanel } from '@/components/checkpoints/CheckpointsPanel'
+import { CHECKPOINTS, LABELS, NOTES } from '../checkpointsMock'
 import { PoolEditor } from '@/components/agents/pool/PoolEditor'
 import { entryLabel } from '@/components/agents/pool/poolModel'
 import type { AgentPoolEntry } from '@/api/agentPool'
@@ -46,6 +48,26 @@ const SECTIONS: Array<{ id: AgentSettingsSection; label: string; icon: string }>
   { id: 'checkpoints', label: 'Checkpoints', icon: 'book_marked' },
   { id: 'workspace', label: 'Workspace', icon: 'folder' },
 ]
+
+// mock state: the profile's checkpoints are the Checkpoints mock's, those its threads wrote.
+const profileCheckpoints = (name: string) => CHECKPOINTS.filter((c) => c.agent === name)
+
+/** The profile's own checkpoints on its Checkpoints section, one openable in place (leaner-navigation). */
+function ProfileCheckpoints({ agent, now }: { agent: string; now: Date }) {
+  const [opened, setOpened] = React.useState<string | null>(() => new URLSearchParams(window.location.hash.split('?')[1] ?? '').get('open'))
+  return (
+    <CheckpointsPanel
+      checkpoints={profileCheckpoints(agent)}
+      openedId={opened}
+      onOpen={setOpened}
+      conversationLabel={(id) => LABELS.get(id) ?? 'An earlier thread'}
+      notes={NOTES.filter((n) => n.consumed_by_checkpoint_id === opened)}
+      onOpenConversation={() => toast({ title: 'Opens that thread' })}
+      emptyText={` has not taken a checkpoint yet.`}
+      now={now}
+    />
+  )
+}
 
 /** The container an agent's settings route would be: the agent from the roster, a patch applied
  *  (here locally, in the app through the agent mutation) and confirmed in a toast. */
@@ -176,7 +198,8 @@ export function AgentSettingsBody({
         <AgentCheckpointsSettings
           agent={agent}
           project={{ mode: projectSettings.checkpoint_mode, at: projectSettings.checkpoint_threshold_value != null ? `${projectSettings.checkpoint_threshold_value}${projectSettings.checkpoint_threshold_mode === 'tokens' ? ' tokens' : '%'}` : null }}
-          taken={7}
+          taken={profileCheckpoints(agent.name).length}
+          list={<ProfileCheckpoints agent={agent.name} now={now} />}
           onChange={apply}
           onShowCheckpoints={() => go({ kind: 'tab', tab: 'checkpoints' })}
         />

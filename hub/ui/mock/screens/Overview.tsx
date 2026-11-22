@@ -6,10 +6,12 @@ import { formatAgoLong } from '@/lib/format'
 import ledgerJson from '../fixtures/ledger.json'
 import { agentAttention, agents, conversations, tasks } from '../fixtures'
 import type { ScreenProps } from '../routes'
+import { LEANER_LEDGER } from '../leanerMock'
 import { SetupList, type SetupItem } from '@/components/overview/SetupList'
 import { dismissSetup, restoreSetup, useTerraSetup } from '../setupMock'
 
-const ledger = ledgerJson as unknown as ProjectLedger
+// A fresh checkout's ledger fixture is a stub; fall back to the hand-written one so the screen still renders.
+const ledger = ((ledgerJson as unknown as Partial<ProjectLedger>).spend ? ledgerJson : LEANER_LEDGER) as unknown as ProjectLedger
 
 /** `latest_integration` rides on the task payload but is not on the `Task` type yet. */
 interface LatestIntegration {
@@ -128,7 +130,8 @@ export default function Overview({ go, now }: ScreenProps) {
       running={running}
       finished={finished}
       agents={strip}
-      spend={{ usd: ledger.spend.total_usd, tokens: ledger.spend.total_tokens, period: 'this week' }}
+      spend={{ usd: ledger.spend?.total_usd ?? LEANER_LEDGER.spend.total_usd, tokens: ledger.spend?.total_tokens ?? LEANER_LEDGER.spend.total_tokens, period: 'this week' }}
+      onOpenChapters={() => go({ kind: 'thread' })}
       onOpenLedger={() => go({ kind: 'tab', tab: 'activity' })}
       onAnswer={(need, option) => {
         setAnswered((a) => [...a, need.id])

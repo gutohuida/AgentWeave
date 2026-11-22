@@ -62,7 +62,7 @@ function when(value: string | null | undefined, now?: Date): string {
   return value ? formatDateTime(hubDate(value), now) : ''
 }
 
-function CheckpointRow({
+export function CheckpointRow({
   checkpoint,
   conversationLabel,
   selected,
@@ -198,12 +198,16 @@ function StartPanel({
   )
 }
 
-function CheckpointDetail({
+/** What the opened checkpoint needs; the page and the panels (side panel, profile page) pass what they hold. */
+export type CheckpointDetailProps = Pick<CheckpointsPageProps, 'conversationLabel' | 'onSelect' | 'agents'> &
+  Partial<Pick<CheckpointsPageProps, 'notes' | 'rawAnswer' | 'onShowRaw' | 'onOpenConversation' | 'onStart' | 'startAgents' | 'now'>>
+
+export function CheckpointDetail({
   checkpoint,
   props,
 }: {
   checkpoint: ProjectCheckpoint
-  props: CheckpointsPageProps
+  props: CheckpointDetailProps
 }) {
   const { conversationLabel, notes = [], rawAnswer, onShowRaw, onOpenConversation, onSelect, now } = props
   const status = statusWords(checkpoint.status)

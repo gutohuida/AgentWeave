@@ -258,6 +258,20 @@ export function ConversationBar({
             <span className="aw-convbar-checkpoint-label">{checkpointLabel}</span>
           </Button>
         ) : null}
+        {onTogglePanel ? (
+          // Outside the ⋯ menu: the side panel is used constantly, and a menu item hid it (leaner-navigation).
+          <Button
+            variant="ghost"
+            size="icon-xs"
+            data-testid="conversation-toggle-panel"
+            aria-label={panelOpen ? 'Hide side panel' : 'Show side panel'}
+            aria-pressed={panelOpen}
+            title={`${panelOpen ? 'Hide' : 'Show'} side panel (Ctrl+Alt+B)`}
+            onClick={onTogglePanel}
+          >
+            <Icon name={panelOpen ? 'right_panel_close' : 'right_panel_open'} size={15} />
+          </Button>
+        ) : null}
         <Menu>
           <MenuTrigger asChild>
             <Button variant="ghost" size="icon-xs" data-testid="conversation-more" aria-label="More thread actions" title="More">
@@ -303,11 +317,6 @@ export function ConversationBar({
               {diagnosticsHidden ? 'Show diagnostics' : 'Hide diagnostics'}
             </MenuItem>
             <MenuItem icon="unfold_less" onSelect={onFoldAll}>Fold all turns</MenuItem>
-            {onTogglePanel ? (
-              <MenuItem icon="right_panel_close" data-testid="conversation-toggle-panel" onSelect={onTogglePanel}>
-                {panelOpen ? 'Hide side panel' : 'Show side panel'}
-              </MenuItem>
-            ) : null}
             {onOpenAgentSettings ? (
               <>
                 <MenuSeparator />

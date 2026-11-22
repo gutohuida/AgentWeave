@@ -12,6 +12,9 @@ import { RunningTab } from '@/components/panel/RunningTab'
 import { runningItems } from '@/components/panel/runningModel'
 import { TerminalTab, type OpenShell, type ShellOption } from '@/components/panel/TerminalTab'
 import { WatchTab } from '@/components/panel/WatchTab'
+import { CheckpointsPanel } from '@/components/checkpoints/CheckpointsPanel'
+import { ConversationTrace } from '@/components/traces/ConversationTrace'
+import { numberRuns, type RunSelection } from '@/components/traces/conversationTraceModel'
 import { FilePreview } from '@/components/spec/FilePreview'
 import { PanelShell, type PanelTabDescriptor } from '@/components/spec/PanelShell'
 import { fileIconFor } from '@/components/spec/fileIcons'
@@ -40,8 +43,10 @@ import type { MockRoute, ScreenProps } from '../routes'
 import { RUNNING_BUILDS, RUNNING_JOBS, RUNNING_LOOPS } from '../runningMock'
 import { buildFor, buildHref, nowFor, projectRowOf } from '../buildsMock'
 import { needsLine, summaryOf } from '@/components/builds/buildViewModel'
+import { CHECKPOINTS, LABELS, NOTES } from '../checkpointsMock'
+import { THREAD_RUNS, threadDetail } from '../leanerMock'
 
-export type SidePanelTab = 'running' | 'changes' | 'files' | 'terminal' | 'terminal-full' | 'terminal-remote' | 'terminal-docker' | 'watch'
+export type SidePanelTab = 'running' | 'changes' | 'files' | 'terminal' | 'terminal-full' | 'terminal-remote' | 'terminal-docker' | 'watch' | 'checkpoints' | 'trace'
 
 const CHATS: Record<string, ChatHistoryResponse> = {
   'conv-e3aba2c5956a': builderChat as unknown as ChatHistoryResponse,
@@ -51,15 +56,18 @@ const CHATS: Record<string, ChatHistoryResponse> = {
 // mock state: the panel store's ids are the app's three index kinds today. The roadmap's new tabs are
 // given ids of their own here (`loops` is shown as Running, which replaces it); the store's union
 // gains them when the slices are built.
-const ID: Record<'specs' | 'files' | 'running' | 'changes' | 'terminal' | 'watch', TabId> = {
+const ID: Record<'specs' | 'files' | 'running' | 'changes' | 'terminal' | 'watch' | 'checkpoints' | 'trace', TabId> = {
   specs: 'specs',
   files: 'files',
   running: 'running',
   changes: 'changes' as TabId,
   terminal: 'terminal' as TabId,
   watch: 'watch' as TabId,
+  // leaner-navigation: the project's Checkpoints and Trace tabs moved into the panel.
+  checkpoints: 'checkpoints' as TabId,
+  trace: 'trace' as TabId,
 }
-const ORDER = ['specs', 'files', 'changes', 'running', 'terminal', 'watch'] as const
+const ORDER = ['specs', 'files', 'changes', 'running', 'checkpoints', 'trace', 'terminal', 'watch'] as const
 
 /** The conversation's side panel with the roadmap's tabs (roadmap
  *  `a-side-panel-worth-keeping-open-activity-changes-files-terminal-and-peers`), in the app's own shell. */
@@ -67,7 +75,7 @@ export function SidePanelMock({ tab, agent, go, now, route }: { tab: SidePanelTa
   React.useEffect(() => {
     const store = usePanelTabsStore.getState()
     for (const key of ORDER) store.openTab(PROJECT_ID, ID[key])
-    store.activateTab(PROJECT_ID, ID[tab.startsWith('terminal') ? 'terminal' : (tab as 'running' | 'changes' | 'files' | 'watch')])
+    store.activateTab(PROJECT_ID, ID[tab.startsWith('terminal') ? 'terminal' : (tab as 'running' | 'changes' | 'files' | 'watch' | 'checkpoints' | 'trace')])
   }, [tab])
 
   // The build view's summary under a build's row: two of this repository's recorded builds join the
@@ -97,8 +105,13 @@ export function SidePanelMock({ tab, agent, go, now, route }: { tab: SidePanelTa
   const openTab = usePanelTabsStore((s) => s.openTab)
   const closeTab = usePanelTabsStore((s) => s.closeTab)
 
+  // mock state: the thread's checkpoints are its agent's (the recorded Terra data carries none).
+  const threadCheckpoints = React.useMemo(() => CHECKPOINTS.filter((c) => c.agent === agent), [agent])
+  const [openedCheckpoint, setOpenedCheckpoint] = React.useState<string | null>(() => new URLSearchParams(window.location.hash.split('?')[1] ?? '').get('open'))
   const describe = (id: TabId): PanelTabDescriptor => {
     if (id === ID.running) return { id, label: 'Running', icon: 'monitoring', count: live }
+    if (id === ID.checkpoints) return { id, label: 'Checkpoints', icon: 'book_marked', count: threadCheckpoints.length }
+    if (id === ID.trace) return { id, label: 'Trace', icon: 'timeline' }
     if (id === ID.changes) return { id, label: 'Changes', icon: 'file_pen_line', count: TURN_CHANGES.length }
     if (id === ID.terminal) return { id, label: 'Terminal', icon: 'terminal' }
     if (id === ID.watch) return { id, label: 'Watch', icon: 'visibility' }
@@ -127,6 +140,20 @@ export function SidePanelMock({ tab, agent, go, now, route }: { tab: SidePanelTa
         />
       )
     }
+    if (id === ID.checkpoints) {
+      return (
+        <CheckpointsPanel
+          checkpoints={threadCheckpoints}
+          openedId={openedCheckpoint}
+          onOpen={setOpenedCheckpoint}
+          conversationLabel={(cid) => LABELS.get(cid) ?? 'An earlier thread'}
+          notes={NOTES.filter((n) => n.consumed_by_checkpoint_id === openedCheckpoint)}
+          onOpenConversation={() => toast({ title: 'Opens that thread' })}
+          now={now}
+        />
+      )
+    }
+    if (id === ID.trace) return <ThreadTraceTab agent={agent} now={now} />
     if (id === ID.changes) {
       return <MockChanges agent={agent} onOpenFile={openFile} />
     }
@@ -231,6 +258,18 @@ export function SidePanelMock({ tab, agent, go, now, route }: { tab: SidePanelTa
   return (
     <div className="h-full min-w-0 flex-1" style={{ minWidth: SPEC_DOC_MIN_WIDTH, borderLeft: '1px solid var(--border)' }} data-testid="side-panel">
       <PanelShell projectId={PROJECT_ID} availableTabs={ORDER.map((k) => describe(ID[k]))} describeTab={describe} renderTabContent={(t) => render(t.id)} />
+    </div>
+  )
+}
+
+/** A thread's trace in the panel: every turn on one timeline (the whole-conversation trace, in the panel's width). */
+function ThreadTraceTab({ agent, now }: { agent: string; now: Date }) {
+  const runs = React.useMemo(() => numberRuns(THREAD_RUNS), [])
+  const details = React.useMemo(() => Object.fromEntries(THREAD_RUNS.map((r) => [r.run_id, threadDetail(r)])), [])
+  const [selection, setSelection] = React.useState<RunSelection>({ from: 1, to: runs.length, since: 'all' })
+  return (
+    <div className="h-full overflow-auto" style={{ background: 'var(--bg)' }} data-testid="thread-trace-tab">
+      <ConversationTrace title="Wire the Checkpoints tab" agent={agent} runs={runs} details={details} selection={selection} onSelection={setSelection} now={now} />
     </div>
   )
 }

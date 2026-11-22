@@ -378,4 +378,8 @@ button.aw-history-row:focus-visible { outline: none; box-shadow: inset 0 0 0 2px
 .aw-settings-row-override:hover { background: var(--row-hover); color: var(--text); }
 .aw-settings-changed-only { display: flex; align-items: center; gap: 8px; margin: 0 0 8px; padding: 0 8px; font-size: 12px; color: var(--text-3); cursor: pointer; }
 .aw-settings-changed-empty { padding: 24px 28px; font-size: 13px; color: var(--text-3); }
-.aw-settings-group:not(:has(.aw-settings-row)) { display: none; }
+.aw-settings-group:not(:has(.aw-settings-row, .aw-ckpts-panel)) { display: none; }
+
+/* A page-shaped view (the ledger, the traces list) placed inside a settings section: it takes the section's column, not its own centred page (leaner-navigation). */
+.aw-settings-embed .aw-evidence-page, .aw-settings-embed .aw-traces { height: auto; overflow: visible; max-width: none; margin: 0; padding: 0; width: 100%; }
+.aw-settings-embed { width: min(100%, 880px); margin-inline: auto; padding: 0 clamp(20px, 4vw, 40px) 64px; }

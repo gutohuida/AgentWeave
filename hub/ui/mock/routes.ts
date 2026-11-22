@@ -49,6 +49,8 @@ export type SettingsSection =
   | 'checkpoints'
   | 'spec-steps'
   | 'traces'
+  | 'jobs'
+  | 'logs'
   | 'agents-defaults' | 'runners' | 'manager' | 'charters' | 'instructions' | 'budgets' | 'worktrees' | 'diagnostics'
 export type AgentSettingsSection = 'agent' | 'running' | 'permissions' | 'checkpoints' | 'workspace'
 

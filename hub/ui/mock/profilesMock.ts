@@ -13,9 +13,11 @@ import { POOL_CATALOG, poolEntry } from './poolMock'
 import chartersJson from './fixtures/charters.json'
 import ledgerJson from './fixtures/ledger.json'
 import type { ProjectLedger } from '@/api/ledger'
+import { LEANER_LEDGER } from './leanerMock'
 
 const charters = chartersJson as unknown as Charter[]
-const ledger = ledgerJson as unknown as ProjectLedger
+// A fresh checkout's ledger fixture is a stub; fall back to the hand-written one so the screen still renders.
+const ledger = ((ledgerJson as unknown as Partial<ProjectLedger>).spend ? ledgerJson : LEANER_LEDGER) as unknown as ProjectLedger
 
 export type ProfilesMockState = 'populated' | 'single' | 'empty' | 'no-matches' | 'error' | 'loading'
 export const PROFILES_MOCK_STATES: Array<{ value: ProfilesMockState; label: string }> = [

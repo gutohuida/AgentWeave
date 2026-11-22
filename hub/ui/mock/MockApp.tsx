@@ -10,12 +10,14 @@ import { beforeKey, type MockRoute } from './routes'
 import { SCREENS, screenFor } from './screens'
 import { useSetupTitles } from './setupMock'
 import { SIDEBAR_MOCK_STATES, setSidebarMockState, useBuildsNeedingYou, useSidebarMock, useSidebarProjectBody, type SidebarMockState } from './sidebarMock'
+import { LEANER_TABS } from './leanerMock'
 import { NOTICE_LEVELS } from './specBanner'
 import { SPEC_MOCK_STATES, setSpecMockControls, useSpecMockControls } from './specMock'
 import { setTasksMockControls, useTasksMockControls } from './tasksMock'
 
 /** The tabs the mock's top bar lists: the app's own, with Profiles after Tasks (operator, 2026-11-21).
  *  Profiles is not in the app's PROJECT_TABS until the page is wired in. */
+/** Every tab a hash may name; the top bar lists only LEANER_TABS (leaner-navigation: the others moved into a thread's side panel, a profile's page and project settings). */
 const MOCK_TABS: readonly ProjectTab[] = PROJECT_TABS.flatMap((t): ProjectTab[] => (t === 'tasks' ? [t, 'profiles'] : [t]))
 
 const BEFORE = import.meta.glob('./before/*.webp', { eager: true, query: '?url', import: 'default' }) as Record<string, string>
@@ -89,7 +91,7 @@ function toHash(route: MockRoute): string {
   }
 }
 
-const PANELS = new Set(['spec', 'specs', 'running', 'changes', 'files', 'terminal', 'terminal-full', 'terminal-remote', 'terminal-docker', 'watch'])
+const PANELS = new Set(['spec', 'specs', 'running', 'changes', 'files', 'terminal', 'terminal-full', 'terminal-remote', 'terminal-docker', 'watch', 'checkpoints', 'trace'])
 
 export function MockApp() {
   const [route, setRoute] = React.useState<MockRoute>(parseHash)
@@ -157,7 +159,7 @@ export function MockApp() {
         <TopBar
           project={{ id: project.id, name: project.name, path: project.working_directory }}
           projects={projects.map((p) => ({ id: p.id, name: p.name, path: p.working_directory }))}
-          tabs={MOCK_TABS}
+          tabs={LEANER_TABS}
           active={route.kind === 'tab' ? route.tab : route.kind === 'traces' ? 'activity' : null}
           // Overview's count is what its "Needs you" section lists (QA1's question and the unmerged task).
           counts={{ tasks: awaitingReview, overview: 2 }}
