@@ -23,6 +23,9 @@ export type MockRoute =
   | { kind: 'thread' }
   /** The Overview redrawn as a dashboard (operator, 2026-11-22); ?state=quiet|trouble shows the other states. */
   | { kind: 'overview-next'; state: OverviewNextState }
+  /** The Overview as a morning briefing, and by team lane: two more designs to compare (operator, 2026-11-22). */
+  | { kind: 'overview-briefing'; state: OverviewNextState }
+  | { kind: 'overview-lanes'; state: OverviewNextState }
   /** How a thread shows the spec it is working on: the header's phase badge with its step, and three
    *  ways to offer a document an agent created in the thread (operator, 2026-11-22). */
   | { kind: 'spec-thread-ui' }

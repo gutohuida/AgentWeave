@@ -7,6 +7,8 @@ const Gallery = React.lazy(() => import('./Gallery'))
 const TaskRedesign = React.lazy(() => import('./TaskRedesign'))
 const Overview = React.lazy(() => import('./Overview'))
 const OverviewNext = React.lazy(() => import('./OverviewNext'))
+const OverviewBriefing = React.lazy(() => import('./OverviewBriefing'))
+const OverviewLanes = React.lazy(() => import('./OverviewLanes'))
 const Tasks = React.lazy(() => import('./Tasks'))
 const Spec = React.lazy(() => import('./Spec'))
 const Vault = React.lazy(() => import('./Vault'))
@@ -49,6 +51,10 @@ export function screenFor(route: MockRoute): ScreenComponent {
       return FirstRunPolish
     case 'overview-next':
       return OverviewNext
+    case 'overview-briefing':
+      return OverviewBriefing
+    case 'overview-lanes':
+      return OverviewLanes
     case 'thread':
       return Thread
     case 'traces':
@@ -81,6 +87,12 @@ export const SCREENS: Array<{ id: string; label: string; route: MockRoute }> = [
   { id: 'overview-next', label: 'Overview, redrawn as a dashboard', route: { kind: 'overview-next', state: 'busy' } },
   { id: 'overview-next-quiet', label: 'Overview, redrawn: quiet', route: { kind: 'overview-next', state: 'quiet' } },
   { id: 'overview-next-trouble', label: 'Overview, redrawn: trouble', route: { kind: 'overview-next', state: 'trouble' } },
+  { id: 'overview-briefing', label: 'Overview B, a morning briefing', route: { kind: 'overview-briefing', state: 'busy' } },
+  { id: 'overview-briefing-quiet', label: 'Overview B, briefing: quiet', route: { kind: 'overview-briefing', state: 'quiet' } },
+  { id: 'overview-briefing-trouble', label: 'Overview B, briefing: trouble', route: { kind: 'overview-briefing', state: 'trouble' } },
+  { id: 'overview-lanes', label: 'Overview C, team lanes', route: { kind: 'overview-lanes', state: 'busy' } },
+  { id: 'overview-lanes-quiet', label: 'Overview C, lanes: quiet', route: { kind: 'overview-lanes', state: 'quiet' } },
+  { id: 'overview-lanes-trouble', label: 'Overview C, lanes: trouble', route: { kind: 'overview-lanes', state: 'trouble' } },
   { id: 'tasks', label: 'Tasks', route: { kind: 'tab', tab: 'tasks' } },
   { id: 'task-redesign', label: 'Tasks · Card and story redesign', route: { kind: 'task-redesign' } },
   { id: 'spec', label: 'Spec', route: { kind: 'tab', tab: 'spec' } },
