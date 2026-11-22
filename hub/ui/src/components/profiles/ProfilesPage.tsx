@@ -82,7 +82,7 @@ export function ProfilesPage({
         <EmptyState
           icon="smart_toy"
           title="No profiles yet"
-          description="A profile is a named agent with its own models, permissions and workspace. It works only when you start a thread with it or a build gives it a task, so add at least one. Most projects start with a builder and a checker."
+          description="A profile has its own name, models, permissions and workspace. It works only when you start a thread with it or a build gives it a task, so add at least one. Most projects start with a builder and a checker."
           action={
             <div className="aw-pf-empty-actions">
               <Button variant="primary" size="sm" onClick={onAddPair}>

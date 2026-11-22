@@ -1,5 +1,6 @@
 import * as React from 'react'
 import { Icon, ProviderMark } from '@/components/common/Icon'
+import { LoadingThread } from '@/components/common/LoadingThread'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { agentColorVars } from '@/lib/agentColors'
@@ -132,7 +133,7 @@ export function ProfilesIndex({
             <span className="aw-pf-num">Last active</span>
           </div>
         ) : null}
-        {state === 'loading' ? <Skeleton /> : null}
+        {state === 'loading' ? <LoadingThread label="Loading profiles" minHeight={200} /> : null}
         {state === 'error' ? (
           <div className="aw-pf-note" role="alert">
             <Icon name="warning" size={14} className="aw-pf-note-icon" />
@@ -292,15 +293,5 @@ function Row({ item, tabStop, onOpen, onNewThread, now }: { item: ProfileListIte
         </Button>
       ) : null}
     </li>
-  )
-}
-
-function Skeleton() {
-  return (
-    <div className="aw-pf-skeleton aw-delayed" role="status" aria-label="Loading profiles">
-      {[0, 1, 2, 3, 4].map((i) => (
-        <span key={i} className="aw-pf-skeleton-row" />
-      ))}
-    </div>
   )
 }
