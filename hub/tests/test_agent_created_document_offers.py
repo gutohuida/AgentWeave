@@ -163,3 +163,17 @@ async def test_answering_an_unknown_document_is_404(app, auth_headers):
     )
     assert response.status_code == 404
     assert response.json()["detail"]["code"] == "unknown_document"
+
+
+@pytest.mark.asyncio
+async def test_offer_names_the_run_that_created_it(app, auth_headers):
+    """The offer is drawn under the creating turn's message (F1208), so it says which run that was
+    and whose."""
+    conversation, headers = await _conversation_with_run("g")
+    path = (await app.post(CREATE, json={"title": "Placed"}, headers=headers)).json()["path"]
+
+    offer = (await _offers(app, auth_headers, conversation))["offers"][0]
+    assert offer["path"] == path
+    assert offer["run_id"] == "run-g"
+    assert offer["created_by"] == "agent-g"
+    assert offer["created_at"]

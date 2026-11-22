@@ -496,3 +496,65 @@ describe('suggestions fit the project (AW-128)', () => {
     expect(screen.queryByText('Review the latest work')).not.toBeInTheDocument()
   })
 })
+
+describe('the describe-a-change starter arms Explore (F1205)', () => {
+  const minted = 'spec/changes/teal-kraken/spec.json'
+  beforeEach(() => {
+    cleanup()
+    localStorage.clear()
+    hasNoWork = true
+    fetchMock.mockReset()
+    fetchMock.mockImplementation((url: string) =>
+      Promise.resolve(
+        String(url).includes('/project/documents')
+          ? new Response(JSON.stringify({ id: 'spdoc-1', path: minted }), { status: 201 })
+          : new Response(JSON.stringify({ status: 'started', conversation_id: 'conv-fresh' }), { status: 200 }),
+      ),
+    )
+    useConfigStore.setState({
+      apiKey: 'aw_live_TESTKEY',
+      hubUrl: 'http://hub.test',
+      selectedProjectId: 'proj-a',
+      isConfigured: true,
+      bootstrapState: 'ready',
+    })
+  })
+
+  it('turns Explore on, and sending unchanged starts the thread on its own spec', async () => {
+    const { onStarted } = renderSurface('claude')
+    fireEvent.click(screen.getByText('Describe a change you want'))
+    expect(screen.getByTestId('composer-start-exploration')).toHaveAttribute('aria-pressed', 'true')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Send message' }))
+    await waitFor(() => expect(onStarted).toHaveBeenCalled())
+
+    const urls = fetchMock.mock.calls.map(([url]) => String(url))
+    const documentIndex = urls.findIndex((url) => url.includes('/project/documents'))
+    const triggerIndex = urls.findIndex((url) => url.includes('/agent/trigger'))
+    expect(documentIndex).toBeGreaterThanOrEqual(0)
+    expect(documentIndex).toBeLessThan(triggerIndex)
+    expect(JSON.parse(String((fetchMock.mock.calls[triggerIndex][1] as RequestInit).body)).spec_document).toBe(minted)
+    expect(onStarted).toHaveBeenCalledWith('claude', 'conv-fresh', minted)
+  })
+
+  it('sends an ordinary message with no spec once Explore is turned off again', async () => {
+    const { onStarted } = renderSurface('claude')
+    fireEvent.click(screen.getByText('Describe a change you want'))
+    fireEvent.click(screen.getByTestId('composer-start-exploration'))
+    expect(screen.getByTestId('composer-start-exploration')).toHaveAttribute('aria-pressed', 'false')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Send message' }))
+    await waitFor(() => expect(onStarted).toHaveBeenCalled())
+    const urls = fetchMock.mock.calls.map(([url]) => String(url))
+    expect(urls.some((url) => url.includes('/project/documents'))).toBe(false)
+    const trigger = fetchMock.mock.calls[urls.findIndex((url) => url.includes('/agent/trigger'))]
+    expect(JSON.parse(String((trigger[1] as RequestInit).body)).spec_document).toBeUndefined()
+    expect(onStarted).toHaveBeenCalledWith('claude', 'conv-fresh')
+  })
+
+  it('leaves Explore off for the other starter', () => {
+    renderSurface('claude')
+    fireEvent.click(screen.getByText('Explain this codebase to me'))
+    expect(screen.getByTestId('composer-start-exploration')).toHaveAttribute('aria-pressed', 'false')
+  })
+})

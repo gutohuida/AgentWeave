@@ -29,7 +29,7 @@ import { usePreparingWorkspaces } from '@/api/workspacePreparation'
 import { ConversationPreparing } from './ConversationPreparing'
 import { useSpecDocuments } from '@/api/spec'
 import { useAnswerSpecDocumentOffer, useConversationSpecDocuments } from '@/api/conversationSpec'
-import { ConversationSpecOffers } from '@/components/conversation/ConversationSpecOffers'
+import { SpecCreatedNote } from '@/components/conversation/SpecCreatedNote'
 import {
   continueConversation,
   cutOver,
@@ -46,7 +46,7 @@ import {
   useCheckpointOperationStore,
   writeCheckpoint,
 } from '@/store/checkpointOperationStore'
-import { AgentTimeline } from './AgentTimeline'
+import { AgentTimeline, type TurnNote } from './AgentTimeline'
 import { BannerStack, type ConversationBanner } from './BannerStack'
 import { PermissionRequestCard } from './PermissionRequestCard'
 import { openPermissionRequestsFor } from '@/lib/pendingPermissions'
@@ -506,6 +506,46 @@ export function AgentOutputPanel({
   // Change documents an agent created in this conversation, offered to the operator (FR-7).
   const offeredDocuments = useConversationSpecDocuments(projectId, startingFresh ? null : (conversationId ?? null))
   const answerOffer = useAnswerSpecDocumentOffer(projectId, startingFresh ? null : (conversationId ?? null))
+  const answerSpecOffer = (path: string, answer: 'open' | 'not_now') =>
+    answerOffer.mutate(
+      { path, answer },
+      {
+        onSuccess: () => (answer === 'open' ? onOpenSpecDocument?.(path) : undefined),
+        onError: (err) => toast({ title: readableApiError(err, 'The Hub refused this.'), tone: 'error' }),
+      },
+    )
+  /* A change document an agent created here is offered by a quiet line under the message of the
+   * turn that created it (F1208), not by a card above the composer. Its wording says what happened,
+   * so it holds at any later step. A failed read is said where the line would be, never shown as
+   * nothing offered. */
+  const specOfferNotes: TurnNote[] = offeredDocuments.error
+    ? [
+        {
+          key: 'spec-offer-read-error',
+          runId: null,
+          node: (
+            <p className="aw-spec-created-note" data-testid="conversation-spec-offer-error">
+              Could not read the documents offered here: {readableApiError(offeredDocuments.error, 'the Hub did not answer.')}
+            </p>
+          ),
+        },
+      ]
+    : (offeredDocuments.data?.offers ?? [])
+        .filter((offer) => offer.path !== specDocumentPath)
+        .map((offer) => ({
+          key: `spec-offer-${offer.path}`,
+          runId: offer.run_id ?? null,
+          node: (
+            <SpecCreatedNote
+              path={offer.path}
+              title={offer.title}
+              createdBy={offer.created_by}
+              busy={answerOffer.isPending}
+              onOpen={() => answerSpecOffer(offer.path, 'open')}
+              onDismiss={() => answerSpecOffer(offer.path, 'not_now')}
+            />
+          ),
+        }))
   const conversationChat = useAgentChatHistory(agent.name, currentConversationId ?? null)
   const recentChat = useAgentRecentChat(agent.name)
   const chat = currentConversationId ? conversationChat : recentChat
@@ -1410,6 +1450,7 @@ export function AgentOutputPanel({
             onRelease={handleRelease}
             foldAllSignal={foldAllSignal}
             recentTurns={accounting?.recent_turns}
+            turnNotes={specOfferNotes}
           />
         )}
         <div aria-hidden="true" data-testid="conversation-tail-spacer" style={{ height: tailSpacer }} />
@@ -1511,19 +1552,6 @@ export function AgentOutputPanel({
         }}
       >
           <BannerStack banners={banners} />
-
-          <ConversationSpecOffers
-            offers={(offeredDocuments.data?.offers ?? []).filter((offer) => offer.path !== specDocumentPath)}
-            busy={answerOffer.isPending}
-            readError={offeredDocuments.error ? readableApiError(offeredDocuments.error, 'the Hub did not answer.') : null}
-            answerError={answerOffer.error ? readableApiError(answerOffer.error, 'The Hub refused this.') : null}
-            onAnswer={(path, answer) =>
-              answerOffer.mutate(
-                { path, answer },
-                { onSuccess: () => (answer === 'open' ? onOpenSpecDocument?.(path) : undefined) },
-              )
-            }
-          />
 
           {/* A successor is handed its checkpoint as a queued entry and then waits. Without this
               the only way to start it was to type a message, which is a strange thing to invent
