@@ -384,7 +384,8 @@ def check_threads_and_pool(pg, pair_pid):
         pg.go("agent=Checker&conversation=__new__", "dark", 1300, wait=".aw-newconv")
         p = pg.page
         intro = p.locator(".aw-newconv").inner_text()
-        composer = p.locator("form, [data-testid=composer]").last.inner_text() if p.locator("form, [data-testid=composer]").count() else ""
+        # the composer itself (its Model, Effort and Permissions chips), not the intro around it
+        composer = p.locator("[data-slot=composer]").last.inner_text() if p.locator("[data-slot=composer]").count() else ""
         both = intro + "\n" + composer
         model, cli = both.count("Haiku 5.5"), both.count("Claude Code")
         ok = "Runs on Claude Code" in intro and model == 1 and cli == 1
@@ -425,6 +426,8 @@ def check_threads_and_pool(pg, pair_pid):
             more.click()
             menu = p.locator("[role=menu]").inner_text()
             p.keyboard.press("Escape")
+            # A menu still closing hands focus back to its trigger, after the palette took it.
+            p.locator("[role=menu]").wait_for(state="detached")
         # Chapters may sit in the bar or in the overflow at 900 px; Thread in neither
         if not (any(t.startswith("Chapters") for t in narrow) or "Chapters" in menu):
             problems.append(f"900 px: no Chapters in bar {narrow} or overflow {menu!r}")
@@ -435,8 +438,9 @@ def check_threads_and_pool(pg, pair_pid):
         p.keyboard.type("chapters")
         p.wait_for_timeout(500)
         pal = p.locator("[role=dialog]").last.inner_text() if p.locator("[role=dialog]").count() else ""
+        typed = p.locator("[cmdk-input]").input_value() if p.locator("[cmdk-input]").count() else None
         if "Chapters" not in pal:
-            problems.append(f"palette has no Chapters: {pal[:120]!r}")
+            problems.append(f"palette has no Chapters (query {typed!r}): {pal[:400]!r}")
         p.keyboard.press("Escape")
         pg.go("tab=thread", "dark", 1400)
         active = p.locator("[data-slot=topbar-tab][data-active=true]").first.inner_text()

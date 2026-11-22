@@ -237,3 +237,27 @@ describe('command palette — settings', () => {
     expect(screen.queryByRole('option', { name: /claude settings/ })).toBeNull()
   })
 })
+
+describe('command palette — the project views (FR-9)', () => {
+  it('finds the chapters view by its name and by its old address word, and opens tab=thread', async () => {
+    const onOpenTab = vi.fn()
+    renderPalette({ onOpenTab })
+    fireEvent.keyDown(document, { key: 'k', ctrlKey: true })
+    const input = await screen.findByPlaceholderText(PLACEHOLDER)
+    expect(screen.queryByRole('option', { name: 'Chapters' })).toBeNull()
+    await userEvent.type(input, 'chapters')
+    expect(screen.getByRole('option', { name: 'Chapters' })).toBeInTheDocument()
+    expect(screen.queryByRole('option', { name: 'Thread' })).toBeNull()
+    await userEvent.clear(input)
+    await userEvent.type(input, 'thread')
+    fireEvent.click(screen.getByRole('option', { name: 'Chapters' }))
+    expect(onOpenTab).toHaveBeenCalledWith('thread')
+  })
+
+  it('offers no views with no project open', async () => {
+    renderPalette()
+    fireEvent.keyDown(document, { key: 'k', ctrlKey: true })
+    await userEvent.type(await screen.findByPlaceholderText(PLACEHOLDER), 'chapters')
+    expect(screen.queryByRole('option', { name: 'Chapters' })).toBeNull()
+  })
+})
