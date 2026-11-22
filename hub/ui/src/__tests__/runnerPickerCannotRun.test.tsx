@@ -44,7 +44,7 @@ function renderExecution(summary: { name: string; runner_id?: string | null }) {
   roster = [summary]
   render(
     <QueryClientProvider client={new QueryClient()}>
-      <AgentSettingsPage agent={summary.name} section="running" onSelectSection={vi.fn()} onBack={vi.fn()} />
+      <AgentSettingsPage agent={summary.name} section="running" />
     </QueryClientProvider>,
   )
 }

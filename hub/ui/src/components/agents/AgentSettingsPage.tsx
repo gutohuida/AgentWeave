@@ -26,11 +26,10 @@ import { PoolEditor } from './pool/PoolEditor'
 import { entryLabel } from './pool/poolModel'
 import { Button } from '@/components/ui/button'
 import { SettingsLoading, SettingsNotice, SettingsPage } from '@/components/ui/settings'
-import { SettingsNavLayout } from '@/components/settings/SettingsNavLayout'
+import { landOnSetting } from '@/components/settings/landOnSetting'
 import { runnerCeilingNote } from '@/components/environment/describeThreshold'
 import { useAgentWorkspace } from '@/api/workspace'
 import { useCopy } from '@/hooks/useCopy'
-import { agentChangedSections } from '@/lib/settingsChanged'
 import { runnerModelPart } from '@/lib/runnerLabel'
 import { toast } from '@/lib/toast'
 import { FoldAgentDialog } from '@/components/agents/FoldAgentDialog'
@@ -52,78 +51,42 @@ import { PERMISSION_WAIT_FALLBACK_SECONDS, QUESTION_WAIT_FALLBACK_SECONDS } from
 interface AgentSettingsPageProps {
   agent: string
   section: AgentSettingsSection
-  onSelectSection: (section: AgentSettingsSection) => void
-  /** Where the back control goes: the agent's conversations (the caller decides which). */
-  onBack: () => void
-  /** The operator's own settings (sound, appearance, the Hub), linked from the section list. */
-  onOpenAppSettings?: () => void
   /** The setting the location names, to land on. */
   setting?: string | null
 }
 
-const SECTIONS: ReadonlyArray<{ id: AgentSettingsSection; label: string; icon: string }> = [
-  { id: 'agent', label: 'Profile', icon: 'badge' },
-  { id: 'running', label: 'Running', icon: 'terminal' },
-  { id: 'permissions', label: 'Permissions', icon: 'lock' },
-  { id: 'checkpoints', label: 'Checkpoints', icon: 'book_marked' },
-  { id: 'workspace', label: 'Workspace', icon: 'folder' },
-  { id: 'runs', label: 'Runs', icon: 'timeline' },
-]
-
-/** The screen is titled Profiles (FR-10); the profile it shows, and its model, sit under the title. */
-function profileSubtitle(agent: string, model: string | undefined): string {
-  return model ? `${agent} · ${model}` : agent
-}
-
 /**
- * An agent's configuration, as a destination rather than a dialog: its own section list and a way
- * back to its conversations, inside the content area (the app's rail stays put).
+ * One section of a profile's settings, as the open tab of the profile's page (FR-13, FR-14): the
+ * page's tabs choose the section, so there is no section list, back link or search here. The
+ * profile's page is the only place these settings are shown.
  *
- * Six sections (Agent, Running, Permissions, Checkpoints, Workspace, and Runs, which lists what it
- * has run), every setting applying on change with a toast. The old seven section ids are resolved to these before they get here
- * (`resolveAgentSettingsSection`).
+ * Six sections (Profile, Models, Permissions, Checkpoints, Workspace, and Runs, which lists what
+ * it has run), every setting applying on change with a toast. Retired section ids are resolved to
+ * these before they get here (`resolveAgentSettingsSection`).
  */
-export function AgentSettingsPage({ agent, section, onSelectSection, onBack, onOpenAppSettings, setting }: AgentSettingsPageProps) {
+export function AgentSettingsPage({ agent, section, setting }: AgentSettingsPageProps) {
   // `all`, not the default open roster: an archived agent must still resolve here, because this
   // is the only surface that can unarchive it.
   const { data: roster = [], isLoading } = useAgents('all')
-  const { data: runners = [] } = useRunners()
   const summary = roster.find((candidate) => candidate.name === agent) ?? null
-  const runnerName = summary?.runner_id ? runners.find((runner) => runner.id === summary.runner_id)?.name : null
+  const rootRef = React.useRef<HTMLDivElement>(null)
+  const ready = Boolean(summary)
+  React.useEffect(() => {
+    if (!setting || !ready || !rootRef.current) return
+    return landOnSetting(rootRef.current, setting)
+  }, [setting, section, agent, ready])
 
-  let body: React.ReactNode
   if (isLoading) {
-    body = (
+    return (
       <div className="aw-settings-page" aria-label="Loading profile settings">
         <SettingsLoading label="Loading profile settings" rows={3} />
       </div>
     )
-  } else if (!summary) {
-    body = <Shell>This profile is no longer in the roster.</Shell>
-  } else {
-    body = (
-      <div className="min-w-0" data-testid={`agent-settings-${section}`}>
-        <SectionContent agent={summary} section={section} />
-      </div>
-    )
   }
-
+  if (!summary) return <Shell>This profile is no longer in the roster.</Shell>
   return (
-    <div className="h-full min-h-0">
-      <SettingsNavLayout
-        title="Profiles"
-        subtitle={profileSubtitle(agent, summary ? (runnerName ?? (summary.runner_id ? undefined : 'No model')) : undefined)}
-        back={{ label: `Back to ${agent}`, onClick: onBack }}
-        items={SECTIONS}
-        active={section}
-        agent={agent}
-        landing={setting}
-        changed={agentChangedSections(summary)}
-        onSelect={onSelectSection}
-        footer={onOpenAppSettings ? { label: 'App settings', icon: 'settings', onClick: onOpenAppSettings } : undefined}
-      >
-        {body}
-      </SettingsNavLayout>
+    <div className="min-w-0" data-testid={`agent-settings-${section}`} ref={rootRef}>
+      <SectionContent agent={summary} section={section} />
     </div>
   )
 }

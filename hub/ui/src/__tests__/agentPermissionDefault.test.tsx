@@ -61,7 +61,7 @@ function agent(overrides: Partial<AgentSummary> = {}): AgentSummary {
 
 function renderExecution(summary: AgentSummary) {
   roster = [summary]
-  return render(<QueryClientProvider client={new QueryClient()}><AgentSettingsPage agent={summary.name} section="permissions" onSelectSection={vi.fn()} onBack={vi.fn()} /></QueryClientProvider>)
+  return render(<QueryClientProvider client={new QueryClient()}><AgentSettingsPage agent={summary.name} section="permissions" /></QueryClientProvider>)
 }
 
 const control = () => menuSelect('Default permissions for codex-1')
@@ -161,7 +161,7 @@ describe('an agent has a default permission posture', () => {
     execution.unmount()
 
     for (const section of ['agent', 'running', 'checkpoints', 'workspace'] as const) {
-      const { unmount } = render(<QueryClientProvider client={new QueryClient()}><AgentSettingsPage agent="codex-1" section={section} onSelectSection={vi.fn()} onBack={vi.fn()} /></QueryClientProvider>)
+      const { unmount } = render(<QueryClientProvider client={new QueryClient()}><AgentSettingsPage agent="codex-1" section={section} /></QueryClientProvider>)
       expect(screen.queryByRole('button', { name: 'Default permissions for codex-1' })).not.toBeInTheDocument()
       unmount()
     }

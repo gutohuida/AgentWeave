@@ -565,7 +565,7 @@ describe('a query the Hub did not answer', () => {
         preferred_display: { kind: 'api_equivalent', label: 'API-equivalent estimate', usd_micros: 3_500_000, unpriced_turns: 1 },
       }
       render(<OverviewScreen onNavigate={vi.fn()} />)
-      const row = screen.getByRole('button', { name: /Open builder/ })
+      const row = screen.getByTestId('agent-card-builder')
       expect(row).toHaveTextContent('—')
       expect(row).not.toHaveTextContent('$')
     })

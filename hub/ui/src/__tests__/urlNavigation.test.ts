@@ -1,12 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import {
   agentDestination,
-  agentSettingsBackDestination,
   agentSettingsDestination,
   appSettingsDestination,
   environmentDestination,
   isAgentSettingsDestination,
-  isSectionedDestination,
   parseDestination,
   projectDestination,
   isSpecDocumentPath,
@@ -136,36 +134,14 @@ describe('phase 5 URL navigation contract', () => {
   })
 
   describe('the agent-settings destination', () => {
-    it('back goes to the agent, not to wherever the operator came from', () => {
-      // Fixed, like "Back to {project}" — no stored origin. `conversationId: null` is what makes
-      // it the agent's most recent, since `resolveConversationSelection` already resolves null
-      // that way.
-      const back = agentSettingsBackDestination(
-        agentSettingsDestination('proj-1', 'claude', 'permissions'),
+    it("is the profile's page under the Profiles tab, naming the profile and its section (FR-13)", () => {
+      expect(serializeDestination(agentSettingsDestination('proj-1', 'claude', 'running'))).toBe(
+        '?project=proj-1&tab=profiles&profile=claude&section=running',
       )
-      expect(back).toEqual(agentDestination('proj-1', 'claude'))
-      expect(back.conversationId).toBeNull()
-    })
-
-    it('does not carry a document back: the conversation reopened shows its own, from the Hub', () => {
-      // Reversed (every-spec-entry-point-leads-into-the-journey, FR-11): the attachment belongs
-      // to the conversation, and `useConversationSpecDocuments` restores it, so settings has no
-      // document to carry.
-      const back = agentSettingsBackDestination(
-        agentSettingsDestination('proj-1', 'claude', 'permissions'),
+      expect(serializeDestination(agentSettingsDestination('proj-1', 'claude'))).toBe(
+        '?project=proj-1&tab=profiles&profile=claude',
       )
-      expect(back.document).toBeNull()
-    })
-
-    it('still returns with nothing open when nothing was open', () => {
-      const back = agentSettingsBackDestination(agentSettingsDestination('proj-1', 'claude'))
-      expect(back.document).toBeNull()
-    })
-
-    it('puts the rail into section mode, as project configuration does', () => {
-      expect(isSectionedDestination(agentSettingsDestination('proj-1', 'claude'))).toBe(true)
-      expect(isSectionedDestination(environmentDestination('proj-1'))).toBe(true)
-      expect(isSectionedDestination(agentDestination('proj-1', 'claude'))).toBe(false)
+      expect(parseDestination('?project=proj-1&tab=profiles')).toEqual(projectDestination('proj-1', 'profiles'))
     })
 
     it('survives resolution against the registered project collection', () => {

@@ -5,8 +5,8 @@
 Spec `profiles-threads-and-builds-everywhere`, FR-10 (D7). Scans the user-visible text of the app's
 source under hub/ui/src -- JSX text, and the `label`, `title`, `aria-label` and `placeholder`
 attributes given a literal -- for the words *agent* and *conversation*, and fails on any use not
-allowed by `ui_vocabulary_allowlist.txt` beside this script. It also checks that the profile settings
-screen is titled Profiles.
+allowed by `ui_vocabulary_allowlist.txt` beside this script. It also checks that the profile settings'
+home, the Profiles tab (a profile's page sits under it), is titled Profiles.
 
 Identifiers are not text: `agent_name`, `conversationId`, `AgentWeave` and the like never match,
 because the words are matched whole. Test files and fixtures are not scanned. An allowlist line is
@@ -29,7 +29,9 @@ UI_SRC = REPO_ROOT / "hub" / "ui" / "src"
 ALLOWLIST = Path(__file__).resolve().with_name("ui_vocabulary_allowlist.txt")
 
 #: The settings screen that configures agents, and the title it must carry.
-PROFILE_SETTINGS = "components/agents/AgentSettingsPage.tsx"
+# A profile's settings are its page under the Profiles tab (spec a-profile-s-pool-and-a-new-chat-can-
+# use-any-model-of-any-provider, FR-13/FR-14): the tab's label is the title to check.
+PROFILE_SETTINGS = "lib/navigation.ts"
 PROFILE_SETTINGS_TITLE = "Profiles"
 
 # Matched whole, so identifiers (`agent_name`, `conversationId`, `AgentWeave`) and file names
@@ -231,9 +233,9 @@ def problems(root: Path = UI_SRC, allowed_path: Path = ALLOWLIST) -> list[str]:
     )
     settings = root / PROFILE_SETTINGS
     source = settings.read_text(encoding="utf-8") if settings.exists() else ""
-    if not re.search(rf"""\btitle=["']{PROFILE_SETTINGS_TITLE}["']""", source):
+    if not re.search(rf"""\bprofiles: ["']{PROFILE_SETTINGS_TITLE}["']""", source):
         out.append(
-            f"hub/ui/src/{PROFILE_SETTINGS}: the settings screen is not titled {PROFILE_SETTINGS_TITLE}"
+            f"hub/ui/src/{PROFILE_SETTINGS}: the profile settings' tab is not titled {PROFILE_SETTINGS_TITLE}"
         )
     return out
 

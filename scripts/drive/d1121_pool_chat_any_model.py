@@ -258,7 +258,7 @@ class Drive:
         """Clicks the top bar's Profiles tab. Returns (found, placed after Tasks)."""
         self.goto(pg, self.url(pid))
         tabs = pg.evaluate("""() => [...document.querySelectorAll('header [role=tab], header a, header button, nav [role=tab], nav a, nav button')]
-            .map(e => (e.innerText || '').trim()).filter(Boolean)""")
+            .map(e => (e.innerText || '').trim().split('\\n')[0]).filter(Boolean)""")
         tab = pg.get_by_role("tab", name="Profiles")
         if not tab.count():
             tab = pg.get_by_role("button", name="Profiles", exact=True)
@@ -787,10 +787,19 @@ class Drive:
 
             self.goto(pg, self.url(agent="Builder", conversation=self.ids["chat"]), 3000)
             follow("thread bar", pg.get_by_test_id("conversation-header"))
-            self.goto(pg, self.url(tab="tasks"), 3000)
+            def open_board():
+                # The task may be approved by now (QA reviews it once Builder finishes), and the
+                # board hides finished tasks until asked: show them, so the card is there to read.
+                self.goto(pg, self.url(tab="tasks"), 3000)
+                finished = pg.get_by_test_id("board-show-finished")
+                if finished.count() and not finished.first.is_checked():
+                    finished.first.check(force=True)
+                    pg.wait_for_timeout(600)
+
+            open_board()
             card = pg.locator("[data-testid^=task-card], article, li").filter(has_text=self.ids["task_title"]).first
             follow("task card", card)
-            self.goto(pg, self.url(tab="tasks"), 3000)
+            open_board()
             pg.get_by_text(self.ids["task_title"]).first.click()
             pg.wait_for_timeout(1500)
             follow("task story", pg.locator("[role=dialog], main").last)
@@ -832,7 +841,7 @@ class Drive:
 
     def open_setup_dialog(self, pg):
         found, _, _ = self.open_profiles_tab(pg, self.empty)
-        btn = pg.get_by_role("button", name="Add a builder and a checker")
+        btn = pg.get_by_role("button", name="Add a builder and a checker", exact=True)
         if not (found and btn.count()):
             self.goto(pg, self.url(self.empty))
             # Today's way in: the Overview's setup item for profiles ("Add both…").

@@ -59,7 +59,9 @@
 .aw-tcard-marker[data-kind="checks"] { color: var(--red); background: color-mix(in oklab, var(--red) 13%, transparent); }
 .aw-tcard-marker[data-kind="critical"] { color: var(--amber); background: color-mix(in oklab, var(--amber) 13%, transparent); }
 
-.aw-tcard-people { color: var(--text-2); gap: 2px; font-size: 11px; }
+/* Below the card's button (its names are links), laid where it sat inside it: the button's 11px foot
+   less the 6px the line would have been spaced by. */
+.aw-tcard-people { color: var(--text-2); gap: 2px; font-size: 11px; margin-top: -6px; padding: 0 12px 11px; box-sizing: content-box; cursor: pointer; }
 .aw-tcard-actions { position: absolute; right: 6px; top: 4px; display: inline-flex; gap: 2px; z-index: 1; background: var(--surface); border-radius: var(--radius-md, 6px); }
 .aw-tcard[data-dragging="true"] { opacity: .5; }
 .aw-tcard-tag {

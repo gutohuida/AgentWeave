@@ -154,7 +154,7 @@ export function AgentRunningSettings({
   onChange: (patch: Partial<Pick<AgentSummary, 'permission_timeout_seconds' | 'question_timeout_seconds'>>, said: string) => void
 }) {
   return (
-    <SettingsPage icon="terminal" title="Running" description={`What ${agent.name} runs on, and how long it holds a turn open for you.`}>
+    <SettingsPage icon="terminal" title="Models" description={`The models ${agent.name} runs on, and how long it holds a turn open for you.`}>
       {notices}
       {pool ?? (
       <SettingsGroup title="Model">

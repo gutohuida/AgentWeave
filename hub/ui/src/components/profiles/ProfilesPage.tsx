@@ -122,6 +122,8 @@ export function ProfilesPage({
     <div
       className="aw-pf-page"
       data-testid="profile-page"
+      // Focusable, so a click on the page's own ground puts keys there and Escape still goes back.
+      tabIndex={-1}
       onKeyDown={(event) => {
         // Only a key pressed on the page itself: a menu or dialog is portalled, and its own Escape
         // closes it first. A text field keeps its Escape.

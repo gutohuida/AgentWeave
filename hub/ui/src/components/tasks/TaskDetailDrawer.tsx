@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { ProfileNameLink } from '@/components/profiles/ProfileNameLink'
 import { formatDistanceToNow } from 'date-fns'
 import { Icon } from '@/components/common/Icon'
 import { PriorityBadge, StatusBadge } from '@/components/common/Badge'
@@ -596,6 +597,23 @@ export function TaskDetailDrawer({ task, onClose, onOpenRequirement, initialView
             ) : null}
             <span data-testid={`task-drawer-stored-id-${task.id}`}>{task.id}</span>
           </p>
+          {/* Who builds it and who checks it, each a way to its profile's page (FR-15). */}
+          {(task.builder ?? task.assignee) || task.checker ? (
+            <p className="text-[12px] mt-1" style={{ color: 'var(--text-2)' }} data-testid={`task-drawer-people-${task.id}`}>
+              {(task.builder ?? task.assignee) ? (
+                <>
+                  Built by <ProfileNameLink name={(task.builder ?? task.assignee)!} className="aw-profile-link-quiet font-medium" />
+                </>
+              ) : null}
+              {(task.builder ?? task.assignee) && task.checker ? ' · ' : null}
+              {task.checker ? (
+                <>
+                  {(task.builder ?? task.assignee) ? 'checked by ' : 'Checked by '}
+                  <ProfileNameLink name={task.checker} className="aw-profile-link-quiet font-medium" />
+                </>
+              ) : null}
+            </p>
+          ) : null}
           {task.build_id && buildProjectId ? (
             <a
               className="mt-1 inline-flex items-center gap-1 text-[12px] underline underline-offset-2"
@@ -1497,12 +1515,12 @@ export function TaskDetailDrawer({ task, onClose, onOpenRequirement, initialView
               approval is governed at, the builder it was declared with, and who checks it. */}
           {people.builder && (
             <Field label="Built by">
-              <span data-testid={`task-built-by-${task.id}`}>{people.builder}</span>
+              <span data-testid={`task-built-by-${task.id}`}><ProfileNameLink name={people.builder} className="aw-profile-link-quiet" /></span>
             </Field>
           )}
           {people.reviewer && (
             <Field label="Reviewing">
-              <span data-testid={`task-reviewing-${task.id}`}>{people.reviewer}</span>
+              <span data-testid={`task-reviewing-${task.id}`}><ProfileNameLink name={people.reviewer} className="aw-profile-link-quiet" /></span>
             </Field>
           )}
 
@@ -1510,8 +1528,8 @@ export function TaskDetailDrawer({ task, onClose, onOpenRequirement, initialView
             <Field label="Build">
               <span className="truncate block" data-testid={`task-build-${task.id}`}>
                 {task.level ? `${task.level[0]!.toUpperCase()}${task.level.slice(1)}` : 'In a build'}
-                {task.builder ? ` · builder @${task.builder}` : ''}
-                {task.checker ? ` · checker @${task.checker}` : ''}
+                {task.builder ? <> · builder @<ProfileNameLink name={task.builder} className="aw-profile-link-quiet" /></> : null}
+                {task.checker ? <> · checker @<ProfileNameLink name={task.checker} className="aw-profile-link-quiet" /></> : null}
               </span>
             </Field>
           )}

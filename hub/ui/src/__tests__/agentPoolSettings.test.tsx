@@ -70,7 +70,7 @@ function renderRunning() {
   ]
   return render(
     <QueryClientProvider client={new QueryClient()}>
-      <AgentSettingsPage agent="Developer" section="running" onSelectSection={vi.fn()} onBack={vi.fn()} />
+      <AgentSettingsPage agent="Developer" section="running" />
     </QueryClientProvider>,
   )
 }

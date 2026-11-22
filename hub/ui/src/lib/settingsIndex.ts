@@ -1,4 +1,5 @@
 import {
+  AGENT_SETTINGS_SECTION_LABELS,
   agentSettingsDestination,
   appSettingsDestination,
   environmentDestination,
@@ -51,14 +52,7 @@ const PROJECT: Record<EnvironmentSection, string> = {
   diagnostics: 'Diagnostics',
 }
 
-const AGENT: Record<AgentSettingsSection, string> = {
-  agent: 'Agent',
-  running: 'Running',
-  permissions: 'Permissions',
-  checkpoints: 'Checkpoints',
-  workspace: 'Workspace',
-  runs: 'Runs',
-}
+const AGENT: Readonly<Record<AgentSettingsSection, string>> = AGENT_SETTINGS_SECTION_LABELS
 
 const app = (section: AppSettingsSection, label: string, description: string): SettingEntry => ({
   scope: 'app',

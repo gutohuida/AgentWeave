@@ -66,7 +66,7 @@ const agent: AgentSummary = {
 
 function saveOwnReach() {
   roster = [agent]
-  render(<QueryClientProvider client={new QueryClient()}><AgentSettingsPage agent="cla" section="permissions" onSelectSection={vi.fn()} onBack={vi.fn()} /></QueryClientProvider>)
+  render(<QueryClientProvider client={new QueryClient()}><AgentSettingsPage agent="cla" section="permissions" /></QueryClientProvider>)
   fireEvent.click(screen.getByRole('switch', { name: 'Own granted reach for cla' }))
 }
 

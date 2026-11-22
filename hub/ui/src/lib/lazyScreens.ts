@@ -60,7 +60,7 @@ export const EvidenceBrowser = screen(() => import('@/components/evidence/Eviden
 export const BuildViewContainer = screen(() => import('@/components/builds/BuildViewContainer'), 'BuildViewContainer')
 export const RequirementStory = screen(() => import('@/components/spec/RequirementStory'), 'RequirementStory')
 export const TasksScreen = screen(() => import('@/components/tasks/TasksScreen'), 'TasksScreen')
-export const AgentSettingsPage = screen(() => import('@/components/agents/AgentSettingsPage'), 'AgentSettingsPage')
+export const ProfilesScreen = screen(() => import('@/components/profiles/ProfilesScreen'), 'ProfilesScreen')
 export const QuestionsPanel = screen(() => import('@/components/questions/QuestionsPanel'), 'QuestionsPanel')
 export const ArchivedAgentNotice = screen(() => import('@/components/agents/ArchivedAgentNotice'), 'ArchivedAgentNotice')
 

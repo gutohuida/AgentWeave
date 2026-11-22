@@ -48,6 +48,7 @@ import {
 } from './buildViewModel'
 import type { Stall } from '@/api/stalls'
 import { StallRemedies } from '@/components/stalls/StallRemedies'
+import { ProfileNameLink } from '@/components/profiles/ProfileNameLink'
 import { STALLED, stallNotice } from '@/lib/stalls'
 import '@/styles/builds.css'
 
@@ -549,12 +550,14 @@ export function CostText({ cell, noneTitle = 'No cost yet: still running, or no 
 
 // ── Task rows ───────────────────────────────────────────────────────────
 
-function AgentName({ name, colorIndexOf, role }: { name: string | null; colorIndexOf?: BuildViewProps['colorIndexOf']; role: string }) {
+/** A builder's or checker's name; a link to its profile's page (FR-15) unless it sits inside a
+ *  button of its own (`link={false}`). */
+function AgentName({ name, colorIndexOf, role, link = true }: { name: string | null; colorIndexOf?: BuildViewProps['colorIndexOf']; role: string; link?: boolean }) {
   if (!name) return <span className="aw-bv-agent aw-bv-agent-none">{role === 'checker' ? 'no checker' : 'unassigned'}</span>
   return (
     <span className="aw-bv-agent" style={{ '--agent-accent': agentColorVars(colorIndexOf?.(name)).accent } as React.CSSProperties}>
       <span className="aw-agent-dot" aria-hidden="true" />
-      {name}
+      {link ? <ProfileNameLink name={name} className="aw-profile-link-quiet" /> : name}
     </span>
   )
 }
@@ -774,7 +777,7 @@ function RunLine({
       >
         <span className="aw-bv-run-label">{item.label}</span>
         <span className="aw-bv-run-who">
-          <AgentName name={run.agent} role="builder" colorIndexOf={colorIndexOf} />
+          <AgentName name={run.agent} role="builder" colorIndexOf={colorIndexOf} link={false} />
           <span className="aw-bv-model">{run.model ?? 'model not reported'}</span>
         </span>
         <time className="aw-bv-run-when tabular" dateTime={run.started_at} title={`Started ${formatDateTime(run.started_at, now)} (${formatAgoLong(run.started_at, now)})`}>

@@ -5,6 +5,7 @@ import { Icon } from '@/components/common/Icon'
 import { ContextUsageIndicator } from '@/components/context/ContextUsageIndicator'
 import { Button } from '@/components/ui/button'
 import { Menu, MenuContent, MenuItem, MenuLabel, MenuSeparator, MenuTrigger } from '@/components/ui/menu'
+import { ProfileNameLink } from '@/components/profiles/ProfileNameLink'
 import { agentColorVars } from '@/lib/agentColors'
 import { formatDuration, formatTokens, formatTokensExact } from '@/lib/format'
 import '@/styles/conversation.css'
@@ -182,7 +183,7 @@ export function ConversationBar({
     <div ref={setRoot} className="conversation-header-surface aw-convbar" data-testid="conversation-header" data-compact={compact} style={{ '--agent-accent': color.accent } as React.CSSProperties}>
       <span className="aw-convbar-agent">
         <span data-testid={`conversation-agent-color-${agent.name}`} className={['aw-convbar-dot', isRunning ? 'aw-pulse' : ''].join(' ')} aria-hidden="true" />
-        <span className="truncate">{agent.name}</span>
+        <ProfileNameLink name={agent.name} className="truncate aw-profile-link-quiet" />
       </span>
       <span className="aw-convbar-sep" aria-hidden="true">/</span>
 

@@ -23,10 +23,10 @@ export interface RailProject {
  *  is still how that is done. This is the other thing: a place to go when the specification is what
  *  you are working on rather than what you are working *beside* — the document and its navigation,
  *  no conversation (operator, 2026-08-10: "just to focus on spec"). */
-export const PROJECT_TABS = ['overview', 'thread', 'tasks', 'spec', 'checkpoints', 'vault', 'jobs', 'activity', 'dashboards'] as const
-/** `profiles` is mock-only until the Profiles page is wired in (mock/screens/Profiles.tsx): it is not
- *  in PROJECT_TABS, so the real top bar never lists it and a URL naming it falls back to Overview. */
-export type ProjectTab = (typeof PROJECT_TABS)[number] | 'profiles'
+export const PROJECT_TABS = ['overview', 'thread', 'tasks', 'profiles', 'spec', 'checkpoints', 'vault', 'jobs', 'activity', 'dashboards'] as const
+/** `profiles` is the Profiles index; one profile's own page is the `agent-settings` destination,
+ *  shown under the same tab (FR-12, FR-13). */
+export type ProjectTab = (typeof PROJECT_TABS)[number]
 
 /** What each project tab is called on screen (the top bar). */
 export const TAB_LABELS: Record<ProjectTab, string> = {
@@ -77,10 +77,21 @@ export function resolveEnvironmentSection(raw: string | null | undefined): Envir
   return RETIRED_ENVIRONMENT_SECTIONS[raw] ?? null
 }
 
-/** An agent's settings, in five sections. Permissions and Checkpoints carry the names of the project
- *  sections they override. */
+/** A profile's settings sections: the tabs of its page. Permissions and Checkpoints carry the names
+ *  of the project sections they override. */
 export const AGENT_SETTINGS_SECTIONS = ['agent', 'running', 'permissions', 'checkpoints', 'workspace', 'runs'] as const
 export type AgentSettingsSection = (typeof AGENT_SETTINGS_SECTIONS)[number]
+
+/** What each section is headed, and so what its tab on the profile's page says (FR-13). The ids
+ *  stay as they were, because saved links and the settings index carry them. */
+export const AGENT_SETTINGS_SECTION_LABELS: Readonly<Record<AgentSettingsSection, string>> = {
+  agent: 'Profile',
+  running: 'Models',
+  permissions: 'Permissions',
+  checkpoints: 'Checkpoints',
+  workspace: 'Workspace',
+  runs: 'Runs',
+}
 
 /** The seven sections the five replaced, and the one that holds what each held, so a saved link or a
  *  toast never lands on a blank page. */
@@ -189,9 +200,9 @@ export type WorkspaceDestination =
       conversationId: string | null
       document: string | null
     }
+  // One profile's own page under the Profiles tab, open at one of its settings sections (FR-13).
   // Its own kind rather than an `ENVIRONMENT_SECTIONS` entry: those address a project and carry no
-  // subject, so they cannot say *which* agent is being configured. `agent` is non-null by
-  // construction — there is no such thing as configuring no agent.
+  // subject, so they cannot say *which* profile is open. `agent` is non-null by construction.
   | { kind: 'agent-settings'; projectId: string; agent: string; section: AgentSettingsSection; setting?: string }
   // The operator's own settings. `projectId` is the project the operator came from, kept so the rail
   // and the way back still know where they were; it is null with no project open, which is the
@@ -385,6 +396,12 @@ export function agentSettingsDestination(
   return { kind: 'agent-settings', projectId, agent, section, ...(setting ? { setting } : {}) }
 }
 
+/** A profile's page as a link, for an anchor's `href`: a copied or new-window address opens the
+ *  same profile at the same section. */
+export function profileHref(projectId: string, agent: string, section?: AgentSettingsSection): string {
+  return `${window.location.pathname}${serializeDestination(agentSettingsDestination(projectId, agent, section))}`
+}
+
 export function appSettingsDestination(
   projectId: string | null,
   section: AppSettingsSection = DEFAULT_APP_SETTINGS_SECTION,
@@ -397,17 +414,6 @@ export function appSettingsDestination(
  *  settings opened with no project). */
 export function destinationProjectId(destination: WorkspaceDestination): string | null {
   return destination.kind === 'zero' ? null : destination.projectId
-}
-
-/** Where the back control on the settings page goes: a *fixed* target, the agent's most recent
- *  conversation, matching `App.tsx`'s fixed "Back to {project}" rather than remembering an origin.
- *
- *  `conversationId: null` is what makes it the most recent one — `resolveConversationSelection`
- *  already resolves null to the agent's newest, so this needs no lookup of its own. */
-export function agentSettingsBackDestination(
-  destination: Extract<WorkspaceDestination, { kind: 'agent-settings' }>,
-): Extract<WorkspaceDestination, { kind: 'conversation' }> {
-  return agentDestination(destination.projectId, destination.agent)
 }
 
 /** The composer-primary surface for a conversation that does not exist yet.
@@ -499,12 +505,6 @@ export function isSpecDestination(
   return destination.kind === 'project' && destination.tab === 'spec'
 }
 
-/** True in either configuration area. The Sidebar swaps into section-list-plus-back mode on this,
- *  because the shell is the same whichever subject is being configured. */
-export function isSectionedDestination(destination: WorkspaceDestination): boolean {
-  return isConfigurationDestination(destination) || isAgentSettingsDestination(destination)
-}
-
 /** Serializes a destination into a URL search string (including the leading
  *  `?`, or `''` for the zero-project state). No provider session identifier is
  *  ever part of this shape — only AgentWeave's own project/agent/conversation
@@ -520,8 +520,9 @@ export function serializeDestination(destination: WorkspaceDestination): string 
   }
   params.set('project', destination.projectId)
   if (destination.kind === 'agent-settings') {
-    params.set('agent', destination.agent)
-    params.set('settings', destination.section)
+    params.set('tab', 'profiles')
+    params.set('profile', destination.agent)
+    if (destination.section !== DEFAULT_AGENT_SETTINGS_SECTION) params.set('section', destination.section)
     if (destination.setting) params.set('setting', destination.setting)
     return `?${params.toString()}`
   }
@@ -605,6 +606,15 @@ export function parseDestination(search: string): WorkspaceDestination | null {
   const agent = params.get('agent')
   const conversation = params.get('conversation')
 
+  // A profile's page (FR-13): the Profiles tab naming one profile, at one section.
+  const rawTab = params.get('tab')
+  const profile = params.get('profile')
+  if (rawTab === 'profiles' && profile) {
+    const section = resolveAgentSettingsSection(params.get('section')) ?? DEFAULT_AGENT_SETTINGS_SECTION
+    return agentSettingsDestination(projectId, profile, section, params.get('setting'))
+  }
+
+  // The address the retired settings screen had, kept so a saved link opens the profile's page.
   // Checked *before* the conversation branch, and deliberately so: that branch claims any URL
   // carrying an `agent`, so testing it first would resolve every settings link to a chat.
   // `settings` without an `agent` is not a destination — there is no agent to configure — so it
@@ -628,7 +638,6 @@ export function parseDestination(search: string): WorkspaceDestination | null {
     }
   }
 
-  const rawTab = params.get('tab')
   if (rawTab === 'environment') {
     const rawSection = params.get('section')
     return environmentDestination(projectId, resolveEnvironmentSection(rawSection) ?? DEFAULT_ENVIRONMENT_SECTION, params.get('setting'))

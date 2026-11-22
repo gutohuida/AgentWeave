@@ -27,7 +27,6 @@ import { useWorkspaceNavigation } from '@/hooks/useWorkspaceNavigation'
 import {
   PROJECT_TABS,
   agentDestination,
-  agentSettingsBackDestination,
   agentSettingsDestination,
   resolveAgentSettingsSection,
   appSettingsDestination,
@@ -56,7 +55,6 @@ import { LoadingThread } from '@/components/common/LoadingThread'
 import {
   ActivityScreen,
   AgentCreateDialog,
-  AgentSettingsPage,
   AppSettingsScreen,
   ArchivedAgentNotice,
   BuildViewContainer,
@@ -65,6 +63,7 @@ import {
   JobsScreen,
   DashboardsScreen,
   NewConversationSurface,
+  ProfilesScreen,
   ProjectSettingsScreen,
   QuestionsPanel,
   RequirementStory,
@@ -458,26 +457,6 @@ export default function App() {
         </div>
       )
     )
-  } else if (destination.kind === 'agent-settings') {
-    const settingsDestination = destination
-    content = (
-      <AgentSettingsPage
-        agent={settingsDestination.agent}
-        section={settingsDestination.section}
-        setting={settingsDestination.setting}
-        onSelectSection={(section) =>
-          navigateTo(agentSettingsDestination(settingsDestination.projectId, settingsDestination.agent, section))
-        }
-        onBack={() =>
-          navigateTo(
-            agentSettingsBackDestination(
-              agentSettingsDestination(settingsDestination.projectId, settingsDestination.agent),
-            ),
-          )
-        }
-        onOpenAppSettings={() => navigateTo(appSettingsDestination(settingsDestination.projectId))}
-      />
-    )
   } else if (destination.kind === 'app-settings') {
     const appSettingsDest = destination
     content = (
@@ -496,7 +475,7 @@ export default function App() {
         }
       />
     )
-  } else if (destination.kind === 'project') {
+  } else if (destination.kind === 'project' || destination.kind === 'agent-settings') {
     const openTask = (taskId: string) => {
       useTaskFilterStore.getState().setPendingOpenTaskId(taskId)
       navigateTo(projectDestination(destination.projectId, 'tasks'))
@@ -504,7 +483,26 @@ export default function App() {
     const openConversation = (agent: string, conversationId: string) =>
       navigateTo(agentDestination(destination.projectId, agent, conversationId))
     let projectContent: React.ReactNode
-    if (destination.tab === 'overview') {
+    // The Profiles tab: its index, and one profile's page (the `agent-settings` destination). One
+    // screen for both, so going back to the index can hand focus to the row just left (FR-13).
+    if (destination.kind === 'agent-settings' || destination.tab === 'profiles') {
+      const pid = destination.projectId
+      projectContent = (
+        <ProfilesScreen
+          projectId={pid}
+          selected={destination.kind === 'agent-settings' ? destination.agent : null}
+          section={destination.kind === 'agent-settings' ? destination.section : 'agent'}
+          setting={destination.kind === 'agent-settings' ? destination.setting : null}
+          onOpenIndex={() => navigateTo(projectDestination(pid, 'profiles'))}
+          onOpenProfile={(agent, section) => navigateTo(agentSettingsDestination(pid, agent, section))}
+          onOpenTask={openTask}
+          onOpenBuild={(buildId) => navigateTo(buildDestination(pid, buildId))}
+          onOpenConversation={openConversation}
+          onNewThread={(agent) => navigateTo(newConversationDestination(pid, agent))}
+          onAddProfile={() => setAgentCreateProjectId(pid)}
+        />
+      )
+    } else if (destination.tab === 'overview') {
       projectContent = overviewQuestionsOpen
         ? <QuestionsPanel />
         : <OverviewScreen onNavigate={navigate} onOpenConversation={openConversation}
@@ -655,11 +653,12 @@ export default function App() {
     // column. Putting the board in that column once made each card narrow before the board had
     // even reached the viewport edge.
     const fills =
+      destination.kind === 'project' && (
       destination.tab === 'spec' ||
       destination.tab === 'tasks' ||
       destination.tab === 'vault' ||
       destination.tab === 'activity' ||
-      destination.tab === 'environment'
+      destination.tab === 'environment')
     content = (
       <div className="flex h-full flex-col" data-testid="active-page-wrapper">
         <div
@@ -735,7 +734,13 @@ export default function App() {
                 project={{ id: currentProject.id, name: currentProject.name, path: currentProject.path_display ?? '' }}
                 projects={(projects ?? []).map((project) => ({ id: project.id, name: project.name, path: project.path_display ?? '' }))}
                 tabs={PROJECT_TABS}
-                active={destination.kind === 'project' && destination.tab !== 'environment' ? destination.tab : null}
+                active={
+                  destination.kind === 'agent-settings'
+                    ? 'profiles'
+                    : destination.kind === 'project' && destination.tab !== 'environment'
+                      ? destination.tab
+                      : null
+                }
                 counts={{ tasks: awaitingReview }}
                 directoryAvailable={currentProject.directory_state === 'available'}
                 onSelectTab={(tab) => {

@@ -53,7 +53,7 @@ function agent(overrides: Partial<AgentSummary> = {}): AgentSummary {
 
 function renderIdentity(summary: AgentSummary) {
   roster = [summary]
-  return render(<QueryClientProvider client={new QueryClient()}><AgentSettingsPage agent={summary.name} section="agent" onSelectSection={vi.fn()} onBack={vi.fn()} /></QueryClientProvider>)
+  return render(<QueryClientProvider client={new QueryClient()}><AgentSettingsPage agent={summary.name} section="agent" /></QueryClientProvider>)
 }
 
 vi.mock('@/api/modelCatalog', async (importOriginal) => {

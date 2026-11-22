@@ -10,6 +10,7 @@
 .aw-pf-search .aw-pf-search-input { width: 100%; padding-left: 28px; }
 .aw-pf-index-head > .aw-pf-search + * { margin-left: auto; }
 .aw-pf-order { margin: 0; padding: 8px 0 10px; font-size: 11.5px; color: var(--text-3); }
+.aw-pf-partial { width: min(100%, 1100px); margin: 12px auto -10px; padding-inline: clamp(20px, 3vw, 32px); font-size: 12px; color: var(--amber); }
 
 /* One grid for the column header and every row, so the columns line up. */
 .aw-pf-cols, .aw-pf-row {
@@ -79,6 +80,7 @@
 
 /* ---- a profile's page ---- */
 .aw-pf-page { width: min(100%, 1100px); margin-inline: auto; padding: 12px clamp(20px, 3vw, 32px) 96px; }
+.aw-pf-page:focus { outline: none; }
 .aw-pf-back {
   display: inline-flex; align-items: center; gap: 6px; min-height: 26px; margin-left: -6px; padding: 3px 8px 3px 6px;
   border-radius: var(--radius-sm); font-size: 12.5px; color: var(--text-3);
@@ -142,13 +144,19 @@
 }
 @media (prefers-reduced-motion: reduce) { .aw-pf-row[data-kind="working"] .aw-pf-status-mark { animation: none; } }
 
-/* The Overview's way into a profile (ProfileLink): an icon at the row's end, quiet until reached. */
-.aw-ov-agent-item { position: relative; }
-.aw-ov-agent-item .aw-ov-agent-row { padding-right: 44px; }
-.aw-ov-profile-link {
-  position: absolute; top: 50%; right: 8px; transform: translateY(-50%);
-  display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 26px;
-  border-radius: var(--radius-sm); color: var(--text-3); opacity: .55;
-}
-.aw-ov-agent-item:hover .aw-ov-profile-link, .aw-ov-profile-link:focus-visible { opacity: 1; }
-.aw-ov-profile-link:hover { background: var(--row-hover); color: var(--text); }
+/* An Overview profile row (FR-15): one button covers the row and opens the conversation; the name
+   (a link to the profile's page) and the settings control sit above it and take their own clicks. */
+.aw-ov-agent-item .aw-ov-agent-row { position: relative; }
+.aw-ov-agent-row:has(.aw-ov-agent-cover:focus-visible) { box-shadow: inset 0 0 0 2px var(--ring); }
+.aw-ov-agent-cover { position: absolute; inset: 0; border-radius: inherit; }
+.aw-ov-agent-cover:focus-visible { outline: none; }
+.aw-ov-agent-row > :not(.aw-ov-agent-cover) { pointer-events: none; }
+.aw-ov-agent-name, .aw-ov-profile-settings { position: relative; pointer-events: auto; }
+.aw-ov-profile-settings { color: var(--text-3); opacity: .55; }
+.aw-ov-agent-item:hover .aw-ov-profile-settings, .aw-ov-profile-settings:focus-visible { opacity: 1; }
+.aw-ov-profile-settings:hover { color: var(--text); }
+
+/* A name that is a link where it sits in running text or a people line: it keeps the colour around
+   it and says it is a link on hover and focus (FR-15). */
+.aw-profile-link.aw-profile-link-quiet { color: inherit; }
+.aw-profile-link.aw-profile-link-quiet:hover { color: var(--text); text-decoration: underline; text-underline-offset: 2px; }
