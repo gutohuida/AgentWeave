@@ -1,5 +1,6 @@
 import * as React from 'react'
 import { Icon } from '@/components/common/Icon'
+import { MarkdownMessage } from '@/components/agents/MarkdownMessage'
 import { MenuSelect, type SelectOption } from '@/components/ui/menu'
 import { Segmented } from '@/components/ui/segmented'
 import {
@@ -77,7 +78,9 @@ export function SpecDocumentBody(props: SpecDocumentBodyProps) {
       {show('document') ? (
         <>
           <Section id="summary" title="Summary" onCopyLink={props.onCopyLink} flash={props.flash} findings={findingsFor('section', 'summary')}>
-            <p className="aw-sp-lede">{doc.summary}</p>
+            <div className="aw-sp-lede">
+              <MarkdownMessage content={doc.summary} />
+            </div>
           </Section>
           {isRoadmap ? (
             <Section id="slices" title="Slices" count={String(doc.slices?.length ?? 0)} onCopyLink={props.onCopyLink} flash={props.flash} findings={findingsFor('section', 'slices')}>
@@ -85,7 +88,9 @@ export function SpecDocumentBody(props: SpecDocumentBodyProps) {
             </Section>
           ) : null}
           <Section id="problem" title="Problem" onCopyLink={props.onCopyLink} flash={props.flash} findings={findingsFor('section', 'problem')}>
-            <ProblemText problem={doc.problem} />
+            <div className="aw-sp-prose">
+              <MarkdownMessage content={doc.problem} />
+            </div>
           </Section>
           <Section id="scope" title="Scope" onCopyLink={props.onCopyLink} flash={props.flash} findings={findingsFor('section', 'scope')}>
             <div className="aw-sp-scope">
@@ -217,37 +222,6 @@ export function SpecDocumentBody(props: SpecDocumentBodyProps) {
   )
 }
 
-
-/** A problem written as a lead and numbered lines ("1. ...") is a list, one item per line; any
- *  other problem keeps its line breaks as a paragraph. */
-function problemParts(problem: string): { lead: string; items: string[] } {
-  const lines = problem.split(/\r?\n/).map((l) => l.trim()).filter(Boolean)
-  const first = lines.findIndex((l) => /^\d+[.)]\s+/.test(l))
-  if (first < 0) return { lead: problem, items: [] }
-  const items: string[] = []
-  for (const line of lines.slice(first)) {
-    const numbered = /^\d+[.)]\s+(.*)$/.exec(line)
-    if (numbered) items.push(numbered[1]!)
-    else if (items.length) items[items.length - 1] += ` ${line}`
-  }
-  return { lead: lines.slice(0, first).join(' '), items }
-}
-
-function ProblemText({ problem }: { problem: string }) {
-  const { lead, items } = problemParts(problem)
-  return (
-    <>
-      {lead ? <p className="aw-sp-prose" style={items.length ? undefined : { whiteSpace: 'pre-line' }}>{lead}</p> : null}
-      {items.length ? (
-        <ol className="aw-sp-problem-list" data-testid="problem-list">
-          {items.map((item, i) => (
-            <li key={i}>{item}</li>
-          ))}
-        </ol>
-      ) : null}
-    </>
-  )
-}
 
 /** What the document rests on: what was checked, and where that stops. */
 function EvidenceSection({ doc, props }: { doc: SpecDocumentView; props: SpecDocumentBodyProps }) {

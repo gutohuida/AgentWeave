@@ -344,6 +344,8 @@ interface Inventory {
   direct: Look[]
   menu: string[]
   notice?: string[]
+  /** Behind the phase badge, which names the step (`badge-names-step`). */
+  journey?: string[]
   body?: string[]
 }
 const ALWAYS_DIRECT: Look[] = [
@@ -363,12 +365,12 @@ const STATES: Record<string, { setup: () => void; afterLoad?: (user: ReturnType<
     setup: () => {
       hub.record = { step: 'requirements', journey: ['intake', 'requirements', 'tasks'], size: 'small' }
     },
-    phase: 'Writing',
+    phase: 'Writing · Requirements',
     inventory: {
       direct: [...ALWAYS_DIRECT, { label: 'Check' }],
       menu: [...ALWAYS_MENU, 'Archive', 'Delete…'],
-      // The journey-step and size control: one click away, open as soon as the list is.
-      notice: ['spec-journey', 'spec-journey-size'],
+      // The journey-step and size control: one click away, behind the badge that names the step.
+      journey: ['spec-journey', 'spec-journey-size'],
     },
   },
   ready: {
@@ -468,6 +470,12 @@ describe('nothing-is-lost (FR-5)', () => {
         expect(found.closest('.aw-sp-scroll'), `${id} is in the body`).toBeTruthy()
       }
 
+      if (spec.inventory.journey) {
+        await user.click(within(header()).getByTestId('spec-phase-journey'))
+        for (const id of spec.inventory.journey) expect(within(header()).getByTestId(id), id).toBeInTheDocument()
+        await user.keyboard('{Escape}')
+      }
+
       if (spec.inventory.notice) {
         await user.click(await within(header()).findByTestId('spec-notice-count'))
         const list = screen.getByTestId('spec-notices')
@@ -482,12 +490,13 @@ describe('nothing-is-lost (FR-5)', () => {
     })
   }
 
-  it('moves the journey step from the notice list, a click after opening the count', async () => {
+  it('moves the journey step from the phase badge, a click after opening it, and lists it among no messages', async () => {
     STATES.writing!.setup()
     const user = userEvent.setup()
     renderIn('page')
     await loaded()
-    await user.click(await within(header()).findByTestId('spec-notice-count'))
+    expect(within(header()).queryByTestId('spec-notice-count')).toBeNull()
+    await user.click(await within(header()).findByTestId('spec-phase-journey'))
     expect(screen.getByTestId('spec-journey-step-requirements')).toBeDisabled()
     expect(screen.getByTestId('spec-journey-step-tasks')).toBeEnabled()
   })
@@ -502,5 +511,52 @@ describe('nothing-is-lost (FR-5)', () => {
     expect(screen.getByRole('navigation', { name: 'Sections' })).toBeInTheDocument()
     expect(screen.getByRole('navigation', { name: 'Requirements' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /Filter & sort/ })).toBeInTheDocument()
+  })
+})
+
+/* `starting-a-spec-from-a-thread-and-a-spec-page-that-agrees-with-itself`, task `header-facts`. */
+describe('a spec page header that agrees with itself', () => {
+  it('lists every open gap the page read carries, one message each, and the count says as many (ac-message-count)', async () => {
+    hub.record = { step: 'build', journey: ['intake', 'build'], size: 'small' }
+    hub.read = {
+      open_gaps: [
+        { code: 'non_goals_empty', where: 'scope.non_goals', message: 'No non-goals are stated' },
+        { code: 'capability_unnamed', where: 'capabilities', message: 'No capability is named' },
+      ],
+    }
+    const user = userEvent.setup()
+    renderIn('page')
+    await loaded()
+    const count = await within(header()).findByTestId('spec-notice-count')
+    expect(count).toHaveTextContent(/^2$/)
+    await user.click(count)
+    const list = screen.getByTestId('spec-notices')
+    expect(list.querySelectorAll('.aw-notice')).toHaveLength(2)
+    expect(within(list).getByTestId('spec-notice-gap-non_goals_empty')).toBeInTheDocument()
+    expect(within(list).getByTestId('spec-notice-gap-capability_unnamed')).toHaveTextContent(/capabilit/)
+    // The step is the badge's, not a message.
+    expect(header().querySelector('.aw-sp-head-row2 .aw-sp-phase')).toHaveTextContent(/^Writing · Build$/)
+  })
+
+  it("names the build's one per-task checker when the build has no default (ac-checker-single)", async () => {
+    hub.phase = 'approved'
+    hub.tasks = [openTask]
+    hub.builds = [{ ...runningBuild, builder: 'Builder', checker: null, tasks: { plan: { builder: 'Builder', checker: 'QA' } } }]
+    renderIn('page')
+    await loaded()
+    await waitFor(() => expect(within(header()).getByTestId('delivery-reviewer')).toHaveTextContent('Checked by @QA'))
+    expect(header()).not.toHaveTextContent(/any free profile/)
+  })
+
+  it('shows the first real task id, never a placeholder letter (ac-task-id)', async () => {
+    hub.phase = 'approved'
+    hub.record = { acronym: 'ASFGP' }
+    hub.tasks = [
+      { ...openTask, id: 't3', readable_id: 'ASFGP-3' },
+      { ...openTask, id: 't2', readable_id: 'ASFGP-2' },
+    ]
+    renderIn('page')
+    await loaded()
+    await waitFor(() => expect(screen.getByTestId('spec-acronym-value')).toHaveTextContent(/^ASFGP-2$/))
   })
 })

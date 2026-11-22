@@ -121,3 +121,11 @@ describe('the acronym editor', () => {
     await waitFor(() => expect(screen.getByTestId('spec-acronym-refusal')).toHaveTextContent('has tasks named by it'))
   })
 })
+
+describe('the acronym once tasks are named by it', () => {
+  it('shows the real id and offers no Change the Hub would refuse (ac-task-id)', () => {
+    renderWith(<AcronymEditor path="p" acronym="BPS" example="BPS-3" locked />)
+    expect(screen.getByTestId('spec-acronym-value')).toHaveTextContent(/^BPS-3$/)
+    expect(screen.queryByTestId('spec-acronym-edit')).toBeNull()
+  })
+})

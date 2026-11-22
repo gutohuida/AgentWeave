@@ -150,7 +150,7 @@ CLASSIFIED: list[tuple[str, str, int, str, str, str]] = [
     ('components/tasks/TaskDetailDrawer.tsx', 'useAgents', 1, 'BLANK', '', 'assignee name list (:153)'),
     ('components/tasks/TaskDetailDrawer.tsx', 'useSpecDocuments', 1, 'BLANK', '', 'document-path map (:158)'),
     ('components/tasks/TaskIntegrationNote.tsx', 'useTaskIntegrations', 1, 'SUPPRESSED', '', '`if (rows.length === 0) return null` (:39) removes the integration outcome and its retry button'),
-    ('components/agents/NewConversationSurface.tsx', 'useModelCatalog', 1, 'BLANK', '', "the intro's model and permission labels (`runnerProvider`, `permissionModeValues`) are left out; the runner's name still shows"),
+    ('components/overview/ProjectSetupList.tsx', 'useAgents', 1, 'BLANK', '', "the first-run path's step and the quickstart link are left out (`useFirstRunStep` reads null)"),
     ('components/settings/ProjectSettingsScreen.tsx', 'useProjects', 1, 'BLANK', '', "only the nav's subtitle (the project's name)"),
     ('components/settings/ProjectSettingsScreen.tsx', 'useCharters', 1, 'BLANK', '', 'the Charters nav count, same shape'),
     ('components/settings/ProjectSettingsScreen.tsx', 'useManagerJobs', 1, 'BLANK', '', "the Manager nav's 'N on' is `undefined` when unread, so nothing is drawn"),

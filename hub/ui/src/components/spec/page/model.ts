@@ -566,3 +566,35 @@ export function capabilityPathFor(title: string): string | null {
     .replace(/^-+|-+$/g, '')
   return slug ? `spec/capabilities/${slug}/spec.json` : null
 }
+
+/** Who checks a document's work (`header-names-checker`): each task's own checker, else the
+ *  default. One profile when every task has the same one, `per-task` when they differ (or only
+ *  some have one), `none` when no task has a checker. With no tasks declared, the tasks the
+ *  build or recommendation names stand in. */
+export type CheckerFact = { kind: 'one'; name: string } | { kind: 'per-task' } | { kind: 'none' }
+
+export function checkerOf(
+  taskKeys: string[],
+  defaultChecker: string | null | undefined,
+  perTask: Record<string, string | null | undefined>,
+): CheckerFact {
+  const keys = taskKeys.length ? taskKeys : Object.keys(perTask)
+  const each = keys.length ? keys.map((key) => perTask[key] || defaultChecker || '') : [defaultChecker || '']
+  const named = new Set(each)
+  if (named.size === 1) {
+    const only = each[0]
+    return only ? { kind: 'one', name: only } : { kind: 'none' }
+  }
+  return { kind: 'per-task' }
+}
+
+/** The id the board shows a spec's first task by (`task-id-example-real`): its real one once it
+ *  exists, else the one it will get. Never a placeholder letter. */
+export function firstTaskId(acronym: string, readableIds: Array<string | null | undefined>): string {
+  const prefix = `${acronym}-`
+  const numbers = readableIds
+    .filter((id): id is string => !!id && id.startsWith(prefix) && /^\d+$/.test(id.slice(prefix.length)))
+    .map((id) => Number(id.slice(prefix.length)))
+    .sort((a, b) => a - b)
+  return `${prefix}${numbers[0] ?? 1}`
+}
