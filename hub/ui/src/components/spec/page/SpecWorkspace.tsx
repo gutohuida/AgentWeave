@@ -49,6 +49,12 @@ export interface SpecSurfaceProps {
   dialogs?: React.ReactNode
   /** The document's pre-mortem and build retrospective, under its builds. */
   retrospective?: (context: { flash: string | null; onCopyLink: (anchor: string) => void }) => React.ReactNode
+  /** The pre-mortem at the end of the document part, in both layouts (spec
+   *  the-spec-process-uses-what-the-hub-already-knows, FR-7). Until a container passes it the
+   *  pre-mortem stays where `retrospective` draws it. */
+  preMortem?: (context: { flash: string | null; onCopyLink: (anchor: string) => void }) => React.ReactNode
+  /** A requirement's possible backing facts, on the full spec page only (same spec, FR-10). */
+  requirementAside?: (identifier: string) => React.ReactNode
 }
 
 export interface SpecWorkspaceProps extends SpecSurfaceProps {
@@ -198,6 +204,8 @@ export function SpecWorkspace(props: SpecWorkspaceProps) {
                 parts={['document', 'tasks', 'builds']}
                 flash={nav.flash}
                 onJump={nav.jump}
+                documentEnd={props.preMortem?.({ flash: nav.flash, onCopyLink: props.onCopyLink })}
+                requirementAside={props.requirementAside}
                 onCopyLink={props.onCopyLink}
                 onOpenDocument={props.onOpenDocument}
                 onOpenBoard={props.onOpenBoard}
@@ -232,9 +240,11 @@ export function SpecWorkspace(props: SpecWorkspaceProps) {
 
 type PanelTab = 'document' | 'tasks' | 'builds'
 
-function tabFor(anchor: string): PanelTab {
+/** `preMortemInDocument`: a container that passes `preMortem` draws it at the Document tab's end. */
+function tabFor(anchor: string, preMortemInDocument = false): PanelTab {
   if (anchor.startsWith('task-') || anchor === anchors.section('tasks')) return 'tasks'
-  if (anchor.startsWith('build-') || anchor === anchors.section('builds') || anchor === anchors.section('retrospective') || anchor === anchors.section('pre-mortem')) return 'builds'
+  if (anchor === anchors.section('pre-mortem')) return preMortemInDocument ? 'document' : 'builds'
+  if (anchor.startsWith('build-') || anchor === anchors.section('builds') || anchor === anchors.section('retrospective')) return 'builds'
   return 'document'
 }
 
@@ -242,21 +252,22 @@ function tabFor(anchor: string): PanelTab {
  *  one column. The outline is a menu, and the document, its tasks and its builds are tabs. */
 export function SpecSidePanel(props: SpecSurfaceProps & { onClose?: () => void; onInsert?: (spec: SpecReference) => void; list?: PanelListProps }) {
   const scroller = React.useRef<HTMLDivElement>(null)
-  const [tab, setTab] = React.useState<PanelTab>(() => (props.initialAnchor ? tabFor(props.initialAnchor) : 'document'))
+  const inDocument = Boolean(props.preMortem)
+  const [tab, setTab] = React.useState<PanelTab>(() => (props.initialAnchor ? tabFor(props.initialAnchor, inDocument) : 'document'))
   const { nav, findings, running, findingAnchor, onAction } = useSurface(props, scroller)
   const active = useActiveAnchor(scroller, [props.doc.path, tab])
   const content = React.useRef<HTMLDivElement>(null)
   useEnterChildren(content, `${props.doc.path}:${tab}`)
   const condensed = useCondensed(scroller)
   const jump = (anchor: string) => {
-    setTab(tabFor(anchor))
+    setTab(tabFor(anchor, inDocument))
     nav.jump(anchor)
   }
   // Back and forward can land on a position in another tab.
   const position = nav.current
   React.useEffect(() => {
-    if (position) setTab(tabFor(position))
-  }, [position])
+    if (position) setTab(tabFor(position, inDocument))
+  }, [position, inDocument])
   const { doc } = props
   const parts: BodyPart[] = [tab]
   const findingsIn = (t: PanelTab) =>
@@ -340,6 +351,7 @@ export function SpecSidePanel(props: SpecSurfaceProps & { onClose?: () => void; 
               hideFilterBar
               flash={nav.flash}
               onJump={jump}
+              documentEnd={props.preMortem?.({ flash: nav.flash, onCopyLink: props.onCopyLink })}
               onCopyLink={props.onCopyLink}
               onOpenDocument={props.onOpenDocument}
               onOpenBoard={props.onOpenBoard}

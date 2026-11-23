@@ -12,6 +12,7 @@ const OverviewLanes = React.lazy(() => import('./OverviewLanes'))
 const OverviewLive = React.lazy(() => import('./OverviewLive'))
 const Tasks = React.lazy(() => import('./Tasks'))
 const Spec = React.lazy(() => import('./Spec'))
+const SpecProcess = React.lazy(() => import('./SpecProcess'))
 const Vault = React.lazy(() => import('./Vault'))
 const Dashboards = React.lazy(() => import('./Dashboards'))
 const Jobs = React.lazy(() => import('./Jobs'))
@@ -51,6 +52,8 @@ export function screenFor(route: MockRoute): ScreenComponent {
       return SpecThreadUi
     case 'pre-mortem':
       return PreMortem
+    case 'spec-process':
+      return SpecProcess
     case 'first-run-polish':
       return FirstRunPolish
     case 'overview-next':
@@ -108,6 +111,8 @@ export const SCREENS: Array<{ id: string; label: string; route: MockRoute }> = [
   { id: 'task-threads', label: 'Spec · Task threads, three ways', route: { kind: 'task-threads' } },
   { id: 'spec-thread-ui', label: 'Spec · In a thread: phase badge and the created-document offer', route: { kind: 'spec-thread-ui' } },
   { id: 'pre-mortem', label: 'Spec · Pre-mortem section, every state', route: { kind: 'pre-mortem' } },
+  { id: 'spec-process-panel', label: 'Spec · Pre-mortem answered, at the end of the side panel’s Document tab', route: { kind: 'spec-process', view: 'panel' } },
+  { id: 'spec-process-page', label: 'Spec · Pre-mortem at the document’s end, and possible backing facts', route: { kind: 'spec-process', view: 'page' } },
   { id: 'first-run-polish', label: 'First run and the Overview read cleanly', route: { kind: 'first-run-polish' } },
   { id: 'roadmap', label: 'Spec · A roadmap’s own page', route: { kind: 'roadmap' } },
   { id: 'spec-home', label: 'Spec · Home, three ways to relate', route: { kind: 'spec-home' } },

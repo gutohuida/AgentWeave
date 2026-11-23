@@ -347,3 +347,23 @@ are three lists, one per reason (contradicted a spec, cited by a spec, opened by
 blended score; sources are counted without the facts whose source is missing from the map (those are
 listed under Facts), so every count agrees with the view it opens; the Overview's lead figures are
 exact (`formatWhole`), not compact.
+
+## The pre-mortem answered, and possible backing facts (mock, 2026-11-23)
+
+Spec `spec/changes/the-spec-process-uses-what-the-hub-already-knows`. The components are real:
+`SpecPreMortemSection` (`src/components/spec/page/SpecPreMortem.tsx`) shows each finding's answer,
+or Unanswered, and "n of m answered", once the Hub sends `answer` on its findings (the proposed
+`PreMortemAnswer` type in `src/api/manager.ts`); a Hub that sends none shows the section as before.
+`SpecWorkspace`/`SpecSidePanel` draw a container's `preMortem` at the end of the Document tab (and
+send a jump to the pre-mortem there), and `requirementAside` under each requirement on the full page;
+`SpecPossibleFacts.tsx` is that aside, with the proposed `SpecPossibleFact` type. Until a container
+passes `preMortem` the app keeps the pre-mortem under Builds. The findings are the Vault page spec's
+real pre-mortem (event evt-b6d0d4e90a15), with the answers its author gave; the possible facts are
+simulated.
+
+```
+http://localhost:5199/mock.html#spec-process/panel?at=section-pre-mortem       # side panel, 4 of 6 answered, beside every state
+http://localhost:5199/mock.html#spec-process/panel?at=section-pre-mortem&pm=none-answered   # pm=partly | none-answered | answered | never | running
+http://localhost:5199/mock.html#spec-process/page?at=section-pre-mortem        # full page: after the requirements
+http://localhost:5199/mock.html#spec-process/page?at=FR-1                      # possible backing facts under FR-1 and FR-2
+```

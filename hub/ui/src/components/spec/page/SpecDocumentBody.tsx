@@ -48,6 +48,12 @@ export interface SpecDocumentBodyProps {
   onOpenDocument?: (path: string) => void
   /** The Tasks board, narrowed to this document (F1129). Absent where the host cannot open it. */
   onOpenBoard?: () => void
+  /** Drawn at the end of the document part, after its algorithms: the pre-mortem (spec
+   *  the-spec-process-uses-what-the-hub-already-knows, FR-7). Absent: nothing is drawn there. */
+  documentEnd?: React.ReactNode
+  /** Drawn under a requirement's statement: its possible backing facts on the full spec page
+   *  (same spec, FR-10). Absent, or null for a requirement, draws nothing. */
+  requirementAside?: (identifier: string) => React.ReactNode
 }
 
 /** The document, drawn by the app from its structure rather than a frame of rendered HTML (FR-3),
@@ -153,6 +159,7 @@ export function SpecDocumentBody(props: SpecDocumentBodyProps) {
                     flash={props.flash === anchors.requirement(r.identifier)}
                     onJump={props.onJump}
                     onCopyLink={props.onCopyLink}
+                    aside={props.requirementAside?.(r.identifier)}
                   />
                 ))}
               </ol>
@@ -175,6 +182,7 @@ export function SpecDocumentBody(props: SpecDocumentBodyProps) {
               ))}
             </Section>
           ) : null}
+          {props.documentEnd ?? null}
         </>
       ) : null}
 
@@ -346,6 +354,7 @@ function RequirementCard({
   flash,
   onJump,
   onCopyLink,
+  aside,
 }: {
   requirement: SpecRequirementView
   index: number
@@ -354,6 +363,7 @@ function RequirementCard({
   flash: boolean
   onJump: (anchor: string) => void
   onCopyLink: (anchor: string) => void
+  aside?: React.ReactNode
 }) {
   const [open, setOpen] = React.useState(false)
   const anchor = anchors.requirement(r.identifier)
@@ -390,6 +400,7 @@ function RequirementCard({
         <Finding key={f.id} finding={f} />
       ))}
       {r.rationale ? <p className="aw-sp-req-why">{r.rationale}</p> : null}
+      {aside ?? null}
       {r.criteria.length ? (
         <>
           <button data-slot="disclosure" type="button" className="aw-sp-disclosure" aria-expanded={open} onClick={() => setOpen((o) => !o)}>

@@ -656,3 +656,24 @@ button.aw-sp-check-pill:focus-visible { outline: none; box-shadow: 0 0 0 2px var
 
 .aw-sp-task[data-lit="dim"] { opacity: 0.45; }
 .aw-sp-task[data-lit="on"] { border-color: var(--ring); }
+
+/* Pre-mortem answers (spec the-spec-process-uses-what-the-hub-already-knows, FR-4, FR-7). */
+.aw-sp-premortem-finding-head { display: flex; align-items: center; gap: 6px; margin-bottom: 3px; }
+.aw-sp-premortem-finding-head .aw-sp-retro-tag { margin-right: 0; }
+.aw-sp-premortem-number { font-size: 11px; font-variant-numeric: tabular-nums; color: var(--text-3); min-width: 14px; }
+.aw-sp-premortem-open { margin-left: auto; padding: 0 7px; border-radius: 999px; font-size: 11px; font-weight: 500; color: var(--amber); background: color-mix(in oklab, var(--amber) 14%, transparent); }
+.aw-sp-retro-list li[data-answered="false"] { padding-left: 8px; border-left: 2px solid color-mix(in oklab, var(--amber) 55%, transparent); }
+.aw-sp-retro-list li[data-answered="true"] { padding-left: 8px; border-left: 2px solid var(--border-hi); }
+.aw-sp-premortem-answer { display: flex; gap: 7px; margin-top: 6px; padding: 6px 8px; border-radius: 6px; background: var(--surface-2); font-size: 12.5px; color: var(--text-2); }
+.aw-sp-premortem-answer > svg { flex: none; margin-top: 1px; color: var(--green); }
+.aw-sp-premortem-answer .aw-sp-muted { margin-top: 2px; font-size: 11px; }
+
+/* A requirement's possible backing facts: named by the spec-vault check, never confirmed (FR-10). */
+.aw-sp-possible-facts { margin-top: 8px; padding: 6px 9px; border: 1px dashed var(--border-hi); border-radius: 6px; font-size: 12px; color: var(--text-3); }
+.aw-sp-possible-facts-head { display: flex; align-items: center; gap: 6px; font-weight: 500; color: var(--text-2); }
+.aw-sp-possible-facts-head .aw-sp-possible-badge { padding: 0 6px; border: 1px dashed var(--border-hi); border-radius: 999px; font-size: 10.5px; font-weight: 500; color: var(--text-3); }
+.aw-sp-possible-facts ul { list-style: none; margin: 4px 0 0; padding: 0; display: grid; gap: 3px; }
+.aw-sp-possible-facts li { display: flex; gap: 6px; line-height: 1.45; }
+.aw-sp-possible-facts li::before { content: '?'; flex: none; width: 12px; text-align: center; color: var(--text-3); }
+.aw-sp-possible-facts .aw-sp-possible-source { color: var(--text-3); white-space: nowrap; }
+.aw-sp-possible-facts-note { margin: 4px 0 0; font-size: 11px; }

@@ -46,6 +46,7 @@ function parseHash(): MockRoute {
   if (kind === 'spec-home') return { kind: 'spec-home' }
   if (kind === 'spec-thread-ui') return { kind: 'spec-thread-ui' }
   if (kind === 'pre-mortem') return { kind: 'pre-mortem' }
+  if (kind === 'spec-process') return { kind: 'spec-process', view: a === 'page' ? 'page' : 'panel' }
   if (kind === 'first-run-polish') return { kind: 'first-run-polish' }
   if (kind === 'thread') return { kind: 'thread' }
   if (kind === 'traces') return { kind: 'traces' }
@@ -82,6 +83,8 @@ function toHash(route: MockRoute): string {
       return 'spec-thread-ui'
     case 'pre-mortem':
       return 'pre-mortem'
+    case 'spec-process':
+      return `spec-process/${route.view}`
     case 'first-run-polish':
       return 'first-run-polish'
     case 'overview-next':

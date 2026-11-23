@@ -96,11 +96,14 @@ export function SpecPreMortemSection({
   const unwritten = latest && latest.outcome !== 'written' ? latest : null
   const written = preMortems.find((p) => p.outcome === 'written') ?? null
   const earlier = preMortems.filter((p) => p !== unwritten && p !== written)
+  // A Hub that records answers sends `answer` on every finding, null while unanswered (spec
+  // the-spec-process-uses-what-the-hub-already-knows, FR-4); an older one sends none.
+  const answers = written ? answerCount(written.findings) : null
   return (
     <Section
       id="pre-mortem"
       title="Pre-mortem"
-      count={written ? String(written.findings.length) : undefined}
+      count={written ? (answers ? `${answers.answered} of ${answers.total} answered` : String(written.findings.length)) : undefined}
       findings={[]}
       flash={flash}
       onCopyLink={onCopyLink}
@@ -114,7 +117,9 @@ export function SpecPreMortemSection({
       }
     >
       <p className="aw-sp-muted aw-sp-premortem-lede">
-        A fresh reader assumes this change shipped and failed, and writes down how. The author reads it in its next turn here, fixes what it can and asks you about the rest.
+        {answers
+          ? 'A fresh reader assumes this change shipped and failed, and writes down how. The author answers each finding with a note of what it did; until every one is answered, the check lists the pre-mortem as a gap. It runs on its own once; after that, only Run a pre-mortem runs it again.'
+          : 'A fresh reader assumes this change shipped and failed, and writes down how. The author reads it in its next turn here, fixes what it can and asks you about the rest.'}
       </p>
       {jobOff ? (
         <p className="aw-sp-retro-note" data-testid="premortem-off">
@@ -159,7 +164,7 @@ export function SpecPreMortemSection({
             <Fact term="Model" value={written.model ?? "The runner's own model"} />
             <Fact term="Cost" value={cost(written.cost_usd_micros)} />
           </dl>
-          <Findings rows={written.findings} />
+          <Findings rows={written.findings} now={now} answered={Boolean(answers)} />
         </article>
       ) : !unwritten && !jobOff ? (
         <div className="aw-sp-empty">
@@ -181,17 +186,42 @@ function Fact({ term, value }: { term: string; value: string }) {
   )
 }
 
-function Findings({ rows }: { rows: PreMortemFinding[] }) {
+/** How many of a written firing's findings are answered; null when the Hub records no answers. */
+function answerCount(findings: PreMortemFinding[]): { answered: number; total: number } | null {
+  if (!findings.length || findings.every((f) => f.answer === undefined)) return null
+  return { answered: findings.filter((f) => f.answer).length, total: findings.length }
+}
+
+function Findings({ rows, now, answered = false }: { rows: PreMortemFinding[]; now?: Date; answered?: boolean }) {
   if (!rows.length) return null
   return (
     <div className="aw-sp-retro-report">
       <h3 className="aw-sp-retro-title">How it failed</h3>
       <ul className="aw-sp-retro-list">
         {rows.map((f, i) => (
-          <li key={i} data-testid="premortem-finding">
-            {f.requirement ? <span className="aw-sp-retro-tag">{f.requirement}</span> : null}
+          <li key={i} data-testid="premortem-finding" data-answered={answered ? (f.answer ? 'true' : 'false') : undefined}>
+            <div className="aw-sp-premortem-finding-head">
+              <span className="aw-sp-premortem-number">{i + 1}</span>
+              {f.requirement ? <span className="aw-sp-retro-tag">{f.requirement}</span> : null}
+              {answered && !f.answer ? (
+                <span className="aw-sp-premortem-open" data-testid="premortem-unanswered">
+                  Unanswered
+                </span>
+              ) : null}
+            </div>
             <p>{f.story}</p>
             {f.cites.length ? <p className="aw-sp-retro-cites">{f.cites.join(' · ')}</p> : null}
+            {answered && f.answer ? (
+              <div className="aw-sp-premortem-answer" data-testid="premortem-answer">
+                <Icon name="check_circle" size={14} />
+                <div>
+                  <p>{f.answer.note}</p>
+                  <p className="aw-sp-muted">
+                    Answered by {f.answer.by} · {now ? formatDateTime(f.answer.at, now) : f.answer.at}
+                  </p>
+                </div>
+              </div>
+            ) : null}
           </li>
         ))}
       </ul>

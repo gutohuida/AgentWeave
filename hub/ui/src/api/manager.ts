@@ -360,6 +360,16 @@ export interface PreMortemFinding {
   story: string
   requirement: string | null
   cites: string[]
+  /** What the document's author did about it (spec the-spec-process-uses-what-the-hub-already-knows,
+   *  FR-4): null while unanswered. Absent on a Hub that records no answers, which shows no count. */
+  answer?: PreMortemAnswer | null
+}
+
+/** The author's answer to one finding: the required note of what it did, who, and when. */
+export interface PreMortemAnswer {
+  note: string
+  by: string
+  at: string
 }
 
 export interface RetrospectiveFinding {

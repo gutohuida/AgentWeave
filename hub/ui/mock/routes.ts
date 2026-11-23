@@ -38,6 +38,9 @@ export type MockRoute =
   /** The spec page's Pre-mortem section in each of its states (spec
    *  the-spec-journey-spends-the-operator-s-attention-only-on-their-decisions, FR-11). */
   | { kind: 'pre-mortem' }
+  /** The pre-mortem answered and at the end of the Document tab, and a requirement's possible
+   *  backing facts (spec the-spec-process-uses-what-the-hub-already-knows). */
+  | { kind: 'spec-process'; view: 'panel' | 'page' }
   /** First run and the Overview read cleanly: six small polish items, each today next to proposed
    *  (operator, 2026-11-22). */
   | { kind: 'first-run-polish' }
