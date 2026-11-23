@@ -8,6 +8,7 @@ import { Menu, MenuContent, MenuItem, MenuLabel, MenuSeparator, MenuTrigger } fr
 import { ProfileNameLink } from '@/components/profiles/ProfileNameLink'
 import { agentColorVars } from '@/lib/agentColors'
 import { formatDuration, formatTokens, formatTokensExact } from '@/lib/format'
+import { togglePanelShortcutLabel } from '@/lib/shortcuts'
 import '@/styles/conversation.css'
 
 /** The conversation's one bar, replacing the project header above it plus a header row of three
@@ -266,7 +267,7 @@ export function ConversationBar({
             data-testid="conversation-toggle-panel"
             aria-label={panelOpen ? 'Hide side panel' : 'Show side panel'}
             aria-pressed={panelOpen}
-            title={`${panelOpen ? 'Hide' : 'Show'} side panel (Ctrl+Alt+B)`}
+            title={`${panelOpen ? 'Hide' : 'Show'} side panel (${togglePanelShortcutLabel()})`}
             onClick={onTogglePanel}
           >
             <Icon name={panelOpen ? 'right_panel_close' : 'right_panel_open'} size={15} />
