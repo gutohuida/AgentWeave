@@ -3,7 +3,7 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import { ApiError } from '@/api/client'
 import type { Question } from '@/api/questions'
 import type { Stall } from '@/api/stalls'
-import { OverviewScreen } from '@/components/overview/OverviewScreen'
+import { OverviewClassicScreen as OverviewScreen } from '@/components/overview/OverviewClassicScreen'
 vi.mock('@/api/firstRun', () => ({ useProjectHasNoWork: () => false }))
 
 // The Overview reads main notices and next-slice offers (`amendments-main-watch-and-the-next-slice`).

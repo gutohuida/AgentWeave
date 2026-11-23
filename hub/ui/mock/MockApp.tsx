@@ -26,7 +26,7 @@ function parseHash(): MockRoute {
   // A query after the route (`?state=…&layout=…&at=…`) presets a screen's mock controls.
   const raw = decodeURIComponent(window.location.hash.replace(/^#/, '')).split('?')[0]!
   const [kind, a, b, c] = raw.split('/')
-  if (kind === 'tab' && (a === 'overview-next' || a === 'overview-briefing' || a === 'overview-lanes')) {
+  if (kind === 'tab' && (a === 'overview-next' || a === 'overview-briefing' || a === 'overview-lanes' || a === 'overview-live')) {
     const state = new URLSearchParams(decodeURIComponent(window.location.hash).split('?')[1] ?? '').get('state')
     return { kind: a, state: state === 'quiet' || state === 'trouble' ? state : 'busy' }
   }
@@ -86,6 +86,7 @@ function toHash(route: MockRoute): string {
     case 'overview-next':
     case 'overview-briefing':
     case 'overview-lanes':
+    case 'overview-live':
       return route.state === 'busy' ? `tab/${route.kind}` : `tab/${route.kind}?state=${route.state}`
     case 'thread':
       return 'thread'
@@ -171,7 +172,7 @@ export function MockApp() {
           project={{ id: project.id, name: project.name, path: project.working_directory }}
           projects={projects.map((p) => ({ id: p.id, name: p.name, path: p.working_directory }))}
           tabs={LEANER_TABS}
-          active={route.kind === 'tab' ? ((PROJECT_TABS as readonly string[]).includes(route.tab) ? topBarTabFor(route.tab as ProjectTab) : null) : route.kind === 'traces' ? null : route.kind === 'overview-next' || route.kind === 'overview-briefing' || route.kind === 'overview-lanes' ? 'overview' : null}
+          active={route.kind === 'tab' ? ((PROJECT_TABS as readonly string[]).includes(route.tab) ? topBarTabFor(route.tab as ProjectTab) : null) : route.kind === 'traces' ? null : route.kind === 'overview-next' || route.kind === 'overview-briefing' || route.kind === 'overview-lanes' || route.kind === 'overview-live' ? 'overview' : null}
           // Overview's count is what its "Needs you" section lists (QA1's question and the unmerged task).
           counts={{ tasks: awaitingReview, overview: 2 }}
           onSelectTab={(tab) => go({ kind: 'tab', tab })}
