@@ -58,6 +58,154 @@ export interface ManagerFiring {
   usage: Record<string, number> | null
   /** What the model answered, cut at 8,000 characters (F581); absent on an older Hub. */
   answer?: string | null
+  /** The run this firing belongs to (`mrun-…`), its initiator and its start; absent on a firing
+   *  recorded before runs had ids. */
+  run_id?: string
+  initiator?: ManagerInitiator
+  started_at?: string
+}
+
+// --- runs (`background-manager-work-you-can-see`) -------------------------------------------------
+
+/** `operator`: a button or a request; `autonomous`: the Hub on its own (`worker.Initiator`). */
+export type ManagerInitiator = 'operator' | 'autonomous'
+
+/** A manager run in progress, as `GET /manager/runs/running` lists it (oldest first) and
+ *  `manager_run_started` announces it. A mender run's id is its `run-…` and it carries its
+ *  conversation; a job's run is `mrun-…` with `conversation_id` null. */
+export interface ManagerRunningRun {
+  run_id: string
+  job: string
+  subject: Record<string, unknown>
+  trigger: string
+  initiator: ManagerInitiator | string
+  started_at: string
+  conversation_id?: string | null
+}
+
+/** A run that ended, as `manager_run_ended` announces it, or as drawn from its firings. */
+export interface ManagerEndedRun extends ManagerRunningRun {
+  ended_at: string
+  duration_ms?: number | null
+  outcome: ManagerFiring['outcome'] | string
+  detail: string | null
+  usage?: Record<string, number> | null
+}
+
+/** An item's newest run when it failed and nobody has seen it (`GET /manager/runs/unseen-failures`). */
+export interface ManagerUnseenFailure {
+  run_id: string
+  job: string
+  subject: Record<string, unknown>
+  ended_at: string
+  detail: string | null
+}
+
+export function managerRunsKey(projectId: string | null | undefined, which: 'running' | 'unseen' | 'ended-live') {
+  return ['project', projectId, 'manager', 'runs', which] as const
+}
+
+/** The runs in progress. Kept current by the stream (`useSSE`: started adds, ended removes) and
+ *  re-read on every run signal, so a run that started before the page opened is still shown. */
+export function useRunningManagerRuns() {
+  const { isConfigured, selectedProjectId: projectId } = useConfigStore()
+  return useQuery<ManagerRunningRun[]>({
+    queryKey: managerRunsKey(projectId, 'running'),
+    queryFn: async () =>
+      (await getJson<{ runs: ManagerRunningRun[] }>(`/api/v1/projects/${projectId}/manager/runs/running`, { background: true }))
+        .runs ?? [],
+    enabled: isConfigured && !!projectId,
+    retry: (count, error) => !isNoManager(error) && count < 2,
+  })
+}
+
+/** Each item's unseen failure; re-read on every run signal and on `manager_run_seen`. */
+export function useUnseenManagerFailures() {
+  const { isConfigured, selectedProjectId: projectId } = useConfigStore()
+  return useQuery<ManagerUnseenFailure[]>({
+    queryKey: managerRunsKey(projectId, 'unseen'),
+    queryFn: async () =>
+      (
+        await getJson<{ failures: ManagerUnseenFailure[] }>(`/api/v1/projects/${projectId}/manager/runs/unseen-failures`, {
+          background: true,
+        })
+      ).failures ?? [],
+    enabled: isConfigured && !!projectId,
+    retry: (count, error) => !isNoManager(error) && count < 2,
+  })
+}
+
+/** Mark failures seen: the operator opened the item's list, or hovered the top bar while they were
+ *  listed. Ids already seen or unknown are ignored by the Hub. */
+export function useMarkManagerRunsSeen() {
+  const queryClient = useQueryClient()
+  const projectId = useConfigStore((state) => state.selectedProjectId)
+  return useMutation({
+    mutationFn: (runIds: string[]) => postJson<unknown>(`/api/v1/projects/${projectId}/manager/runs/seen`, { run_ids: runIds }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: managerRunsKey(projectId, 'unseen') })
+    },
+  })
+}
+
+/** Runs from `/activity`'s firings (newest first), one per run id: the run's newest firing ends it,
+ *  and its outcome is the first failure's, else the newest firing's. Firings with no run id are
+ *  from before runs had ids and are left out. */
+export function endedRunsFromFirings(firings: ManagerFiring[]): ManagerEndedRun[] {
+  const runs = new Map<string, ManagerEndedRun>()
+  for (const firing of firings) {
+    if (!firing.run_id) continue
+    const known = runs.get(firing.run_id)
+    if (!known) {
+      runs.set(firing.run_id, {
+        run_id: firing.run_id,
+        job: firing.job,
+        subject: firing.subject ?? {},
+        trigger: firing.trigger,
+        initiator: firing.initiator ?? 'autonomous',
+        started_at: firing.started_at ?? firing.at,
+        ended_at: firing.at,
+        outcome: firing.outcome,
+        detail: firing.detail,
+        usage: firing.usage,
+        conversation_id: null,
+      })
+    } else if (firing.outcome === 'failed') {
+      known.outcome = 'failed'
+      known.detail = firing.detail
+    }
+  }
+  return [...runs.values()]
+}
+
+/** The runs that ended most recently, newest first: those this window heard end (mender runs
+ *  included), merged with those recorded before it opened; and why the recorded ones could not be
+ *  read, if they could not. */
+export function useRecentManagerRuns(limit = 8) {
+  const { isConfigured, selectedProjectId: projectId } = useConfigStore()
+  const recorded = useQuery<ManagerEndedRun[]>({
+    queryKey: ['project', projectId, 'manager', 'activity', 'runs'],
+    queryFn: async () =>
+      endedRunsFromFirings(
+        (await getJson<{ firings: ManagerFiring[] }>(`/api/v1/projects/${projectId}/manager/activity?limit=50`, { background: true }))
+          .firings ?? [],
+      ),
+    enabled: isConfigured && !!projectId,
+    retry: (count, error) => !isNoManager(error) && count < 2,
+  })
+  const live = useQuery<ManagerEndedRun[]>({
+    queryKey: managerRunsKey(projectId, 'ended-live'),
+    queryFn: () => [],
+    enabled: false,
+    initialData: [],
+    staleTime: Infinity,
+  })
+  const merged = new Map<string, ManagerEndedRun>()
+  for (const run of [...(live.data ?? []), ...(recorded.data ?? [])]) {
+    if (!merged.has(run.run_id)) merged.set(run.run_id, run)
+  }
+  const runs = [...merged.values()].sort((a, b) => (a.ended_at < b.ended_at ? 1 : a.ended_at > b.ended_at ? -1 : 0)).slice(0, limit)
+  return { runs, error: recorded.error }
 }
 
 /** True when the Hub predates the manager. A committed bundle reaches the operator's app before

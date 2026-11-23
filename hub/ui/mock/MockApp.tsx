@@ -1,6 +1,7 @@
 import * as React from 'react'
 import { Sidebar } from '@/components/layout/Sidebar'
 import { TopBar } from '@/components/layout/TopBar'
+import { ManagerIndicator } from '@/components/manager/ManagerIndicator'
 import { Toaster } from '@/components/ui/toast'
 import { APP_SETTINGS_SECTIONS, PROJECT_TABS, topBarTabFor, type AppSettingsSection, type ProjectTab } from '@/lib/navigation'
 import { PROFILES_MOCK_STATES, useProfilesAddress, type ProfilesMockState } from './profilesMock'
@@ -182,6 +183,7 @@ export function MockApp() {
           mode={mode}
           onToggleMode={toggleMode}
           settingsActive={route.kind === 'settings'}
+          manager={<ManagerIndicator onOpenRun={() => go({ kind: 'settings', section: 'manager' })} onOpenConversation={() => undefined} />}
         />
         <main className="aw-page" data-fill={fill ? 'true' : 'false'}>
           <React.Suspense fallback={null}>

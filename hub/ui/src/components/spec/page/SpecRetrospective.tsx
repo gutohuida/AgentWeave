@@ -6,6 +6,10 @@ import { Icon } from '@/components/common/Icon'
 import { Button } from '@/components/ui/button'
 import { formatDateTime, formatDuration, formatUsage } from '@/lib/format'
 import { Section } from './SpecDocumentBody'
+import { ManagerIcon } from '@/components/manager/ManagerIcon'
+import { useManagerItem, type ManagerIconState } from '@/components/manager/useManagerItem'
+import { useQueryClient } from '@tanstack/react-query'
+import { useConfigStore } from '@/store/configStore'
 import '@/styles/spec-page.css'
 
 const TRIGGER_LABEL: Record<string, string> = {
@@ -36,11 +40,22 @@ function cost(micros: number | null | undefined): string {
   return micros == null ? 'not reported' : formatUsage({ cost_usd_micros: micros })
 }
 
-/** The document's retrospectives and the action that asks for one (FR-3, FR-9). Polled, because a
- *  firing is recorded as an event when it ends and nothing broadcasts it. */
+/** The document's retrospectives and the action that asks for one (FR-3, FR-9). The manager's icon
+ *  says whether one of this document is running (`background-manager-work-you-can-see`, FR-4), and
+ *  the list is read again when it ends (FR-5). A failed run keeps the icon failed until the operator
+ *  opens it: pressing the icon shows the failure's reason in place, and that is them seeing it
+ *  (FR-6). Rendering the section is not, since the page renders it whether or not it is looked at. */
 export function SpecRetrospective({ path, now, flash, onCopyLink }: { path: string; now: Date; flash: string | null; onCopyLink: (anchor: string) => void }) {
   const { data, error } = useBuildRetrospectives(path)
   const review = useReviewThisBuild(path)
+  const queryClient = useQueryClient()
+  const projectId = useConfigStore((state) => state.selectedProjectId)
+  const manager = useManagerItem({
+    job: 'build-retrospective',
+    // The Hub names a retrospective's document by id, with its path beside it (subject_of).
+    matches: (subject) => subject.path === path,
+    onEnded: () => void queryClient.invalidateQueries({ queryKey: ['project', projectId, 'manager', 'retrospectives', path] }),
+  })
   const rows = data ?? []
   const newest = rows[0]?.id ?? null
   // The newest firing when a press was accepted: until the list moves on from it, one is running.
@@ -56,13 +71,19 @@ export function SpecRetrospective({ path, now, flash, onCopyLink }: { path: stri
     <SpecRetrospectiveSection
       retrospectives={rows}
       unreadable={error ? readableApiError(error, 'The Hub did not answer.') : null}
-      running={askedOver !== undefined && askedOver === newest}
+      running={manager.state === 'working' || (askedOver !== undefined && askedOver === newest)}
+      managerState={manager.state}
+      managerFailure={manager.state === 'failed' ? (manager.failure?.detail ?? '') : null}
+      onSeeFailure={manager.seeFailures}
       refusal={review.isError ? readableApiError(review.error, 'The Hub did not answer.') : null}
       pending={review.isPending}
       now={now}
       flash={flash}
       onCopyLink={onCopyLink}
-      onReview={() => review.mutate(undefined, { onSuccess: () => setAskedOver(newest) })}
+      onReview={() => {
+        manager.starting()
+        review.mutate(undefined, { onSuccess: () => setAskedOver(newest), onError: manager.cancelStarting })
+      }}
     />
   )
 }
@@ -71,6 +92,9 @@ export function SpecRetrospectiveSection({
   retrospectives,
   unreadable,
   running,
+  managerState = 'idle',
+  managerFailure = null,
+  onSeeFailure,
   refusal,
   pending,
   now,
@@ -82,6 +106,12 @@ export function SpecRetrospectiveSection({
   retrospectives: BuildRetrospective[]
   unreadable: string | null
   running: boolean
+  /** The manager's icon on the section: working, failed unseen, or idle. */
+  managerState?: ManagerIconState
+  /** Why the last run failed, while the icon is failed ('' when the Hub recorded no reason). */
+  managerFailure?: string | null
+  /** The operator opened the failure: it is marked seen. */
+  onSeeFailure?: () => void
   /** What the Hub said when it refused the press: one is in progress, or the job has no runner. */
   refusal: string | null
   pending: boolean
@@ -94,6 +124,8 @@ export function SpecRetrospectiveSection({
   const unwritten = latest && latest.outcome !== 'written' ? latest : null
   const written = retrospectives.find((r) => r.outcome === 'written') ?? null
   const earlier = retrospectives.filter((r) => r !== unwritten && r !== written)
+  const [failureOpen, setFailureOpen] = React.useState(false)
+  const failed = managerState === 'failed' && managerFailure !== null
   return (
     <Section
       id="retrospective"
@@ -103,15 +135,36 @@ export function SpecRetrospectiveSection({
       flash={flash}
       onCopyLink={onCopyLink}
       actions={
+        <>
+        <ManagerIcon
+          state={managerState}
+          job="build-retrospective"
+          detail={failed ? managerFailure || 'the Hub recorded no reason' : managerState === 'working' ? 'writing a retrospective of this build' : null}
+          onOpen={
+            failed
+              ? () => {
+                  setFailureOpen((open) => !open)
+                  onSeeFailure?.()
+                }
+              : undefined
+          }
+        />
         <Button variant="outline" size="xs" disabled={pending} onClick={onReview}>
           <Icon name="play_arrow" size={13} />
           Review this build
         </Button>
+        </>
       }
     >
       {running ? (
         <p className="aw-sp-retro-note" role="status" data-testid="retro-running">
           <span className="aw-sp-live" aria-hidden="true" />A retrospective is running. It appears here when it ends.
+        </p>
+      ) : null}
+      {failed && failureOpen ? (
+        <p className="aw-sp-retro-note" role="alert" data-testid="retro-failure">
+          <Icon name="error" size={14} />
+          The last retrospective run failed: {managerFailure || 'the Hub recorded no reason.'}
         </p>
       ) : null}
       {refusal ? (
