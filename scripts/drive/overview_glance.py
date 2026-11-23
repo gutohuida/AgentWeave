@@ -50,12 +50,43 @@ the rename, not the behaviour):
   * Settings > Manager is `/?project=<id>&tab=environment&section=manager`, firing rows
     `[data-testid^=manager-firing-]`.
 
-Prints the check in the `drive_baseline` shape and exits 1 if it failed:
-    check ac-drive-end-to-end: reached=<yes|no> failed_at_assertion=<yes|no> -- <detail>
+Three more checks (OGDBT-7), each in a project of its own:
+
+  ac-note-quality   a two-task build: real Haiku turns build both; the operator lands one and sends
+                    the other back, the Builder is held so the build stays still, every timestamp of
+                    the project is set back 40 minutes and the last visit 3 hours. The operator
+                    presses Refresh note on the Briefing (a real Haiku turn). Steps: refresh (its
+                    POST /manager/jobs/overview-note/run answers 202), written (GET /overview's note,
+                    trigger `button`, written after the press), short (< 120 words), names (the
+                    landed task, the sent-back task and the build, by id, readable id or title, and
+                    that it stopped moving), links (every cite answers 200 from GET /tasks/{id},
+                    /project/builds/{id}/tasks, /agents/{name} or /questions/{id}, and the note shows
+                    one link per cite), in-project (no id-shaped word the project does not hold, no
+                    other project's name). The note is saved as note-quality.txt.
+  ac-tabs-feel      tabs (Dashboard, Briefing on a project never reordered), held-moves (while the
+                    mouse holds Briefing, an element labelled Briefing has moved 8 px or is
+                    transformed), drag-reorders (Briefing, Dashboard after the drop),
+                    keyboard-reorders (focus Briefing and try Space/ArrowRight/Space, then
+                    Alt+Shift+ArrowRight, Ctrl+Shift+ArrowRight, Alt+ArrowRight; the keys that moved
+                    it are printed), reload-keeps (the order after a reload, and aw.overview.tabs.v1).
+  ac-looks-like-mock  the mock dev server from this checkout's hub/ui (vite.mock.config.ts, a free
+                    port from 5211, AW_MOCK_PORT) is read for each shape and tab at 1280 and 1920 px,
+                    and shot by shoot.py into mock-shoot/; then live projects in the busy (a
+                    question, a two-task build, two held runs), quiet (nothing) and trouble (busy
+                    plus a test failing on main) shapes. One step per shape, tab and width: the live
+                    screen has the mock's sections and the criterion's (the Briefing's note, which
+                    the mock lacks), the mock's in its order, and nothing past the viewport's edge
+                    (outside a scrolling or clipping box) and no two sections or tiles overlapping.
+                    Sections are read by the same script on both: the health band, the tiles, and
+                    each h1/h2 by its words (SECTIONS_JS).
+
+Prints one line per check in the `drive_baseline` shape and exits 1 if any failed:
+    check <key>: reached=<yes|no> failed_at_assertion=<yes|no> -- <detail>
 Screenshots and the note text go to testbed/overview-glance/<HHMMSS>/.
 
-    py -3.11 scripts/drive/overview_glance.py                      # the trial Hub :8010
+    py -3.11 scripts/drive/overview_glance.py                      # the trial Hub :8010, every check
     py -3.11 scripts/drive/overview_glance.py --own-hub            # a Hub from this checkout
+    py -3.11 scripts/drive/overview_glance.py --checks ac-tabs-feel,ac-looks-like-mock
     py -3.11 scripts/drive/overview_glance.py --self-test          # the drive's own logic, no Hub
 """
 
@@ -103,7 +134,8 @@ STEPS = ["job-on", "first-visit", "built", "clock-back", "second-visit", "finish
 HUB = ""
 KEY = ""
 DB = pathlib.Path()
-results: dict[str, tuple[bool, str]] = {}
+CHECK = KEY_CHECK
+checks: dict[str, dict[str, tuple[bool, str]]] = {}
 
 
 class Setup(Exception):
@@ -111,8 +143,8 @@ class Setup(Exception):
 
 
 def step(name, ok, detail):
-    results[name] = (bool(ok), detail)
-    print(f"{'PASS' if ok else 'FAIL'} {name} -- {detail}", flush=True)
+    checks.setdefault(CHECK, {})[name] = (bool(ok), detail)
+    print(f"{'PASS' if ok else 'FAIL'} {CHECK} {name} -- {detail}", flush=True)
     return bool(ok)
 
 
@@ -174,6 +206,63 @@ def first_failure(order, found):
     return None
 
 
+STALL_WORDS = re.compile(
+    r"\b(stall(ed|s|ing)?|stuck|stopped|not moved|(has not|hasn't|have not|haven't) moved|no progress|idle|"
+    r"no movement|without (moving|progress)|not (been )?moving|quiet for|still for)\b", re.I)
+NOT_IDS = {"UTF-8", "UTF-16", "ISO-8601", "SHA-1", "SHA-256"}  # id-shaped words that are not ids
+ID_TOKEN = re.compile(r"\b(?:(?:task|build|proj|run|spdoc|question|kf)-[0-9a-f]{6,}|[A-Z]{3,6}-\d+)\b")
+
+
+def shift_stamp(text, minutes):
+    """*text*, a stored timestamp, moved by *minutes* in the same format; None if it is not one."""
+    m = re.fullmatch(r"(\d{4}-\d\d-\d\d)([T ])(\d\d:\d\d:\d\d)(\.\d{1,6})?(Z|[+-]\d\d:\d\d)?", (text or "").strip())
+    if not m:
+        return None
+    at = dt.datetime.fromisoformat(f"{m[1]}T{m[3]}{m[4] or ''}") + dt.timedelta(minutes=minutes)
+    frac = f".{at.microsecond:06d}" if m[4] else ""
+    return f"{at:%Y-%m-%d}{m[2]}{at:%H:%M:%S}{frac}{m[5] or ''}"
+
+
+def stamp_ago(minutes):
+    return shift_stamp(_now(), -minutes)
+
+
+def word_count(text):
+    return len(re.findall(r"\S+", text or ""))
+
+
+def names_any(text, cites, ids):
+    """The note names one of *ids*: in its text, or as a cite's id or label."""
+    ids = {str(i) for i in ids if i}
+    return any(i in (text or "") for i in ids) or any(
+        str(c.get("id")) in ids or str(c.get("label")) in ids for c in cites or [])
+
+
+def outside_names(text, known, other_projects):
+    """Id-like words in *text* the project does not hold, and other projects' names it uses."""
+    stray = [t for t in dict.fromkeys(ID_TOKEN.findall(text or "")) if t not in known and t not in NOT_IDS]
+    stray += [n for n in other_projects if n and len(n) >= 5 and n in (text or "")]
+    return stray
+
+
+def shown_moving(start_left, samples):
+    """While held, an element labelled Briefing sits 8 px or more from where the tab started, or is transformed."""
+    if start_left is None:
+        return False
+    return any(abs(s["left"] - start_left) >= 8 or (s.get("transform") or "none") != "none" for s in samples)
+
+
+def sections_match(mock_keys, live_keys, named):
+    """`(ok, words)`: the live screen has the mock's sections and the named ones, the mock's in its order."""
+    missing = [k for k in dict.fromkeys([*mock_keys, *named]) if k not in live_keys]
+    if missing:
+        return False, f"missing {missing}"
+    live_order = [k for k in live_keys if k in mock_keys]
+    if live_order != list(mock_keys):
+        return False, f"order {live_order}, the mock's {list(mock_keys)}"
+    return True, "the mock's sections in its order"
+
+
 def self_test():
     cases = [
         (bool(TIME_WORDS.search("You last looked 40 minutes ago")), True),
@@ -199,6 +288,26 @@ def self_test():
          "first-visit"),
         (first_failure(STEPS, {"job-on": (True, "")}), None),
         ("T00:00:00" in local_midnight(), True),
+        (shift_stamp("2026-11-23 08:00:00.123456", -40), "2026-11-23 07:20:00.123456"),
+        (shift_stamp("2026-11-23T00:10:00+00:00", -40), "2026-11-22T23:30:00+00:00"),
+        (shift_stamp("2026-11-23 08:00:00", -1), "2026-11-23 07:59:00"),
+        (shift_stamp("not a time", -1), None),
+        (word_count("Builder landed GNB-1.  Two  words"), 5),
+        (bool(STALL_WORDS.search("The build has not moved for 40 minutes")), True),
+        (bool(STALL_WORDS.search("Glance note build stalled")), True),
+        (bool(STALL_WORDS.search("Everything moved along")), False),
+        (names_any("GNB-1 landed", [], {"GNB-1", "task-1"}), True),
+        (names_any("a task landed", [{"type": "task", "id": "task-1"}], {"task-1"}), True),
+        (names_any("a task landed", [], {"task-1"}), False),
+        (outside_names("GNB-1 landed, XYZ-9 too; UTF-8", {"GNB-1"}, []), ["XYZ-9"]),
+        (outside_names("see other-project", set(), ["other-project", "abc"]), ["other-project"]),
+        (shown_moving(100, [{"left": 100, "transform": "none"}, {"left": 60, "transform": "none"}]), True),
+        (shown_moving(100, [{"left": 100, "transform": "matrix(1, 0, 0, 1, -30, 0)"}]), True),
+        (shown_moving(100, [{"left": 101, "transform": "none"}]), False),
+        (shown_moving(None, []), False),
+        (sections_match(["health", "tiles", "needs"], ["health", "tiles", "x", "needs"], ["health"])[0], True),
+        (sections_match(["health", "needs", "timeline"], ["health", "timeline", "needs"], [])[0], False),
+        (sections_match(["headline", "needs"], ["headline", "needs"], ["note"]), (False, "missing ['note']")),
     ]
     bad = [(i, got, want) for i, (got, want) in enumerate(cases) if got != want]
     for i, got, want in bad:
@@ -326,54 +435,63 @@ def as_agent(pid, agent, method, path, body=None):
         release(run_id)
 
 
-def document_payload():
+def document_payload(title=TITLE, files=(("glance.txt", TASK_TITLE),)):
+    """A change document with one requirement, criterion and task per `(file, task title)`."""
+    reqs, crits, tasks = [], [], []
+    for n, (name, task_title) in enumerate(files, 1):
+        word = name.split(".")[0]
+        reqs.append({"key": f"r{n}", "modal": "MUST", "statement": f"The repository MUST hold {name}."})
+        crits.append({"key": f"has-{word}", "requirement": f"r{n}", "given": "the repository",
+                      "when": "it is read", "then": f"{name} says {word}",
+                      "how_to_check": "read it", "checked_by": "agent"})
+        tasks.append({"key": f"t{n}", "title": task_title, "requirements": [f"r{n}"], "files": [name],
+                      "depends_on": [],
+                      "description": (f"Create the file {name} at the repository root holding the single "
+                                      f"line `{word}`. Change nothing else. Record evidence for the "
+                                      "requirement with record_evidence, then complete the task.")})
     return {
-        "schema_version": 1, "kind": "change-spec", "title": TITLE,
-        "summary": f"{TITLE}, a document for the Overview-at-a-glance drive.", "problem": "The drive needs one.",
+        "schema_version": 1, "kind": "change-spec", "title": title,
+        "summary": f"{title}, a document for the Overview-at-a-glance drive.", "problem": "The drive needs one.",
         "scope": {"in_scope": ["the drive"], "non_goals": ["anything else"]},
-        "requirements": [{"key": "r1", "modal": "MUST", "statement": "The repository MUST hold glance.txt."}],
-        "acceptance_criteria": [{"key": "has-glance", "requirement": "r1", "given": "the repository",
-                                 "when": "it is read", "then": "glance.txt says glance",
-                                 "how_to_check": "read it", "checked_by": "agent"}],
-        "tasks": [{"key": "t1", "title": TASK_TITLE, "requirements": ["r1"], "files": ["glance.txt"],
-                   "depends_on": [],
-                   "description": ("Create the file glance.txt at the repository root holding the single "
-                                   "line `glance`. Change nothing else. Record evidence for the requirement "
-                                   "with record_evidence, then complete the task.")}],
+        "requirements": reqs, "acceptance_criteria": crits, "tasks": tasks,
         "delivery": {"mode": "flow", "agent": BUILDER, "stop_when_queue_empties": True,
                      "cron": "0 0 1 1 *",  # once a year: the drive fires the flow itself
                      "reasons": {"mode": "The drive.", "agent": "The default builder."}},
     }
 
 
-def make_build(base, pid):
-    quoted = urllib.parse.quote(DOC)
-    code, out = api("POST", f"{base}/project/documents", {"title": TITLE, "kind": "change-spec", "path": DOC})
+def make_build(base, pid, doc=DOC, title=TITLE, files=(("glance.txt", TASK_TITLE),)):
+    """Author, approve and build *doc* as a flow at Reviewed; `(task ids in file order, job, build)`."""
+    quoted = urllib.parse.quote(doc)
+    payload = document_payload(title, files)
+    code, out = api("POST", f"{base}/project/documents", {"title": title, "kind": "change-spec", "path": doc})
     if code != 201:
-        raise Setup(f"create {DOC}: {code} {str(out)[:300]}")
-    code, out = api("PUT", f"{base}/project/documents/{DOC}/content", {"document": document_payload()})
+        raise Setup(f"create {doc}: {code} {str(out)[:300]}")
+    code, out = api("PUT", f"{base}/project/documents/{doc}/content", {"document": payload})
     if code != 200:
-        raise Setup(f"save {DOC}: {code} {str(out)[:600]}")
+        raise Setup(f"save {doc}: {code} {str(out)[:600]}")
+    confirmations = [{"criterion": c["key"], "kind": "new"} for c in payload["acceptance_criteria"]]
     code, out = as_agent(pid, CHECKER, "POST", "/spec/documents/confirm-criteria",
-                         {"path": DOC, "confirmations": [{"criterion": "has-glance", "kind": "new"}]})
+                         {"path": doc, "confirmations": confirmations})
     if code != 200:
-        raise Setup(f"confirm {DOC}'s criterion: {code} {str(out)[:300]}")
+        raise Setup(f"confirm {doc}'s criteria: {code} {str(out)[:300]}")
     _, read = api("GET", f"{base}/project/spec?path={quoted}")
     code, out = api("POST", f"{base}/project/documents/phase?path={quoted}&to=approved",
                     {"reason": "drive", "approve_anyway": True, "content_version": read.get("content_version")})
     if code != 200:
-        raise Setup(f"approve {DOC}: {code} {str(out)[:600]}")
+        raise Setup(f"approve {doc}: {code} {str(out)[:600]}")
     code, out = api("POST", f"{base}/project/documents/build?path={quoted}",
                     {"driver": "flow", "level": "reviewed", "builder": BUILDER, "checker": CHECKER,
                      "landing": "main"})
     if code != 200:
-        raise Setup(f"build {DOC}: {code} {str(out)[:800]}")
-    (doc_id,) = ro("select id from spec_documents where project_id=? and path=?",
-                   (pid, DOC))[0]
-    task_id, loop_id = ro("select id, loop_id from tasks where spec_document_id=?", (doc_id,))[0]
-    (job_id,) = ro("select job_id from loops where id=?", (loop_id,))[0]
+        raise Setup(f"build {doc}: {code} {str(out)[:800]}")
+    (doc_id,) = ro("select id from spec_documents where project_id=? and path=?", (pid, doc))[0]
+    rows = ro("select id, loop_id, spec_task_key from tasks where spec_document_id=?", (doc_id,))
+    by_key = {key: (tid, loop) for tid, loop, key in rows}
+    task_ids = [by_key[f"t{n}"][0] for n in range(1, len(files) + 1)]
+    (job_id,) = ro("select job_id from loops where id=?", (rows[0][1],))[0]
     build_id = ((out.get("build_outcome") or {}).get("build") or {}).get("id")
-    return task_id, job_id, build_id
+    return task_ids, job_id, build_id
 
 
 def status_of(task_id):
@@ -385,28 +503,39 @@ def live_runs(pid):
               "and id not like 'run-glance-%'", (pid,))
 
 
-def work(base, pid, job_id, task_id):
-    """Fire the flow until a real turn finishes *task_id*, re-firing only while nothing runs."""
-    end = time.time() + TURN_WAIT
-    while time.time() < end and status_of(task_id) not in DONE:
+def work(base, pid, job_id, *task_ids):
+    """Fire the flow until real turns finish every one of *task_ids*, re-firing only while nothing runs."""
+    end = time.time() + TURN_WAIT * len(task_ids)
+    while time.time() < end and any(status_of(t) not in DONE for t in task_ids):
         if not live_runs(pid):
             code, out = api("POST", f"{base}/jobs/{job_id}/run")
             print(f"  fired {job_id}: {code} {str(out)[:120]}", flush=True)
         time.sleep(20)
-    if status_of(task_id) not in DONE:
-        raise Setup(f"no real turn finished the task in {TURN_WAIT}s ({status_of(task_id)})")
+    if any(status_of(t) not in DONE for t in task_ids):
+        raise Setup(f"no real turn finished the tasks in time ({[status_of(t) for t in task_ids]})")
     poll(lambda: not live_runs(pid), 180)
 
 
 def approve(base, task_id):
+    """Accept *task_id*'s awaiting evidence (every awaiting piece when the rows name no task), then land it."""
     code, rows = api("GET", f"{base}/project/spec/evidence?review_state=awaiting")
     rows = rows.get("evidence", []) if code == 200 and isinstance(rows, dict) else []
+    if any("task_id" in row for row in rows):
+        rows = [row for row in rows if row.get("task_id") == task_id]
     for row in rows:
         api("POST", f"{base}/project/spec/evidence/{row['id']}/decision",
             {"decision": "accepted", "reason": "the drive's operator"})
     code, out = api("POST", f"{base}/tasks/{task_id}/land")
     if code != 200 or status_of(task_id) != "approved":
         raise Setup(f"the operator's approval: {code} {status_of(task_id)} {str(out)[:300]}")
+
+
+def send_back(base, task_id):
+    code, out = api("PATCH", f"{base}/tasks/{task_id}",
+                    {"status": "revision_needed", "reason_class": "defect",
+                     "notes": "The drive's operator sends this back: the file's line is wrong."})
+    if code != 200 or status_of(task_id) != "revision_needed":
+        raise Setup(f"the operator's send-back: {code} {status_of(task_id)} {str(out)[:300]}")
 
 
 def landing_state(task_id):
@@ -435,11 +564,12 @@ def table_exists(name):
 class Browser:
     """One operator session in Chromium, recording the page's POSTs to /overview/visit."""
 
-    def __init__(self, play, pid):
+    def __init__(self, play, pid, profile="browser-profile"):
         self.pid = pid
         self.visits: list[tuple[int, object]] = []
+        self.posts: list[tuple[str, int, object]] = []
         self.context = play.chromium.launch_persistent_context(
-            str(SCRATCH / "browser-profile"), viewport={"width": 1440, "height": 940})
+            str(SCRATCH / profile), viewport={"width": 1440, "height": 940})
         self.context.add_init_script(
             f"sessionStorage.setItem('agentweave-session', JSON.stringify({{apiKey: {KEY!r}, hubUrl: {HUB!r}}}));"
             f"localStorage.setItem('agentweave-selected-project', {pid!r});")
@@ -447,11 +577,15 @@ class Browser:
         self.page.on("response", self._seen)
 
     def _seen(self, response):
-        if response.request.method == "POST" and response.url.split("?")[0].endswith("/overview/visit"):
-            try:
-                body = response.json()
-            except Exception:  # noqa: BLE001 -- a body that is not JSON is recorded as text
-                body = response.text()[:300]
+        url = response.url.split("?")[0]
+        if response.request.method != "POST" or "/api/v1/" not in url:
+            return
+        try:
+            body = response.json()
+        except Exception:  # noqa: BLE001 -- a body that is not JSON is recorded as text
+            body = response.text()[:300]
+        self.posts.append((url, response.status, body))
+        if url.endswith("/overview/visit"):
             self.visits.append((response.status, body))
 
     def open(self, query):
@@ -491,19 +625,21 @@ def note_box(page):
 # --------------------------------------------------------------------------- the scenario
 
 
-def arrange(state):
-    root = SCRATCH / "proj"
+def new_project(state, label, agents=(BUILDER, CHECKER)):
+    """A throwaway git repository on `main`, opened as a project with a Haiku runner and *agents*."""
+    root = SCRATCH / f"proj-{label}"
     root.mkdir(parents=True)
     git(root, "init", "-q", "-b", "main")
     (root / "README.md").write_text("A throwaway project for the Overview-at-a-glance drive.\n", encoding="utf-8")
     git(root, "add", "README.md")
     git(root, "commit", "-q", "-m", "seed")
-    code, project = api("POST", "/projects/open", {"path": str(root), "name": f"glance-{STAMP}"})
+    code, project = api("POST", "/projects/open", {"path": str(root), "name": f"glance-{label}-{STAMP}"})
     if code not in (200, 201):
         raise Setup(f"the project opens: {code} {project}")
     pid = project["id"]
     base = f"/projects/{pid}"
     state.update(pid=pid, base=base)
+    state.setdefault("bases", []).append(base)
     code, out = api("PUT", f"{base}/settings", {"main_branch": "main"})
     if code != 200:
         raise Setup(f"the project's main branch: {code} {str(out)[:300]}")
@@ -511,13 +647,30 @@ def arrange(state):
     if code not in (200, 201):
         raise Setup(f"the Haiku runner: {code} {haiku}")
     state["runner"] = haiku["id"]
-    for name in (BUILDER, CHECKER):
+    for name in agents:
         code, out = api("POST", f"{base}/agents", {"name": name, "runner_id": haiku["id"]})
         if code not in (200, 201):
             raise Setup(f"agent {name}: {code} {out}")
-    state["task"], state["job"], state["build"] = make_build(base, pid)
-    state["hold"] = hold(pid, CHECKER)
-    print(f"project {pid} at {root}; task {state['task']}, build {state['build']}", flush=True)
+    return pid, base
+
+
+def held(state, pid, agent):
+    run_id = hold(pid, agent)
+    state.setdefault("holds", []).append(run_id)
+    return run_id
+
+
+def built(state, base, pid, **kwargs):
+    tasks, job, build = make_build(base, pid, **kwargs)
+    state.setdefault("builds", []).append((base, build))
+    return tasks, job, build
+
+
+def arrange(state):
+    pid, base = new_project(state, "e2e")
+    (state["task"],), state["job"], state["build"] = built(state, base, pid)
+    state["hold"] = held(state, pid, CHECKER)
+    print(f"project {pid}; task {state['task']}, build {state['build']}", flush=True)
 
 
 def scenario(state, play):
@@ -654,16 +807,452 @@ def scenario(state, play):
         browser.close()
 
 
+# --------------------------------------------------------------------------- ac-note-quality
+
+
+NQ_DOC, NQ_TITLE = "spec/changes/glance-note/spec.json", "Glance note build"
+NQ_FILES = (("landed.txt", "Write landed.txt"), ("sentback.txt", "Write sentback.txt"))
+NQ_STEPS = ["refresh", "written", "short", "names", "links", "in-project"]
+STILL_BACK = 40  # minutes the build's last movement is set back
+VISIT_BACK = 180  # minutes the last visit is set back, so the landing and the send-back come after it
+SHIFTED = {  # every timestamp of the project a build's movement is read from
+    "tasks": ("updated", "created_at"),
+    "task_transitions": ("created_at",),
+    "task_landings": ("created_at", "updated_at", "ended_at"),
+    "runs": ("started_at", "ended_at", "last_heartbeat_at", "mcp_adapter_online_at"),
+    "builds": ("created_at",),
+    "event_logs": ("timestamp",),
+    "stalls": ("first_seen_at", "last_seen_at"),
+}
+
+
+def set_back(pid, minutes):
+    """Move every SHIFTED timestamp of *pid* back *minutes*, each in its own stored format."""
+    moved = 0
+    con = sqlite3.connect(DB.as_posix(), timeout=30)
+    try:
+        for table, wanted in SHIFTED.items():
+            have = {r[1] for r in con.execute(f"pragma table_info({table})")}
+            cols = [c for c in wanted if c in have]
+            if "project_id" not in have or not cols:
+                continue
+            rows = con.execute(f"select rowid, {', '.join(cols)} from {table} where project_id=?", (pid,)).fetchall()
+            for row in rows:
+                values = [shift_stamp(v, -minutes) if isinstance(v, str) else None for v in row[1:]]
+                sets = [(c, v) for c, v in zip(cols, values, strict=True) if v is not None]
+                if sets:
+                    con.execute(f"update {table} set {', '.join(c + '=?' for c, _ in sets)} where rowid=?",
+                                [v for _, v in sets] + [row[0]])
+                    moved += 1
+        con.commit()
+    finally:
+        con.close()
+    return moved
+
+
+def ids_of(base, pid):
+    """What the project holds that a note may name: task ids and readable ids, builds, questions."""
+    known = {pid}
+    known.update(x for row in ro("select id, readable_id from tasks where project_id=?", (pid,)) for x in row if x)
+    known.update(r[0] for r in ro("select id from builds where project_id=?", (pid,)))
+    known.update(r[0] for r in ro("select id from questions where project_id=?", (pid,)))
+    return known
+
+
+def resolves(base, cite):
+    """`(ok, words)`: *cite* answers 200 from the Hub's route for its type, in this project."""
+    kind, ident = cite.get("type"), urllib.parse.quote(str(cite.get("id") or ""), safe="")
+    path = {"task": f"/tasks/{ident}", "build": f"/project/builds/{ident}/tasks",
+            "profile": f"/agents/{ident}", "question": f"/questions/{ident}"}.get(kind)
+    if not path or not ident:
+        return False, f"{kind}:{cite.get('id')} has no route"
+    code, _ = api("GET", base + path)
+    return code == 200, f"{kind}:{cite.get('id')} -> {code}"
+
+
+def note_quality(play):
+    """ac-note-quality: since the last visit one task landed, one was sent back and the build has
+    not moved for 40 minutes; the operator presses Refresh note and a real Haiku turn writes it."""
+    state = STATES[CHECK]
+    pid, base = new_project(state, "note")
+    code, out = api("PATCH", f"{base}/manager/jobs/{JOB}", {"enabled": True, "runner_id": state["runner"], "model": HAIKU})
+    print(f"  the note job on Haiku: {code} {str(out)[:160]}", flush=True)
+    code, out = api("POST", f"{base}/overview/visit")
+    print(f"  the operator's earlier visit: {code} {str(out)[:160]}", flush=True)
+    (landed, sent), job, build = built(state, base, pid, doc=NQ_DOC, title=NQ_TITLE, files=NQ_FILES)
+    held(state, pid, CHECKER)
+    work(base, pid, job, landed, sent)
+    held(state, pid, BUILDER)  # so the send-back starts no turn: the build stays still
+    approve(base, landed)
+    if not poll(lambda: landing_state(landed) == "landed", LANDING_WAIT, every=3):
+        raise Setup(f"task {landed} did not land ({landing_state(landed)})")
+    send_back(base, sent)
+    moved = set_back(pid, STILL_BACK)
+    visits = 0
+    if table_exists("overview_visits"):
+        visits = rw("update overview_visits set last_visit_at=?, previous_visit_at=? where project_id=?",
+                    (stamp_ago(VISIT_BACK), stamp_ago(VISIT_BACK + 60), pid))
+    print(f"  set back {moved} rows {STILL_BACK} minutes and {visits} visit rows {VISIT_BACK}", flush=True)
+    readable = {t: (ro("select readable_id from tasks where id=?", (t,))[0][0] or t) for t in (landed, sent)}
+    names = {"landed": {landed, readable[landed], NQ_FILES[0][1]}, "sent back": {sent, readable[sent], NQ_FILES[1][1]},
+             "build": {build, NQ_TITLE}}
+    print(f"  landed {readable[landed]}, sent back {readable[sent]}, build {build}", flush=True)
+
+    browser = Browser(play, pid, profile="browser-note")
+    try:
+        browser.open("tab=overview")
+        tab = browser.tab("Briefing")
+        if tab is not None:
+            tab.click()
+            browser.page.wait_for_timeout(1500)
+        button = browser.page.get_by_role("button", name=re.compile(r"refresh note", re.I))
+        has_button = button.count() > 0
+        pressed_at = dt.datetime.now(dt.timezone.utc)
+        if has_button:
+            button.first.click()
+            browser.page.wait_for_timeout(3000)
+        browser.shot("note-quality-1-pressed")
+        runs = [(c, b) for url, c, b in browser.posts if url.endswith(f"/manager/jobs/{JOB}/run")]
+        started = any(c == 202 for c, _ in runs)
+        step("refresh", started, f"Briefing tab {'found' if tab is not None else 'missing'}; Refresh note button "
+             f"{'found' if has_button else 'missing'}; its POST answered {[(c, str(b)[:120]) for c, b in runs] or 'nothing'}")
+
+        def latest():
+            c, v = overview(base)
+            n = (v or {}).get("note") if c == 200 and isinstance(v, dict) else None
+            at = parse_at((n or {}).get("written_at"))
+            fresh = at is not None and at >= pressed_at - dt.timedelta(seconds=2)
+            return n if n and n.get("trigger") == "button" and fresh else None
+
+        poll(lambda: latest() is not None, NOTE_WAIT if started else 5, every=5)
+        note = latest()
+        text = (note or {}).get("text") or ""
+        cites = (note or {}).get("cites") or []
+        OUT.mkdir(parents=True, exist_ok=True)
+        (OUT / "note-quality.txt").write_text(text or "(no note was written)\n", encoding="utf-8")
+        (OUT / "note-quality.json").write_text(json.dumps(note, indent=2), encoding="utf-8")
+        step("written", bool(text), f"GET /overview's note after the press: {str(note)[:300]}")
+
+        words = word_count(text)
+        step("short", bool(text) and words < 120, f"{words} words")
+
+        named = {what: names_any(text, cites, ids) for what, ids in names.items()}
+        still = bool(STALL_WORDS.search(text))
+        step("names", bool(text) and all(named.values()) and still,
+             f"named {named}; says the build stopped moving: {still}; text {text[:300]!r}")
+
+        browser.open("tab=overview")
+        if browser.tab("Briefing") is not None:
+            browser.tab("Briefing").click()
+            browser.page.wait_for_timeout(1500)
+        browser.shot("note-quality-2-note")
+        box = note_box(browser.page)
+        links = (box.locator("a, button").filter(has_not_text=re.compile(r"refresh", re.I)).count()
+                 if box is not None and box.count() else 0)
+        checked = [resolves(base, c) for c in cites]
+        step("links", bool(text) and bool(cites) and all(ok for ok, _ in checked) and links == len(cites),
+             f"cites {[w for _, w in checked]}; links shown in the note {links}")
+
+        _, listed = api("GET", "/projects")
+        listed = listed if isinstance(listed, list) else (listed or {}).get("projects", []) if isinstance(listed, dict) else []
+        others = [p.get("name") for p in listed if isinstance(p, dict) and p.get("id") != pid]
+        stray = outside_names(text, ids_of(base, pid), others)
+        step("in-project", bool(text) and not stray, f"named outside the project: {stray or 'nothing'}")
+    finally:
+        browser.close()
+
+
+# --------------------------------------------------------------------------- ac-tabs-feel
+
+
+TF_STEPS = ["tabs", "held-moves", "drag-reorders", "keyboard-reorders", "reload-keeps"]
+KEY_MOVES = (("Space", "ArrowRight", "Space"), ("Alt+Shift+ArrowRight",), ("Control+Shift+ArrowRight",),
+             ("Alt+ArrowRight",))
+TAB_ORDER_JS = """() => {
+  const seen = new Map();
+  for (const e of document.querySelectorAll('[role=tab], button')) {
+    const name = (e.innerText || e.textContent || '').trim();
+    const r = e.getBoundingClientRect();
+    if (!['Dashboard', 'Briefing'].includes(name) || r.width === 0 || seen.has(name)) continue;
+    seen.set(name, r.left);
+  }
+  return [...seen.entries()].sort((a, b) => a[1] - b[1]).map(e => e[0]);
+}"""
+HELD_JS = """() => [...document.querySelectorAll('*')].filter(e => (e.innerText || '').trim() === 'Briefing'
+  && e.children.length <= 2 && e.getBoundingClientRect().width > 0).map(e => ({
+    left: e.getBoundingClientRect().left, transform: getComputedStyle(e).transform}))"""
+
+
+def tab_order(page):
+    return page.evaluate(TAB_ORDER_JS)
+
+
+def tabs_feel(play):
+    """ac-tabs-feel: drag Briefing before Dashboard with the mouse, move it back with the keyboard, reload."""
+    state = STATES[CHECK]
+    pid, _ = new_project(state, "tabs", agents=())
+    browser = Browser(play, pid, profile="browser-tabs")
+    page = browser.page
+    try:
+        browser.open("tab=overview")
+        browser.shot("tabs-feel-1-start")
+        order = tab_order(page)
+        dash, brief = browser.tab("Dashboard"), browser.tab("Briefing")
+        have = dash is not None and brief is not None
+        step("tabs", have and order == ["Dashboard", "Briefing"],
+             f"tabs in order {order} (a project never reordered wants Dashboard, Briefing)")
+
+        samples, start_left = [], None
+        if have:
+            a, b = dash.bounding_box(), brief.bounding_box()
+            start_left = b["x"]
+            page.mouse.move(b["x"] + b["width"] / 2, b["y"] + b["height"] / 2)
+            page.mouse.down()
+            page.mouse.move(b["x"] + b["width"] / 2 - 12, b["y"] + b["height"] / 2, steps=4)
+            page.mouse.move(a["x"] + 4, a["y"] + a["height"] / 2, steps=12)
+            page.wait_for_timeout(250)
+            samples = page.evaluate(HELD_JS)
+            browser.shot("tabs-feel-2-held")
+            page.mouse.up()
+            page.wait_for_timeout(600)
+        browser.shot("tabs-feel-3-dropped")
+        step("held-moves", have and shown_moving(start_left, samples),
+             f"the held tab started at x={start_left}; while held {samples[:4]}")
+        order = tab_order(page)
+        step("drag-reorders", have and order == ["Briefing", "Dashboard"], f"after the drop {order}")
+
+        used = None
+        if have:
+            for keys in KEY_MOVES:
+                browser.tab("Briefing").focus()
+                for key in keys:
+                    page.keyboard.press(key)
+                    page.wait_for_timeout(250)
+                page.wait_for_timeout(400)
+                if tab_order(page) == ["Dashboard", "Briefing"]:
+                    used = " ".join(keys)
+                    break
+                page.keyboard.press("Escape")
+        browser.shot("tabs-feel-4-keyboard")
+        step("keyboard-reorders", have and used is not None,
+             f"after the keys {tab_order(page)}; the keys that moved it: {used}")
+
+        page.reload(wait_until="domcontentloaded")
+        page.wait_for_timeout(3500)
+        browser.shot("tabs-feel-5-reloaded")
+        order = tab_order(page)
+        stored = page.evaluate(
+            f"() => (JSON.parse(localStorage.getItem('aw.overview.tabs.v1') || 'null') || {{}})[{pid!r}] || null")
+        want = ["Dashboard", "Briefing"] if used else ["Briefing", "Dashboard"]
+        step("reload-keeps", have and order == want and (stored or {}).get("order") == [w.lower() for w in want],
+             f"after the reload {order}, wanted {want}; aw.overview.tabs.v1 for the project {stored}")
+    finally:
+        browser.close()
+
+
+# --------------------------------------------------------------------------- ac-looks-like-mock
+
+
+SHAPES = ("busy", "quiet", "trouble")
+WIDTHS = (1280, 1920)
+MOCK_ROUTES = {"Dashboard": "overview-next", "Briefing": "overview-briefing"}
+NAMED = {  # the sections the criterion names (builds only where the shape has one); the mock has no note
+    "Dashboard": ("health", "tiles", "needs", "timeline"),
+    "Briefing": ("headline", "since", "working", "needs", "note"),
+}
+SECTIONS_JS = r"""() => {
+  const vis = e => { const r = e.getBoundingClientRect(), cs = getComputedStyle(e);
+    return r.width > 0 && r.height > 0 && cs.visibility !== 'hidden' && cs.display !== 'none'; };
+  const panel = [...document.querySelectorAll('[role=tabpanel]')].find(vis);
+  const root = panel || document.querySelector('.aw-od, .aw-ob') || document.querySelector('main') || document.body;
+  const rules = [[/^builds in progress/i, 'builds'], [/^needs you/i, 'needs'], [/^(activity|timeline)/i, 'timeline'],
+    [/^(in flight|working)/i, 'working'], [/^(since you last looked|recently finished)/i, 'since'],
+    [/^spend/i, 'spend'], [/main branch/i, 'main'], [/\bnote\b/i, 'note'], [/^builds?\b/i, 'builds']];
+  const keyOf = e => {
+    if (e.matches('[data-testid=overview-note]')) return 'note';
+    if (e.matches('[role=status][aria-label^="Project health"], .aw-od-health')) return 'health';
+    if (e.matches('[aria-label="Project at a glance"], .aw-od-tiles')) return 'tiles';
+    if (e.matches('h1')) return 'headline';
+    if (!e.matches('h2')) return null;
+    const t = (e.innerText || e.textContent || '').trim();
+    for (const [re, k] of rules) if (re.test(t)) return k;
+    return null;
+  };
+  const keys = [], boxes = {};
+  for (const e of [root, ...root.querySelectorAll('*')]) {
+    const k = keyOf(e);
+    if (!k || k in boxes || !vis(e)) continue;
+    keys.push(k);
+    boxes[k] = e.matches('h1, h2') ? (e.closest('section, header, article') || e.parentElement) : e;
+  }
+  const W = document.documentElement.clientWidth;
+  const clipped = e => { for (let a = e.parentElement; a && a !== document.body; a = a.parentElement) {
+    if (['auto', 'scroll', 'hidden', 'clip'].includes(getComputedStyle(a).overflowX)) return true; } return false; };
+  const offenders = [];
+  for (const e of root.querySelectorAll('*')) {
+    const r = e.getBoundingClientRect();
+    if (r.width === 0 || (r.right <= W + 1 && r.left >= -1) || clipped(e)) continue;
+    const cls = typeof e.className === 'string' ? e.className.split(' ')[0] : '';
+    offenders.push(`${e.tagName.toLowerCase()}.${cls} ${Math.round(r.left)}..${Math.round(r.right)}`);
+    if (offenders.length >= 5) break;
+  }
+  const hit = (a, b) => { const p = a.getBoundingClientRect(), q = b.getBoundingClientRect();
+    return Math.max(0, Math.min(p.right, q.right) - Math.max(p.left, q.left))
+      * Math.max(0, Math.min(p.bottom, q.bottom) - Math.max(p.top, q.top)) > 4; };
+  const overlaps = [];
+  const pairs = (list, name) => { for (let i = 0; i < list.length; i++) for (let j = i + 1; j < list.length; j++) {
+    const a = list[i][1], b = list[j][1];
+    if (a.contains(b) || b.contains(a) || !hit(a, b)) continue;
+    overlaps.push(`${name}: ${list[i][0]} / ${list[j][0]}`); } };
+  pairs(Object.entries(boxes), 'sections');
+  pairs([...root.querySelectorAll('[data-slot=overview-tile]')].filter(vis).map((e, i) => [`tile ${i + 1}`, e]), 'tiles');
+  return {root: String(root.className || root.tagName).slice(0, 60), keys,
+    page_overflow: document.documentElement.scrollWidth > W + 1, offenders, overlaps};
+}"""
+
+
+def free_port(start):
+    port = start
+    while port_answers(port):
+        port += 1
+    return port
+
+
+def start_mock():
+    """The mock dev server from this checkout's hub/ui (vite.mock.config.ts), on a free port."""
+    port = free_port(int(os.environ.get("AW_MOCK_PORT") or 5211))
+    log = open(SCRATCH / "mock.log", "w", encoding="utf-8")  # noqa: SIM115 -- the child's stdout
+    proc = subprocess.Popen(["npx.cmd" if os.name == "nt" else "npx", "vite", "--config", "vite.mock.config.ts",
+                             "--port", str(port), "--strictPort", "--host", "127.0.0.1"], cwd=str(REPO / "hub" / "ui"),
+                            stdout=log, stderr=subprocess.STDOUT)
+    if not poll(lambda: port_answers(port), 90):
+        subprocess.run(["taskkill", "/PID", str(proc.pid), "/T", "/F"], capture_output=True)
+        raise Setup(f"the mock server did not come up; see {SCRATCH / 'mock.log'}")
+    return proc, port
+
+
+def mock_sections(play, port):
+    """Each shape and tab of the approved mock at each width: its sections in order, and a screenshot."""
+    browser = play.chromium.launch()
+    found = {}
+    try:
+        for shape in SHAPES:
+            for tab, route in MOCK_ROUTES.items():
+                for width in WIDTHS:
+                    page = browser.new_page(viewport={"width": width, "height": 1000})
+                    query = "" if shape == "busy" else f"?state={shape}"
+                    page.goto(f"http://127.0.0.1:{port}/mock.html#tab/{route}{query}")
+                    page.wait_for_load_state("networkidle")
+                    page.wait_for_timeout(1500)
+                    found[(shape, tab, width)] = page.evaluate(SECTIONS_JS)
+                    OUT.mkdir(parents=True, exist_ok=True)
+                    page.screenshot(path=str(OUT / f"mock-{shape}-{tab.lower()}-{width}.png"), full_page=True)
+                    page.close()
+    finally:
+        browser.close()
+    if not any(got["keys"] for got in found.values()):
+        raise Setup(f"the mock showed no sections: {found}")
+    return found
+
+
+def shoot_mock(port):
+    """The mock's own screenshots, taken by shoot.py, beside the drive's."""
+    routes = [f"tab/{r}" + ("" if s == "busy" else f"?state={s}") for s in SHAPES for r in MOCK_ROUTES.values()]
+    done = subprocess.run(["py", "-3.11", str(REPO / "hub" / "ui" / "mock" / "shoot.py"), str(OUT / "mock-shoot"),
+                           *routes, "--tall"], env=dict(os.environ, AW_MOCK_PORT=str(port)),
+                          capture_output=True, text=True, timeout=600)
+    shots = [line for line in done.stdout.splitlines() if line.strip()]
+    print(f"  shoot.py: exit {done.returncode}, {len(shots)} shots in {OUT / 'mock-shoot'} "
+          f"{done.stderr.strip()[-200:]}", flush=True)
+
+
+def shape_project(state, shape):
+    """A live project in *shape*: quiet holds nothing; busy a question, a build in progress and two
+    running runs; trouble the same with a test failing on main."""
+    if shape == "quiet":
+        return new_project(state, shape, agents=())[0]
+    pid, base = new_project(state, shape)
+    held(state, pid, BUILDER)
+    held(state, pid, CHECKER)  # two running runs, and no turn starts on the build
+    built(state, base, pid, doc=f"spec/changes/glance-{shape}/spec.json", title=f"Glance {shape} build",
+          files=(("one.txt", "Write one.txt"), ("two.txt", "Write two.txt")))
+    code, out = api("POST", f"{base}/questions",
+                    {"from_agent": BUILDER, "question": "Keep the cache for thirty seconds?", "blocking": False,
+                     "header": "Cache", "multi_select": False,
+                     "options": [{"label": "Yes", "description": "Thirty seconds of cache."},
+                                 {"label": "No", "description": "No cache."}]})
+    if code not in (200, 201):
+        raise Setup(f"the {shape} question: {code} {str(out)[:300]}")
+    if shape == "trouble":
+        rw("insert into known_failing_tests (id, project_id, check_name, test, kind, first_seen, last_seen, "
+           "passes, counted_runs) values (?, ?, 'hub-tests', 'tests/test_glance.py::test_main', 'fails on main', "
+           "?, ?, 0, '[]')", ("kf-glance-" + secrets.token_hex(4), pid, _now(), _now()))
+    return pid
+
+
+def looks_like_mock(play):
+    """ac-looks-like-mock: both tabs of the busy, quiet and trouble shapes at 1280 and 1920 px, against the mock."""
+    state = STATES[CHECK]
+    proc, port = start_mock()
+    try:
+        mock = mock_sections(play, port)
+        shoot_mock(port)
+    finally:
+        subprocess.run(["taskkill", "/PID", str(proc.pid), "/T", "/F"], capture_output=True)
+    for key, got in mock.items():
+        if got["page_overflow"] or got["offenders"] or got["overlaps"]:
+            print(f"  WARN the mock itself overflows or overlaps at {key}: {got}", flush=True)
+    projects = {shape: shape_project(state, shape) for shape in SHAPES}
+    for shape, pid in projects.items():
+        browser = Browser(play, pid, profile=f"browser-{shape}")
+        try:
+            for width in WIDTHS:
+                browser.page.set_viewport_size({"width": width, "height": 1000})
+                browser.open("tab=overview")
+                for tab in MOCK_ROUTES:
+                    name = f"{shape}-{tab.lower()}-{width}"
+                    handle = browser.tab(tab)
+                    if handle is not None:
+                        handle.click()
+                        browser.page.wait_for_timeout(1200)
+                    live = browser.page.evaluate(SECTIONS_JS)
+                    browser.shot(f"live-{name}")
+                    want = mock[(shape, tab, width)]["keys"]
+                    ok, why = sections_match(want, live["keys"], NAMED[tab])
+                    clean = not live["page_overflow"] and not live["offenders"] and not live["overlaps"]
+                    step(name, handle is not None and ok and clean,
+                         f"tab {'found' if handle is not None else 'missing'}; mock {want}; live {live['keys']} "
+                         f"({why}); overflow {live['page_overflow']} {live['offenders']}; overlaps {live['overlaps']}")
+        finally:
+            browser.close()
+
+
+LM_STEPS = [f"{s}-{t.lower()}-{w}" for s in SHAPES for w in WIDTHS for t in MOCK_ROUTES]
+
+
+def end_to_end(play):
+    state = STATES[CHECK]
+    arrange(state)
+    scenario(state, play)
+
+
+STATES: dict[str, dict] = {}
+CHECKS = {KEY_CHECK: (STEPS, end_to_end), "ac-note-quality": (NQ_STEPS, note_quality),
+          "ac-tabs-feel": (TF_STEPS, tabs_feel), "ac-looks-like-mock": (LM_STEPS, looks_like_mock)}
+
+
 # --------------------------------------------------------------------------- main
 
 
 def main():
-    global HUB, KEY, DB, SCRATCH
+    global HUB, KEY, DB, SCRATCH, CHECK
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--self-test", action="store_true", help="check the drive's own logic only; no Hub")
     parser.add_argument("--hub", default="http://127.0.0.1:8010", help="a running Hub (default the trial :8010)")
     parser.add_argument("--db", default=str(TRIAL / "agentweave.db"), help="that Hub's database")
     parser.add_argument("--own-hub", action="store_true", help="start a Hub from this checkout instead")
+    parser.add_argument("--checks", default="all",
+                        help=f"comma-separated checks to run (default all): {', '.join(CHECKS)}")
     args = parser.parse_args()
     if args.self_test:
         sys.exit(0 if self_test() else 1)
@@ -688,40 +1277,57 @@ def main():
             sys.exit(f"setup error: no key (AW_KEY or {key_file}) or no database at {DB}")
         if api("GET", "/projects", timeout=10)[0] != 200:
             sys.exit(f"setup error: {HUB} does not answer GET /projects with this key")
-    state, setup_error = {}, None
+    chosen = list(CHECKS) if args.checks == "all" else [c.strip() for c in args.checks.split(",") if c.strip()]
+    unknown = [c for c in chosen if c not in CHECKS]
+    if unknown:
+        sys.exit(f"unknown checks {unknown}; the drive has {list(CHECKS)}")
+    errors: dict[str, str] = {}
     try:
         from playwright.sync_api import sync_playwright
 
-        arrange(state)
         with sync_playwright() as play:
-            scenario(state, play)
-    except Setup as exc:
-        setup_error = str(exc)
-        print(f"SETUP: {exc}", flush=True)
+            for key in chosen:
+                CHECK = key
+                STATES[key] = {}
+                print(f"\n== {key}", flush=True)
+                try:
+                    CHECKS[key][1](play)
+                except Setup as exc:
+                    errors[key] = str(exc)
+                    print(f"SETUP {key}: {exc}", flush=True)
+                except Exception as exc:  # noqa: BLE001 -- one check's crash is reported, the next still runs
+                    errors[key] = f"{type(exc).__name__}: {exc}"
+                    print(f"ERROR {key}: {errors[key]}", flush=True)
     finally:
-        if state.get("hold"):
-            release(state["hold"])
-        if state.get("build") and state.get("base"):
-            api("POST", f"{state['base']}/project/builds/{state['build']}/stop")
-        if state.get("base"):
-            api("PATCH", f"{state['base']}/manager/jobs/{JOB}", {"enabled": False})
+        for state in STATES.values():
+            for run_id in state.get("holds", []):
+                release(run_id)
+            for base, build in state.get("builds", []):
+                if build:
+                    api("POST", f"{base}/project/builds/{build}/stop")
+            for base in state.get("bases", []):
+                api("PATCH", f"{base}/manager/jobs/{JOB}", {"enabled": False})
         if proc is not None:
             stop_hub(proc)
     print("\n== drive_baseline")
-    first = first_failure(STEPS, results)
-    reached = bool(results) and setup_error is None
-    failed = first is not None
-    if not reached:
-        detail = f"setup: {setup_error or 'nothing ran'}"
-    elif failed:
-        detail = (f"first failing assertion {first}: {results[first][1][:600]} | steps "
-                  + ", ".join(f"{n}={'pass' if results[n][0] else 'FAIL'}" for n in STEPS if n in results))
-    else:
-        detail = "all nine assertions passed: " + ", ".join(STEPS)
-    print(f"check {KEY_CHECK}: reached={'yes' if reached else 'no'} "
-          f"failed_at_assertion={'yes' if reached and failed else 'no'} -- {detail}")
+    failed_any = False
+    for key in chosen:
+        steps, found = CHECKS[key][0], checks.get(key, {})
+        first = first_failure(steps, found)
+        reached = bool(found) and key not in errors
+        failed = first is not None
+        if not reached:
+            detail = f"setup: {errors.get(key) or 'nothing ran'}"
+        elif failed:
+            detail = (f"first failing assertion {first}: {found[first][1][:600]} | steps "
+                      + ", ".join(f"{n}={'pass' if found[n][0] else 'FAIL'}" for n in steps if n in found))
+        else:
+            detail = f"all {len(steps)} assertions passed: " + ", ".join(steps)
+        failed_any = failed_any or failed or not reached
+        print(f"check {key}: reached={'yes' if reached else 'no'} "
+              f"failed_at_assertion={'yes' if reached and failed else 'no'} -- {detail}")
     print(f"output: {OUT}")
-    sys.exit(1 if failed or not reached else 0)
+    sys.exit(1 if failed_any else 0)
 
 
 if __name__ == "__main__":

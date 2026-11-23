@@ -4,13 +4,13 @@
 recent firings. The jobs are `hub/hub/manager.py`'s registry; a job's row holds only the choice.
 """
 
-from typing import Literal, Optional, Tuple
+from typing import List, Literal, Optional, Tuple
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Response, status
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ... import build_retrospective, chapters_job, manager, overview_note_job, pre_mortem
+from ... import build_retrospective, chapters_job, manager, overview_note_job, pre_mortem, stalls
 from ...auth import get_project
 from ...db.engine import get_session
 from ...db.models import Runner
@@ -221,3 +221,45 @@ async def list_manager_activity(
     session: AsyncSession = Depends(get_session),
 ) -> dict:
     return {"firings": await manager.list_firings(session, project[0], job=job, limit=limit)}
+
+
+# --- runs (`background-manager-work-you-can-see` D1-D3) ------------------------------------------
+
+
+@router.get("/runs/running")
+async def list_running_runs(
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """The manager runs in progress, oldest first: this process's registry of job runs, plus the
+    mender's running `runs` rows. A Hub restart empties the registry with the work it held."""
+    runs = manager.running(project[0]) + await stalls.running_mender_runs(session, project[0])
+    runs.sort(key=lambda run: str(run.get("started_at") or ""))
+    return {"runs": runs}
+
+
+@router.get("/runs/unseen-failures")
+async def list_unseen_failures(
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """Each item's newest run when it failed and the operator has not seen it, nor has a run on
+    the same item started since."""
+    return {"failures": await manager.unseen_failures(session, project[0])}
+
+
+class RunsSeen(BaseModel):
+    run_ids: List[str] = Field(default_factory=list, max_length=500)
+
+    model_config = {"extra": "forbid"}
+
+
+@router.post("/runs/seen", status_code=status.HTTP_204_NO_CONTENT)
+async def mark_runs_seen(
+    body: RunsSeen,
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+) -> Response:
+    """Mark the named runs' failures seen, once each; unknown ids are ignored."""
+    await manager.mark_seen(session, project[0], body.run_ids)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

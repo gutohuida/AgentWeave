@@ -12,13 +12,30 @@ records no `Run` row and holds no agent name, for the reason `conversation_title
 `turn_scheduler` gates an agent's queue on a running `Run` under its name. Each spawn is recorded
 instead as one `manager_job_fired` event (D4), and only spawns are recorded -- a job that exits
 before spawning anything records nothing (D5).
+
+**A run is announced when it starts and ends exactly once** (`background-manager-work-you-can-see`
+D1-D3). A job's background entry point does its work inside `manager_run`, which mints the run's
+`mrun-` id, holds it in this process's registry of runs in progress (read by
+`GET /manager/runs/running`; a restart empties it along with the work), publishes
+`manager_run_started`, and on every exit -- a return, a refusal, an exception, no runner, nothing to
+compare -- makes sure the run has at least one `manager_job_fired` event carrying its `run_id`,
+`initiator` and `started_at`, then publishes `manager_run_ended` once. A firing recorded inside the
+run joins it on its own (`record_firing` reads the run from a context variable), so the jobs'
+recording is unchanged; a job that spawns more than once (a distillation's pieces, a long build's
+parts) records several firings under one run. "Seen" is a `manager_run_seen` event per run (D3).
+A job added later joins by entering `manager_run`; nothing else here names the jobs.
 """
 
 from __future__ import annotations
 
+import contextlib
+import contextvars
 import logging
-from dataclasses import asdict, dataclass
-from typing import Any, Dict, List, Optional
+import time
+import uuid
+from dataclasses import asdict, dataclass, field
+from datetime import datetime, timezone
+from typing import Any, AsyncIterator, Dict, Iterable, List, Optional, Tuple
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -27,11 +44,16 @@ from .db.models import EventLog, ManagerJob, Runner
 from .model_catalog import default_model, get_provider
 from .runner_adapters.one_shot import WorkerUsage
 from .runner_provider import has_provider
+from .sse import defer_broadcast, sse_manager
 from .utils import persist_event
 
 logger = logging.getLogger(__name__)
 
 FIRED_EVENT = "manager_job_fired"
+#: The live signals on the project stream, and the event that marks a run's failure seen (D3).
+RUN_STARTED_EVENT = "manager_run_started"
+RUN_ENDED_EVENT = "manager_run_ended"
+SEEN_EVENT = "manager_run_seen"
 
 # The outcomes a firing can record: the job's product was stored, the model answered and nothing
 # needed storing (a report whose entry stands, F641), the model produced nothing usable, or the
@@ -380,13 +402,20 @@ async def record_firing(
 
     *extra* is what a job keeps on its firing beside the standard fields (spec-vault-check: its
     conflicts); it never overrides one of them. *answer* is what the model answered
-    (`answer_record`), kept so a judgement can be read afterwards (F581)."""
+    (`answer_record`), kept so a judgement can be read afterwards (F581).
+
+    Inside `manager_run` for the same project and job, the firing carries that run's `run_id`,
+    `initiator` and `started_at`, and is part of the run's end (D2)."""
+    run = current_run()
+    if run is not None and (run.project_id != project_id or run.job != job):
+        run = None
     await persist_event(
         db,
         project_id,
         FIRED_EVENT,
         {
             **(extra or {}),
+            **(run.identity() if run is not None else {}),
             "job": job,
             "trigger": trigger,
             "subject": subject,
@@ -401,6 +430,8 @@ async def record_firing(
         },
         commit=commit,
     )
+    if run is not None:
+        run.firings.append({"outcome": outcome, "detail": detail, "usage": usage})
 
 
 async def record_no_runner(
@@ -456,3 +487,332 @@ async def list_firings(
         .all()
     )
     return [{**(row.data or {}), "id": row.id, "at": row.timestamp.isoformat()} for row in rows]
+
+
+# ---------------------------------------------------------------------------
+# Runs: started, ended, running now and seen (`background-manager-work-you-can-see` D1-D3)
+# ---------------------------------------------------------------------------
+
+#: `worker.Initiator`'s vocabulary: a button or a request, or the Hub on its own.
+OPERATOR = "operator"
+AUTONOMOUS = "autonomous"
+
+#: Which outcome stands for a run whose firings differ: any failure fails the run, else the most
+#: productive one (a distillation's last firing is its contradiction check, often empty).
+_OUTCOME_RANK = {"written": 0, "answered": 1, "empty": 2}
+
+#: The subject keys that name the item a run works on: a run on the same item is that item's run
+#: whatever else its subject carries (a content version, a build's approving task).
+_ITEM_KEYS = ("document", "source", "report", "conversation_id", "stall")
+_VOLATILE_KEYS = ("content_version",)
+
+
+def _now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def new_run_id() -> str:
+    return f"mrun-{uuid.uuid4().hex[:12]}"
+
+
+@dataclass
+class ManagerRun:
+    """One run in progress. *runner_id*, *cli* and *model* are what a firing the wrapper records
+    itself names (`uses`); *outcome* and *detail* are how it ends when the job records no firing
+    of its own (`ends`)."""
+
+    project_id: str
+    job: str
+    trigger: str
+    subject: Dict[str, Any]
+    initiator: str
+    run_id: str = field(default_factory=new_run_id)
+    started_at: str = field(default_factory=_now_iso)
+    runner_id: str = ""
+    cli: str = ""
+    model: Optional[str] = None
+    firings: List[Dict[str, Any]] = field(default_factory=list)
+    outcome: Optional[str] = None
+    detail: Optional[str] = None
+    closed: bool = False
+    started_monotonic: float = field(default_factory=time.monotonic)
+
+    def identity(self) -> Dict[str, Any]:
+        return {"run_id": self.run_id, "initiator": self.initiator, "started_at": self.started_at}
+
+    def listed(self) -> Dict[str, Any]:
+        return {
+            "run_id": self.run_id,
+            "job": self.job,
+            "subject": self.subject,
+            "trigger": self.trigger,
+            "initiator": self.initiator,
+            "started_at": self.started_at,
+            "conversation_id": None,
+        }
+
+    def ends(self, outcome: str, detail: str) -> None:
+        """How the run ends if it records no firing: nothing to compare (`empty`), a refusal
+        (`failed`). A firing the job records takes precedence."""
+        self.outcome, self.detail = outcome, detail
+
+    def uses(self, *, runner_id: str, cli: str, model: Optional[str]) -> None:
+        self.runner_id, self.cli, self.model = runner_id, cli, model
+
+
+_CURRENT_RUN: contextvars.ContextVar[Optional[ManagerRun]] = contextvars.ContextVar(
+    "manager_run", default=None
+)
+#: Runs in progress, by project then run id. This process's own, so a restart forgets them along
+#: with the work they were doing and shows no ghost (D1). Insertion order is start order.
+_running: Dict[str, Dict[str, ManagerRun]] = {}
+
+
+def current_run() -> Optional[ManagerRun]:
+    """The run this code is inside, if it is still open. A task started from inside a run copies
+    the context; once that run has ended, its firings are no longer the run's."""
+    run = _CURRENT_RUN.get()
+    return run if run is not None and not run.closed else None
+
+
+def running(project_id: str) -> List[Dict[str, Any]]:
+    """The project's manager-job runs in progress, oldest first."""
+    return [run.listed() for run in (_running.get(project_id) or {}).values()]
+
+
+async def job_enabled(project_id: str, key: str) -> bool:
+    """Whether job *key* is on in the project. A run starts only for a job that is on, so a job
+    left off announces nothing on each of its triggers."""
+    from .db.engine import async_session_factory
+
+    async with async_session_factory() as db:
+        row = await get_job_row(db, project_id, key)
+    return row is not None and bool(row.enabled)
+
+
+def summed_usage(firings: Iterable[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    total: Dict[str, Any] = {}
+    for firing in firings:
+        for name, value in (firing.get("usage") or {}).items():
+            if isinstance(value, (int, float)):
+                total[name] = total.get(name, 0) + value
+    return total or None
+
+
+def run_outcome(firings: List[Dict[str, Any]]) -> Tuple[str, Optional[str]]:
+    """A run's outcome and detail from its firings, oldest first: the first failure's, else the
+    most productive firing's (the latest of those)."""
+    for firing in firings:
+        if firing.get("outcome") == "failed":
+            return "failed", firing.get("detail")
+    best = min(reversed(firings), key=lambda firing: _OUTCOME_RANK.get(firing.get("outcome"), 3))
+    return str(best.get("outcome")), best.get("detail")
+
+
+def publish(project_id: str, event_type: str, data: Dict[str, Any]) -> None:
+    """Push a run signal to the project's open views. Never raises into the work it describes."""
+    try:
+        sse_manager.publish(project_id, event_type, data)
+    except Exception:  # noqa: BLE001
+        logger.warning("could not publish %s", event_type, exc_info=True)
+
+
+@contextlib.asynccontextmanager
+async def manager_run(
+    project_id: str,
+    *,
+    job: str,
+    trigger: str,
+    subject: Dict[str, Any],
+    initiator: str,
+) -> AsyncIterator[ManagerRun]:
+    """Do one run of *job* inside this: announced as started on entry, ended exactly once on exit.
+
+    A firing recorded inside it is the run's end. When the body records none, the run records one
+    itself: the outcome the body set with `ends`, else a failure naming the exception, else a
+    failure saying it ended with no outcome -- so no run is left in progress or unrecorded (D2). An
+    exception is recorded, and raised again for the entry point's own handling."""
+    run = ManagerRun(
+        project_id=project_id, job=job, trigger=trigger, subject=dict(subject), initiator=initiator
+    )
+    _running.setdefault(project_id, {})[run.run_id] = run
+    token = _CURRENT_RUN.set(run)
+    started = run.listed()
+    started.pop("conversation_id")
+    publish(project_id, RUN_STARTED_EVENT, started)
+    failure: Optional[BaseException] = None
+    try:
+        yield run
+    except BaseException as exc:
+        failure = exc
+        raise
+    finally:
+        _CURRENT_RUN.reset(token)
+        await _end(run, failure)
+
+
+async def _end(run: ManagerRun, failure: Optional[BaseException]) -> None:
+    from .db.engine import async_session_factory
+
+    duration_ms = int((time.monotonic() - run.started_monotonic) * 1000)
+    own: Optional[Tuple[str, str]] = None
+    if failure is not None and not any(f.get("outcome") == "failed" for f in run.firings):
+        own = ("failed", f"The run failed: {str(failure) or type(failure).__name__}")
+    elif not run.firings:
+        own = (
+            (run.outcome, run.detail or "")
+            if run.outcome
+            else ("failed", "The run ended without recording an outcome.")
+        )
+    if own is not None:
+        try:
+            async with async_session_factory() as db:
+                await record_firing(
+                    db,
+                    run.project_id,
+                    job=run.job,
+                    trigger=run.trigger,
+                    subject=run.subject,
+                    runner_id=run.runner_id,
+                    cli=run.cli,
+                    model=run.model,
+                    outcome=own[0],
+                    detail=own[1],
+                    duration_ms=0,
+                    usage=None,
+                    extra=run.identity(),
+                )
+        except Exception:  # noqa: BLE001 -- the end is still announced below
+            logger.warning("could not record the end of run %s", run.run_id, exc_info=True)
+        run.firings.append({"outcome": own[0], "detail": own[1], "usage": None})
+    run.closed = True
+    project_runs = _running.get(run.project_id) or {}
+    project_runs.pop(run.run_id, None)
+    if not project_runs:
+        _running.pop(run.project_id, None)
+    outcome, detail = run_outcome(run.firings)
+    publish(
+        run.project_id,
+        RUN_ENDED_EVENT,
+        {
+            "run_id": run.run_id,
+            "job": run.job,
+            "subject": run.subject,
+            "trigger": run.trigger,
+            "initiator": run.initiator,
+            "started_at": run.started_at,
+            "ended_at": _now_iso(),
+            "duration_ms": duration_ms,
+            "outcome": outcome,
+            "detail": detail,
+            "usage": summed_usage(run.firings),
+        },
+    )
+
+
+def item_of(job: str, subject: Optional[Dict[str, Any]]) -> Tuple[str, Tuple[Tuple[str, str], ...]]:
+    """The item a run works on, as a key: its job and the subject keys that name the item."""
+    subject = subject or {}
+    named = {k: subject[k] for k in _ITEM_KEYS if k in subject}
+    if not named:
+        named = {k: v for k, v in subject.items() if k not in _VOLATILE_KEYS}
+    return job, tuple(sorted((k, str(v)) for k, v in named.items()))
+
+
+def _iso(moment: datetime) -> str:
+    return (moment if moment.tzinfo else moment.replace(tzinfo=timezone.utc)).isoformat()
+
+
+async def ended_runs(db: AsyncSession, project_id: str) -> List[Dict[str, Any]]:
+    """Every ended run with an id, oldest first, as `{run_id, job, subject, trigger, initiator,
+    started_at, ended_at, outcome, detail}` drawn from its firings. A firing from before runs had
+    ids is not a run here."""
+    rows = (
+        (
+            await db.execute(
+                select(EventLog)
+                .where(
+                    EventLog.project_id == project_id,
+                    EventLog.event_type == FIRED_EVENT,
+                    EventLog.data["run_id"].as_string().is_not(None),
+                )
+                .order_by(EventLog.timestamp, EventLog.id)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    runs: Dict[str, Dict[str, Any]] = {}
+    firings: Dict[str, List[Dict[str, Any]]] = {}
+    for row in rows:
+        data = row.data or {}
+        run_id = data.get("run_id")
+        if not isinstance(run_id, str):
+            continue
+        run = runs.setdefault(
+            run_id,
+            {
+                "run_id": run_id,
+                "job": data.get("job"),
+                "subject": data.get("subject") or {},
+                "trigger": data.get("trigger"),
+                "initiator": data.get("initiator"),
+                "started_at": data.get("started_at"),
+            },
+        )
+        run["ended_at"] = _iso(row.timestamp)
+        firings.setdefault(run_id, []).append(data)
+    for run_id, run in runs.items():
+        run["outcome"], run["detail"] = run_outcome(firings[run_id])
+    return sorted(runs.values(), key=lambda run: (str(run["started_at"] or ""), run["ended_at"]))
+
+
+async def _seen(db: AsyncSession, project_id: str) -> set:
+    return set(
+        (
+            await db.execute(
+                select(EventLog.data["run_id"].as_string()).where(
+                    EventLog.project_id == project_id, EventLog.event_type == SEEN_EVENT
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+
+
+async def unseen_failures(db: AsyncSession, project_id: str) -> List[Dict[str, Any]]:
+    """Each item's newest ended run, when it failed, has no `manager_run_seen`, and no run on the
+    same item has started since -- one in progress included (D3). Oldest first."""
+    seen = await _seen(db, project_id)
+    newest: Dict[Any, Dict[str, Any]] = {}
+    for run in await ended_runs(db, project_id):
+        newest[item_of(run["job"], run["subject"])] = run
+    busy = {item_of(run.job, run.subject) for run in (_running.get(project_id) or {}).values()}
+    return [
+        {
+            "run_id": run["run_id"],
+            "job": run["job"],
+            "subject": run["subject"],
+            "ended_at": run["ended_at"],
+            "detail": run["detail"],
+        }
+        for item, run in newest.items()
+        if run["outcome"] == "failed" and run["run_id"] not in seen and item not in busy
+    ]
+
+
+async def mark_seen(db: AsyncSession, project_id: str, run_ids: Iterable[str]) -> List[str]:
+    """Record each named run as seen, once. An id naming no ended run of the project, or one
+    already seen, is ignored. Answers the ids newly marked, and tells the open views."""
+    wanted = {run_id for run_id in run_ids if isinstance(run_id, str)}
+    if not wanted:
+        return []
+    known = {run["run_id"] for run in await ended_runs(db, project_id)}
+    marked = sorted((wanted & known) - await _seen(db, project_id))
+    for run_id in marked:
+        await persist_event(db, project_id, SEEN_EVENT, {"run_id": run_id}, commit=False)
+    if marked:
+        defer_broadcast(db, project_id, SEEN_EVENT, {"run_ids": marked})
+        await db.commit()
+    return marked

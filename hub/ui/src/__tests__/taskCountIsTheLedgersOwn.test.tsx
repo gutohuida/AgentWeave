@@ -3,7 +3,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 
 import type { Task } from '@/api/tasks'
-import { OverviewScreen } from '@/components/overview/OverviewScreen'
+import { OverviewClassicScreen as OverviewScreen } from '@/components/overview/OverviewClassicScreen'
 import { TasksScreen } from '@/components/tasks/TasksScreen'
 
 // The Overview reads main notices and next-slice offers (`amendments-main-watch-and-the-next-slice`).

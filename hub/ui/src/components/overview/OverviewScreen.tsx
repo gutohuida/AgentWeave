@@ -1,549 +1,283 @@
 import * as React from 'react'
-import { useAccounting } from '@/api/accounting'
-import { conversationLabel, useProjectConversations } from '@/api/agentChat'
 import { useAgents } from '@/api/agents'
-import { useProjectLedger } from '@/api/ledger'
-import { useQueueStatuses } from '@/api/queue'
 import { readableApiError } from '@/api/client'
-import { useAnswerQuestion, useDeclineQuestion, useQuestions } from '@/api/questions'
-import { useEndStall, useOpenStalls, type Stall } from '@/api/stalls'
-import { StallRemedies } from '@/components/stalls/StallRemedies'
-import { stallNotice } from '@/lib/stalls'
 import { useClearStableFixTasks, useDisturbedRuns, useKnownFailing } from '@/api/knownFailing'
-import { useCheckNotices } from '@/api/checkNotices'
-import { describeMainNotice, useMarkMainNoticeSeen, useOpenMainNotices } from '@/api/mainNotices'
-import { useReopeningWarnings } from '@/api/reopeningWarnings'
-import { offerKey, offerTarget, offerTitle, useDeclineNextSliceOffer, useNextSliceOffers, useTakeNextSliceOffer } from '@/api/nextSlice'
-import { isWaitedOn } from '@/lib/pendingQuestions'
-import { useRetryIntegration, useTasks, useUpdateTask, type Task } from '@/api/tasks'
-import { accountingDisplayLabel, formatAiCredits } from '@/components/accounting/accountingDisplay'
-import { BudgetExhaustionNotice } from '@/components/accounting/BudgetExhaustionNotice'
-import { DeleteConfirmDialog } from '@/components/common/DeleteConfirmDialog'
-import { QueryErrorNotice, type QueryFailure } from '@/components/common/QueryErrorNotice'
-import { getStatusConfig } from '@/lib/agentStatusConfig'
-import { formatAgoLong } from '@/lib/format'
-import { toast } from '@/lib/toast'
+import { useOverview, type OverviewBody } from '@/api/overview'
+import { useProjects } from '@/api/projects'
+import { useQuarantine, useRemoveNeverQuarantine, useSetNeverQuarantine } from '@/api/quarantine'
+import { Icon } from '@/components/common/Icon'
+import { QueryErrorNotice } from '@/components/common/QueryErrorNotice'
+import { agentColorVars } from '@/lib/agentColors'
+import { buildDestination, goTo } from '@/lib/navigation'
 import { useConfigStore } from '@/store/configStore'
-import { useTaskFilterStore } from '@/store/taskFilterStore'
+import { selectOpeningTab, useOverviewTabsStore, type OverviewTabId } from '@/store/overviewTabsStore'
 import { AgentPostureChips } from './AgentPostureChips'
 import { KnownFailingList } from './KnownFailingList'
-import { QuarantineList } from './QuarantineList'
-import { useQuarantine, useRemoveNeverQuarantine, useSetNeverQuarantine } from '@/api/quarantine'
-import { ReopeningWarnings } from './ReopeningWarnings'
+import { OverviewClassicScreen } from './OverviewClassicScreen'
+import { OverviewDashboard, type DashActivity, type DashBuild, type DashNeed } from './OverviewDashboard'
+import {
+  dashboardFigures,
+  finishedCostWords,
+  overviewPanelDomId,
+  overviewTabDomId,
+  useOverviewOpeners,
+  type OverviewScreenProps,
+} from './overviewLiveModel'
+import { OverviewTabs } from './OverviewTabs'
 import { ProjectSetupList } from './ProjectSetupList'
-import { OverviewView, type AgentStripItem, type FinishedItem, type NeedItem, type RunningItem } from './OverviewView'
-import { profileHref } from '@/lib/navigation'
+import { QuarantineList } from './QuarantineList'
+import '@/styles/overview-tabs.css'
 
-/** The Hub's own agent for stalled work (`hub/hub/stalls.py`, `MENDER`). */
-const MENDER = 'mender'
+/** The project Overview (`overview-at-a-glance-with-dashboard-and-briefing-tabs`): two tabs over
+ *  one Hub read (`GET /overview`, design D1). The Dashboard is live here; the Briefing is wired by
+ *  its own task. A Hub older than the route answers 404, and the previous Overview is shown under a
+ *  notice to restart, so a committed bundle never meets a blank page (design, hazards). */
 
-const STALL_TITLE: Record<Stall['cause'], string> = {
-  loop_stalled: 'A loop has nothing it can start',
-  delivery_refused: 'A profile’s run was refused',
-  integration_skipped: 'Approved work did not merge',
-  integration_failed: 'Approved work failed to merge',
-  review_unstaffed: 'Nobody can review a task',
-  dead_run: 'A run stopped answering',
-  stuck_task: 'A task is stuck in progress',
-  no_progress: 'A loop has stopped moving',
-  checks_unjudged: 'A task’s checks could not judge its work',
-}
-
-/** `latest_integration` rides on the task list response but is not on the `Task` type yet. */
-type TaskWithIntegration = Task & {
-  latest_integration?: { outcome: string; reason: string; target_branch: string | null; created_at: string; retryable?: boolean } | null
-}
-
-function sentence(text: string): string {
-  const t = text.trim()
-  if (!t) return t
-  return /[.!?]$/.test(t) ? t : `${t}.`
-}
-
-/** The Overview, wired: `OverviewView` fed from the project's hooks. Drop-in for `OverviewPage`
- *  (`onNavigate` takes the same strings App's `navigate` understands). */
-export function OverviewScreen({
-  onNavigate,
-  onOpenConversation,
-  onAddAgent,
-}: {
-  onNavigate: (page: string) => void
-  /** Opens the Add-agent dialog for this project (F808). */
-  onAddAgent?: () => void
-  /** Opens one conversation; without it a row opens its agent's latest conversation. */
-  onOpenConversation?: (agent: string, conversationId: string) => void
-}) {
+export function OverviewScreen(props: OverviewScreenProps) {
   const projectId = useConfigStore((state) => state.selectedProjectId)
-  const { data: agents = [], isLoading: agentsLoading, error: agentsError, refetch: refetchAgents } = useAgents()
-  const { data: questions = [], error: questionsError, refetch: refetchQuestions } = useQuestions(false)
-  const { data: openStalls = [], error: stallsError, refetch: refetchStalls } = useOpenStalls()
-  const endStall = useEndStall()
+  const overview = useOverview()
+  if (!projectId) return null
+  if (overview.data === null) {
+    // A Hub started before this Overview: say what to do, and keep what it can show.
+    return (
+      <div className="aw-ov-live">
+        <p className="aw-ov-restart" role="status" data-slot="overview-restart">
+          <Icon name="restart_alt" size={16} /> Restart the Hub to see the new Overview.
+        </p>
+        <OverviewClassicScreen {...props} />
+      </div>
+    )
+  }
+  return <LiveOverview projectId={projectId} overview={overview} screen={props} />
+}
+
+function LiveOverview({
+  projectId,
+  overview,
+  screen,
+}: {
+  projectId: string
+  overview: ReturnType<typeof useOverview>
+  screen: OverviewScreenProps
+}) {
+  const opening = useOverviewTabsStore((s) => selectOpeningTab(s, projectId))
+  const openTab = useOverviewTabsStore((s) => s.openTab)
+  const [active, setActive] = React.useState<OverviewTabId>(opening)
+  // Another project keeps its own tabs: switching project re-reads where this one opens.
+  React.useEffect(() => setActive(useOverviewTabsStore.getState().session[projectId] ?? opening), [projectId]) // eslint-disable-line react-hooks/exhaustive-deps
+  const choose = (tab: OverviewTabId) => {
+    setActive(tab)
+    openTab(projectId, tab)
+  }
+
+  return (
+    <div className="aw-ov-live" data-slot="overview-live">
+      <div className="aw-ov-live-head">
+        <ProjectSetupList place="overview" />
+        <OverviewTabs projectId={projectId} active={active} onOpen={choose} />
+      </div>
+      <div role="tabpanel" id={overviewPanelDomId(active)} aria-labelledby={overviewTabDomId(active)} data-tab={active}>
+        {overview.error ? (
+          <div className="aw-ov-placeholder">
+            <QueryErrorNotice failures={[['the Overview', overview.error, overview.refetch]]} />
+          </div>
+        ) : !overview.data ? (
+          <p className="aw-ov-placeholder" role="status">
+            Loading the Overview…
+          </p>
+        ) : active === 'dashboard' ? (
+          <LiveDashboard projectId={projectId} body={overview.data} screen={screen} />
+        ) : (
+          <p className="aw-ov-placeholder" data-slot="overview-briefing-placeholder">
+            The Briefing will tell this same picture in sentences. Until it is built, the Dashboard tab shows everything.
+          </p>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function LiveDashboard({ projectId, body, screen }: { projectId: string; body: OverviewBody; screen: OverviewScreenProps }) {
+  // A failed read of either only loses a name or a colour; say so rather than show them blank.
+  const { data: projects = [], error: projectsError, refetch: refetchProjects } = useProjects()
+  const { data: agents = [], error: agentsError, refetch: refetchAgents } = useAgents()
+  const open = useOverviewOpeners(projectId, screen)
+  const now = new Date()
+  const colorOf = (name: string | null) => (name ? agents.find((a) => a.name === name)?.color_index : undefined)
+  const { main, spend, finishedToday, todays } = dashboardFigures(body, now)
+
+  const needs: DashNeed[] = body.needs.map((n) => ({
+    id: n.id,
+    kind: n.kind,
+    agent: n.agent,
+    colorIndex: colorOf(n.agent),
+    title: n.title,
+    action: n.action,
+    at: n.waiting_since,
+    onOpen: () => open.openTarget(n.target, n.agent),
+  }))
+  const running: DashActivity[] = body.running.map((r) => ({
+    id: `run-${r.run_id}`,
+    agent: r.agent,
+    colorIndex: colorOf(r.agent),
+    what: r.what,
+    outcome: 'running',
+    at: r.started_at,
+    onOpen: () => open.openConversation(r.agent, r.conversation_id),
+  }))
+  // The timeline lists today's finished work (FR-7); the Briefing counts from the last visit.
+  const finished: DashActivity[] = todays.map((f) => ({
+    id: `finished-${f.id}`,
+    agent: f.agent ?? 'The Hub',
+    colorIndex: colorOf(f.agent),
+    what: f.title,
+    outcome: f.outcome,
+    at: f.at,
+    usd: f.usd,
+    costWords: finishedCostWords(f),
+    onOpen: () => (f.task_id ? open.openTask(f.task_id) : f.agent ? screen.onNavigate(`agent:${f.agent}`) : screen.onNavigate('activity')),
+  }))
+  const builds: DashBuild[] = body.builds.map((b) => ({
+    id: b.build_id,
+    title: b.title,
+    done: b.tasks_done,
+    total: b.tasks_total,
+    stage: b.stage_words,
+    needsYou: b.needs_operator,
+    onOpen: () => goTo(buildDestination(projectId, b.build_id)),
+  }))
+
+  return (
+    <>
+      <QueryErrorNotice
+        failures={[
+          ['the project list', projectsError, refetchProjects],
+          ['the profiles', agentsError, refetchAgents],
+        ]}
+      />
+      <OverviewDashboard
+        projectName={projects.find((p) => p.id === projectId)?.name ?? ''}
+        needs={needs}
+        running={running}
+        finished={finished}
+        finishedToday={finishedToday}
+        spend={spend}
+        main={main}
+        builds={builds}
+        onNavigate={open.openPlace}
+        now={now}
+      >
+        <ChecksAndProfiles onNavigate={screen.onNavigate} onOpenTask={open.openTask} />
+      </OverviewDashboard>
+    </>
+  )
+}
+
+type MorePanel = 'checks' | 'profiles'
+
+/** The previous Overview's quarantine list, known-failing list and profile status chips, reached by
+ *  a link each (FR-13). Each list's hooks run only while it is open. */
+export function ChecksAndProfiles({ onNavigate, onOpenTask }: { onNavigate: (page: string) => void; onOpenTask: (taskId: string) => void }) {
+  const [panel, setPanel] = React.useState<MorePanel | null>(null)
+  const toggle = (next: MorePanel) => setPanel((current) => (current === next ? null : next))
+  return (
+    <section className="aw-ov-more" aria-label="Checks and profiles">
+      <div className="aw-ov-more-links">
+        <button
+          type="button"
+          data-slot="overview-more-link"
+          className="aw-ov-more-link"
+          aria-expanded={panel === 'checks'}
+          aria-controls="overview-more-checks"
+          onClick={() => toggle('checks')}
+        >
+          <Icon name="verified_user" size={15} /> Quarantine and known failures
+        </button>
+        <button
+          type="button"
+          data-slot="overview-more-link"
+          className="aw-ov-more-link"
+          aria-expanded={panel === 'profiles'}
+          aria-controls="overview-more-profiles"
+          onClick={() => toggle('profiles')}
+        >
+          <Icon name="group" size={15} /> Profile status
+        </button>
+      </div>
+      {panel === 'checks' ? <ChecksPanel onOpenTask={onOpenTask} /> : null}
+      {panel === 'profiles' ? <ProfilesPanel onNavigate={onNavigate} /> : null}
+    </section>
+  )
+}
+
+function ChecksPanel({ onOpenTask }: { onOpenTask: (taskId: string) => void }) {
+  const now = new Date()
   const { data: knownFailing, error: knownFailingError, refetch: refetchKnownFailing } = useKnownFailing()
   const { data: disturbedRuns = [] } = useDisturbedRuns()
   const clearStable = useClearStableFixTasks()
   const { data: quarantine, error: quarantineError, refetch: refetchQuarantine } = useQuarantine()
   const setMark = useSetNeverQuarantine()
   const removeMark = useRemoveNeverQuarantine()
-  const { data: mainNotices = [], error: mainNoticesError, refetch: refetchMainNotices } = useOpenMainNotices()
-  const markSeen = useMarkMainNoticeSeen()
-  const { data: checkNotices = [], error: checkNoticesError, refetch: refetchCheckNotices } = useCheckNotices()
-  const { data: offers = [], error: offersError, refetch: refetchOffers } = useNextSliceOffers()
-  const takeOffer = useTakeNextSliceOffer()
-  const declineOffer = useDeclineNextSliceOffer()
-  const [offerAgent, setOfferAgent] = React.useState<Record<string, string>>({})
-  const { data: reopenings = [], error: reopeningsError, refetch: refetchReopenings } = useReopeningWarnings()
-  const { data: taskPage, error: tasksError, refetch: refetchTasks } = useTasks()
-  const { data: conversationPage, error: conversationsError, refetch: refetchConversations } = useProjectConversations(projectId || null)
-  const { data: ledger, error: ledgerError, refetch: refetchLedger } = useProjectLedger()
-  const { data: accounting, error: accountingError, refetch: refetchAccounting } = useAccounting()
-  const failures: QueryFailure[] = [
-    ['the profiles', agentsError, refetchAgents],
-    ['the questions', questionsError, refetchQuestions],
-    ['the stalls', stallsError, refetchStalls],
-    ['the known-failing list', knownFailingError, refetchKnownFailing],
-    ['the quarantine', quarantineError, refetchQuarantine],
-    ['the tasks', tasksError, refetchTasks],
-    ['the threads', conversationsError, refetchConversations],
-    ['the ledger', ledgerError, refetchLedger],
-    ['the budget', accountingError, refetchAccounting],
-    ['the main branch notices', mainNoticesError, refetchMainNotices],
-    ['the checks that could not run', checkNoticesError, refetchCheckNotices],
-    ['the next-slice offers', offersError, refetchOffers],
-    ['the reopened builds', reopeningsError, refetchReopenings],
-  ]
-  // Turns the budget is holding: the queue's own reason, per agent, never inferred from the total.
-  const queueStatuses = useQueueStatuses(agents.map((a) => a.name))
-  const heldByBudget = accounting?.budget.exhausted
-    ? queueStatuses.reduce((n, s) => n + (/budget/i.test(s.waiting_reason ?? '') ? s.waiting_count : 0), 0)
-    : 0
-  const answer = useAnswerQuestion()
-  const decline = useDeclineQuestion()
-  const retryIntegration = useRetryIntegration()
-  const updateTask = useUpdateTask()
-  const now = new Date()
-  const [confirmingDeclineAll, setConfirmingDeclineAll] = React.useState(false)
-  const [decliningAll, setDecliningAll] = React.useState(false)
-  const [declineAllError, setDeclineAllError] = React.useState<string | null>(null)
-  /** A refused action says so, with the Hub's reason; the row stays, since nothing changed. */
-  const refusal = (title: string) => (error: unknown) =>
-    toast({ title, description: readableApiError(error, error instanceof Error ? error.message : 'The Hub refused it.'), tone: 'error' })
-
-  const tasks = React.useMemo(() => (taskPage?.tasks ?? []) as TaskWithIntegration[], [taskPage])
-  const conversations = React.useMemo(() => conversationPage?.conversations ?? [], [conversationPage])
-  const openTask = (taskId: string) => {
-    useTaskFilterStore.getState().setPendingOpenTaskId(taskId)
-    onNavigate('tasks')
-  }
-  const openConversation = (agent: string, conversationId: string) =>
-    onOpenConversation ? onOpenConversation(agent, conversationId) : onNavigate(`agent:${agent}`)
-  const colorOf = (name: string) => agents.find((a) => a.name === name)?.color_index
-
-  const needs: NeedItem[] = [
-    // A question an agent is blocked on comes first (F904): the route is oldest first, and a
-    // non-blocking record would otherwise sit in front of every later ask someone waits on.
-    // `sort` is stable, so within each group the route's order stands.
-    ...questions
-      .filter((q) => !q.answered && !q.declined)
-      .sort((a, b) => Number(isWaitedOn(b)) - Number(isWaitedOn(a)))
-      .map<NeedItem>((q) => ({
-        id: `question-${q.id}`,
-        kind: 'question',
-        agent: q.from_agent || null,
-        colorIndex: colorOf(q.from_agent),
-        title: q.question,
-        waiting: isWaitedOn(q),
-        // Only a blocking question whose asking turn ended has lost its waiter. A non-blocking one
-        // is a note — the mender's always are — and nobody ever waited: its answer is delivered as
-        // a later message, so saying nobody is waiting would be false.
-        detail: q.blocking && q.asker_waiting === false ? 'The turn that asked has ended; nobody is waiting on this answer any more.' : (q.header ?? null),
-        at: q.created_at,
-        // A multi-select or open-ended question is answered where it can be composed in full.
-        options: q.multi_select ? undefined : q.options,
-        // The thread it was asked in when the Hub says which: the answer is delivered there.
-        primary: q.from_agent
-          ? {
-              label: 'Open thread',
-              onClick: () => (q.conversation_id ? openConversation(q.from_agent, q.conversation_id) : onNavigate(`agent:${q.from_agent}`)),
-            }
-          : { label: 'Answer', onClick: () => onNavigate('questions') },
-        // Closed without an answer, through the same route the Questions page uses. The row goes
-        // when the questions come back without it.
-        secondary: {
-          label: 'Decline',
-          onClick: () => decline.mutate({ id: q.id }, { onError: refusal('The question was not declined') }),
-        },
-      })),
-    // A task whose only mover is the operator (`blocked`, `every-task-can-always-be-moved-on`): it
-    // waits on them whether or not a question sits beside it, so it is listed with its reason and
-    // the move that releases it.
-    ...tasks
-      .filter((t) => t.status === 'blocked')
-      .map<NeedItem>((t) => ({
-        id: `blocked-${t.id}`,
-        kind: 'blocked',
-        agent: t.assignee || null,
-        colorIndex: t.assignee ? colorOf(t.assignee) : null,
-        title: `“${t.title}” is waiting on you`,
-        detail: t.blocked_reason ? sentence(t.blocked_reason) : null,
-        at: t.updated,
-        primary: {
-          label: 'Resume work',
-          onClick: () => updateTask.mutate({ id: t.id, status: 'in_progress' }, { onError: refusal('The task was not resumed') }),
-        },
-        secondary: { label: 'Open task', onClick: () => openTask(t.id) },
-      })),
-    // Approved work that did not reach the product is the Hub's own stall (`integration_skipped` /
-    // `integration_failed`, raised for every skip or failure except "already in the target" and ended
-    // when the work merges), so the row follows that stall instead of a second rule here: it clears
-    // itself on a merge, is never listed for work already in main, and Dismiss means what it does
-    // for every other stall (`merge-row-follows-its-stall`).
-    ...openStalls
-      .filter((st) => st.cause.startsWith('integration_') && tasks.some((t) => t.id === st.task_id))
-      .map<NeedItem>((st) => {
-        const t = tasks.find((task) => task.id === st.task_id)!
-        const mending = st.conversation_id
-        const retryable = t.latest_integration?.retryable === true
-        return {
-          id: `merge-${t.id}`,
-          kind: 'merge',
-          agent: null,
-          title: `“${t.title}” was approved but not merged`,
-          detail: sentence(st.reason || t.latest_integration?.reason || '') || null,
-          at: t.latest_integration?.created_at ?? st.last_seen_at,
-          primary: retryable
-            ? {
-                label: 'Try again',
-                onClick: () => retryIntegration.mutate(t.id, { onError: refusal('The merge was not retried') }),
-              }
-            : { label: 'Open task', onClick: () => openTask(t.id) },
-          secondary: { label: 'Dismiss', onClick: () => endStall.mutate(st.id, { onError: refusal('The notice was not dismissed') }) },
-          more: [
-            ...(retryable ? [{ label: 'Open task', onClick: () => openTask(t.id) }] : []),
-            ...(mending ? [{ label: 'The mender is on it', onClick: () => openConversation(MENDER, mending) }] : []),
-          ],
-        }
-      }),
-    // Every other stall (`hub/hub/stalls.py`); a merge stall is the merge row above.
-    ...openStalls
-      .filter((st) => !(st.cause.startsWith('integration_') && tasks.some((t) => t.id === st.task_id)))
-      .map<NeedItem>((st) => {
-        const ref = tasks.find((t) => t.id === st.task_id)?.readable_id ?? null
-        return {
-        id: `stall-${st.id}`,
-        kind: 'stall',
-        agent: st.conversation_id ? MENDER : null,
-        colorIndex: st.conversation_id ? colorOf(MENDER) : null,
-        title: STALL_TITLE[st.cause],
-        // In the operator's words (FR-9): a capital first, no stored ids.
-        detail: stallNotice(st.reason, ref) + (st.conversation_id ? ' The mender is on it.' : ''),
-        remedies: <StallRemedies stall={st} taskRef={ref} />,
-        at: st.last_seen_at,
-        primary: st.conversation_id
-          ? { label: 'Open the mender’s thread', onClick: () => openConversation(MENDER, st.conversation_id!) }
-          : st.task_id
-            ? { label: 'Open task', onClick: () => openTask(st.task_id!) }
-            : { label: 'Open tasks', onClick: () => onNavigate('tasks') },
-        // Ended by hand: what the operator says when they have dealt with it themselves.
-        secondary: { label: 'Dismiss', onClick: () => endStall.mutate(st.id, { onError: refusal('The notice was not dismissed') }) },
-        }
-      }),
-    // A built roadmap slice whose next slice's drafting is offered (`hub/hub/slice_drafting.py`):
-    // Draft queues it to the chosen agent (the author preselected), Not now hides it.
-    ...offers.map<NeedItem>((offer) => {
-      const names = agents.map((a) => a.name)
-      const options = offer.agent && !names.includes(offer.agent) ? [offer.agent, ...names] : names
-      const key = offerKey(offer)
-      const target = offerTarget(offer)
-      const agent = offerAgent[key] ?? offer.agent ?? options[0] ?? ''
-      return {
-        id: `offer-${key}`,
-        kind: 'offer',
-        agent: null,
-        title: offerTitle(offer),
-        detail: sentence(
-          offer.approved_slice
-            ? `${offer.roadmap_title}: what ${offer.next_slice.key} builds after is built, and no document claims it yet`
-            : `${offer.roadmap_title}: ${offer.next_slice.key} builds after nothing, and no document claims it yet`,
-        ),
-        at: new Date().toISOString(),
-        picker: {
-          label: 'Profile that drafts the next slice',
-          options,
-          value: agent,
-          onChange: (value: string) => setOfferAgent((current) => ({ ...current, [key]: value })),
-        },
-        primary: {
-          label: 'Draft',
-          onClick: () =>
-            takeOffer.mutate(
-              { ...target, agent },
-              {
-                onSuccess: (taken) =>
-                  toast({
-                    title: `Asked ${agent} to draft ${offer.next_slice.title || offer.next_slice.key}`,
-                    tone: 'success',
-                    // The slice's document exists now (FR-1); its conversation opens with it.
-                    action: taken?.conversation_id
-                      ? { label: 'Open the thread', onClick: () => openConversation(taken.agent || agent, taken.conversation_id!) }
-                      : undefined,
-                  }),
-                onError: refusal('The drafting turn was not queued'),
-              },
-            ),
-        },
-        secondary: {
-          label: 'Not now',
-          onClick: () => declineOffer.mutate(target,{ onError: refusal('The offer was not dismissed') }),
-        },
-      }
-    }),
-    // Main moved outside the Hub's own integration (`hub/hub/main_watch.py`): one row per open
-    // notice, naming the commits so the operator recognises their own merges at a glance.
-    // A check whose latest run could not run (`project_checks.could_not_run_notices`): landing
-    // waits on it, and it clears when the check runs again. The row only takes the operator to
-    // the tasks, where the run is.
-    ...checkNotices.map<NeedItem>((notice) => ({
-      id: `check-${notice.check}`,
-      kind: 'check',
-      agent: null,
-      title: `${notice.check} could not run`,
-      detail: notice.message,
-      at: notice.at,
-      primary: { label: 'Open tasks', onClick: () => onNavigate('tasks') },
-    })),
-    ...mainNotices.map<NeedItem>((notice) => ({
-      id: `main-${notice.id}`,
-      kind: 'main',
-      agent: null,
-      title: notice.rewrite
-        ? `The history of ${notice.branch} was rewritten outside the Hub`
-        : `${notice.branch} moved outside the Hub`,
-      detail: describeMainNotice(notice),
-      at: notice.updated_at,
-      primary: {
-        label: 'Seen',
-        onClick: () => markSeen.mutate(notice.id, { onError: refusal('The notice was not marked seen') }),
-      },
-    })),
-  ]
-
-  // A running turn on a task that belongs to a build offers that build's view at the task.
-  const buildOf = (taskId: string | null | undefined): Pick<RunningItem, 'build'> => {
-    const task = taskId ? tasks.find((t) => t.id === taskId) : undefined
-    return task?.build_id && projectId ? { build: { projectId, buildId: task.build_id, task: task.readable_id ?? task.id } } : {}
-  }
-  const running: RunningItem[] = conversations
-    .filter((c) => c.attention === 'running')
-    .map((c) => ({
-      id: c.id,
-      agent: c.agent,
-      colorIndex: colorOf(c.agent),
-      conversationTitle: conversationLabel(c),
-      taskTitle: c.task_id ? (tasks.find((t) => t.id === c.task_id)?.title ?? null) : null,
-      startedAt: c.updated_at,
-      tokens: c.context_usage?.context_tokens ?? null,
-      onOpen: () => openConversation(c.agent, c.id),
-      ...buildOf(c.task_id),
-    }))
-
-  const usdByTask = new Map((ledger?.spend.by_task ?? []).map((t) => [t.task_id, t.usd]))
-  const finished: FinishedItem[] = (ledger?.merges ?? [])
-    .filter((m) => m.outcome === 'merged' && m.at)
-    .slice(0, 5)
-    .map((m) => ({
-      id: m.id,
-      kind: 'merged' as const,
-      title: m.task_title ?? 'A task',
-      detail: `Merged into ${m.target_branch ?? 'the main branch'} · approved by ${m.actor_kind === 'operator' ? 'you' : (m.actor ?? 'a profile')}`,
-      at: m.at!,
-      usd: usdByTask.get(m.task_id) ?? null,
-      onOpen: () => openTask(m.task_id),
-    }))
-
-  // The ledger counts a turn with no reported cost as $0; the accounting snapshot knows which
-  // were unpriced, so it answers per agent when it has loaded (F952).
-  const usdByAgent = new Map<string, number | null>(
-    accounting?.agents
-      ? accounting.agents.map((a) => [a.agent, a.api_equivalent_usd_micros != null ? a.api_equivalent_usd_micros / 1_000_000 : null])
-      : (ledger?.spend.by_agent ?? []).map((a) => [a.agent, a.usd]),
-  )
-  const strip: AgentStripItem[] = agents.map((a) => {
-    const mine = conversations.filter((c) => c.agent === a.name).sort((x, y) => y.updated_at.localeCompare(x.updated_at))
-    const live = mine.find((c) => c.attention === 'running')
-    const waiting = mine.some((c) => c.attention === 'waiting')
-    const state: AgentStripItem['state'] =
-      a.status === 'running' || live
-        ? 'running'
-        : waiting
-          ? 'waiting'
-          : a.status === 'stalled'
-            ? 'stalled'
-            : !a.runner_id && (!a.runner || a.runner === 'native')
-              ? 'no-runner'
-              : 'idle'
-    const latest = live ?? mine[0]
-    return {
-      name: a.name,
-      colorIndex: a.color_index,
-      state,
-      statusLabel: state === 'waiting' ? 'Waiting' : getStatusConfig(a.status).label || a.status,
-      doing:
-        state === 'running'
-          ? `Working on “${latest ? conversationLabel(latest) : 'a thread'}”`
-          : state === 'waiting'
-            ? 'Waiting for your answer'
-            : state === 'stalled'
-              ? 'Stalled: its turn stopped making progress'
-              : state === 'no-runner'
-                ? 'No runner yet, so it cannot start a turn'
-                : `Last active ${a.last_seen ? formatAgoLong(a.last_seen, now) : 'never'}`,
-      usd: usdByAgent.get(a.name) ?? (accounting?.agents ? null : 0),
-      extra: <AgentPostureChips agent={a} onNavigate={onNavigate} />,
-      // The name and the settings control both lead to the profile's page (FR-15).
-      profile: projectId
-        ? { href: profileHref(projectId, a.name), onOpen: () => onNavigate(`agent-settings:${a.name}:agent`) }
-        : undefined,
-      onOpen: () => onNavigate(`agent:${a.name}`),
-    }
-  })
-
-  // The same facts the Budgets page states: what the dollar figure leaves out, the credits a
-  // Copilot project spends, and the allowance a subscription is measured by (F952).
-  const project = accounting?.project
-  const unpriced = project?.unpriced_turns ?? 0
-  const display = accounting?.preferred_display
-  const spend = {
-    usd: project ? (project.api_equivalent_usd_micros != null ? project.api_equivalent_usd_micros / 1_000_000 : null) : (ledger?.spend.total_usd ?? null),
-    tokens: ledger?.spend.total_tokens ?? 0,
-    period: project && project.api_equivalent_usd_micros != null ? 'API-equivalent so far' : 'so far',
-    credits: formatAiCredits(project?.ai_nano_aiu ?? null),
-    notes: [
-      unpriced > 0 && project?.api_equivalent_usd_micros != null ? `${unpriced} ${unpriced === 1 ? 'turn' : 'turns'} unpriced` : null,
-      display?.kind === 'allowance' ? accountingDisplayLabel(display) : null,
-    ].filter((note): note is string => !!note),
-  }
-
-  // Questions whose asker has gone (or never waited): the section declines them in one go. A
-  // question an agent still holds a call open for is never in this set.
-  const unwaited = questions.filter((q) => !q.answered && !q.declined && !isWaitedOn(q))
-  const declineAll = async () => {
-    setDecliningAll(true)
-    setDeclineAllError(null)
-    const results = await Promise.allSettled(unwaited.map((q) => decline.mutateAsync({ id: q.id })))
-    setDecliningAll(false)
-    const failed = results.filter((r): r is PromiseRejectedResult => r.status === 'rejected')
-    if (failed.length === 0) {
-      setConfirmingDeclineAll(false)
-      toast({ title: `Declined ${unwaited.length} ${unwaited.length === 1 ? 'question' : 'questions'}`, tone: 'success' })
-      return
-    }
-    setDeclineAllError(
-      `${failed.length} of ${unwaited.length} could not be declined: ${readableApiError(failed[0].reason, failed[0].reason instanceof Error ? failed[0].reason.message : 'the Hub refused it')}`,
-    )
-  }
-
   return (
-    <>
-    <OverviewView
-      loading={agentsLoading}
-      needsAction={
-        unwaited.length >= 2
-          ? { label: `Decline ${unwaited.length} questions nobody is waiting on`, onClick: () => setConfirmingDeclineAll(true) }
-          : null
-      }
-      needs={needs}
-      running={running}
-      finished={finished}
-      agents={strip}
-      spend={spend}
-      taskTotal={taskPage?.total}
-      heldByBudget={heldByBudget}
-      onOpenTasks={() => onNavigate('tasks')}
-      onOpenLedger={() => onNavigate('budgets')}
-      onOpenChapters={() => onNavigate('thread')}
-      onOpenQuestions={() => onNavigate('questions')}
-      onAddAgent={onAddAgent}
-      setup={<ProjectSetupList place="overview" />}
-      knownFailing={
-        // A Hub older than the list answers null: it has none to show, so no section.
-        knownFailing ? (
-          <KnownFailingList
-            entries={knownFailing}
-            disturbed={disturbedRuns}
-            onClear={() => clearStable.mutate()}
-            clearing={clearStable.isPending}
-            cleared={clearStable.data ?? null}
-            clearError={clearStable.error ? readableApiError(clearStable.error, 'The fix tasks could not be closed.') : null}
-            onOpenTask={openTask}
-            now={now}
-          />
-        ) : null
-      }
-      quarantine={
-        // A Hub older than the route answers null: it has no quarantine to show.
-        quarantine ? (
-          <QuarantineList
-            quarantined={quarantine.quarantined}
-            marks={quarantine.marks}
-            onSetMark={(check, test) => setMark.mutate({ check, test })}
-            onRemoveMark={(check, test) => removeMark.mutate({ check, test })}
-            busy={setMark.isPending || removeMark.isPending}
-            error={
-              setMark.error
-                ? readableApiError(setMark.error, 'The mark could not be set.')
-                : removeMark.error
-                  ? readableApiError(removeMark.error, 'The mark could not be removed.')
-                  : null
-            }
-            onOpenTask={openTask}
-            now={now}
-          />
-        ) : null
-      }
-      notice={
-        reopenings.length > 0 || failures.some(([, error]) => error) || accounting?.budget.exhausted ? (
-          <>
-            <ReopeningWarnings warnings={reopenings} />
-            {/* A failed query would otherwise read as fact here: no questions, nobody working, $0. */}
-            <QueryErrorNotice failures={failures} />
-            {accounting?.budget.exhausted ? (
-              <BudgetExhaustionNotice
-                exhausted
-                embedded
-                limitTokens={accounting.budget.limit_tokens}
-                usedTokens={accounting.budget.used_tokens}
-                heldCount={heldByBudget}
-                onOpenBudgets={() => onNavigate('budgets')}
-              />
-            ) : null}
-          </>
-        ) : null
-      }
-      onAnswer={(need, option) => {
-        const id = need.id.replace(/^question-/, '')
-        answer.mutate(
-          { id, answer: option.label, labels: [option.label] },
-          {
-            onSuccess: () => toast({ title: `Answered ${need.agent ?? 'the question'}: “${option.label}”`, tone: 'success' }),
-            onError: (error: unknown) =>
-              toast({ title: 'The answer was not sent', description: error instanceof Error ? error.message : undefined, tone: 'error' }),
-          },
-        )
-      }}
-      now={now}
-    />
-    {confirmingDeclineAll ? (
-      <DeleteConfirmDialog
-        heading={`Decline ${unwaited.length} ${unwaited.length === 1 ? 'question' : 'questions'}?`}
-        body={`Nobody is waiting on the answers to these ${unwaited.length}. Declining closes each one without an answer.`}
-        confirmLabel={`Decline ${unwaited.length} ${unwaited.length === 1 ? 'question' : 'questions'}`}
-        isPending={decliningAll}
-        pendingLabel="Declining…"
-        error={declineAllError}
-        onCancel={() => setConfirmingDeclineAll(false)}
-        onConfirm={() => void declineAll()}
+    <div id="overview-more-checks" className="aw-ov-more-panel" data-slot="overview-quarantine">
+      <h2>Quarantine and known failures</h2>
+      <QueryErrorNotice
+        failures={[
+          ['the known-failing list', knownFailingError, refetchKnownFailing],
+          ['the quarantine', quarantineError, refetchQuarantine],
+        ]}
       />
-    ) : null}
-    </>
+      {knownFailing ? (
+        <KnownFailingList
+          entries={knownFailing}
+          disturbed={disturbedRuns}
+          onClear={() => clearStable.mutate()}
+          clearing={clearStable.isPending}
+          cleared={clearStable.data ?? null}
+          clearError={clearStable.error ? readableApiError(clearStable.error, 'The fix tasks could not be closed.') : null}
+          onOpenTask={onOpenTask}
+          now={now}
+        />
+      ) : null}
+      {quarantine ? (
+        <QuarantineList
+          quarantined={quarantine.quarantined}
+          marks={quarantine.marks}
+          onSetMark={(check, test) => setMark.mutate({ check, test })}
+          onRemoveMark={(check, test) => removeMark.mutate({ check, test })}
+          busy={setMark.isPending || removeMark.isPending}
+          error={
+            setMark.error
+              ? readableApiError(setMark.error, 'The mark could not be set.')
+              : removeMark.error
+                ? readableApiError(removeMark.error, 'The mark could not be removed.')
+                : null
+          }
+          onOpenTask={onOpenTask}
+          now={now}
+        />
+      ) : null}
+    </div>
+  )
+}
+
+function ProfilesPanel({ onNavigate }: { onNavigate: (page: string) => void }) {
+  const { data: agents = [], error, refetch } = useAgents()
+  return (
+    <div id="overview-more-profiles" className="aw-ov-more-panel" data-slot="overview-profile-status">
+      <h2>Profile status</h2>
+      <QueryErrorNotice failures={[['the profiles', error, refetch]]} />
+      <ul className="aw-ov-profile-list">
+        {agents.map((a) => (
+          <li key={a.name} className="aw-ov-profile">
+            <span className="aw-ov-profile-name">
+              <span className="aw-od-agent-dot" style={{ background: agentColorVars(a.color_index).accent }} aria-hidden />
+              {a.name}
+            </span>
+            <AgentPostureChips agent={a} onNavigate={onNavigate} />
+          </li>
+        ))}
+      </ul>
+    </div>
   )
 }
