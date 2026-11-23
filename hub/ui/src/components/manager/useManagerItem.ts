@@ -25,7 +25,11 @@ const STARTING_MS = 20_000
  * - `onEnded` is called when a run on the item ends, so the placement re-reads its product (FR-5).
  * - `seeOnShow`: the placement is the item's warning or failure list, so showing a failure is the
  *   operator seeing it, and it is marked seen at once (FR-6). The icon keeps showing it failed in
- *   this view until a run on the item starts, so the operator sees what they arrived to.
+ *   this view until a run on the item starts, so the operator sees what they arrived to. Without
+ *   it the placement only signals the failure (the spec's health line, while its warning list is
+ *   closed): it shows failed until somebody sees it, and idle once they have.
+ * - `seeFailures()` is for a placement whose failure list opens on demand: it marks the failures
+ *   seen, and this view keeps showing the one it opened, as `seeOnShow` does.
  * - `starting()` is for the placement's own control (Check now): the icon goes straight to working,
  *   with no idle between a failure and the run's start arriving.
  */
@@ -99,9 +103,8 @@ export function useManagerItem({
   const { mutate: see } = markSeen
   const posted = React.useRef(new Set<string>())
   React.useEffect(() => {
-    if (!newest || startingSince !== null || isRunning) return
+    if (!newest || startingSince !== null || isRunning || !seeOnShow) return
     setShownFailure((shown) => shown ?? newest)
-    if (!seeOnShow) return
     const fresh = failureIds.split(',').filter((id) => id && !posted.current.has(id))
     if (!fresh.length) return
     fresh.forEach((id) => posted.current.add(id))
@@ -113,11 +116,12 @@ export function useManagerItem({
 
   /** Mark this item's listed failures seen (a placement whose failure list opens on demand). */
   const seeFailures = React.useCallback(() => {
+    if (newest) setShownFailure((shown) => shown ?? newest)
     const fresh = failureIds.split(',').filter((id) => id && !posted.current.has(id))
     if (!fresh.length) return
     fresh.forEach((id) => posted.current.add(id))
     see(fresh)
-  }, [failureIds, see])
+  }, [failureIds, newest, see])
 
   // What a press set aside, so a press the Hub refused gives the failure back.
   const pressed = React.useRef<{ ids: string[]; shown: ManagerUnseenFailure | null }>({ ids: [], shown: null })

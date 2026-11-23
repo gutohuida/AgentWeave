@@ -5,6 +5,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ManagerIndicator } from '@/components/manager/ManagerIndicator'
 import { SpecVaultWarnings } from '@/components/spec/SpecVaultWarnings'
 import { SpecRetrospective } from '@/components/spec/page/SpecRetrospective'
+import { SpecDocumentFacts } from '@/components/spec/page/SpecDocumentFacts'
+import { openMenu } from './testUtils/menus'
 import { VaultDistillationStatus } from '@/components/vault/VaultDistillationStatus'
 import { useVaultMap } from '@/api/vault'
 import { __resetSSEStateForTest, cancelReconnect } from '@/hooks/useSSE'
@@ -364,6 +366,83 @@ describe('failure-persists and failure-cleared (a), (c) (FR-6)', () => {
     expect(screen.getByTestId('manager-icon')).toHaveAttribute('data-state', 'working')
     await waitFor(() => expect(screen.getByTestId('manager-icon')).toHaveAttribute('data-state', 'failed'))
     expect(await screen.findByText(/Could not start the check/)).toBeInTheDocument()
+  })
+})
+
+describe('failure-persists on the spec page, with the warning list closed (FR-6)', () => {
+  beforeEach(() => {
+    unseen = [{ run_id: 'mrun-fail', job: 'spec-vault-check', subject: { document: SPEC_A }, ended_at: ago(86_400), detail: 'no such model' }]
+  })
+
+  const facts = () => <SpecDocumentFacts path={SPEC_A} specList={undefined} onOpenRequirement={() => {}} />
+  const seen = () => posted.filter((p) => p.url.endsWith('/runs/seen'))
+
+  it("shows spec A's failure on its health line without marking it seen, until the list is opened", async () => {
+    wrap(facts())
+    const fact = await screen.findByTestId('spec-health-vault')
+    await waitFor(() => expect(within(fact).getByTestId('manager-icon')).toHaveAttribute('data-state', 'failed'))
+    expect(screen.queryByTestId('spec-vault-warnings')).toBeNull()
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 50))
+    })
+    expect(seen()).toHaveLength(0)
+
+    // The fact's popover names the failure; that is not the warning list, so it is not seen yet.
+    openMenu(fact)
+    expect(screen.getByTestId('spec-health-vault-failure')).toHaveTextContent('no such model')
+    expect(seen()).toHaveLength(0)
+
+    // Opening the warning list in place is the operator seeing it.
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Show details' }))
+    await waitFor(() => expect(seen().map((p) => p.body)).toEqual([{ run_ids: ['mrun-fail'] }]))
+    // Once the Hub stops listing it, the health line goes idle; the list keeps what was opened.
+    unseen = []
+    await act(async () => push('manager_run_seen', { run_ids: ['mrun-fail'] }))
+    await waitFor(() => expect(within(screen.getByTestId('spec-health-vault')).queryByTestId('manager-icon')).toBeNull())
+    expect(within(screen.getByTestId('spec-vault-warnings')).getByTestId('manager-icon')).toHaveAttribute('data-state', 'failed')
+  })
+
+  it("goes straight to working on the health line's Check now", async () => {
+    wrap(facts())
+    const fact = await screen.findByTestId('spec-health-vault')
+    await waitFor(() => expect(within(fact).getByTestId('manager-icon')).toHaveAttribute('data-state', 'failed'))
+    openMenu(fact)
+    fireEvent.click(screen.getByRole('menuitem', { name: /Check against the vault again/ }))
+    expect(within(screen.getByTestId('spec-health-vault')).getByTestId('manager-icon')).toHaveAttribute('data-state', 'working')
+    await waitFor(() => expect(posted.some((p) => p.url.includes('/vault/warnings/check'))).toBe(true))
+  })
+
+  it('shows working on the health line while a check of spec A runs', async () => {
+    unseen = []
+    running = [run('mrun-a', 'spec-vault-check', { document: SPEC_A })]
+    wrap(facts())
+    const fact = await screen.findByTestId('spec-health-vault')
+    await waitFor(() => expect(within(fact).getByTestId('manager-icon')).toHaveAttribute('data-state', 'working'))
+  })
+})
+
+describe('a failed retrospective is seen only when its icon is opened (FR-6)', () => {
+  beforeEach(() => {
+    unseen = [{ run_id: 'mrun-rfail', job: 'build-retrospective', subject: { document: SPEC_B }, ended_at: ago(600), detail: 'runner timed out' }]
+  })
+
+  it('shows failed with its reason, marks it seen only on opening, and keeps it shown', async () => {
+    wrap(<SpecRetrospective path={SPEC_B} now={new Date()} flash={null} onCopyLink={() => {}} />)
+    await waitFor(() => expect(screen.getByTestId('manager-icon')).toHaveAttribute('data-state', 'failed'))
+    expect(screen.getByTestId('manager-icon')).toHaveAccessibleName(/runner timed out/)
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 50))
+    })
+    expect(posted.filter((p) => p.url.endsWith('/runs/seen'))).toHaveLength(0)
+    fireEvent.click(screen.getByTestId('manager-icon'))
+    expect(screen.getByTestId('retro-failure')).toHaveTextContent('runner timed out')
+    await waitFor(() => expect(posted.find((p) => p.url.endsWith('/runs/seen'))?.body).toEqual({ run_ids: ['mrun-rfail'] }))
+    unseen = []
+    await act(async () => push('manager_run_seen', { run_ids: ['mrun-rfail'] }))
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 50))
+    })
+    expect(screen.getByTestId('retro-failure')).toHaveTextContent('runner timed out')
   })
 })
 
