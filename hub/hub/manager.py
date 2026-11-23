@@ -68,6 +68,7 @@ CHAPTERS = "chapters"
 MENDER = "mender"
 BUILD_RETROSPECTIVE = "build-retrospective"
 PRE_MORTEM = "pre-mortem"
+OVERVIEW_NOTE = "overview-note"
 
 
 @dataclass(frozen=True)
@@ -184,6 +185,23 @@ JOBS = (
             button="Run a pre-mortem",
             where="a spec document's page",
             automatic="when a document's acceptance criteria are written",
+        ),
+    ),
+    JobSpec(
+        key=OVERVIEW_NOTE,
+        title="Overview note",
+        description=(
+            "Writes the Briefing's short note on what changed since your last visit and anything "
+            "that looks wrong, such as a build that stopped moving or spend well above its usual "
+            "day. Fires when you open the Overview more than 30 minutes after your last visit and "
+            "something changed since the last note (automatic), and when you press Refresh note. "
+            "Never on a timer. Needs a runner. Off: the Briefing shows no new note."
+        ),
+        trigger="overview_visit",
+        firing_choice=FiringChoice(
+            button="Refresh note",
+            where="the Overview's Briefing",
+            automatic="when a new visit to the Overview starts and something changed",
         ),
     ),
     # The one entry that is an agent, not a one-shot spawn (`stalls.py`): its runner and model

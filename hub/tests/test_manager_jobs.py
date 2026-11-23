@@ -59,7 +59,11 @@ async def test_the_listing_offers_the_firing_choice_on_exactly_the_jobs_with_a_b
 ):
     listed = (await app.get(f"{BASE}/manager/jobs", headers=auth_headers)).json()["jobs"]
     offered = {job["key"] for job in listed if job["firing_choice"]}
-    assert offered == {"chapters", "build-retrospective", "pre-mortem"} == set(manager.HAS_BUTTON)
+    assert (
+        offered
+        == {"chapters", "build-retrospective", "pre-mortem", "overview-note"}
+        == set(manager.HAS_BUTTON)
+    )
     retrospective = next(job for job in listed if job["key"] == "build-retrospective")
     assert retrospective["firing_choice"]["button"] == "Review this build"
 
@@ -102,6 +106,7 @@ async def test_each_job_says_whether_it_can_run_without_a_runner(app, auth_heade
         manager.CHAPTERS: True,
         manager.BUILD_RETROSPECTIVE: True,
         manager.PRE_MORTEM: True,
+        manager.OVERVIEW_NOTE: True,
         manager.MENDER: True,
     }
 

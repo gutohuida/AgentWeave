@@ -350,6 +350,9 @@ async def project_rows(
     from . import build_needs
 
     needs = await build_needs.needs_of_builds(session, project_id, builds)
+    moving = await _tasks_in_motion(
+        session, project_id, [b.id for b in builds if b.state == RUNNING], states
+    )
     rows: List[Dict[str, Any]] = []
     for build in builds:
         pair = loops.get(build.loop_id or "")
@@ -392,6 +395,10 @@ async def project_rows(
                 # and whether they dismissed it from the sidebar since it began needing that.
                 "needs_operator": needs[build.id].build,
                 "attention_dismissed": build_needs.attention_dismissed(build, needs[build.id]),
+                # A few words on what it is doing now (`overview-at-a-glance...`, FR-8, D8).
+                "stage_words": stage_words(
+                    build, needs[build.id].build, bool(asked), moving.get(build.id, [])
+                ),
                 "open_questions": len(asked),
                 "question": (
                     {
@@ -407,6 +414,112 @@ async def project_rows(
             }
         )
     return rows
+
+
+#: How far along an unfinished task is, for `stage_words`: the highest wins, the earliest-created
+#: task breaking a tie. Each with the words that name it.
+_MOTION_RANK = {"landing": 5, "held": 4, "checking": 3, "reviewing": 2, "building": 1, "waiting": 0}
+_MOTION_WORDS = {
+    "landing": "Landing task {}",
+    "held": "Holding the landing of task {}",
+    "checking": "Checking task {}",
+    "reviewing": "Reviewing task {}",
+    "building": "Building task {}",
+    "waiting": "Waiting to start task {}",
+}
+
+
+async def _tasks_in_motion(
+    session: AsyncSession,
+    project_id: str,
+    build_ids: Sequence[str],
+    states: Dict[str, Tuple[str, str]],
+) -> Dict[str, List[Tuple[str, str]]]:
+    """build id -> `(motion, display id)` of each of its unfinished tasks, in creation order, for
+    the running builds in *build_ids*. *states* are `landing_queue.landing_states`' answer for the
+    builds' tasks: a task on its way to main is checking, held or landing by its landing; one whose
+    own checks are running (a `TaskCheckRun` still `running`) is checking; completed or under
+    review, reviewing; with a run bound to it, building; otherwise waiting to start."""
+    from .db.models import TaskCheckRun
+
+    if not build_ids:
+        return {}
+    tasks = (
+        await session.execute(
+            select(Task.id, Task.build_id, Task.status, Task.readable_id)
+            .where(Task.build_id.in_(list(build_ids)))
+            .order_by(Task.created_at, Task.id)
+        )
+    ).all()
+    ids = [row[0] for row in tasks]
+    if not ids:
+        return {}
+    running = set(
+        (
+            await session.execute(
+                select(Run.task_id).where(
+                    Run.project_id == project_id, Run.status == "running", Run.task_id.in_(ids)
+                )
+            )
+        ).scalars()
+    )
+    checking = set(
+        (
+            await session.execute(
+                select(TaskCheckRun.task_id).where(
+                    TaskCheckRun.task_id.in_(ids), TaskCheckRun.state == "running"
+                )
+            )
+        ).scalars()
+    )
+    found: Dict[str, List[Tuple[str, str]]] = {}
+    for task_id, build_id, task_status, readable_id in tasks:
+        landing = states.get(task_id, (None, ""))[0]
+        if task_status == "approved":
+            if landing in ("queued", "checking"):
+                motion = "checking"
+            elif landing in ("held", "landing"):
+                motion = landing
+            else:
+                continue  # done, or did not land: not moving
+        elif task_status == "rejected":
+            continue
+        elif task_id in checking:
+            motion = "checking"
+        elif task_status in ("completed", "under_review"):
+            motion = "reviewing"
+        elif task_id in running:
+            motion = "building"
+        else:
+            motion = "waiting"
+        found.setdefault(build_id, []).append((motion, readable_id or task_id))
+    return found
+
+
+def stage_words(
+    build: Build,
+    need: Optional[Dict[str, str]],
+    asked: bool,
+    moving: Sequence[Tuple[str, str]],
+) -> str:
+    """A few words on what *build* is doing now (`overview-at-a-glance...`, D8): waiting for the
+    operator's answer, stalled, or the furthest-along unfinished task's stage ('Checking task 8');
+    an ended build says it finished or stopped. *need* is `build_needs`' need of the build, *asked*
+    whether a blocking question is waiting on its work, *moving* `_tasks_in_motion`'s entry."""
+    if build.state == FINISHED:
+        return "Finished"
+    if build.state == STOPPED:
+        return "Stopped"
+    kind = (need or {}).get("kind")
+    if asked or kind == "question":
+        return "Waiting for your answer"
+    if kind in ("stalled", "gave-up"):
+        return "Stalled"
+    if not moving:
+        return "Finishing"
+    best = max(range(len(moving)), key=lambda i: (_MOTION_RANK[moving[i][0]], -i))
+    motion, name = moving[best]
+    return _MOTION_WORDS[motion].format(name)
 
 
 async def build_of_loop(session: AsyncSession, loop_id: Optional[str]) -> Optional[Build]:

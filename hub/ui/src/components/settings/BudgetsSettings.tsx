@@ -24,6 +24,7 @@ const WORKER_LABELS: Record<string, string> = {
   'vault-distillation': 'Vault distillation',
   'vault-reports': 'Vault reports',
   'spec-vault-check': 'Spec checks',
+  mender: 'Mender',
 }
 
 function premium(n: number | null | undefined): string | null {
