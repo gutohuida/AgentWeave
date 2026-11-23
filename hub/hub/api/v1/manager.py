@@ -10,7 +10,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, s
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ... import build_retrospective, chapters_job, manager, pre_mortem
+from ... import build_retrospective, chapters_job, manager, overview_note_job, pre_mortem
 from ...auth import get_project
 from ...db.engine import get_session
 from ...db.models import Runner
@@ -57,7 +57,7 @@ async def update_manager_job(
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="mode chooses between automatic firing and the button, and only the "
-                "chapters, build retrospective and pre-mortem jobs have a button",
+                "chapters, build retrospective, pre-mortem and overview note jobs have a button",
             )
         fields["automatic"] = mode == "automatic"
     runner_id = fields.get("runner_id")
@@ -121,6 +121,27 @@ async def weave_the_thread(
     background.add_task(
         chapters_job.weave_in_background, project_id, trigger=chapters_job.REQUESTED
     )
+    return {"started": True}
+
+
+@router.post("/jobs/overview-note/run", status_code=status.HTTP_202_ACCEPTED)
+async def refresh_the_note(
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """'Refresh note' on the Overview's Briefing: the overview-note job writes a note now, whatever
+    its automatic choice and whether or not anything changed. Refused (409 `{code, reason}`) while
+    the job is off (`disabled`), has no runner (`no_runner`, recorded as a failed firing) or is
+    already writing one (`already_running`); the firing runs after the answer."""
+    project_id = project[0]
+    try:
+        await overview_note_job.start(session, project_id, trigger=overview_note_job.BUTTON)
+    except overview_note_job.CannotWriteNoteError as exc:
+        await overview_note_job.refuse(project_id, exc, trigger=overview_note_job.BUTTON)
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"code": exc.code, "reason": exc.reason},
+        ) from exc
     return {"started": True}
 
 

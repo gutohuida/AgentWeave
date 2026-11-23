@@ -1,6 +1,7 @@
 """The project's Overview in one read (`overview-at-a-glance-with-dashboard-and-briefing-tabs`, D1).
 
-Read-only: refetching it never moves the visit record (D2)."""
+The read is read-only: refetching it never moves the visit record. The visit is its own write,
+`POST /overview/visit`, called once when the Overview mounts (D2)."""
 
 from datetime import datetime, timezone
 from typing import Optional, Tuple
@@ -9,7 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ... import overview as overview_module
-from ... import project_workspace
+from ... import overview_note_job, project_workspace
 from ...auth import get_project
 from ...db.engine import get_session
 
@@ -44,3 +45,30 @@ async def get_overview(
     return await overview_module.overview(
         session, project_id, day_start=start, days=days, workspace=workspace, now=now
     )
+
+
+@router.post("/visit")
+async def record_visit(
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    """The operator opened the Overview (algorithm 'record-visit'): `{previous_at, current_at,
+    note_started}`. A new visit -- the first, or one more than 30 minutes after the last -- fires
+    the overview-note job when something changed since the latest note (algorithm 'note-on-visit');
+    the firing runs in the background and this answers at once."""
+    project_id, _ = project
+    now = datetime.now(timezone.utc)
+    previous, current, new_visit = await overview_note_job.record_visit(session, project_id, now)
+    await session.commit()
+    note_started = False
+    if new_visit:
+        try:
+            workspace = await project_workspace.resolve_project_workspace(session, project_id)
+        except project_workspace.ProjectWorkspaceError:
+            workspace = None
+        note_started = await overview_note_job.on_visit(session, project_id, workspace)
+    return {
+        "previous_at": previous.isoformat() if previous is not None else None,
+        "current_at": current.isoformat(),
+        "note_started": note_started,
+    }

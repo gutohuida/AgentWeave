@@ -8,8 +8,8 @@ stalls, permission requests, the known-failing list, check and main notices, nex
 reopening warnings, `builds.project_rows`, the turns' usage, the integration and transition
 records) and changes none of them. Nothing here writes: refetching it never moves the visit record.
 
-The visit, the note and its state are the `visits-and-note` task's: until it lands they are
-answered null, null, false and null.
+The visit, the note and its state are read from `overview_note_job` (task `visits-and-note`):
+the visit is moved only by `POST /overview/visit`, the note only by the overview-note job.
 """
 
 from __future__ import annotations
@@ -180,10 +180,16 @@ async def overview(
 
     *day_start* is the operator's local midnight today; spend is bucketed into *days* local days
     ending with today. Finished work is listed from the earlier of *day_start* and
-    *previous_visit_at* (the visit before the current one, once visits are recorded)."""
+    *previous_visit_at* (the visit before the current one), read from the visit record unless the
+    caller passes it."""
+    from . import overview_note_job
+
     moment = _aware(now) or datetime.now(timezone.utc)
     day_start = _aware(day_start) or moment
     days = max(1, min(int(days), MAX_DAYS))
+    visit = await overview_note_job.visit_view(session, project_id)
+    if previous_visit_at is None and visit is not None and visit["previous_at"]:
+        previous_visit_at = datetime.fromisoformat(visit["previous_at"])
     previous = _aware(previous_visit_at)
     since = min(day_start, previous) if previous is not None else day_start
 
@@ -193,16 +199,18 @@ async def overview(
     needs = await gather_needs(session, project_id, workspace=workspace, main=main)
     out: Dict[str, Any] = {
         "generated_at": moment.isoformat(),
-        "visit": None,
+        "visit": visit,
         "needs": [_need_view(n) for n in rank_needs(needs)],
         "running": await running(session, project_id),
         "finished": await finished(session, project_id, since=since),
         "spend": await spend(session, project, day_start=day_start, days=days),
         "main": main,
         "builds": [_build_view(row) for row in rows if row["state"] == builds_module.RUNNING],
-        "note": None,
-        "note_writing": False,
-        "note_last_attempt": None,
+        "note": overview_note_job.note_view(
+            await overview_note_job.latest_note(session, project_id)
+        ),
+        "note_writing": overview_note_job.is_writing(project_id),
+        "note_last_attempt": await overview_note_job.last_attempt(session, project_id),
     }
     return out
 
