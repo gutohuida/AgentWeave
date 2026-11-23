@@ -49,6 +49,7 @@ from .db.models import (
     TaskDependency,
     TaskIntegration,
     TaskTransition,
+    TurnUsage,
 )
 from .model_catalog import default_model
 from .runner_provider import has_provider
@@ -695,6 +696,71 @@ async def running_mender_runs(db: AsyncSession, project_id: str) -> List[Dict[st
         .all()
     )
     return [await _mender_run_view(db, row) for row in rows]
+
+
+async def ended_mender_runs(db: AsyncSession, project_id: str) -> List[Dict[str, Any]]:
+    """The Hub mender's finished runs as the run log lists a run (`manager.list_runs`): its stall,
+    when it started and ended, its outcome, and its cost from the turn's `turn_usage`. Newest
+    first. A project's own agent named `mender` is not the Hub's, so lists nothing."""
+    if not await _is_hub_mender(db, project_id):
+        return []
+    rows = (
+        await db.execute(
+            select(Run, TurnUsage)
+            .outerjoin(TurnUsage, TurnUsage.run_id == Run.id)
+            .where(
+                Run.project_id == project_id,
+                Run.agent == MENDER,
+                Run.status.in_(("completed", "failed", "stopped")),
+            )
+            .order_by(Run.started_at.desc(), Run.id.desc())
+        )
+    ).all()
+    runs: List[Dict[str, Any]] = []
+    for run, turn in rows:
+        view = await _mender_run_view(db, run)
+        started = _utc(run.started_at) if run.started_at is not None else None
+        ended = _utc(run.ended_at) if run.ended_at is not None else None
+        outcome = "answered" if run.status == "completed" else "failed"
+        detail = None
+        if outcome == "failed":
+            detail = str(run.error or "") or (
+                "Stopped." if run.status == "stopped" else "The run failed."
+            )
+        usage: Optional[Dict[str, Any]] = None
+        reason: Optional[str] = None
+        if turn is None:
+            reason = "no usage was recorded for this run"
+        else:
+            usage = {
+                name: value
+                for name, value in (
+                    ("input_tokens", turn.input_tokens),
+                    ("output_tokens", turn.output_tokens),
+                    ("cost_usd_micros", turn.api_equivalent_usd_micros),
+                )
+                if value is not None
+            }
+            if turn.model:
+                usage["model"] = turn.model
+            if turn.api_equivalent_usd_micros is None:
+                reason = "the runner reported no cost"
+        runs.append(
+            {
+                **view,
+                "ended_at": _iso(ended),
+                "duration_ms": (
+                    int((ended - started).total_seconds() * 1000)
+                    if started is not None and ended is not None
+                    else None
+                ),
+                "outcome": outcome,
+                "detail": detail,
+                "usage": usage or None,
+                "no_cost_reason": reason,
+            }
+        )
+    return runs
 
 
 async def announce_mender_run(
