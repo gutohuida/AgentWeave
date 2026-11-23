@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, useState } from 'react'
+import { useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { Icon } from '@/components/common/Icon'
 import { Menu, MenuContent, MenuItem, MenuLabel, MenuSeparator, MenuTrigger } from '@/components/ui/menu'
 import { TAB_LABELS, type ProjectTab } from '@/lib/navigation'
@@ -43,6 +43,7 @@ export function TopBar({
   mode,
   onToggleMode,
   settingsActive,
+  manager,
 }: {
   project: TopBarProject
   projects: TopBarProject[]
@@ -61,6 +62,8 @@ export function TopBar({
   mode: 'dark' | 'light'
   onToggleMode: () => void
   settingsActive?: boolean
+  /** The manager's indicator (`ManagerIndicator`), first among the actions. */
+  manager?: ReactNode
 }) {
   const segments = project.path ? elidePathSegments(project.path) : []
   const navRef = useRef<HTMLElement>(null)
@@ -194,6 +197,7 @@ export function TopBar({
       </nav>
 
       <div className="aw-topbar-actions">
+        {manager}
         <button data-slot="search-button" type="button" className="aw-search-button" onClick={onOpenPalette} aria-label="Search" title="Search (Ctrl K)">
           <Icon name="search" size={13} />
           <span>Search</span>

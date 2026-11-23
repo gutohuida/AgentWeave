@@ -200,6 +200,8 @@ export type WorkspaceDestination =
       environmentSection: EnvironmentSection
       setting?: string
       focus?: string
+      // Settings › Manager: the manager run whose detail it opens (URL `run`).
+      run?: string
     }
   // `agent` is null only on the new-conversation surface reached from the recency view, where
   // no agent is implied by where the operator started — that surface asks for one.
@@ -445,8 +447,11 @@ export function environmentDestination(
   setting?: string | null,
   /** The item the section opens: a job id in Jobs, a comma-separated run list in Traces. */
   focus?: string | null,
+  /** Settings › Manager: the run whose detail it opens, a `mrun-…` or a mender's `run-…` id. */
+  run?: string | null,
 ): Extract<WorkspaceDestination, { kind: 'project' }> {
   const cleanFocus = focus && ENVIRONMENT_FOCUS.test(focus) ? focus : null
+  const cleanRun = run && MANAGER_RUN_ID.test(run) ? run : null
   return {
     kind: 'project',
     projectId,
@@ -454,7 +459,15 @@ export function environmentDestination(
     environmentSection: resolveEnvironmentSection(section) ?? DEFAULT_ENVIRONMENT_SECTION,
     ...(setting ? { setting } : {}),
     ...(cleanFocus ? { focus: cleanFocus } : {}),
+    ...(cleanRun ? { run: cleanRun } : {}),
   }
+}
+
+const MANAGER_RUN_ID = /^[A-Za-z0-9_-]{1,80}$/
+
+/** A manager run's detail in Settings › Manager (`background-manager-work-you-can-see`). */
+export function managerRunDestination(projectId: string, runId: string): Extract<WorkspaceDestination, { kind: 'project' }> {
+  return environmentDestination(projectId, 'manager', null, null, runId)
 }
 
 const ENVIRONMENT_FOCUS = /^[A-Za-z0-9_.:,-]{1,2000}$/
@@ -642,6 +655,7 @@ export function serializeDestination(destination: WorkspaceDestination): string 
     params.set('section', destination.environmentSection ?? DEFAULT_ENVIRONMENT_SECTION)
     if (destination.setting) params.set('setting', destination.setting)
     if (destination.focus) params.set('focus', destination.focus)
+    if (destination.run) params.set('run', destination.run)
   }
   if (destination.tab === 'thread' && destination.knot) {
     params.set('knot', destination.knot)
@@ -743,6 +757,7 @@ export function parseDestination(search: string): WorkspaceDestination | null {
       resolveEnvironmentSection(rawSection) ?? DEFAULT_ENVIRONMENT_SECTION,
       params.get('setting'),
       params.get('focus'),
+      params.get('run'),
     )
   }
   // Every tab but Spec's views, retired tabs included, resolves in one place.

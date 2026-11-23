@@ -24,6 +24,10 @@ import { SpecCoverageBar } from '../SpecCoverageBar'
 import { SpecDriftPanel } from '../SpecDriftPanel'
 import { SpecHealthLine, type HealthFactKey } from '../SpecHealthLine'
 import { SpecVaultWarnings } from '../SpecVaultWarnings'
+import { ManagerIcon } from '@/components/manager/ManagerIcon'
+import { useManagerItem } from '@/components/manager/useManagerItem'
+import { useQueryClient } from '@tanstack/react-query'
+import { useConfigStore } from '@/store/configStore'
 import { firstTaskId } from './model'
 import '@/styles/spec-header.css'
 
@@ -147,6 +151,18 @@ export function SpecDocumentFacts({
   const unread = !inHeader && [specError, coverageError, vaultCheckedError, documentsError, tasksError].some(Boolean)
   const detect = useDetectDrift()
   const checkVault = useCheckVaultWarnings()
+  const queryClient = useQueryClient()
+  const projectId = useConfigStore((state) => state.selectedProjectId)
+  // The document's vault check on its health line, so a running or failed check shows while the
+  // warning list is closed (`background-manager-work-you-can-see`, FR-4, FR-6). Only opening the
+  // list (SpecVaultWarnings) sees a failure; this placement signals it.
+  const vaultManager = useManagerItem({
+    job: 'spec-vault-check',
+    matches: (subject) => subject.document === path,
+    onEnded: () => {
+      void queryClient.invalidateQueries({ queryKey: ['project', projectId, 'vault', 'warnings', path] })
+    },
+  })
 
   // The Hub reports each missing document twice by design: structured in `missing` and as a
   // `missing_document` entry in `diagnostics`. Keep only the `missing` representation.
@@ -178,6 +194,17 @@ export function SpecDocumentFacts({
         driftCount={driftError || !drift ? null : drift.drift.length}
         vaultWarnings={vault === undefined ? null : vault.length}
         vaultChecked={vaultChecked}
+        vaultManager={
+          vaultManager.state === 'idle' ? null : (
+            <ManagerIcon
+              state={vaultManager.state}
+              job="spec-vault-check"
+              size={13}
+              detail={vaultManager.state === 'failed' ? vaultManager.failure?.detail : 'checking this document against the vault'}
+            />
+          )
+        }
+        vaultFailure={vaultManager.state === 'failed' ? (vaultManager.failure?.detail ?? '') : null}
         indexIssues={indexIssues}
         tasks={(documentTasks ?? []).map((task) => ({ id: task.id, title: task.title, status: task.status }))}
         history={approvalHistory(specDoc?.approval_outcome)}
@@ -193,12 +220,16 @@ export function SpecDocumentFacts({
             onError: (error: unknown) => toast({ title: 'Could not scan for drift', description: readableApiError(error, 'The Hub did not answer.'), tone: 'error' }),
           })
         }
-        onCheckVault={() =>
+        onCheckVault={() => {
+          vaultManager.starting()
           checkVault.mutate(path, {
             onSuccess: () => toast({ title: 'Checking against the vault', description: 'The result arrives here when the check finishes.' }),
-            onError: (error: unknown) => toast({ title: 'Could not start the check', description: readableApiError(error, 'The Hub did not answer.'), tone: 'error' }),
+            onError: (error: unknown) => {
+              vaultManager.cancelStarting()
+              toast({ title: 'Could not start the check', description: readableApiError(error, 'The Hub did not answer.'), tone: 'error' })
+            },
           })
-        }
+        }}
         onOpenTasks={() => onOpenTasks?.((documentTasks ?? []).map((task) => task.id), record?.id)}
         onOpenRequirement={onOpenRequirement}
         activeDetail={detail}

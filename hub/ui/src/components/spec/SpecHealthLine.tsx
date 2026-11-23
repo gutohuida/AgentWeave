@@ -30,6 +30,8 @@ export function SpecHealthLine({
   lastDriftScan,
   vaultWarnings,
   vaultChecked = true,
+  vaultManager,
+  vaultFailure,
   indexIssues,
   tasks,
   history,
@@ -54,6 +56,12 @@ export function SpecHealthLine({
    *  "agrees" would be a verdict nobody produced (F946). Defaults to true: a host that cannot say
    *  keeps the old reading. */
   vaultChecked?: boolean
+  /** The manager's icon for this document's vault check, drawn on the fact so a running or failed
+   *  check shows while the warning list is closed (`background-manager-work-you-can-see`, FR-4, FR-6). */
+  vaultManager?: React.ReactNode
+  /** Why the last vault check failed, while that failure is unseen. Opening the warning list is
+   *  what sees it; the popover only says so. */
+  vaultFailure?: string | null
   /** Spec index (manifest) problems. */
   indexIssues: number
   tasks: HealthTask[]
@@ -168,11 +176,14 @@ export function SpecHealthLine({
           active={activeDetail === 'vault'}
           tone={vaultWarnings ? 'warn' : undefined}
           label={
-            vaultWarnings
-              ? `${vaultWarnings} vault ${vaultWarnings === 1 ? 'conflict' : 'conflicts'}`
-              : vaultChecked
-                ? 'Vault agrees'
-                : 'Vault not checked'
+            <>
+              {vaultManager}
+              {vaultWarnings
+                ? `${vaultWarnings} vault ${vaultWarnings === 1 ? 'conflict' : 'conflicts'}`
+                : vaultChecked
+                  ? 'Vault agrees'
+                  : 'Vault not checked'}
+            </>
           }
           title="Vault"
           width={300}
@@ -184,6 +195,11 @@ export function SpecHealthLine({
                 ? 'No requirement contradicts what the vault knows.'
                 : 'This document has not been checked against the vault yet. The check runs when the spec vault check job is on (Project settings → Manager).'}
           </p>
+          {vaultFailure !== undefined && vaultFailure !== null ? (
+            <p className="aw-health-note" data-testid="spec-health-vault-failure" style={{ color: 'var(--red)' }}>
+              The last check failed: {vaultFailure || 'the Hub recorded no reason.'} Show details to see it in the warning list.
+            </p>
+          ) : null}
           <DropdownMenu.Item className="aw-menu-item" onSelect={onCheckVault}>
             <Icon name="refresh" size={14} className="aw-menu-item-icon" />
             {vaultWarnings || vaultChecked ? 'Check against the vault again' : 'Check against the vault'}

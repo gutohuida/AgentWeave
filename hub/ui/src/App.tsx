@@ -29,6 +29,7 @@ import {
   type GoToName,
   type ProjectTab,
   agentDestination,
+  managerRunDestination,
   agentSettingsDestination,
   resolveAgentSettingsSection,
   appSettingsDestination,
@@ -57,6 +58,8 @@ import { useConfigStore } from '@/store/configStore'
 import { useBoardScopeStore } from '@/store/boardScopeStore'
 import { useTaskFilterStore } from '@/store/taskFilterStore'
 import { usePanelTabsStore, loopTabId } from '@/store/panelTabsStore'
+import { ManagerIndicator } from '@/components/manager/ManagerIndicator'
+import { MENDER_JOB } from '@/components/manager/managerRuns'
 import { CheckpointStatusBanner } from '@/components/checkpoints/CheckpointStatusBanner'
 import { LoadingThread } from '@/components/common/LoadingThread'
 import {
@@ -773,6 +776,15 @@ export default function App() {
                 settingsActive={destination.kind === 'project' && destination.tab === 'environment'}
                 mode={mode === 'light' ? 'light' : 'dark'}
                 onToggleMode={toggleMode}
+                manager={
+                  // Only once the store names the project shown: its reads are keyed on the store,
+                  // and for the one commit a switch or a delete leaves them apart they would ask
+                  // about the project being left (F729).
+                  currentProject.id === projectId && <ManagerIndicator
+                    onOpenRun={(runId) => navigateTo(managerRunDestination(currentProject.id, runId))}
+                    onOpenConversation={(conversationId) => navigateTo(agentDestination(currentProject.id, MENDER_JOB, conversationId))}
+                  />
+                }
               />
             )}
             <div className="min-h-0 flex-1 overflow-hidden">

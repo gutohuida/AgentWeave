@@ -3,6 +3,7 @@ import type { VaultContradiction, VaultEntry, VaultEntryPage, VaultSettings } fr
 import { Switch } from '@/components/ui/switch'
 import { toast } from '@/lib/toast'
 import { VaultLibrary } from '@/components/vault/VaultLibrary'
+import { VaultDistillationStatus } from '@/components/vault/VaultDistillationStatus'
 import mapJson from '../fixtures/vault_map.json'
 import entriesJson from '../fixtures/vault_entries.json'
 import settingsJson from '../fixtures/vault_settings.json'
@@ -75,6 +76,7 @@ export default function Vault({ now }: ScreenProps) {
   return (
     <div className="relative h-full">
       <VaultLibrary
+        status={<VaultDistillationStatus />}
         entries={empty ? [] : entries}
         settings={settings}
         selectedId={selectedId}
