@@ -4,6 +4,7 @@ import { useConfigStore } from '@/store/configStore'
 import type { AgentSummary, ContextUsage } from '@/api/agents'
 import type { AgentConversation, ProjectConversations } from '@/api/agentChat'
 import type { ProjectSummary } from '@/api/projects'
+import { managerRunsKey, type ManagerEndedRun, type ManagerRunningRun } from '@/api/manager'
 
 export interface SSEEvent {
   type: string
@@ -96,11 +97,19 @@ const SSE_EVENT_TYPES = [
   'project_settings_updated',
   'agent_archived',
   'agent_unarchived',
+  // A manager run started or ended (`manager.manager_run`, and the mender's runs), and failures
+  // marked seen (`background-manager-work-you-can-see`).
+  'manager_run_started',
+  'manager_run_ended',
+  'manager_run_seen',
   // The Overview's manager note: one being written, written, or not written (`overview-note`).
   'overview_note_started',
   'overview_note_written',
   'overview_note_failed',
 ]
+
+/** How many ended runs this window keeps from the stream for the top bar's popover. */
+const LIVE_ENDED_KEPT = 20
 
 /** Events that move something the one Overview read (`GET /overview`) shows (design D10): the same
  *  events that refresh its parts, plus the note's own three. */
@@ -531,6 +540,28 @@ function invalidateSpecShownPhase(inv: (f?: InvalidateFilters) => void, pid: str
   inv({ queryKey: ['project', pid, 'specDocuments'] })
 }
 
+/** Put a run's start or end into the cached running list (and an end into this window's recent
+ *  ends) at once, ahead of the re-read the caller also asks for. Idempotent per run id. */
+function applyManagerRun(queryClient: QueryClient, pid: string | undefined, event: SSEEvent): void {
+  const run = event.data as (ManagerRunningRun & Partial<ManagerEndedRun>) | null
+  if (!pid || !run || typeof run.run_id !== 'string') return
+  const { project_id: _drop, ...listed } = run as ManagerRunningRun & Partial<ManagerEndedRun> & { project_id?: string }
+  void _drop
+  if (event.type === 'manager_run_started') {
+    queryClient.setQueryData<ManagerRunningRun[]>(managerRunsKey(pid, 'running'), (rows) =>
+      Array.isArray(rows) && !rows.some((r) => r.run_id === run.run_id) ? [...rows, listed] : rows,
+    )
+  } else if (event.type === 'manager_run_ended') {
+    queryClient.setQueryData<ManagerRunningRun[]>(managerRunsKey(pid, 'running'), (rows) =>
+      Array.isArray(rows) ? rows.filter((r) => r.run_id !== run.run_id) : rows,
+    )
+    queryClient.setQueryData<ManagerEndedRun[]>(managerRunsKey(pid, 'ended-live'), (rows) => [
+      listed as ManagerEndedRun,
+      ...(rows ?? []).filter((r) => r.run_id !== run.run_id),
+    ].slice(0, LIVE_ENDED_KEPT))
+  }
+}
+
 /** Apply one stream event to *queryClient*'s cache. Called once per event per tab (see
  *  `acquireInvalidator`), however many components subscribe. */
 function applyInvalidation(queryClient: QueryClient, event: SSEEvent): void {
@@ -610,6 +641,14 @@ function applyInvalidation(queryClient: QueryClient, event: SSEEvent): void {
             queryKey: ['project', pid, 'task', (event.data as { task_id?: string } | null)?.task_id, 'integrations'],
           })
           inv({ queryKey: ['project', pid, 'tasks'] })
+          break
+        case 'manager_run_started':
+        case 'manager_run_ended':
+        case 'manager_run_seen':
+          applyManagerRun(queryClient, pid, event)
+          inv({ queryKey: managerRunsKey(pid, 'running') })
+          inv({ queryKey: managerRunsKey(pid, 'unseen') })
+          if (event.type === 'manager_run_ended') inv({ queryKey: ['project', pid, 'manager', 'activity'] })
           break
         case 'stall_recorded':
         case 'stall_ended':
