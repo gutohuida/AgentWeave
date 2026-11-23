@@ -42,7 +42,11 @@ let overviewData: OverviewBody | null | undefined = body()
 vi.mock('@/api/overview', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/api/overview')>()),
   useOverview: () => ({ data: overviewData, error: null, refetch: vi.fn(), isLoading: overviewData === undefined }),
+  recordOverviewVisit: (projectId: string) => recordVisit(projectId),
+  refreshOverviewNote: (projectId: string) => refreshNote(projectId),
 }))
+const recordVisit = vi.fn<(id: string) => Promise<null>>(() => Promise.resolve(null))
+const refreshNote = vi.fn<(id: string) => Promise<string | null>>(() => Promise.resolve(null))
 
 let setupItems: ProjectSetupItem[] = []
 vi.mock('@/api/projects', async (importOriginal) => ({
@@ -416,10 +420,101 @@ describe('a Hub older than GET /overview', () => {
   })
 })
 
-describe('the Briefing tab before its own task lands', () => {
-  it('shows a placeholder, not an empty panel', () => {
+
+describe('the live Briefing', () => {
+  const openBriefing = () => fireEvent.click(screen.getByRole('tab', { name: 'Briefing' }))
+  const headlineText = () => screen.getByRole('heading', { level: 1 }).textContent
+
+  it('ac-last-visit-none: says the Hub has no record, and counts from the earlier visit once there is one', () => {
+    overviewData = body({ visit: null, finished: [{ id: 'f1', task_id: 't1', run_id: null, agent: 'Developer', title: 'Fix it', outcome: 'landed', at: ago(10), usd: 0.5, tokens: 10, credits: null }] })
     renderScreen()
-    fireEvent.click(screen.getByRole('tab', { name: 'Briefing' }))
-    expect(screen.getByRole('tabpanel')).toHaveTextContent('The Briefing will tell this same picture in sentences')
+    expect(recordVisit).toHaveBeenCalledWith('proj-a')
+    openBriefing()
+    expect(screen.getByText(/no record of your last visit/i)).toBeInTheDocument()
+    cleanup()
+    overviewData = body({
+      visit: { previous_at: ago(120), last_at: NOW.toISOString() },
+      finished: [{ id: 'f1', task_id: 't1', run_id: null, agent: 'Developer', title: 'Fix it', outcome: 'landed', at: ago(10), usd: 0.5, tokens: 10, credits: null }],
+    })
+    renderScreen()
+    openBriefing()
+    expect(screen.queryByText(/no record of your last visit/i)).toBeNull()
+    expect(screen.getByText(/1 task has finished: 1 landed/)).toBeInTheDocument()
+  })
+
+  it('ac-tabs-agree: the headline equals the band sentence and the needs count agrees', () => {
+    overviewData = body({
+      needs: [{ id: 'n1', kind: 'question', rank: 1, agent: 'Developer', title: 'Which one?', waiting_since: ago(5), action: 'Answer', target: { type: 'thread', id: 'c1', conversation_id: 'c1' } }],
+    })
+    renderScreen()
+    const bandText = band().textContent ?? ''
+    openBriefing()
+    const head = headlineText() ?? ''
+    expect(bandText.toLowerCase()).toContain(head.replace(/\.$/, '').toLowerCase())
+    expect(screen.getAllByRole('button', { name: /^Answer: Which one\?/ })).toHaveLength(1)
+  })
+
+  it('shows the note with its time and links, and opens what it names', () => {
+    overviewData = body({
+      note: { id: 'note1', written_at: ago(20), trigger: 'visit', text: 'One task landed.', cites: [{ type: 'task', id: 'task-1', label: 'OGDBT-1' }, { type: 'build', id: 'build-1', label: 'The build' }] },
+    })
+    renderScreen()
+    openBriefing()
+    expect(screen.getByText('One task landed.')).toBeInTheDocument()
+    expect(screen.getByText(/Written/)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'OGDBT-1' }))
+    expect(useTaskFilterStore.getState().pendingOpenTaskId).toBe('task-1')
+    expect(onNavigate).toHaveBeenCalledWith('tasks')
+    fireEvent.click(screen.getByRole('button', { name: 'The build' }))
+    expect(goTo).toHaveBeenCalled()
+  })
+
+  it('says a note is being written', () => {
+    overviewData = body({ note_writing: true })
+    renderScreen()
+    openBriefing()
+    expect(screen.getByText(/Writing a note/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Refresh note' })).toBeDisabled()
+  })
+
+  it('ac-note-failure: Refresh note names why none was written and keeps the earlier note', async () => {
+    overviewData = body({ note: { id: 'n', written_at: ago(90), trigger: 'visit', text: 'Earlier note.', cites: [] } })
+    refreshNote.mockResolvedValueOnce('The note job has no runner set up.')
+    renderScreen()
+    openBriefing()
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Refresh note' }))
+    })
+    expect(refreshNote).toHaveBeenCalledWith('proj-a')
+    expect(screen.getByRole('alert').textContent).toContain('The note job has no runner set up.')
+    expect(screen.getByText('Earlier note.')).toBeInTheDocument()
+  })
+
+  it('shows why the latest firing wrote no note, from the read', () => {
+    overviewData = body({
+      note: { id: 'n', written_at: ago(90), trigger: 'visit', text: 'Earlier note.', cites: [] },
+      note_last_attempt: { at: ago(1), trigger: 'button', outcome: 'failed', reason: 'The runner failed.' },
+    })
+    renderScreen()
+    openBriefing()
+    expect(screen.getByRole('alert').textContent).toContain('The runner failed.')
+    expect(screen.getByText('Earlier note.')).toBeInTheDocument()
+  })
+
+  it('ac-click-through: the Briefing items open their task, thread and build', () => {
+    overviewData = body({
+      running: [{ run_id: 'r1', agent: 'Developer', conversation_id: 'c9', task_id: 't9', what: 'Build the thing', started_at: ago(3) }],
+      builds: [{ build_id: 'b1', document_path: null, title: 'Big build', tasks_done: 1, tasks_total: 2, stage_words: 'Building', needs_operator: false }],
+      visit: { previous_at: ago(120), last_at: NOW.toISOString() },
+      finished: [{ id: 'f1', task_id: 't1', run_id: null, agent: 'Developer', title: 'Fix it', outcome: 'landed', at: ago(10), usd: 0.5, tokens: 10, credits: null }],
+    })
+    renderScreen()
+    openBriefing()
+    fireEvent.click(screen.getByRole('button', { name: /^Developer: Build the thing, running/ }))
+    expect(onOpenConversation).toHaveBeenCalledWith('Developer', 'c9')
+    fireEvent.click(screen.getByRole('button', { name: /^Build: Big build/ }))
+    expect(goTo).toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: /^Developer: Fix it, Landed/ }))
+    expect(useTaskFilterStore.getState().pendingOpenTaskId).toBe('t1')
   })
 })

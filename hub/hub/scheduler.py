@@ -86,7 +86,27 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-def job_conversation_title(job_name: str, agent: str, task: Optional[Task], is_review: bool) -> str:
+async def earlier_turns_on_task(session: AsyncSession, task_id: str, is_review: bool) -> int:
+    """How many flow or build conversations already worked (or reviewed) this task.
+
+    Counted from the queue entries a flow firing or a build hand-out wrote for the task in the
+    same role: a work turn carries `task_id`, a review turn `review_task_id`. Asked before the
+    caller writes its own entry, so the answer is "turns before this one".
+    """
+    column = InboundQueueEntry.review_task_id if is_review else InboundQueueEntry.task_id
+    count = await session.scalar(
+        select(func.count(func.distinct(InboundQueueEntry.conversation_id))).where(
+            InboundQueueEntry.origin_type == "job",
+            column == task_id,
+            InboundQueueEntry.conversation_id.is_not(None),
+        )
+    )
+    return int(count or 0)
+
+
+def job_conversation_title(
+    job_name: str, agent: str, task: Optional[Task], is_review: bool, turn: int = 1
+) -> str:
     """The name a job's firing gives its conversation.
 
     A plain job, or a loop firing with no task (the never-filled queue), is named after the job:
@@ -106,7 +126,7 @@ def job_conversation_title(job_name: str, agent: str, task: Optional[Task], is_r
     if task is None:
         return job_name
     role = "review" if is_review else "work"
-    return f"{agent} · {role}: {task.title}"
+    return f"{agent} · {role} turn {turn}: {task.title}"
 
 
 def _safe_error_summary(exc: Exception) -> str:
@@ -5303,14 +5323,21 @@ class JobScheduler:
             # Named from the job, not its message: a schedule fires the same message repeatedly,
             # and the job's name is what the operator recognises the thread by. A loop's task
             # turn also says whose turn and which kind (F61).
+            title_task = selection.task if selection is not None else None
+            title_review = bool(selection is not None and selection.is_review)
             name_conversation(
                 conversation,
                 # From `selection`, not `claimed_task`: `selection` is bound for a plain job too.
                 job_conversation_title(
                     job.name,
                     acting_agent,
-                    selection.task if selection is not None else None,
-                    bool(selection is not None and selection.is_review),
+                    title_task,
+                    title_review,
+                    (
+                        (await earlier_turns_on_task(session, title_task.id, title_review)) + 1
+                        if title_task is not None
+                        else 1
+                    ),
                 ),
             )
             run.conversation_id = conversation.id
@@ -5776,7 +5803,10 @@ class JobScheduler:
         conversation = new_conversation(project_id=job.project_id, agent=agent, origin="job")
         session.add(conversation)
         await inherit_runtime_overrides(session, conversation)
-        name_conversation(conversation, job_conversation_title(job.name, agent, task, is_review))
+        turn = await earlier_turns_on_task(session, task.id, is_review) + 1
+        name_conversation(
+            conversation, job_conversation_title(job.name, agent, task, is_review, turn)
+        )
 
         run_id = f"run-{short_id()}"
         run = JobRun(

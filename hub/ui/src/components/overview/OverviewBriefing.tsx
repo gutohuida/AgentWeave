@@ -25,6 +25,20 @@ export interface OverviewBriefingProps {
   builds: DashBuild[]
   onNavigate: (target: OverviewTarget) => void
   now: Date
+  /** The manager's note on what changed; absent until one is written. */
+  note?: BriefingNote | null
+}
+
+export interface BriefingNote {
+  writtenAt: string
+  text: string
+  /** What the note names, each opening its detail. */
+  links: { key: string; label: string; onOpen: () => void }[]
+  writing: boolean
+  /** Why no note was written by the latest attempt; the previous note stays shown. */
+  problem: string | null
+  refreshing: boolean
+  onRefresh: () => void
 }
 
 const LEVEL: Record<HealthLevel, { icon: string; word: string }> = {
@@ -84,7 +98,7 @@ function SpendBars({ trend, now }: { trend: SpendFigures['trend']; now: Date }) 
   )
 }
 
-export function OverviewBriefing({ projectName, lastSeenAt, needs, running, finished, finishedToday, spend, main, builds, onNavigate, now }: OverviewBriefingProps) {
+export function OverviewBriefing({ projectName, lastSeenAt, needs, running, finished, finishedToday, spend, main, builds, onNavigate, now, note }: OverviewBriefingProps) {
   const health = healthOf({ needs: needs.length, main, spend })
   const ratio = budgetRatio(spend)
   const branch = main.branch ?? 'main'
@@ -107,6 +121,46 @@ export function OverviewBriefing({ projectName, lastSeenAt, needs, running, fini
         <h1 className="aw-ob-headline">{headline({ needs: needs.length, main, spend })}</h1>
         <p className="aw-ob-summary">{lines.join(' ')}</p>
       </header>
+
+      {note ? (
+        <section className="aw-ob-sec" aria-labelledby="ob-note" data-slot="briefing-note">
+          <h2 id="ob-note">Note from the manager</h2>
+          {note.writing ? (
+            <p className="aw-ob-muted" role="status" data-slot="briefing-note-writing">
+              Writing a note&hellip;
+            </p>
+          ) : null}
+          {note.text ? (
+            <>
+              <p className="aw-ob-prose" data-slot="briefing-note-text">{note.text}</p>
+              <p className="aw-ob-meta">
+                Written <span title={formatDateTime(note.writtenAt, now)}>{formatAgo(note.writtenAt, now)}</span>
+              </p>
+              {note.links.length > 0 ? (
+                <ul className="aw-ob-list aw-ob-list-tight" aria-label="Named in the note">
+                  {note.links.map((l) => (
+                    <li key={l.key}>
+                      <button type="button" data-slot="briefing-note-link" className="aw-ob-link" onClick={l.onOpen} title={`Opens ${l.label}`}>
+                        {l.label}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+            </>
+          ) : !note.writing ? (
+            <p className="aw-ob-muted">No note has been written yet.</p>
+          ) : null}
+          {note.problem ? (
+            <p className="aw-ob-flag" role="alert" data-slot="briefing-note-problem">
+              No note was written: {note.problem}
+            </p>
+          ) : null}
+          <button type="button" data-slot="briefing-note-refresh" className="aw-ob-link aw-ob-more" onClick={note.onRefresh} disabled={note.refreshing || note.writing}>
+            Refresh note
+          </button>
+        </section>
+      ) : null}
 
       <section className="aw-ob-sec" aria-labelledby="ob-needs">
         <h2 id="ob-needs">Needs you</h2>

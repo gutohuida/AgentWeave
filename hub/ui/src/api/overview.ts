@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
-import { getJson } from './client'
+import { ApiError, getJson, postJson, readableApiError } from './client'
 import { useConfigStore } from '@/store/configStore'
 
 /** The one Overview read (`GET /api/v1/projects/{id}/overview`, design D1 and its contract): every
@@ -156,5 +156,35 @@ export function useOverview() {
         },
       ),
     enabled: isConfigured && !!projectId,
+    // While a note is being written the Briefing says so, and picks the note up when it lands.
+    refetchInterval: (query) => (query.state.data?.note_writing ? NOTE_POLL_MS : false),
   })
+}
+
+const NOTE_POLL_MS = 3000
+
+/** The operator opened the Overview (`POST /overview/visit`): the Hub records it and, on a new visit
+ *  with something changed, starts a note. Best effort: a failed record only leaves "last looked" as
+ *  it was. */
+export function recordOverviewVisit(projectId: string): Promise<{ previous_at: string | null; note_started: boolean } | null> {
+  return postJson<{ previous_at: string | null; note_started: boolean }>(`/api/v1/projects/${projectId}/overview/visit`).catch(() => null)
+}
+
+/** "Refresh note": the overview-note job writes one now. Resolves to why it could not, or null. */
+export function refreshOverviewNote(projectId: string): Promise<string | null> {
+  return postJson<unknown>(`/api/v1/projects/${projectId}/manager/jobs/overview-note/run`).then(
+    () => null,
+    (error: unknown) => {
+      // The refusal is `{detail: {code, reason}}`: the reason is the sentence to show.
+      if (error instanceof ApiError) {
+        try {
+          const reason = (JSON.parse(error.message) as { detail?: { reason?: unknown } })?.detail?.reason
+          if (typeof reason === 'string' && reason.trim()) return reason
+        } catch {
+          // not JSON: fall through to the generic reading
+        }
+      }
+      return readableApiError(error, 'The note could not be written.')
+    },
+  )
 }
