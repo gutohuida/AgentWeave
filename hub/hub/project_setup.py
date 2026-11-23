@@ -26,16 +26,17 @@ projects on is sent (FR-6): a model bound to an agent, and a dismissal made or u
 
 from __future__ import annotations
 
+import asyncio
 import contextlib
 import subprocess
-from typing import Dict, List, Literal, Optional
+from typing import Dict, List, Literal, Optional, Sequence, Tuple
 
 from pydantic import BaseModel
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from . import blocking, corpus_start, project_workspace, task_integration
-from .db.models import Agent, Project, Runner, SetupDismissal
+from . import blocking, project_workspace, spec_documents, task_integration
+from .db.models import Agent, Project, Runner, SetupDismissal, SpecDocument
 from .launchability import probe_agent
 from .runner_provider import runner_probe_config
 
@@ -113,69 +114,134 @@ def _is_repository(root) -> bool:  # noqa: ANN001 -- a workspace root
         return False
 
 
+def _disk_facts(
+    workspace: project_workspace.ProjectWorkspace, ask_corpus: bool
+) -> Tuple[bool, bool]:
+    """Whether *workspace*'s folder is a repository, and (when *ask_corpus*) whether its `spec/`
+    holds no document. Runs on the blocking pool: both read the project's filesystem."""
+    return _is_repository(workspace.root), ask_corpus and not spec_documents.discover(workspace)[0]
+
+
+async def project_setups(
+    session: AsyncSession,
+    projects: Sequence[Project],
+    *,
+    verdicts: Optional[Dict[str, dict]] = None,
+) -> Dict[str, ProjectSetup]:
+    """Each project's set-up items, worked out from its state now, keyed by project id.
+
+    Batched for the projects list (BWYCS-8): over ~200 projects, a `git rev-parse` per folder run
+    one after another took ~19 s, and ten queries per project ~4 s more. The database is read once
+    per kind of row, and the folders are asked concurrently on the blocking pool.
+
+    `verdicts` is a launchability cache keyed by runner id that a caller may share between calls;
+    each runner is probed once per call either way.
+    """
+    ids = [project.id for project in projects]
+    workspaces: Dict[str, project_workspace.ProjectWorkspace] = {}
+    for project in projects:
+        with contextlib.suppress(project_workspace.ProjectWorkspaceError):
+            workspaces[project.id] = await project_workspace.resolve_project_workspace(
+                session, project.id
+            )
+    # Asked only of a folder that is found: an empty corpus in a missing folder is not news.
+    found = {
+        project.id: workspaces[project.id]
+        for project in projects
+        if project.id in workspaces and project.directory_state == "available"
+    }
+    # A project with any document row (archived ones count) is not empty, whatever is on disk;
+    # one with none is empty exactly when discovery finds no file (`corpus_start.corpus_state`).
+    with_documents = set(
+        (
+            await session.execute(
+                select(SpecDocument.project_id).where(SpecDocument.project_id.in_(ids)).distinct()
+            )
+        )
+        .scalars()
+        .all()
+    )
+    agents_of: Dict[str, List[Agent]] = {project_id: [] for project_id in ids}
+    for agent in (
+        await session.execute(
+            select(Agent)
+            .where(Agent.project_id.in_(ids), Agent.lifecycle == "open")
+            .order_by(Agent.name)
+        )
+    ).scalars():
+        agents_of[agent.project_id].append(agent)
+    runner_ids = {agent.runner_id for agents in agents_of.values() for agent in agents}
+    runners = {
+        runner.id: runner
+        for runner in (
+            await session.execute(select(Runner).where(Runner.id.in_(runner_ids - {None})))
+        ).scalars()
+    }
+    dismissed_of: Dict[str, set[str]] = {project_id: set() for project_id in ids}
+    for project_id, item in await session.execute(
+        select(SetupDismissal.project_id, SetupDismissal.item).where(
+            SetupDismissal.project_id.in_(ids)
+        )
+    ):
+        dismissed_of[project_id].add(item)
+    # Half the blocking pool at most, so a cold list (no folder remembered yet) leaves threads for
+    # the turn starts and merges that share it.
+    lanes = asyncio.Semaphore(max(1, blocking.MAX_WORKERS // 2))
+
+    async def ask(project_id: str, workspace: project_workspace.ProjectWorkspace):
+        async with lanes:
+            return await blocking.run(_disk_facts, workspace, project_id not in with_documents)
+
+    answers = await asyncio.gather(*(ask(pid, ws) for pid, ws in found.items()))
+    disk = dict(zip(found, answers, strict=True))
+
+    cache = verdicts if verdicts is not None else {}
+    setups: Dict[str, ProjectSetup] = {}
+    for project in projects:
+        candidates: List[SetupItem] = []
+        repository, corpus_empty = disk.get(project.id, (False, False))
+        if project.id not in found:
+            candidates.append(SetupItem(id="folder", key="folder"))
+        # A folder that is not found cannot be asked whether it is a repository: the folder item
+        # is what the operator resolves first, and the repository item follows if it still applies.
+        elif not repository:
+            candidates.append(SetupItem(id="repository", key="repository", dismissable=True))
+
+        agents = agents_of[project.id]
+        if not agents:
+            candidates.append(SetupItem(id="profiles", key="profiles", dismissable=True))
+        for agent in agents:
+            runner = runners.get(agent.runner_id) if agent.runner_id else None
+            if runner is not None and runner.project_id != project.id:
+                runner = None
+            verdict = None
+            if runner is not None:
+                if runner.id not in cache:
+                    cache[runner.id] = dict(probe_agent(agent.name, runner_probe_config(runner)))
+                verdict = cache[runner.id]
+                if verdict.get("runnable"):
+                    continue
+            candidates.append(_can_run_item(agent, runner, verdict))
+
+        if corpus_empty:
+            candidates.append(SetupItem(id="specification", key="specification", dismissable=True))
+
+        dismissed = dismissed_of[project.id]
+        setups[project.id] = ProjectSetup(
+            items=[item for item in candidates if item.id not in dismissed],
+            dismissed=[item for item in candidates if item.id in dismissed],
+        )
+    return setups
+
+
 async def project_setup(
     session: AsyncSession,
     project: Project,
     *,
     verdicts: Optional[Dict[str, dict]] = None,
 ) -> ProjectSetup:
-    """The project's set-up items, worked out from its state now.
-
-    `verdicts` is a launchability cache keyed by runner id that a caller listing several projects
-    may share; each runner is probed once per call either way.
-    """
-    candidates: List[SetupItem] = []
-
-    root = None
-    workspace = None
-    with contextlib.suppress(project_workspace.ProjectWorkspaceError):
-        workspace = await project_workspace.resolve_project_workspace(session, project.id)
-        root = workspace.root
-    if root is None or project.directory_state != "available":
-        candidates.append(SetupItem(id="folder", key="folder"))
-    # A folder that is not found cannot be asked whether it is a repository: the folder item is
-    # what the operator resolves first, and the repository item follows if it still applies.
-    elif not await blocking.run(_is_repository, root):
-        candidates.append(SetupItem(id="repository", key="repository", dismissable=True))
-
-    agents = (
-        (
-            await session.execute(
-                select(Agent)
-                .where(Agent.project_id == project.id, Agent.lifecycle == "open")
-                .order_by(Agent.name)
-            )
-        )
-        .scalars()
-        .all()
-    )
-    if not agents:
-        candidates.append(SetupItem(id="profiles", key="profiles", dismissable=True))
-    cache = verdicts if verdicts is not None else {}
-    for agent in agents:
-        runner = await session.get(Runner, agent.runner_id) if agent.runner_id else None
-        if runner is not None and runner.project_id != project.id:
-            runner = None
-        verdict = None
-        if runner is not None:
-            if runner.id not in cache:
-                cache[runner.id] = dict(probe_agent(agent.name, runner_probe_config(runner)))
-            verdict = cache[runner.id]
-            if verdict.get("runnable"):
-                continue
-        candidates.append(_can_run_item(agent, runner, verdict))
-
-    # Asked only of a folder that is found: an empty corpus in a missing folder is not news.
-    if workspace is not None and root is not None and project.directory_state == "available":
-        state = await corpus_start.corpus_state(session, workspace, project.id)
-        if state.empty:
-            candidates.append(SetupItem(id="specification", key="specification", dismissable=True))
-
-    dismissed = await dismissed_items(session, project.id)
-    return ProjectSetup(
-        items=[item for item in candidates if item.id not in dismissed],
-        dismissed=[item for item in candidates if item.id in dismissed],
-    )
+    """The project's set-up items, worked out from its state now (`project_setups` of one)."""
+    return (await project_setups(session, [project], verdicts=verdicts))[project.id]
 
 
 async def dismiss(session: AsyncSession, project_id: str, item: str) -> None:

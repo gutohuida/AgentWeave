@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { getJson, postJson } from './client'
 import { useConfigStore } from '@/store/configStore'
+import { coalescedReads } from '@/lib/coalescedReads'
 import type { BuildDriver, BuildLevel } from './spec'
 import type { BuildNeedsRead } from '@/components/builds/buildViewModel'
 import { sidebarBuilds } from '@/components/layout/threadsAndBuildsModel'
@@ -76,6 +77,28 @@ export interface ProjectBuildLanding {
 const readProjectBuilds = async (projectId: string) =>
   (await getJson<{ builds: ProjectBuildRow[] }>(`/api/v1/projects/${projectId}/project/builds`)).builds
 
+/** How many projects one `GET /api/v1/builds` may name (`spec.py`'s `BUILDS_LISTING_LIMIT`). */
+const BUILDS_LISTING_LIMIT = 200
+
+/** The sidebar's reads of every project's builds, sent together (BWYCS-8): one request per project
+ *  was ~200 reads queued behind the browser's six connections, ahead of the open page's own. */
+const readBuildsOfProject = coalescedReads<ProjectBuildRow[]>(
+  (projectId) => readProjectBuilds(projectId),
+  async (projectIds) => {
+    const query = projectIds.map((id) => `project_id=${encodeURIComponent(id)}`).join('&')
+    const body = await getJson<{ projects: Record<string, { builds: ProjectBuildRow[] }>; missing: string[] }>(
+      `/api/v1/builds?${query}`,
+      { background: true },
+    )
+    return {
+      found: Object.fromEntries(Object.entries(body.projects).map(([id, listing]) => [id, listing.builds])),
+      missing: body.missing,
+    }
+  },
+  () => 'Project not found',
+  BUILDS_LISTING_LIMIT,
+)
+
 export function useProjectBuilds(refetchMs?: number) {
   const { isConfigured, selectedProjectId: projectId } = useConfigStore()
   return useQuery<ProjectBuildRow[]>({
@@ -92,7 +115,7 @@ export function useBuildsOfProject(projectId: string, enabled = true) {
   const { isConfigured } = useConfigStore()
   return useQuery<ProjectBuildRow[]>({
     queryKey: ['project', projectId, 'builds'],
-    queryFn: () => readProjectBuilds(projectId),
+    queryFn: () => readBuildsOfProject(projectId),
     enabled: isConfigured && enabled,
   })
 }

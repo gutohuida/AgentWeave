@@ -44,6 +44,7 @@ from ...project_setup import (
     ProjectSetup,
     dismiss,
     project_setup,
+    project_setups,
     publish_setup_changed,
     show_again,
 )
@@ -483,7 +484,11 @@ ProjectSettingsUpdate = create_model(  # type: ignore[call-overload]
 
 
 async def _project_summary(
-    session: AsyncSession, project: Project, *, verdicts: Optional[Dict[str, dict]] = None
+    session: AsyncSession,
+    project: Project,
+    *,
+    verdicts: Optional[Dict[str, dict]] = None,
+    setup: Optional[ProjectSetup] = None,
 ) -> ProjectSummary:
     # The second roster, and the one the navigation rail actually draws from — `Sidebar` reads
     # `useProjects()`, not `useAgents()`. Archived agents are excluded here as well as in
@@ -563,7 +568,7 @@ async def _project_summary(
         token_budget=project.token_budget,
         allow_agent_jobs=project.allow_agent_jobs,
         agents=agent_summaries,
-        setup=await project_setup(session, project, verdicts=verdicts),
+        setup=setup or await project_setup(session, project, verdicts=verdicts),
     )
 
 
@@ -591,9 +596,14 @@ async def list_projects(
     for project in projects:
         await _refresh_project_observation(session, project)
     await session.commit()
-    # One launchability probe per runner for the whole list, not one per project that shares it.
+    # One launchability probe per runner for the whole list, not one per project that shares it,
+    # and every project's set-up items worked out together (BWYCS-8: ~200 projects took ~25 s).
     verdicts: Dict[str, dict] = {}
-    return [await _project_summary(session, project, verdicts=verdicts) for project in projects]
+    setups = await project_setups(session, projects, verdicts=verdicts)
+    return [
+        await _project_summary(session, project, verdicts=verdicts, setup=setups[project.id])
+        for project in projects
+    ]
 
 
 @router.post("/open", response_model=ProjectSummary)

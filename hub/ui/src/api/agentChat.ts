@@ -215,6 +215,9 @@ export function useOperatorThreads(projectId: string, lifecycle: 'open' | 'archi
   })
 }
 
+/** How many projects one `GET /api/v1/conversations` may name (`agent_chat.py`'s own limit). */
+const SIDEBAR_LISTING_LIMIT = 200
+
 /** Grouped by the query string after `lifecycle=`, so the plain and the operator-only listings
  *  each travel in their own coalesced request. */
 const readProjectConversations = coalescedReadsByGroup<ProjectConversations>((lifecycle) =>
@@ -225,10 +228,12 @@ const readProjectConversations = coalescedReadsByGroup<ProjectConversations>((li
       const query = projectIds.map((id) => `project_id=${encodeURIComponent(id)}`).join('&')
       const body = await getJson<{ projects: Record<string, ProjectConversations>; missing: string[] }>(
         `/api/v1/conversations?${query}&lifecycle=${lifecycle}`,
+        { background: true },
       )
       return { found: body.projects, missing: body.missing }
     },
     () => 'Project not found',
+    SIDEBAR_LISTING_LIMIT,
   ),
 )
 

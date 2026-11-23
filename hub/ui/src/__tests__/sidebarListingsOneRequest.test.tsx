@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { useConfigStore } from '@/store/configStore'
 import { useProjectConversations } from '@/api/agentChat'
 import { useQueueStatuses } from '@/api/queue'
+import { useBuildsOfProject } from '@/api/projectBuilds'
 import { ApiError } from '@/api/client'
 import { cancelReconnect, __resetSSEStateForTest } from '@/hooks/useSSE'
 
@@ -23,6 +24,7 @@ const listing = (projectId: string) => ({
   archived_count: 0,
   archived_by_agent: {},
 })
+const builds = (projectId: string) => [{ id: `build-${projectId}`, document_title: projectId, needs_operator: null }]
 const status = (agent: string) => ({ agent, waiting_count: 0, running: false, waiting_reason: null })
 
 function installHub() {
@@ -44,6 +46,16 @@ function installHub() {
         missing: ids.filter((id) => id === 'proj-gone'),
       })
     }
+    if (url.pathname === '/api/v1/conversations' && url.searchParams.getAll('project_id').length > 200) {
+      return json({ detail: [{ type: 'too_long' }] }, 422)
+    }
+    if (url.pathname === '/api/v1/builds' && !oldHub) {
+      const ids = url.searchParams.getAll('project_id')
+      if (ids.length > 200) return json({ detail: [{ type: 'too_long' }] }, 422)
+      return json({ projects: Object.fromEntries(ids.map((id) => [id, { builds: builds(id) }])), missing: [] })
+    }
+    const ownBuilds = url.pathname.match(/^\/api\/v1\/projects\/([^/]+)\/project\/builds$/)
+    if (ownBuilds) return json({ builds: builds(ownBuilds[1]) })
     const one = url.pathname.match(/^\/api\/v1\/projects\/([^/]+)\/conversations$/)
     if (one) return json(listing(one[1]))
     if (url.pathname === '/api/v1/projects/p/queue-status') {
@@ -70,6 +82,21 @@ const errors: Record<string, unknown> = {}
 function Listing({ projectId }: { projectId: string }) {
   const { error } = useProjectConversations(projectId)
   if (error) errors[projectId] = error
+  return null
+}
+
+function BuildsRail({ projects }: { projects: string[] }) {
+  return (
+    <>
+      {projects.map((id) => (
+        <Builds key={id} projectId={id} />
+      ))}
+    </>
+  )
+}
+
+function Builds({ projectId }: { projectId: string }) {
+  useBuildsOfProject(projectId)
   return null
 }
 
@@ -150,6 +177,42 @@ describe('the sidebar reads its listings in one request', () => {
       ),
     )
     expect(gets.filter((g) => g.startsWith('/api/v1/projects/'))).toHaveLength(3)
+  })
+
+  it('more projects than one request may name leave in batches, not one request each (BWYCS-8)', async () => {
+    const many = Array.from({ length: 215 }, (_, i) => `proj-${i}`)
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    render(
+      <QueryClientProvider client={client}>
+        <Rail projects={many} />
+        <BuildsRail projects={many} />
+      </QueryClientProvider>,
+    )
+    await waitFor(() =>
+      many.forEach((id) => {
+        expect(client.getQueryData(['project', id, 'conversations', 'open'])).toEqual(listing(id))
+        expect(client.getQueryData(['project', id, 'builds'])).toEqual(builds(id))
+      }),
+    )
+    const listings = gets.filter((g) => g.includes('conversations'))
+    expect(listings.map((g) => new URLSearchParams(g.split('?')[1]).getAll('project_id').length)).toEqual([200, 15])
+    const buildReads = gets.filter((g) => g.includes('builds'))
+    expect(buildReads.every((g) => g.startsWith('/api/v1/builds?'))).toBe(true)
+    expect(buildReads.map((g) => new URLSearchParams(g.split('?')[1]).getAll('project_id').length)).toEqual([200, 15])
+  })
+
+  it('a Hub without the many-project builds route still lists every project’s builds', async () => {
+    oldHub = true
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    render(
+      <QueryClientProvider client={client}>
+        <BuildsRail projects={['proj-1', 'proj-2']} />
+      </QueryClientProvider>,
+    )
+    await waitFor(() =>
+      ['proj-1', 'proj-2'].forEach((id) => expect(client.getQueryData(['project', id, 'builds'])).toEqual(builds(id))),
+    )
+    expect(gets.filter((g) => g.endsWith('/project/builds'))).toHaveLength(2)
   })
 
   it('every listed agent’s queue status is one request', async () => {

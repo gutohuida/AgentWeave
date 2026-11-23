@@ -1,7 +1,8 @@
 """Perf slice 4: one request answers what the app read once per project, or once per agent.
 
 `GET /api/v1/conversations?project_id=..` carries several projects' rail listings and
-`GET /projects/{id}/queue-status?agent=..` several agents' queue statuses. Each body inside is the
+`GET /projects/{id}/queue-status?agent=..` several agents' queue statuses, and
+`GET /api/v1/builds?project_id=..` several projects' builds (BWYCS-8). Each body inside is the
 one the per-project or per-agent route answers, compared here byte for byte, so the two cannot drift;
 a name the single route would 404 is listed as missing rather than failing the whole request.
 """
@@ -10,7 +11,7 @@ import pytest
 
 from hub.conversations import new_conversation
 from hub.db.engine import async_session_factory
-from hub.db.models import Agent, Project
+from hub.db.models import Agent, Build, Project, SpecDocument
 from hub.inbound_queue import new_entry
 
 pytestmark = pytest.mark.asyncio
@@ -112,3 +113,60 @@ async def test_queue_statuses_are_each_agents_own_status(app, auth_headers):
         assert body["statuses"][agent] == one.json()
     assert body["statuses"]["beta"]["waiting_count"] == 1  # not vacuous: a waiting entry compared
     assert (await app.get(f"{P}/queue/ghost/status", headers=auth_headers)).status_code == 404
+
+
+async def _seed_builds() -> None:
+    async with async_session_factory() as session:
+        for project_id in ("proj-test", "proj-other"):
+            session.add(
+                SpecDocument(
+                    id=f"spdoc-{project_id}",
+                    project_id=project_id,
+                    path="spec/changes/a/spec.json",
+                    title=f"A change of {project_id}",
+                    kind="change-spec",
+                    phase="approved",
+                )
+            )
+        await session.flush()
+        for project_id in ("proj-test", "proj-other"):
+            session.add(
+                Build(
+                    id=f"build-{project_id}",
+                    project_id=project_id,
+                    document_id=f"spdoc-{project_id}",
+                    state="running",
+                    driver="flow",
+                    level="reviewed",
+                )
+            )
+        await session.commit()
+
+
+async def test_the_builds_listing_is_each_projects_own_listing(app, auth_headers):
+    await _seed()
+    await _seed_builds()
+    many = await app.get(
+        "/api/v1/builds",
+        params=[
+            ("project_id", "proj-test"),
+            ("project_id", "proj-nowhere"),
+            ("project_id", "proj-other"),
+        ],
+        headers=auth_headers,
+    )
+    assert many.status_code == 200, many.text
+    body = many.json()
+    assert body["missing"] == ["proj-nowhere"]
+    assert list(body["projects"]) == ["proj-test", "proj-other"]
+    for project_id in ("proj-test", "proj-other"):
+        one = await app.get(f"/api/v1/projects/{project_id}/project/builds", headers=auth_headers)
+        assert one.status_code == 200, one.text
+        assert body["projects"][project_id] == one.json()
+        assert [row["id"] for row in one.json()["builds"]] == [f"build-{project_id}"]
+
+
+async def test_the_builds_listing_requires_the_operator(app, auth_headers):
+    await _seed()
+    assert (await app.get("/api/v1/builds?project_id=proj-test")).status_code == 401
+    assert (await app.get("/api/v1/builds", headers=auth_headers)).status_code == 422
