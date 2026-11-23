@@ -3,7 +3,6 @@ import { Icon } from '@/components/common/Icon'
 import { hubDate } from '@/lib/hubTime'
 import { formatAgo, formatAgoLong, formatCost, formatDateTime, formatDay, formatMoney } from '@/lib/format'
 import '@/styles/overview-briefing.css'
-import type { NeedKind } from './OverviewView'
 import type { ActivityOutcome, DashActivity, DashBuild, DashNeed, OverviewTarget } from './OverviewDashboard'
 import { BUDGET_NEAR, budgetRatio, healthOf, type FinishedTally, type HealthLevel, type MainHealth, type SpendFigures } from './overviewDashboardModel'
 import { OUTCOME_ORDER, headline, summary } from './overviewBriefingModel'
@@ -43,7 +42,7 @@ const OUTCOME_HEAD: Record<ActivityOutcome, { icon: string; word: string }> = {
 }
 
 /** One need as a sentence; the action is offered after it. */
-function needSentence(kind: NeedKind, agent: string | null, title: string): React.ReactNode {
+function needSentence(kind: DashNeed['kind'], agent: string | null, title: string): React.ReactNode {
   const who = agent ? <strong>{agent}</strong> : null
   switch (kind) {
     case 'question':

@@ -30,6 +30,8 @@ export type MockRoute =
   /** The Overview as a morning briefing, and by team lane: two more designs to compare (operator, 2026-11-22). */
   | { kind: 'overview-briefing'; state: OverviewNextState }
   | { kind: 'overview-lanes'; state: OverviewNextState }
+  /** The live Overview (tabs and the wired Dashboard) fed those shapes as `GET /overview` bodies. */
+  | { kind: 'overview-live'; state: OverviewNextState }
   /** How a thread shows the spec it is working on: the header's phase badge with its step, and three
    *  ways to offer a document an agent created in the thread (operator, 2026-11-22). */
   | { kind: 'spec-thread-ui' }

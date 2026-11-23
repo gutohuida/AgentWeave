@@ -9,6 +9,7 @@ const Overview = React.lazy(() => import('./Overview'))
 const OverviewNext = React.lazy(() => import('./OverviewNext'))
 const OverviewBriefing = React.lazy(() => import('./OverviewBriefing'))
 const OverviewLanes = React.lazy(() => import('./OverviewLanes'))
+const OverviewLive = React.lazy(() => import('./OverviewLive'))
 const Tasks = React.lazy(() => import('./Tasks'))
 const Spec = React.lazy(() => import('./Spec'))
 const Vault = React.lazy(() => import('./Vault'))
@@ -58,6 +59,8 @@ export function screenFor(route: MockRoute): ScreenComponent {
       return OverviewBriefing
     case 'overview-lanes':
       return OverviewLanes
+    case 'overview-live':
+      return OverviewLive
     case 'thread':
       return Thread
     case 'traces':
@@ -92,6 +95,9 @@ export const SCREENS: Array<{ id: string; label: string; route: MockRoute }> = [
   { id: 'overview-next-trouble', label: 'Overview, redrawn: trouble', route: { kind: 'overview-next', state: 'trouble' } },
   { id: 'overview-briefing', label: 'Overview B, a morning briefing', route: { kind: 'overview-briefing', state: 'busy' } },
   { id: 'overview-briefing-quiet', label: 'Overview B, briefing: quiet', route: { kind: 'overview-briefing', state: 'quiet' } },
+  { id: 'overview-live', label: 'Overview, live: tabs and the wired Dashboard', route: { kind: 'overview-live', state: 'busy' } },
+  { id: 'overview-live-quiet', label: 'Overview, live: quiet', route: { kind: 'overview-live', state: 'quiet' } },
+  { id: 'overview-live-trouble', label: 'Overview, live: trouble', route: { kind: 'overview-live', state: 'trouble' } },
   { id: 'overview-briefing-trouble', label: 'Overview B, briefing: trouble', route: { kind: 'overview-briefing', state: 'trouble' } },
   { id: 'overview-lanes', label: 'Overview C, team lanes', route: { kind: 'overview-lanes', state: 'busy' } },
   { id: 'overview-lanes-quiet', label: 'Overview C, lanes: quiet', route: { kind: 'overview-lanes', state: 'quiet' } },

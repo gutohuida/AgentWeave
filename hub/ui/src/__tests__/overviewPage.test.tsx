@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
 import { fireEvent, render, screen } from '@testing-library/react'
-import { OverviewScreen } from '@/components/overview/OverviewScreen'
+import { OverviewClassicScreen as OverviewScreen } from '@/components/overview/OverviewClassicScreen'
 import type { AgentSummary } from '@/api/agents'
 // @ts-expect-error Vitest runs in Node; the browser bundle never includes this test.
 import { readFileSync } from 'node:fs'
