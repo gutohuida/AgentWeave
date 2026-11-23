@@ -63,6 +63,7 @@ import {
   type TabId,
   type TraceTarget,
 } from '@/store/panelTabsStore'
+import { isTogglePanelShortcut } from '@/lib/shortcuts'
 import { AgentOutputPanel } from './AgentOutputPanel'
 
 /** What a divider costs the row. `PaneResizer` is an 11px strip with -5px margins either side. */
@@ -344,6 +345,26 @@ export function ConversationView({
     },
     [openTraceTab, projectId, fitsAsColumn],
   )
+  const togglePanel = useCallback(() => {
+    const opening = !shellIsOpen
+    setShellOpen(projectId, opening)
+    // F634: in a narrow window the panel is a drawer, so showing it means opening the drawer;
+    // the toggle used to flip to "Hide panel" with nothing on screen.
+    if (!fitsAsColumn) setOverlayOpen(opening)
+  }, [shellIsOpen, setShellOpen, projectId, fitsAsColumn])
+  /* Ctrl+Alt+B / Cmd+Option+B toggles the panel (leaner-navigation D5, FR-12). Capture phase, so it
+   * runs before the composer's own keydown handling, and the default is prevented so nothing is
+   * typed (Option+B on macOS would type '∫'). */
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (!isTogglePanelShortcut(e)) return
+      e.preventDefault()
+      e.stopPropagation()
+      togglePanel()
+    }
+    window.addEventListener('keydown', onKeyDown, true)
+    return () => window.removeEventListener('keydown', onKeyDown, true)
+  }, [togglePanel])
   /* A link to one checkpoint arrives as the destination's `checkpoint` (leaner-navigation D4): it
    * opens the Checkpoints tab once and is dropped from the address, the composer insert request's
    * consume-once shape, so a reload or Back does not reopen what the operator has since closed. */
@@ -696,13 +717,7 @@ export function ConversationView({
       insertRequest={insertRequest}
       onOpenCheckpointsPanel={openCheckpoints}
       onOpenTracePanel={openTrace}
-      onTogglePanel={() => {
-        const opening = !shellIsOpen
-        setShellOpen(projectId, opening)
-        // F634: in a narrow window the panel is a drawer, so showing it means opening the drawer;
-        // the toggle used to flip to "Hide panel" with nothing on screen.
-        if (!fitsAsColumn) setOverlayOpen(opening)
-      }}
+      onTogglePanel={togglePanel}
       panelOpen={shellIsOpen}
     />
   )
