@@ -568,8 +568,8 @@ export function useVaultFactRecords(factIds: string[]) {
 }
 
 /** A spec requirement that names a fact: one citing it in its `facts`, or one the manager's
- *  spec-vault check judged to contradict it. Proposed `GET /vault/fact-uses`
- *  (spec a-vault-page-that-says-what-it-holds); no route answers it yet. */
+ *  spec-vault check judged to contradict it. `GET /vault/fact-uses`
+ *  (spec a-vault-page-that-says-what-it-holds FR-3). */
 export interface VaultSpecReference {
   /** The document's path, `spec/changes/<name>/spec.json`. */
   document: string
@@ -591,6 +591,26 @@ export interface VaultFactUse {
   fact: string
   citations: VaultSpecReference[]
   conflicts: VaultSpecConflict[]
+}
+
+/** `GET /vault/fact-uses`: every fact a spec names, and the documents whose file could not be read,
+ *  each with the reason, so a missing citation is never mistaken for "no spec uses this fact". */
+export interface VaultFactUsesBody {
+  uses: VaultFactUse[]
+  unreadable: Array<{ document: string; reason: string }>
+}
+
+/** What the project's specs do with each fact. Conflicts are kept by the rule the warnings route
+ *  applies, so this and a spec's warnings never disagree. 503 when the check's findings cannot be
+ *  read. */
+export function useVaultFactUses() {
+  const { isConfigured, selectedProjectId: projectId } = useConfigStore()
+  return useQuery<VaultFactUsesBody>({
+    queryKey: ['project', projectId, 'vault', 'fact-uses'],
+    queryFn: () => getJson<VaultFactUsesBody>(`/api/v1/projects/${projectId}/vault/fact-uses`),
+    enabled: isConfigured && !!projectId,
+    retry: (count, error) => !isNoVault(error) && count < 2,
+  })
 }
 
 /** A source whose text holds the searched word: how many lines do, and the first of them, in
