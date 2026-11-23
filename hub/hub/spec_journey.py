@@ -542,7 +542,12 @@ ADVANCE_YOURSELF = (
     "you what this step left empty, and returns the next step's instructions. Follow them in the "
     "same turn, and say in your reply which step you moved to. Do not ask the operator whether to "
     "go on, or where. End your turn waiting for them only when you ask something only they can "
-    "decide."
+    "decide.\n"
+    "- **A save can move the step for you.** When `submit_spec_document` answers with "
+    "`step_moved`, the document already holds what the earlier steps produce and the save placed "
+    "it at `step_moved.to`. Do not call `advance_spec_step` for that move, which would skip the "
+    "step you were placed at: follow `step_moved.instructions` in the same turn, and say in your "
+    "reply which step the document is at."
 )
 
 #: The one questioning rule every built-in step shares (D4, `few-deep-questions`,

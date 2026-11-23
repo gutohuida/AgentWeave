@@ -77,6 +77,9 @@ class SaveResult:
     fold_target_not_named: Optional[bool] = None
     # The `content_version` of what this save stored: the copy its author now holds (FR-16).
     version: str = ""
+    # `{"from": ..., "to": ...}` when the save itself moved the document's step (`step_by_content`),
+    # so its author follows the new step rather than advancing past it (`agent-advances`).
+    step_moved: Optional[Dict[str, Optional[str]]] = None
 
 
 @dataclass
@@ -420,6 +423,7 @@ async def _apply_and_write(
         notes=report.notes,
         acknowledged=report.acknowledged,
         version=spec_documents.content_version(content),
+        step_moved=move if reached is not None else None,
     )
 
 

@@ -5636,6 +5636,11 @@ def submit_spec_document(
     gap is open (`warnings`). `notes` never gate. A gap you judge acceptable, you leave open with
     `acknowledge_spec_gap(path, code, where, reason)`; it then shows under `acknowledged`. A saved
     document is not a ready one: say it is ready only when that field is true.
+
+    `step_moved` appears when the save itself moved an exploring change document's step, because
+    it already holds what the earlier steps produce: `from`, `to`, and `instructions` for the step
+    it now stands at. Do not call `advance_spec_step` for that move; follow those instructions in
+    this run.
     """
     document: Dict[str, Any] = {
         "schema_version": schema_version,
