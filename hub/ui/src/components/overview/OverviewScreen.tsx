@@ -90,11 +90,13 @@ function LiveOverview({
   const openTab = useOverviewTabsStore((s) => s.openTab);
   const [active, setActive] = React.useState<OverviewTabId>(opening);
   // Another project keeps its own tabs: switching project re-reads where this one opens.
-  React.useEffect(
-    () =>
-      setActive(useOverviewTabsStore.getState().session[projectId] ?? opening),
-    [projectId],
-  ); // eslint-disable-line react-hooks/exhaustive-deps
+  const openingRef = React.useRef(opening);
+  openingRef.current = opening;
+  React.useEffect(() => {
+    setActive(
+      useOverviewTabsStore.getState().session[projectId] ?? openingRef.current,
+    );
+  }, [projectId]);
   // The operator opened the Overview: the Hub records the visit (and may start a note), then the
   // read is taken again so "since you last looked" counts from the visit before this one.
   const { refetch } = overview;
