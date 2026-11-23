@@ -2,7 +2,7 @@ import * as React from 'react'
 import { useAgents } from '@/api/agents'
 import { readableApiError } from '@/api/client'
 import { useClearStableFixTasks, useDisturbedRuns, useKnownFailing } from '@/api/knownFailing'
-import { useOverview, type OverviewBody } from '@/api/overview'
+import { recordOverviewVisit, refreshOverviewNote, useOverview, type OverviewBody } from '@/api/overview'
 import { useProjects } from '@/api/projects'
 import { useQuarantine, useRemoveNeverQuarantine, useSetNeverQuarantine } from '@/api/quarantine'
 import { Icon } from '@/components/common/Icon'
@@ -14,6 +14,7 @@ import { selectOpeningTab, useOverviewTabsStore, type OverviewTabId } from '@/st
 import { AgentPostureChips } from './AgentPostureChips'
 import { KnownFailingList } from './KnownFailingList'
 import { OverviewClassicScreen } from './OverviewClassicScreen'
+import { OverviewBriefing, type BriefingNote } from './OverviewBriefing'
 import { OverviewDashboard, type DashActivity, type DashBuild, type DashNeed } from './OverviewDashboard'
 import {
   dashboardFigures,
@@ -65,6 +66,18 @@ function LiveOverview({
   const [active, setActive] = React.useState<OverviewTabId>(opening)
   // Another project keeps its own tabs: switching project re-reads where this one opens.
   React.useEffect(() => setActive(useOverviewTabsStore.getState().session[projectId] ?? opening), [projectId]) // eslint-disable-line react-hooks/exhaustive-deps
+  // The operator opened the Overview: the Hub records the visit (and may start a note), then the
+  // read is taken again so "since you last looked" counts from the visit before this one.
+  const { refetch } = overview
+  React.useEffect(() => {
+    let live = true
+    void recordOverviewVisit(projectId).then(() => {
+      if (live) void refetch()
+    })
+    return () => {
+      live = false
+    }
+  }, [projectId]) // eslint-disable-line react-hooks/exhaustive-deps
   const choose = (tab: OverviewTabId) => {
     setActive(tab)
     openTab(projectId, tab)
@@ -88,18 +101,17 @@ function LiveOverview({
         ) : active === 'dashboard' ? (
           <LiveDashboard projectId={projectId} body={overview.data} screen={screen} />
         ) : (
-          <p className="aw-ov-placeholder" data-slot="overview-briefing-placeholder">
-            The Briefing will tell this same picture in sentences. Until it is built, the Dashboard tab shows everything.
-          </p>
+          <LiveBriefing projectId={projectId} body={overview.data} screen={screen} refetch={overview.refetch} />
         )}
       </div>
     </div>
   )
 }
 
-function LiveDashboard({ projectId, body, screen }: { projectId: string; body: OverviewBody; screen: OverviewScreenProps }) {
-  // A failed read of either only loses a name or a colour; say so rather than show them blank.
-  const { data: projects = [], error: projectsError, refetch: refetchProjects } = useProjects()
+/** Both tabs' items, mapped from the one read the same way, so a figure on one never contradicts the
+ *  other (FR-10). `todays` is what the Dashboard's timeline lists; `finishedAll` is what the Briefing
+ *  counts from the last visit. */
+function useOverviewItems(projectId: string, body: OverviewBody, screen: OverviewScreenProps) {
   const { data: agents = [], error: agentsError, refetch: refetchAgents } = useAgents()
   const open = useOverviewOpeners(projectId, screen)
   const now = new Date()
@@ -125,8 +137,7 @@ function LiveDashboard({ projectId, body, screen }: { projectId: string; body: O
     at: r.started_at,
     onOpen: () => open.openConversation(r.agent, r.conversation_id),
   }))
-  // The timeline lists today's finished work (FR-7); the Briefing counts from the last visit.
-  const finished: DashActivity[] = todays.map((f) => ({
+  const toActivity = (f: OverviewBody['finished'][number]): DashActivity => ({
     id: `finished-${f.id}`,
     agent: f.agent ?? 'The Hub',
     colorIndex: colorOf(f.agent),
@@ -136,7 +147,10 @@ function LiveDashboard({ projectId, body, screen }: { projectId: string; body: O
     usd: f.usd,
     costWords: finishedCostWords(f),
     onOpen: () => (f.task_id ? open.openTask(f.task_id) : f.agent ? screen.onNavigate(`agent:${f.agent}`) : screen.onNavigate('activity')),
-  }))
+  })
+  // The timeline lists today's finished work (FR-7); the Briefing counts from the last visit.
+  const finished = todays.map(toActivity)
+  const finishedAll = body.finished.map(toActivity)
   const builds: DashBuild[] = body.builds.map((b) => ({
     id: b.build_id,
     title: b.title,
@@ -146,6 +160,13 @@ function LiveDashboard({ projectId, body, screen }: { projectId: string; body: O
     needsYou: b.needs_operator,
     onOpen: () => goTo(buildDestination(projectId, b.build_id)),
   }))
+  return { open, now, main, spend, finishedToday, needs, running, finished, finishedAll, builds, agentsError, refetchAgents }
+}
+
+function LiveDashboard({ projectId, body, screen }: { projectId: string; body: OverviewBody; screen: OverviewScreenProps }) {
+  // A failed read of either only loses a name or a colour; say so rather than show them blank.
+  const { data: projects = [], error: projectsError, refetch: refetchProjects } = useProjects()
+  const { open, now, main, spend, finishedToday, needs, running, finished, builds, agentsError, refetchAgents } = useOverviewItems(projectId, body, screen)
 
   return (
     <>
@@ -170,6 +191,69 @@ function LiveDashboard({ projectId, body, screen }: { projectId: string; body: O
         <ChecksAndProfiles onNavigate={screen.onNavigate} onOpenTask={open.openTask} />
       </OverviewDashboard>
     </>
+  )
+}
+
+function LiveBriefing({
+  projectId,
+  body,
+  screen,
+  refetch,
+}: {
+  projectId: string
+  body: OverviewBody
+  screen: OverviewScreenProps
+  refetch: () => unknown
+}) {
+  const { data: projects = [] } = useProjects()
+  const { open, now, main, spend, finishedToday, needs, running, finishedAll, builds } = useOverviewItems(projectId, body, screen)
+  const [refreshing, setRefreshing] = React.useState(false)
+  const [refusal, setRefusal] = React.useState<string | null>(null)
+  const refresh = () => {
+    setRefreshing(true)
+    setRefusal(null)
+    void refreshOverviewNote(projectId).then((reason) => {
+      setRefusal(reason)
+      setRefreshing(false)
+      void refetch()
+    })
+  }
+  const attempt = body.note_last_attempt
+  const failedAttempt = attempt && attempt.outcome !== 'written' ? attempt : null
+  const note: BriefingNote = {
+    writtenAt: body.note?.written_at ?? '',
+    text: body.note?.text ?? '',
+    links: (body.note?.cites ?? []).map((c) => ({
+      key: `${c.type}:${c.id}`,
+      label: c.label,
+      onOpen: () => {
+        if (c.type === 'task') open.openTask(c.id)
+        else if (c.type === 'build') goTo(buildDestination(projectId, c.id))
+        else if (c.type === 'profile') screen.onNavigate(`agent:${c.id}`)
+        else screen.onNavigate('questions')
+      },
+    })),
+    writing: body.note_writing,
+    // A refusal the button just met, else why the latest firing wrote none; the earlier note stays.
+    problem: refusal ?? (failedAttempt ? (failedAttempt.reason ?? 'The note could not be written.') : null),
+    refreshing,
+    onRefresh: refresh,
+  }
+  return (
+    <OverviewBriefing
+      projectName={projects.find((p) => p.id === projectId)?.name ?? ''}
+      lastSeenAt={body.visit?.previous_at ?? null}
+      needs={needs}
+      running={running}
+      finished={finishedAll}
+      finishedToday={finishedToday}
+      spend={spend}
+      main={main}
+      builds={builds}
+      onNavigate={open.openPlace}
+      now={now}
+      note={note}
+    />
   )
 }
 
