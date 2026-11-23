@@ -5714,12 +5714,12 @@ def set_spec_size(path: str, size: SpecSize, reason: str) -> Dict[str, Any]:
 
 @_tool()
 def advance_spec_step(path: str, to: str = "") -> Dict[str, Any]:
-    """Move a change document to its next step, or to the step named in `to`. Call it only after
-    the operator chose to continue (here, or in a fresh thread) through `ask_user`.
+    """Move a change document to its next step, or to the step named in `to`. Call it yourself
+    once the current step's output is written and you have no question for the operator, and say
+    in your reply which step you moved to; do not ask the operator whether to continue.
 
     Never refused for something the step left unwritten: the answer's `missing` lists it, so say
-    so to the operator. The answer's `instructions` are the new step's: follow them now if the
-    operator chose to continue here, otherwise end your run.
+    so to the operator. The answer's `instructions` are the new step's: follow them in this run.
     """
     body: Dict[str, Any] = {"path": path}
     if to:

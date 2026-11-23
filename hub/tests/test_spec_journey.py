@@ -283,3 +283,86 @@ def test_acceptance_step_text_names_existing_behaviour(step):
     assert "guard: true" in text
     assert "fails until the change is built" in text
     assert "confirm_acceptance_criteria" in text
+
+
+# ---------------------------------------------------------------------------------------------
+# The spec journey spends the operator's attention only on their decisions: intake's picture,
+# its grilling and coverage, the process it settles itself, and what requirements and acceptance
+# show the operator (FR-1, FR-2, FR-3, FR-6, FR-9, FR-10).
+# ---------------------------------------------------------------------------------------------
+
+
+def _intake(size=None):
+    return spec_journey.duty(spec_journey.INTAKE, size=size, problem_written=True)
+
+
+# today-and-shape-every-size (FR-1)
+@pytest.mark.parametrize("size", ["fix", "small", "large", None])
+def test_today_and_shape_are_written_before_any_requirement_at_every_size(size):
+    text = _intake(size)
+
+    assert "**Write the picture before any requirement**" in text
+    assert "`## Today`" in text and "citing `file:line`" in text
+    assert "`## Proposed shape`" in text and "before/after sketch" in text
+    assert "what it would touch and what it changes for existing behaviour" in text
+    assert "two or three approaches with your recommendation" in text
+    assert "a fix included" in text
+
+
+# questions-grounded-and-ordered (FR-2)
+def test_intake_questions_are_grounded_and_asked_in_dependency_order():
+    text = _intake()
+
+    assert "Each question names the finding that makes it matter" in text
+    assert "Ask a question others depend on first" in text
+
+
+# premise-challenged-duty (FR-3)
+def test_intake_challenges_the_premise_and_asks_what_breaks():
+    text = _intake()
+
+    assert "challenge the request's premise at least once" in text
+    assert "is this the right problem" in text and "smaller or different change" in text
+    assert "failure modes, boundary cases and conflicts with existing behaviour" in text
+    assert "Before this step ends" in text
+
+
+# coverage-in-duty (FR-6)
+def test_intake_names_the_coverage_list_and_ends_every_reply_with_what_is_open():
+    text = _intake()
+
+    assert len(spec_journey.COVERAGE) == 6
+    for item in spec_journey.COVERAGE:
+        assert item in text
+    assert "End every reply with the items still open" in text
+    assert "each **assumption** you are making in place of an answer" in text
+
+
+# process-settled-duty (FR-9)
+def test_intake_settles_process_size_and_built_and_people_brief_asks_no_sources():
+    text = _intake("large")
+
+    assert "Record it with `set_spec_size(path, size, reason)`" in text
+    assert "do not ask them to confirm it" in text
+    assert "Ask the operator to confirm the size" not in text
+    assert "only when you found candidate commits" in text
+    assert 'Otherwise record `{"built": false}` and say so' in text
+
+    brief = spec_journey.people_brief("large", [("Developer", "claude-opus-5-5")])
+    assert "which sources" not in brief and "web search" not in brief
+    assert '`{"checked": [...], "limits": [...]}`' in brief
+    assert not hasattr(spec_journey, "SOURCES")
+
+
+# contested-only-duty (FR-10)
+@pytest.mark.parametrize(
+    "step",
+    [spec_journey.REQUIREMENTS, spec_journey.ACCEPTANCE, spec_journey.REQUIREMENTS_AND_ACCEPTANCE],
+)
+def test_requirements_and_acceptance_show_only_what_is_contested(step):
+    text = spec_journey.duty(step)
+
+    assert "**Show the operator only what is contested:**" in text
+    assert "you are unsure of or that contradict something" in text
+    assert "the assumptions behind them, and the acceptance drive" in text
+    assert "point at the document for it" in text

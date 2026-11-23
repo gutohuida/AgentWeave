@@ -2721,6 +2721,7 @@ async def advance_spec_step(
             steps,
             size=document.size,
             roster=await spec_journey.open_roster(session, actor.project_id),
+            problem_written=bool((payload or {}).get("problem")),
         ),
         "message": f"moved from {left} to {target}"
         + (f"; {left} left empty: {', '.join(gaps)}" if gaps else ""),

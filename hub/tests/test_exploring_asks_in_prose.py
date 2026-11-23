@@ -103,21 +103,23 @@ def test_every_step_asks_its_choices_in_the_reply(step):
     text = spec_journey.duty(step)
 
     assert "ask_user" not in text
-    if step == "build":
-        assert "Continue here" not in text
-        return
-    for choice in ("Continue here", "Continue in a fresh conversation", "Stop here"):
-        assert choice in text
-    assert "advance_spec_step" in text
+    assert "Continue here" not in text
     assert "in your reply" in text
+    if step == "build":
+        return
+    # The agent moves itself on (`agent-advances`): nothing asks the operator whether to continue.
+    for choice in ("Continue in a fresh conversation", "Stop here"):
+        assert choice not in text
+    assert "advance_spec_step" in text
 
 
-def test_intake_asks_the_size_in_the_reply_and_records_it():
+def test_intake_tells_the_size_in_the_reply_and_records_it():
     text = spec_journey.duty("intake")
 
-    for size in ("`fix`", "`small`", "`large`"):
+    for size in ("**fix**", "**small**", "**large**"):
         assert size in text
     assert "set_spec_size" in text
+    assert "tell the operator the size and your reason in your reply" in text
     assert text.index("set_spec_size") < text.index("advance_spec_step")
 
 
