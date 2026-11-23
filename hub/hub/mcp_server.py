@@ -5719,7 +5719,7 @@ def advance_spec_step(path: str, to: str = "") -> Dict[str, Any]:
     in your reply which step you moved to; do not ask the operator whether to continue.
 
     Never refused for something the step left unwritten: the answer's `missing` lists it, so say
-    so to the operator. The answer's `instructions` are the new step's: follow them in this turn.
+    so to the operator. The answer's `instructions` are the new step's: follow them in this run.
     """
     body: Dict[str, Any] = {"path": path}
     if to:
