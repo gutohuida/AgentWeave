@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest'
 import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { JobsScreen } from '@/components/jobs/JobsScreen'
+import { JobsSection } from './support/JobsSection'
 import type { Job } from '@/api/jobs'
 
 /**
@@ -73,7 +73,7 @@ function renderCard(job: Job, onOpenTasks?: (taskIds: string[]) => void) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(
     <QueryClientProvider client={client}>
-      <JobsScreen onOpenTasks={onOpenTasks} />
+      <JobsSection onOpenTasks={onOpenTasks} />
     </QueryClientProvider>,
   )
 }
@@ -667,5 +667,21 @@ describe('JobCard: what the row and the chips actually claim', () => {
 
     await user.click(screen.getByLabelText('Expand job details'))
     expect(within(screen.getByTestId('job-loop-current-tasks')).getByText('builder')).toBeInTheDocument()
+  })
+})
+
+// leaner-navigation FR-7: the Running tab opens Project settings › Jobs on one job, expanded.
+describe('Project settings › Jobs opened on one job', () => {
+  it('opens the job the address names expanded, and leaves the others closed', () => {
+    loopTasks = []
+    pageJobs = [baseJob(), baseJob({ id: 'job-2', name: 'Weekly digest' })]
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    render(
+      <QueryClientProvider client={client}>
+        <JobsSection focus="job-2" />
+      </QueryClientProvider>,
+    )
+    const toggles = screen.getAllByRole('button', { name: /job details$/ })
+    expect(toggles.map((t) => t.getAttribute('aria-expanded'))).toEqual(['false', 'true'])
   })
 })

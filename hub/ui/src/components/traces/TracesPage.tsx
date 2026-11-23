@@ -38,6 +38,7 @@ import { Segmented } from '@/components/ui/segmented'
 import { formatCost, formatCostExact, formatCount, formatTokens, formatTokensExact, UNPRICED_TITLE } from '@/lib/format'
 import { hubDate } from '@/lib/hubTime'
 import '@/styles/traces.css'
+import '@/styles/activity.css'
 
 function plural(n: number, one: string, many = `${one}s`): string {
   return `${formatCount(n)} ${n === 1 ? one : many}`
@@ -306,7 +307,7 @@ function Groups({
 }
 
 /**
- * Activity → Traces: agents' runs by default, the Hub's own traces behind a quiet "Hub internals"
+ * Project settings › Traces: agents' runs by default, the Hub's own traces behind a quiet "Hub internals"
  * choice; filters by agent, conversation, task, run and time range. A row opens its trace in the
  * drawer; the filters live here, so closing the drawer returns to the same list.
  */
@@ -316,6 +317,7 @@ export function TracesPage({ request = null }: { request?: TracesRequest | null 
     build: request?.build ?? '',
     task: request?.task ?? '',
     agent: request?.agent ?? '',
+    run: request?.run ?? '',
   }))
   // The moment a range is measured from is taken when the filter changes, so the query key is still.
   const [anchor, setAnchor] = React.useState(() => new Date())

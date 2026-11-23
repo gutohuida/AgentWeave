@@ -7,6 +7,8 @@ export interface TracesRequest {
   build?: string
   task?: string
   agent?: string
+  /** One run's id (the address's `focus`, in Project settings › Traces). */
+  run?: string
   /** An ISO date-time; runs that started at or after it. */
   since?: string
   /** What the filtered list is called while it is in force ("Build 2", "task AW-5"). */
@@ -14,7 +16,7 @@ export interface TracesRequest {
 }
 
 interface TracesRequestState {
-  /** Set by a run count elsewhere, read by Activity → Traces when it mounts. `nonce` makes two
+  /** Set by a run count elsewhere, read by Project settings › Traces when it mounts. `nonce` makes two
    *  identical requests in a row still count as two, so the view re-reads the second one. */
   request: (TracesRequest & { nonce: number }) | null
   ask: (request: TracesRequest) => void

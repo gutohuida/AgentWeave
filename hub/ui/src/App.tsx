@@ -467,7 +467,7 @@ export default function App() {
         onOpenTasks={(taskIds, specDocumentId) =>
           openTasksFor(destination.projectId, taskIds, specDocumentId)
         }
-        onOpenJobs={() => navigateTo(environmentDestination(destination.projectId, 'jobs'))}
+        onOpenJobs={(jobId) => navigateTo(environmentDestination(destination.projectId, 'jobs', null, jobId))}
         onOpenQuestions={() => {
           setOverviewQuestionsOpen(true)
           navigateTo(projectDestination(destination.projectId, 'overview'))
@@ -640,6 +640,8 @@ export default function App() {
         <ProjectSettingsScreen
           section={destination.environmentSection}
           setting={destination.setting}
+          focus={destination.focus}
+          onOpenTask={(taskId) => openTasksFor(destination.projectId, [taskId])}
           onSelectSection={(section) => navigateTo(environmentDestination(destination.projectId, section))}
           onNavigate={navigate}
           onOpenAppSettings={() => navigateTo(appSettingsDestination(destination.projectId))}

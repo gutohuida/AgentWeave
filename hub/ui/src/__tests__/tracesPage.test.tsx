@@ -9,7 +9,6 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
 import { useConfigStore } from '@/store/configStore'
 import { TracesPage } from '@/components/traces/TracesPage'
-import { ActivityScreen } from '@/components/activity/ActivityScreen'
 
 vi.mock('@/api/agents', () => ({
   useAgents: () => ({ data: [{ name: 'alpha' }, { name: 'beta' }] }),
@@ -95,13 +94,6 @@ afterEach(() => {
 })
 
 describe('TracesPage', () => {
-  it('is a fourth view in Activity, beside Ledger, Activity and Logs', async () => {
-    render(<ActivityScreen onOpenTask={vi.fn()} initialView="traces" />, { wrapper })
-    expect(await screen.findByTestId('traces-view')).toBeInTheDocument()
-    const group = screen.getByRole('radiogroup', { name: 'Activity view' })
-    expect(within(group).getAllByRole('radio').map((r) => r.textContent)).toEqual(['Ledger', 'Activity', 'Logs', 'Traces'])
-  })
-
   it('opens on agents’ runs only, and the Hub’s kinds sit behind Hub internals with a way back', async () => {
     render(<TracesPage />, { wrapper })
     await screen.findAllByTestId('trace-row')

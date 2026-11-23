@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { fireEvent, render, screen } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { Job } from '@/api/jobs'
-import { JobsScreen } from '@/components/jobs/JobsScreen'
+import { JobsSection } from './support/JobsSection'
 
 /** F637: after every job was archived, the Jobs page said "No jobs yet / Create First Job" although
  *  six had fired. Archived jobs are listed on their own, and the empty state counts them. */
@@ -48,7 +48,7 @@ function renderPage() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(
     <QueryClientProvider client={client}>
-      <JobsScreen />
+      <JobsSection />
     </QueryClientProvider>,
   )
 }

@@ -92,8 +92,8 @@ interface ConversationViewProps {
   /** A spec tab's 'Show these on the board' / coverage task link: the host scopes the Tasks board
    *  and navigates there. */
   onOpenTasks?: (taskIds: string[], specDocumentId?: string) => void
-  /** Running's job row: the Jobs page. */
-  onOpenJobs?: () => void
+  /** Running's job row: Project settings › Jobs with that job expanded (leaner-navigation FR-7). */
+  onOpenJobs?: (jobId?: string) => void
   /** Running's Answer: where the project's open questions can be answered. */
   onOpenQuestions?: () => void
   /** The Watch tab's Talk to: another agent's (or this agent's) conversation becomes the main view. */
@@ -333,7 +333,7 @@ export function ConversationView({
       } else if (item.kind === 'loop' && item.loopId) {
         openTab(projectId, loopTabId(item.loopId))
       } else if (item.kind === 'job') {
-        onOpenJobs?.()
+        onOpenJobs?.(item.id)
       }
     },
     [openTab, projectId, onOpenJobs],
