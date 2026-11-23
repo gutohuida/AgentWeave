@@ -397,7 +397,7 @@ function CheckpointsSection({ agent }: { agent: AgentSummary }) {
   // The profile's own checkpoints are read here, on its page (leaner-navigation FR-9): the list,
   // then one opened in place with a way back. The same query the list reads, so the count is free.
   const [openedCheckpoint, setOpenedCheckpoint] = React.useState<string | null>(null)
-  const taken = useProjectCheckpoints({ agent: agent.name })
+  const { data: takenData, error: takenError } = useProjectCheckpoints({ agent: agent.name })
   const mode = useUpdateAgentCheckpointMode()
   const threshold = useUpdateAgentCheckpointOverride()
   const { run, notices } = usePatchWrites()
@@ -444,7 +444,8 @@ function CheckpointsSection({ agent }: { agent: AgentSummary }) {
         }
         run(writes, said)
       }}
-      taken={taken.data?.checkpoints.length}
+      // A failed read shows no count rather than a false 0; the list below names the failure.
+      taken={takenError ? undefined : takenData?.checkpoints.length}
       list={
         <CheckpointsPanelContainer
           scope={{ agent: agent.name }}
