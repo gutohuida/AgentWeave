@@ -1,8 +1,11 @@
 import * as React from 'react'
-import type { PreMortem, PreMortemFinding } from '@/api/manager'
+import { isNoManager, useManagerJobs, usePreMortems, useRunPreMortem, type PreMortem, type PreMortemFinding } from '@/api/manager'
+import { readableApiError } from '@/api/client'
 import { Icon } from '@/components/common/Icon'
 import { Button } from '@/components/ui/button'
 import { formatDateTime, formatUsage } from '@/lib/format'
+import { environmentDestination, goTo } from '@/lib/navigation'
+import { useConfigStore } from '@/store/configStore'
 import { Section } from './SpecDocumentBody'
 import '@/styles/spec-page.css'
 
@@ -19,6 +22,44 @@ const OUTCOME_LABEL: Record<string, string> = {
 
 function cost(micros: number | null | undefined): string {
   return micros == null ? 'not reported' : formatUsage({ cost_usd_micros: micros })
+}
+
+/** The Pre-mortem section of a change document's page, fed from the Hub: its firings (polled, since a
+ *  firing is recorded when it ends and nothing broadcasts it) and whether the job is on. */
+export function SpecPreMortem({ path, now, flash, onCopyLink }: { path: string; now: Date; flash: string | null; onCopyLink: (anchor: string) => void }) {
+  const { data, error } = usePreMortems(path)
+  const { data: jobList, error: jobsError } = useManagerJobs()
+  const run = useRunPreMortem(path)
+  const projectId = useConfigStore((state) => state.selectedProjectId)
+  const rows = data ?? []
+  const newest = rows[0]?.id ?? null
+  // The newest firing when a press was accepted: until the list moves on from it, one is running.
+  const [askedOver, setAskedOver] = React.useState<string | null | undefined>(undefined)
+  const { reset } = run
+  React.useEffect(() => {
+    setAskedOver((asked) => (asked === undefined || asked === newest ? asked : undefined))
+    reset()
+  }, [newest, reset])
+  const job = jobList?.find((item) => item.key === 'pre-mortem')
+  // A Hub that predates the job: a committed bundle reaches the operator's app before its restart.
+  if (isNoManager(error) || isNoManager(jobsError) || (jobList && !job)) return null
+  const unreadable = error ?? jobsError
+  return (
+    <SpecPreMortemSection
+      preMortems={rows}
+      jobOff={job ? !job.enabled : false}
+      running={askedOver !== undefined && askedOver === newest}
+      refusal={run.isError ? readableApiError(run.error, 'The Hub did not answer.') : unreadable ? readableApiError(unreadable, 'The Hub did not answer.') : null}
+      pending={run.isPending}
+      now={now}
+      flash={flash}
+      onCopyLink={onCopyLink}
+      onRun={() => run.mutate(undefined, { onSuccess: () => setAskedOver(newest) })}
+      onOpenManager={() => {
+        if (projectId) goTo(environmentDestination(projectId, 'manager'))
+      }}
+    />
+  )
 }
 
 /** The document's pre-mortems and the action that asks for one

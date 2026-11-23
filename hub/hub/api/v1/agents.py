@@ -1385,9 +1385,10 @@ def _operations(*, can_admin_specs: bool = False) -> List[_Operation]:
             fields=("path", "to"),
             required=("path",),
             text=(
-                "move a change document to its next step (or the step in `to`), once the operator "
-                "chose to continue. Never refused: `missing` names what the step left empty, and "
-                "`instructions` are the new step's."
+                "move a change document to its next step (or the step in `to`): call it yourself "
+                "once the step's output is written and you have no question for the operator, and "
+                "say which step you moved to. Never refused: `missing` names what the step left "
+                "empty, and `instructions` are the new step's."
             ),
         ),
         _Operation(
@@ -2917,6 +2918,15 @@ async def _render_hub_agent_context(
                     # its Markdown, an appended instruction reaches only its step (FR-3, FR-4).
                     steps = await spec_journey.project_steps(db, project_id)
                     lines.append(spec_journey.journey_line(row.size, row.step, steps))
+                    # Intake plays the intent back while the problem is unwritten (D1); a payload
+                    # that cannot be read is treated as unwritten, which only asks once more.
+                    problem_written = False
+                    with contextlib.suppress(Exception):
+                        problem_written = bool(
+                            (spec_documents.read_payload(workspace, open_spec_path) or {}).get(
+                                "problem"
+                            )
+                        )
                     lines.append(
                         spec_journey.duty(
                             row.step,
@@ -2929,6 +2939,7 @@ async def _render_hub_agent_context(
                                 )
                                 for peer in roster
                             ],
+                            problem_written=problem_written,
                         )
                         or spec_journey.removed(row.step, row.size, steps)
                     )
@@ -3005,6 +3016,11 @@ async def _render_hub_agent_context(
                     "is not is authoring this document through anything but `submit_spec_document`."
                 )
             lines.append("")
+            # The latest written pre-mortem reaches the author in its next turn here (FR-11).
+            if row is not None and row.kind == "change-spec":
+                from ... import pre_mortem
+
+                lines.extend(await pre_mortem.briefing_lines(db, project_id, row.id))
 
     # A project with nobody else in it gets no Team section at all — not a Team section saying the
     # team is empty. `roster` includes the agent being addressed (that is what the `<- you` marker

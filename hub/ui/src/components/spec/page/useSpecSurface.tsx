@@ -36,6 +36,7 @@ import { NO_DOCUMENT_FILTERS, type CheckState, type DocumentFilters, type ListPr
 import { SpecDocumentFacts } from './SpecDocumentFacts'
 import type { HeaderNotice } from './SpecNotices'
 import type { PlainDocument } from './SpecPlainDocument'
+import { SpecPreMortem } from './SpecPreMortem'
 import { SpecRetrospective } from './SpecRetrospective'
 import type { HeaderChrome } from './SpecPageHeader'
 import type { SpecSurfaceProps } from './SpecWorkspace'
@@ -384,7 +385,12 @@ export function useSpecSurface(path: string, host: SpecSurfaceHost): SpecSurface
     dialogs: controls?.dialogs,
     retrospective:
       doc.kind === 'change-spec'
-        ? ({ flash, onCopyLink }) => <SpecRetrospective path={path} now={now} flash={flash} onCopyLink={onCopyLink} />
+        ? ({ flash, onCopyLink }) => (
+            <>
+              <SpecPreMortem path={path} now={now} flash={flash} onCopyLink={onCopyLink} />
+              <SpecRetrospective path={path} now={now} flash={flash} onCopyLink={onCopyLink} />
+            </>
+          )
         : undefined,
   }
   return { status: 'ready', surface }

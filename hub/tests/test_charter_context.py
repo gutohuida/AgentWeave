@@ -88,3 +88,21 @@ async def test_bind_agent_to_unknown_charter_is_refused(app, auth_headers, add_a
     # passed without the agent existing at all.
     assert response.status_code == 404
     assert "Charter 'charter-does-not-exist' not found" in response.json()["detail"]
+
+
+# charter-relentless (`charter-stance`, FR-12): the bundled Spec Author charter interviews curious
+# first, then relentless, and no longer lets an assumption stand unnamed.
+def test_the_bundled_spec_charter_is_curious_first_then_relentless():
+    from pathlib import Path
+
+    text = (Path(__file__).parent.parent / "hub" / "data" / "charters" / "spec.md").read_text(
+        encoding="utf-8"
+    )
+
+    assert "Curious first, then relentless" in text
+    playback = text.index("**Play the intent back before asking.**")
+    relentless = text.index("**Then relentless.** Challenge assumptions, premises and terms")
+    assert playback < relentless
+    assert "until nothing is silently assumed" in text
+    assert "Let a harmless one stand" not in text
+    assert "Open-threaded" not in text

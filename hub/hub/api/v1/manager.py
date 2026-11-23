@@ -10,7 +10,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, s
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ... import build_retrospective, chapters_job, manager
+from ... import build_retrospective, chapters_job, manager, pre_mortem
 from ...auth import get_project
 from ...db.engine import get_session
 from ...db.models import Runner
@@ -57,7 +57,7 @@ async def update_manager_job(
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="mode chooses between automatic firing and the button, and only the "
-                "chapters and build retrospective jobs have a button",
+                "chapters, build retrospective and pre-mortem jobs have a button",
             )
         fields["automatic"] = mode == "automatic"
     runner_id = fields.get("runner_id")
@@ -155,6 +155,41 @@ async def list_retrospectives(
             session, project[0], document.id
         )
     }
+
+
+class PreMortemRun(BaseModel):
+    path: str = Field(..., min_length=1)
+
+    model_config = {"extra": "forbid"}
+
+
+@router.post("/jobs/pre-mortem/run", status_code=status.HTTP_202_ACCEPTED)
+async def run_a_pre_mortem(
+    body: PreMortemRun,
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """'Run a pre-mortem' on the document *path* now. Refused (409) while the job is off or has no
+    runner, the document has no requirements, or one of this document is in progress; 404 for an
+    unknown document. The firing runs after the answer and never holds it."""
+    try:
+        await pre_mortem.request(session, project[0], body.path)
+    except pre_mortem.CannotRunError as exc:
+        raise HTTPException(status_code=exc.status, detail=exc.reason) from exc
+    return {"started": True}
+
+
+@router.get("/jobs/pre-mortem/pre-mortems")
+async def list_pre_mortems(
+    path: str = Query(..., min_length=1),
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """The document's pre-mortems, newest first, the failed firings among them."""
+    document = await pre_mortem.find_document(session, project[0], path)
+    if document is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"No document '{path}'")
+    return {"pre_mortems": await pre_mortem.list_for_document(session, project[0], document.id)}
 
 
 @router.get("/activity")
