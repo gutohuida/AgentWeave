@@ -61,7 +61,7 @@ async def test_a_review_turn_is_titled_as_the_reviewers_review(
 
     await _fire(job.id)
 
-    assert await _conversation_title_for(REVIEWER) == "critic · review: Balance the ledger"
+    assert await _conversation_title_for(REVIEWER) == "critic · review turn 1: Balance the ledger"
 
 
 @pytest.mark.usefixtures("no_agent_cli_spawn")
@@ -85,7 +85,7 @@ async def test_a_work_turn_is_titled_as_the_authors_work(
 
     await _fire(job.id)
 
-    assert await _conversation_title_for(AUTHOR) == "builder · work: Balance the ledger"
+    assert await _conversation_title_for(AUTHOR) == "builder · work turn 1: Balance the ledger"
 
 
 @pytest.mark.usefixtures("no_agent_cli_spawn")
@@ -121,7 +121,7 @@ async def test_the_task_title_is_what_truncation_cuts():
     from hub.conversations import title_from_message
 
     title = job_conversation_title("Ledger flow", "critic", _task("word " * 60), True)
-    assert title_from_message(title).startswith("critic · review: word")
+    assert title_from_message(title).startswith("critic · review turn 1: word")
 
 
 async def test_no_task_means_the_job_name():
@@ -150,9 +150,9 @@ async def test_each_selection_of_a_wide_firing_is_titled_for_its_own_agent(
 
     titles = {await _conversation_title_for(OWNER), await _conversation_title_for(SECOND)}
     assert titles == {
-        f"{OWNER} · work: work a",
-        f"{SECOND} · work: work b",
+        f"{OWNER} · work turn 1: work a",
+        f"{SECOND} · work turn 1: work b",
     } or titles == {
-        f"{OWNER} · work: work b",
-        f"{SECOND} · work: work a",
+        f"{OWNER} · work turn 1: work b",
+        f"{SECOND} · work turn 1: work a",
     }

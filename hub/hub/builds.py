@@ -1784,8 +1784,10 @@ async def hand_out(
                 raise HandOutRefused(str(exc), 409) from exc
     loop = await session.get(Loop, build.loop_id) if build.loop_id else None
     conversation = new_conversation(project_id=project_id, agent=agent, origin="job")
-    kind = "Review" if review else "Build"
-    name_conversation(conversation, f"{kind}: {task.title}"[:120])
+    from .scheduler import earlier_turns_on_task, job_conversation_title
+
+    turn = await earlier_turns_on_task(session, task.id, review) + 1
+    name_conversation(conversation, job_conversation_title("", agent, task, review, turn)[:120])
     session.add(conversation)
     await inherit_runtime_overrides(session, conversation)
     await session.flush()

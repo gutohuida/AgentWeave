@@ -225,6 +225,10 @@ async def generate_conversation_title(*, project_id: str, conversation_id: str) 
             return None
         if conversation.title_set_by_operator:
             return None
+        # A thread a flow, job, build or the mender started was titled when it was created
+        # (`flow-threads-get-standard-titles`): no model is called for it.
+        if conversation.origin in ("job", "mender"):
+            return None
 
         project = await db.get(Project, project_id)
         job = await manager.get_job_row(db, project_id, manager.TITLES)

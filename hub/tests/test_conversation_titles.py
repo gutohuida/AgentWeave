@@ -252,3 +252,57 @@ async def test_rename_of_an_unknown_conversation_is_not_found(app, auth_headers)
         headers=auth_headers,
     )
     assert response.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# Which threads the conversation-titles job may title (FR-12, FR-13)
+# ---------------------------------------------------------------------------
+
+
+async def _generate_after_setting_origin(app, auth_headers, bind_runner, monkeypatch, origin):
+    """Turn titles on, give a fresh thread *origin*, and run the titler on it.
+
+    Returns the spawn calls and the title the thread ends with.
+    """
+    import hub.conversation_titles as conversation_titles
+    from hub.db.engine import async_session_factory
+
+    from .test_title_generation import _conversation, _fake_spawn, _set_mode, _sync_agent, _title
+
+    await _sync_agent(app, auth_headers)
+    conversation_id = await _conversation(app, auth_headers, bind_runner)
+    await _set_mode("generate")
+    async with async_session_factory() as session:
+        conversation = await get_conversation_by_id(session, conversation_id)
+        conversation.origin = origin
+        await session.commit()
+    calls = []
+    _fake_spawn(monkeypatch, "Model title", calls)
+    await conversation_titles.generate_conversation_title(
+        project_id="proj-test", conversation_id=conversation_id
+    )
+    return calls, (await _title(conversation_id))[0]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("origin", ["job", "mender"])
+async def test_no_titler_for_job_threads(
+    app, auth_headers, bind_runner, monkeypatch, origin
+) -> None:
+    calls, title = await _generate_after_setting_origin(
+        app, auth_headers, bind_runner, monkeypatch, origin
+    )
+    assert calls == [], "a thread a flow, job or the mender started is never sent to a model"
+    assert title == "Investigate the flaky checkout test"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("origin", ["operator", "peer"])
+async def test_operator_and_peer_threads_are_titled(
+    app, auth_headers, bind_runner, monkeypatch, origin
+) -> None:
+    calls, title = await _generate_after_setting_origin(
+        app, auth_headers, bind_runner, monkeypatch, origin
+    )
+    assert calls, "the conversation-titles job still titles these"
+    assert title == "Model title"
