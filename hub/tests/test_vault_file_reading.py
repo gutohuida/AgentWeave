@@ -275,7 +275,11 @@ async def test_a_codex_runner_cannot_read_and_spawns_nothing(
     await _enable(app, auth_headers, await _runner(app, auth_headers, cli="codex", model=None))
     source = await _upload(app, auth_headers, PNG, "image/png")
     assert fake.spawns == []
-    assert await _firings() == []
+    # The upload's run is refused before any spawn, and ends saying why
+    # (`background-manager-work-you-can-see` FR-2), where it used to end silently.
+    firings = await _firings()
+    assert [(f["outcome"], f["model"]) for f in firings] == [("failed", None)]
+    assert "Claude runner" in firings[0]["detail"] and firings[0]["run_id"].startswith("mrun-")
 
     refused = await app.post(f"{BASE}/vault/sources/{source['id']}/distil", headers=auth_headers)
     assert refused.status_code == 409, refused.text

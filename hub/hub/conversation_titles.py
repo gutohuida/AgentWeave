@@ -282,30 +282,6 @@ async def generate_conversation_title(*, project_id: str, conversation_id: str) 
             prompt=_PROMPT.format(excerpt=excerpt),
         )
 
-    # Always autonomous: nobody asked for this title. At a spent budget it is not spawned and the
-    # truncated title stays, which is already the titler's floor.
-    gated = await budget_blocks_autonomy(project_id)
-    if gated is not None:
-        await _recorded(gated)
-        # F721: the job's record too, as a vault job's paused call leaves one, so the Manager's
-        # activity says why no title came instead of showing nothing.
-        async with async_session_factory() as db:
-            await manager.record_firing(
-                db,
-                project_id,
-                job=manager.TITLES,
-                trigger="turn_completed",
-                subject={"conversation_id": conversation_id},
-                runner_id=runner.id,
-                cli=runner.cli,
-                model=model,
-                outcome="failed",
-                detail=f"Did not run: {gated.error}",
-                duration_ms=0,
-                usage=None,
-            )
-        return None
-
     try:
         cmd = build_title_command(
             cli=runner.cli, model=model, prompt=_PROMPT.format(excerpt=excerpt)
@@ -319,82 +295,116 @@ async def generate_conversation_title(*, project_id: str, conversation_id: str) 
     if cmd is None:
         return None
 
-    async with _gate:
-        started = time.monotonic()
-        spawn = await asyncio.to_thread(_run_titler, cmd, cwd, env)
-        duration_ms = int((time.monotonic() - started) * 1000)
-    output: Optional[str] = None
-    if spawn.outcome == "ok":
-        # Every CLI answers in JSON since F240, so its usage is read like any worker's; titled
-        # from the raw stream, a conversation would be named after a fragment of JSON (R2). An
-        # unparseable envelope titles nothing, the titler's existing floor.
-        answer, envelope_usage, error = get_adapter(runner.cli).parse_one_shot(spawn.stdout)
-        result = WorkerResult(
-            "unparseable" if error is not None else "ok",
-            answer_text=answer,
-            usage=envelope_usage,
-            exit_code=spawn.exit_code,
-            duration_ms=duration_ms,
-            error=error,
-        )
-        output = answer if error is None else None
-    else:
-        result = WorkerResult(
-            spawn.outcome, exit_code=spawn.exit_code, duration_ms=duration_ms, error=spawn.error
-        )
-    await _recorded(result)
-    usage = manager.usage_record(result.usage)
-    failed = output is None
-
-    title = "" if failed else title_from_output(restore_file_mentions(output or ""))
-
-    async def _fired(db, outcome: str, detail: Optional[str]) -> None:
-        await manager.record_firing(
-            db,
-            project_id,
-            job=manager.TITLES,
-            trigger="turn_completed",
-            subject={"conversation_id": conversation_id},
-            runner_id=runner.id,
-            cli=runner.cli,
-            model=model,
-            outcome=outcome,
-            detail=detail,
-            duration_ms=duration_ms,
-            usage=usage,
-            answer=manager.cut_answer(output),
-        )
-
-    if not title:
-        # F740: a failure says why (the spawn's or the envelope's error), as a vault job's does.
-        reason = (result.error or result.outcome) if failed else None
-        async with async_session_factory() as db:
-            await _fired(db, "failed" if failed else "empty", reason)
-        return None
-
-    async with async_session_factory() as db:
-        conversation = await get_conversation_by_id(db, conversation_id)
-        # Re-read rather than reuse: the operator may have renamed it while the model thought.
-        # The spawn still happened, so it is still recorded, as producing nothing that was kept.
-        if conversation is None or conversation.title_set_by_operator:
-            await _fired(db, "empty", None)
+    # From here a model is called, or the budget says why not: one run, announced when it starts
+    # and ended with a record however it ends (`manager.manager_run`).
+    async with manager.manager_run(
+        project_id,
+        job=manager.TITLES,
+        trigger="turn_completed",
+        subject={"conversation_id": conversation_id},
+        initiator=manager.AUTONOMOUS,
+    ) as run:
+        run.uses(runner_id=runner.id, cli=runner.cli, model=model)
+        # Always autonomous: nobody asked for this title. At a spent budget it is not spawned and the
+        # truncated title stays, which is already the titler's floor.
+        gated = await budget_blocks_autonomy(project_id)
+        if gated is not None:
+            await _recorded(gated)
+            # F721: the job's record too, as a vault job's paused call leaves one, so the Manager's
+            # activity says why no title came instead of showing nothing.
+            async with async_session_factory() as db:
+                await manager.record_firing(
+                    db,
+                    project_id,
+                    job=manager.TITLES,
+                    trigger="turn_completed",
+                    subject={"conversation_id": conversation_id},
+                    runner_id=runner.id,
+                    cli=runner.cli,
+                    model=model,
+                    outcome="failed",
+                    detail=f"Did not run: {gated.error}",
+                    duration_ms=0,
+                    usage=None,
+                )
             return None
-        conversation.title = title
-        await db.commit()
-        await _fired(db, "written", title)
-        await persist_event(
-            db,
-            project_id,
-            "conversation_titled",
-            {
-                "conversation_id": conversation_id,
-                "agent": agent_name,
-                "title": title,
-                "excerpt_digest": digest,
-            },
-            agent=agent_name,
-        )
-    return title
+
+        async with _gate:
+            started = time.monotonic()
+            spawn = await asyncio.to_thread(_run_titler, cmd, cwd, env)
+            duration_ms = int((time.monotonic() - started) * 1000)
+        output: Optional[str] = None
+        if spawn.outcome == "ok":
+            # Every CLI answers in JSON since F240, so its usage is read like any worker's; titled
+            # from the raw stream, a conversation would be named after a fragment of JSON (R2). An
+            # unparseable envelope titles nothing, the titler's existing floor.
+            answer, envelope_usage, error = get_adapter(runner.cli).parse_one_shot(spawn.stdout)
+            result = WorkerResult(
+                "unparseable" if error is not None else "ok",
+                answer_text=answer,
+                usage=envelope_usage,
+                exit_code=spawn.exit_code,
+                duration_ms=duration_ms,
+                error=error,
+            )
+            output = answer if error is None else None
+        else:
+            result = WorkerResult(
+                spawn.outcome, exit_code=spawn.exit_code, duration_ms=duration_ms, error=spawn.error
+            )
+        await _recorded(result)
+        usage = manager.usage_record(result.usage)
+        failed = output is None
+
+        title = "" if failed else title_from_output(restore_file_mentions(output or ""))
+
+        async def _fired(db, outcome: str, detail: Optional[str]) -> None:
+            await manager.record_firing(
+                db,
+                project_id,
+                job=manager.TITLES,
+                trigger="turn_completed",
+                subject={"conversation_id": conversation_id},
+                runner_id=runner.id,
+                cli=runner.cli,
+                model=model,
+                outcome=outcome,
+                detail=detail,
+                duration_ms=duration_ms,
+                usage=usage,
+                answer=manager.cut_answer(output),
+            )
+
+        if not title:
+            # F740: a failure says why (the spawn's or the envelope's error), as a vault job's does.
+            reason = (result.error or result.outcome) if failed else None
+            async with async_session_factory() as db:
+                await _fired(db, "failed" if failed else "empty", reason)
+            return None
+
+        async with async_session_factory() as db:
+            conversation = await get_conversation_by_id(db, conversation_id)
+            # Re-read rather than reuse: the operator may have renamed it while the model thought.
+            # The spawn still happened, so it is still recorded, as producing nothing that was kept.
+            if conversation is None or conversation.title_set_by_operator:
+                await _fired(db, "empty", None)
+                return None
+            conversation.title = title
+            await db.commit()
+            await _fired(db, "written", title)
+            await persist_event(
+                db,
+                project_id,
+                "conversation_titled",
+                {
+                    "conversation_id": conversation_id,
+                    "agent": agent_name,
+                    "title": title,
+                    "excerpt_digest": digest,
+                },
+                agent=agent_name,
+            )
+        return title
 
 
 @traces.traced_work(

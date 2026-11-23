@@ -516,23 +516,41 @@ async def weave_in_background(
     project_id: str, *, trigger: str, subject: Optional[Dict[str, Any]] = None
 ) -> None:
     """The background entry point: a thread that is not woven now is simply not woven, and nothing
-    here raises into the event loop."""
+    here raises into the event loop. A firing the job's choice lets go ahead (on, and automatic
+    unless it is the button) is one run that ends with a record however it ends
+    (`manager.manager_run`); one it holds back is no run."""
     subject = subject or {}
     lock = _locks.setdefault(project_id, asyncio.Lock())
     async with lock:
         try:
-            plan = await prepare(project_id, trigger=trigger)
+            async with async_session_factory() as db:
+                await gate(db, project_id, trigger)
         except CannotWeaveError as refusal:
-            if refusal.no_runner:
-                await manager.record_no_runner(
-                    project_id, job=JOB, trigger=trigger, subject=subject
-                )
-            return
+            if not refusal.no_runner:
+                return
         except Exception:  # noqa: BLE001 -- a background task must not raise
             logger.warning("chapters could not start for %s", project_id, exc_info=True)
             return
         try:
-            await weave(plan, trigger=trigger, subject=subject)
+            async with manager.manager_run(
+                project_id,
+                job=JOB,
+                trigger=trigger,
+                subject=subject,
+                initiator=manager.OPERATOR if trigger == REQUESTED else manager.AUTONOMOUS,
+            ) as run:
+                try:
+                    plan = await prepare(project_id, trigger=trigger)
+                except CannotWeaveError as refusal:
+                    if refusal.no_runner:
+                        await manager.record_no_runner(
+                            project_id, job=JOB, trigger=trigger, subject=subject
+                        )
+                    else:
+                        run.ends("failed", f"Did not weave: {refusal.reason}")
+                    return
+                run.uses(runner_id=plan.runner_id, cli=plan.cli, model=plan.model)
+                await weave(plan, trigger=trigger, subject=subject)
         except Exception:  # noqa: BLE001 -- a background task must not raise
             logger.warning("chapters firing failed for %s", project_id, exc_info=True)
 

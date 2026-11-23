@@ -416,19 +416,56 @@ async def check_in_background(
     project_id: str, path: str, *, trigger: str, content_version: Optional[str] = None
 ) -> None:
     """The background entry point: a document that is not checked now is simply not checked, and
-    nothing here raises into the event loop."""
-    try:
-        plan = await prepare(project_id, path, content_version=content_version)
-    except CannotCheckError as refusal:
-        if refusal.no_runner:
-            await manager.record_no_runner(
-                project_id, job=JOB, trigger=trigger, subject={"document": path}
-            )
+    nothing here raises into the event loop. With the job on, it is one run that ends with a
+    record however it ends (`manager.manager_run`): no runner, a refusal, nothing to compare, an
+    error."""
+    if not await manager.job_enabled(project_id, JOB):
         return
-    except Exception:  # noqa: BLE001 -- a background task must not raise
-        logger.warning("spec vault check could not start for %s", path, exc_info=True)
-        return
+    subject: Dict[str, Any] = {"document": path}
+    if content_version is not None:
+        subject["content_version"] = content_version
     try:
-        await check(plan, trigger=trigger)
+        async with manager.manager_run(
+            project_id, job=JOB, trigger=trigger, subject=subject, initiator=initiator_for(trigger)
+        ) as run:
+            try:
+                plan = await prepare(project_id, path, content_version=content_version)
+            except CannotCheckError as refusal:
+                if refusal.no_runner:
+                    await manager.record_no_runner(
+                        project_id, job=JOB, trigger=trigger, subject=subject
+                    )
+                else:
+                    run.ends("failed", f"Did not check: {refusal.reason}")
+                return
+            await _checked(run, plan, trigger)
     except Exception:  # noqa: BLE001 -- a background task must not raise
         logger.warning("spec vault check failed for %s", path, exc_info=True)
+
+
+async def _checked(run: manager.ManagerRun, plan: Plan, trigger: str) -> None:
+    run.uses(runner_id=plan.runner_id, cli=plan.cli, model=plan.model)
+    idle = nothing_to_compare(plan)
+    if idle is not None:
+        run.ends("empty", f"Did not check: {idle}")
+        return
+    await check(plan, trigger=trigger)
+
+
+async def check_requested(plan: Plan) -> None:
+    """Check now's run on a document `prepare` has already planned, after the answer is sent:
+    operator work, announced and ended like every run. Never raises."""
+    subject: Dict[str, Any] = {"document": plan.path}
+    if plan.content_version is not None:
+        subject["content_version"] = plan.content_version
+    try:
+        async with manager.manager_run(
+            plan.project_id,
+            job=JOB,
+            trigger=REQUESTED,
+            subject=subject,
+            initiator=initiator_for(REQUESTED),
+        ) as run:
+            await _checked(run, plan, REQUESTED)
+    except Exception:  # noqa: BLE001 -- the answer has been sent; nothing can raise into it
+        logger.warning("spec vault check failed for %s", plan.path, exc_info=True)
