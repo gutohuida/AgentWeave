@@ -645,6 +645,45 @@ async def get_vault_warnings(
     }
 
 
+@router.get("/fact-uses")
+async def get_vault_fact_uses(
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """What the project's specs do with each fact (`a-vault-page-that-says-what-it-holds` FR-3):
+    the requirements citing it and the conflicts the newest spec-vault-check firing of each
+    document found, kept by the rule `GET /vault/warnings` applies. A document whose file cannot
+    be read is left out and named in `unreadable` with the reason; the event log failing to read
+    answers 503, so the page shows the uses as not read rather than as "no spec uses this fact".
+    409 while the project's workspace is unavailable."""
+    project_id = project[0]
+    root, private = await roots(session, project_id)
+    workspace = await project_workspace.resolve_project_workspace(session, project_id)
+    listed = [
+        (d.path, d.title or "") for d in await spec_lifecycle.list_documents(session, project_id)
+    ]
+    try:
+        firings = await vault_spec_check.newest_firings(session, project_id)
+    except Exception as exc:  # noqa: BLE001 -- the reason is answered, never a bare 500
+        logger.warning("could not read the spec vault check's firings", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"The spec vault check's findings could not be read: {exc}",
+        ) from exc
+
+    # Both are hundreds of small file reads; read side by side, they cost the longer of the two.
+    standing: Any = (
+        asyncio.to_thread(vault_spec_check.standing_fact_ids, root, private)
+        if vault_spec_check.any_conflicts(firings)
+        else asyncio.sleep(0, set())
+    )
+    (documents, unreadable), ids = await asyncio.gather(
+        asyncio.to_thread(vault_spec_check.read_documents, workspace, sorted(listed)), standing
+    )
+    uses = vault_spec_check.fact_uses(documents, firings, lambda: ids)
+    return {"uses": uses, "unreadable": unreadable}
+
+
 @router.post("/warnings/check", status_code=status.HTTP_202_ACCEPTED)
 async def check_vault_warnings(
     background: BackgroundTasks,
