@@ -342,4 +342,8 @@ http://localhost:5199/mock.html#tab/vault?state=no-uses         # uses-loading |
 http://localhost:5199/mock.html#tab/vault?data=replica          # the replica's small vault, as before
 ```
 
-Awaiting the operator's look.
+Approved by the operator on 2026-11-23 as it renders, including the author's choices: important facts
+are three lists, one per reason (contradicted a spec, cited by a spec, opened by agents), never one
+blended score; sources are counted without the facts whose source is missing from the map (those are
+listed under Facts), so every count agrees with the view it opens; the Overview's lead figures are
+exact (`formatWhole`), not compact.
