@@ -42140,3 +42140,15 @@ OGDBT-4's `hub-ui` check failed once, `chk-37a0da77db4d` on merged sha `eacbe239
 
 - A completion with no new commit should either re-run a failed check, or be refused up front saying it would replay the same result. It should not be accepted and then bounced.
 - There is no tool a builder can use to ask for a check to run again. Changing the tree is the only way to trigger one.
+
+## F1211 (B) -- the `hub-ui` check times out a different unrelated synchronous test each run when the check machine is loaded
+
+**Status:** open
+**Source:** found by driving (flow `Overview at a glance`, OGDBT-4, 2026-11-23)
+**Theme:** checks and landing
+**Ready:** yes
+
+OGDBT-4's second real `hub-ui` run, `chk-8a0346b6d22b` on merged sha `86ec96d7`, failed on one test: `runnerPickerCannotRun.test.tsx` > "shows the Hub's reason for an agent with no runner", which hit the 20 s `testTimeout`. The task does not touch that file or `AgentSettingsPage`. Alone it passes, 8/8 in 5.8 s. The run took 778 s, with setup 426 s and environment 777 s, against about 300 s when the machine is quiet. The first run (`chk-37a0da77db4d`, F1210) timed out three other unrelated tests. So a synchronous render test that takes under a second can exceed 20 s when the check shares the machine with other full runs, and which test fails changes from run to run. `vitest.config.ts`'s own comment records the same pattern at the old 5 s timeout.
+
+- The check should take its turn behind other full runs, as `scripts/checks/hub_suite.py` does for the Hub suite (F1122), or retry a timed-out file once before failing the task.
+- Until then, every UI task risks a `broken-check` send-back it cannot fix.
