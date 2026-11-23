@@ -1,0 +1,209 @@
+INFO:     Started server process [2004]
+INFO:     Waiting for application startup.
+This Hub was started inside an agent's run; dropped the run's variables it inherited, so its own runs are never handed them: AW_RUN_TOKEN, AW_RUN_ID, AW_AGENT_IDENTITY, AW_WORKSPACE_DIR, AW_TURN_DEPTH, HUB_URL
+Hub database: opening C:\Users\huida\.agentweave\hub\profiles\ovdrive\agentweave.db (existed before this process opened it: False, pid 2004)
+INFO  [alembic.runtime.migration] Context impl SQLiteImpl.
+INFO  [alembic.runtime.migration] Will assume non-transactional DDL.
+INFO  [alembic.runtime.migration] Running upgrade  -> 0001, add agent_outputs table
+INFO  [alembic.runtime.migration] Running upgrade 0001 -> 0002, add severity column to event_logs
+INFO  [alembic.runtime.migration] Running upgrade 0002 -> 0003, add session_id column to messages
+INFO  [alembic.runtime.migration] Running upgrade 0003 -> 0004, add agent table for pilot mode
+INFO  [alembic.runtime.migration] Running upgrade 0004 -> 0005, add agent self-registration columns
+INFO  [alembic.runtime.migration] Running upgrade 0005 -> 0006, add agent config column
+INFO  [alembic.runtime.migration] Running upgrade 0006 -> 0007, add job run error summary
+INFO  [alembic.runtime.migration] Running upgrade 0007 -> 0008, cap job run error summary to 500 chars
+INFO  [alembic.runtime.migration] Running upgrade 0008 -> 0009, add project_specs table
+INFO  [alembic.runtime.migration] Running upgrade 0009 -> 0010, add project_spec_snapshots table
+INFO  [alembic.runtime.migration] Running upgrade 0010 -> 0011, add structured stream fields to agent outputs
+INFO  [alembic.runtime.migration] Running upgrade 0011 -> 0012, add runs table
+INFO  [alembic.runtime.migration] Running upgrade 0012 -> 0013, drop agent pilot columns
+INFO  [alembic.runtime.migration] Running upgrade 0013 -> 0014, add inbound queue and turn limits
+INFO  [alembic.runtime.migration] Running upgrade 0014 -> 0015, add agent and scheduled-work governance
+INFO  [alembic.runtime.migration] Running upgrade 0015 -> 0016, add stable agent colour index
+INFO  [alembic.runtime.migration] Running upgrade 0016 -> 0017, add stable AgentWeave conversations
+INFO  [alembic.runtime.migration] Running upgrade 0017 -> 0018, add durable per-turn accounting
+INFO  [alembic.runtime.migration] Running upgrade 0018 -> 0019, classify scheduled queue work as autonomous
+INFO  [alembic.runtime.migration] Running upgrade 0019 -> 0020, add hashed per-run capability credentials
+INFO  [alembic.runtime.migration] Running upgrade 0020 -> 0021, add run attribution to coordination effects
+INFO  [alembic.runtime.migration] Running upgrade 0021 -> 0022, add attribution for governed agent and job actions
+INFO  [alembic.runtime.migration] Running upgrade 0022 -> 0023, add runners and charters tables, bind agents to each
+INFO  [alembic.runtime.migration] Running upgrade 0023 -> 0024, add durable per-project charter seed marker
+INFO  [alembic.runtime.migration] Running upgrade 0024 -> 0025, drop the legacy project role configuration table
+INFO  [alembic.runtime.migration] Running upgrade 0025 -> 0026, add directory-backed project identity and operator credentials
+INFO  [alembic.runtime.migration] Running upgrade 0026 -> 0027, add Conversation.runtime_overrides
+INFO  [alembic.runtime.migration] Running upgrade 0027 -> 0028, add Run.instance_id
+INFO  [alembic.runtime.migration] Running upgrade 0028 -> 0029, add permission_requests
+INFO  [alembic.runtime.migration] Running upgrade 0029 -> 0030, add Question.options
+INFO  [alembic.runtime.migration] Running upgrade 0030 -> 0031, questions gain header/multi_select/answer_labels, and options carry descriptions
+INFO  [alembic.runtime.migration] Running upgrade 0031 -> 0032, add unasked_questions
+INFO  [alembic.runtime.migration] Running upgrade 0032 -> 0033, add question batch columns
+INFO  [alembic.runtime.migration] Running upgrade 0033 -> 0034, add per-agent waiting settings
+INFO  [alembic.runtime.migration] Running upgrade 0034 -> 0035, add conversation title and origin
+INFO  [alembic.runtime.migration] Running upgrade 0035 -> 0036, add conversation_id to the tables that block a run
+INFO  [alembic.runtime.migration] Running upgrade 0036 -> 0037, add the project-level conversation title generation setting
+INFO  [alembic.runtime.migration] Running upgrade 0037 -> 0038, add agent lifecycle
+INFO  [alembic.runtime.migration] Running upgrade 0038 -> 0039, add agent description
+INFO  [alembic.runtime.migration] Running upgrade 0039 -> 0040, add agent default permission mode
+INFO  [alembic.runtime.migration] Running upgrade 0040 -> 0041, add conversation peer binding
+INFO  [alembic.runtime.migration] Running upgrade 0041 -> 0042, add worker invocations
+INFO  [alembic.runtime.migration] Running upgrade 0042 -> 0043, add run snapshot commit sha
+INFO  [alembic.runtime.migration] Running upgrade 0043 -> 0044, add checkpoints
+INFO  [alembic.runtime.migration] Running upgrade 0044 -> 0045, add checkpoint notes
+INFO  [alembic.runtime.migration] Running upgrade 0045 -> 0046, add checkpoint policy columns
+INFO  [alembic.runtime.migration] Running upgrade 0046 -> 0047, allow a checkpoint to be a queue entry origin
+INFO  [alembic.runtime.migration] Running upgrade 0047 -> 0048, add checkpoint access grants and citations
+INFO  [alembic.runtime.migration] Running upgrade 0048 -> 0049, add checkpoint auto continue
+INFO  [alembic.runtime.migration] Running upgrade 0049 -> 0050, add conversation checkpoint warning
+INFO  [alembic.runtime.migration] Running upgrade 0050 -> 0051, add inbound queue entry spec document
+INFO  [alembic.runtime.migration] Running upgrade 0051 -> 0052, add task transitions
+INFO  [alembic.runtime.migration] Running upgrade 0052 -> 0053, add task transition actor agent
+INFO  [alembic.runtime.migration] Running upgrade 0053 -> 0054, add run task binding
+INFO  [alembic.runtime.migration] Running upgrade 0054 -> 0055, add inbound queue entry task
+INFO  [alembic.runtime.migration] Running upgrade 0055 -> 0056, add task divergence policy and transition origin
+INFO  [alembic.runtime.migration] Running upgrade 0056 -> 0057, add run divergences
+INFO  [alembic.runtime.migration] Running upgrade 0057 -> 0058, classify a divergence response as its own queue origin
+INFO  [alembic.runtime.migration] Running upgrade 0058 -> 0059, add the blocked reason and the question-to-task link
+INFO  [alembic.runtime.migration] Running upgrade 0059 -> 0060, add the conversation's task binding
+INFO  [alembic.runtime.migration] Running upgrade 0060 -> 0061, add the declined state to questions
+INFO  [alembic.runtime.migration] Running upgrade 0061 -> 0062, add the dismissed state to permission requests
+INFO  [alembic.runtime.migration] Running upgrade 0062 -> 0063, make the agent name unique within a project
+INFO  [alembic.runtime.migration] Running upgrade 0063 -> 0064, drop the project spec content cache and its reconciliation snapshots
+INFO  [alembic.runtime.migration] Running upgrade 0064 -> 0065, add spec_documents and spec_document_events
+INFO  [alembic.runtime.migration] Running upgrade 0065 -> 0066, add spec_requirements and spec_requirement_revisions
+INFO  [alembic.runtime.migration] Running upgrade 0066 -> 0067, add task_requirement_links and task_requirement_references
+INFO  [alembic.runtime.migration] Running upgrade 0067 -> 0068, add requirement evidence, reviews, footprints and drift
+INFO  [alembic.runtime.migration] Running upgrade 0068 -> 0069, add document rigor, its history, and the policy digest on a transition
+INFO  [alembic.runtime.migration] Running upgrade 0069 -> 0070, add the project's main branch and the record of what approval merged
+INFO  [alembic.runtime.migration] Running upgrade 0070 -> 0071, record which document declared a task, so approval can create work idempotently
+INFO  [alembic.runtime.migration] Running upgrade 0071 -> 0072, count failed deliveries, so an input that kills the runtime cannot wedge its agent forever
+INFO  [alembic.runtime.migration] Running upgrade 0072 -> 0073, give conversations a real ordering key, so "most recent" cannot tie
+INFO  [alembic.runtime.migration] Running upgrade 0073 -> 0074, give a document an archived phase and a capability kind that lives outside the phase machine
+INFO  [alembic.runtime.migration] Running upgrade 0074 -> 0075, add loops, a task->loop join column, and a job run's conversation traceability column
+INFO  [alembic.runtime.migration] Running upgrade 0075 -> 0076, add spec_edit_proposals
+INFO  [alembic.runtime.migration] Running upgrade 0076 -> 0077, a loop declares its source document; a checkpoint carries which loop it belongs to
+INFO  [alembic.runtime.migration] Running upgrade 0077 -> 0078, a loop and a plain job are archivable, and a loop records how it ended
+INFO  [alembic.runtime.migration] Running upgrade 0078 -> 0079, a loop's queue-extension control is an explicit per-loop setting
+INFO  [alembic.runtime.migration] Running upgrade 0079 -> 0080, a loop's definition edits are staged, not applied immediately
+INFO  [alembic.runtime.migration] Running upgrade 0080 -> 0081, a per-loop history home for event_logs
+INFO  [alembic.runtime.migration] Running upgrade 0081 -> 0082, retire the unasked-question backstop
+INFO  [alembic.runtime.migration] Running upgrade 0082 -> 0083, add task_dependencies and spec_documents.first_approved_at
+INFO  [alembic.runtime.migration] Running upgrade 0083 -> 0084, add task_dependency_references
+INFO  [alembic.runtime.migration] Running upgrade 0084 -> 0085, give a conversation a lineage that survives a checkpoint cutover
+INFO  [alembic.runtime.migration] Running upgrade 0085 -> 0086, carry "this turn is a review of task X" through the inbound queue
+INFO  [alembic.runtime.migration] Running upgrade 0086 -> 0087, count a repeated stall in place instead of appending a row per tick
+INFO  [alembic.runtime.migration] Running upgrade 0087 -> 0088, give checkpoints a real ordering key, so "which is newest" cannot tie
+INFO  [alembic.runtime.migration] Running upgrade 0088 -> 0089, name the commits that rode along with an approved merge, not just the one it targeted
+INFO  [alembic.runtime.migration] Running upgrade 0089 -> 0090, an archived loop's document claim no longer blocks a new loop forever
+INFO  [alembic.runtime.migration] Running upgrade 0090 -> 0091, give evidence reviews a real ordering key, so "which review is latest" cannot tie
+INFO  [alembic.runtime.migration] Running upgrade 0091 -> 0092, let a divergence record that a review governed it, and that a reviewer was resolved again
+INFO  [alembic.runtime.migration] Running upgrade 0092 -> 0093, let a conversation say it was opened to answer a divergence
+INFO  [alembic.runtime.migration] Running upgrade 0093 -> 0094, let a divergence record that a live flow governed its own work turn's divergence
+INFO  [alembic.runtime.migration] Running upgrade 0094 -> 0095, stamp which workspace scheme a task belongs to, once, and never again
+INFO  [alembic.runtime.migration] Running upgrade 0095 -> 0096, record the directory a run actually executed in
+INFO  [alembic.runtime.migration] Running upgrade 0096 -> 0097, checkpoints stored under the absent default become project-visible
+INFO  [alembic.runtime.migration] Running upgrade 0097 -> 0098, a queued entry records why its last delivery attempt did not start a turn
+INFO  [alembic.runtime.migration] Running upgrade 0098 -> 0099, a question records the deadline of the wait it started, and when that wait ended
+INFO  [alembic.runtime.migration] Running upgrade 0099 -> 0100, a loop declares whether its work needs evidence before it reaches the main branch
+INFO  [alembic.runtime.migration] Running upgrade 0100 -> 0101, record the writes a run made outside the directory it was given
+INFO  [alembic.runtime.migration] Running upgrade 0101 -> 0102, record whether a run's harness actually started the injected MCP server
+INFO  [alembic.runtime.migration] Running upgrade 0102 -> 0103, count the deliveries a provider refused on usage grounds, apart from failed ones
+INFO  [alembic.runtime.migration] Running upgrade 0103 -> 0104, a structural dedupe key for questions, apart from their prose
+INFO  [alembic.runtime.migration] Running upgrade 0104 -> 0105, an archived agent holds no charter binding
+INFO  [alembic.runtime.migration] Running upgrade 0105 -> 0106, a checkpoint records the conversation it was cut over to
+INFO  [alembic.runtime.migration] Running upgrade 0106 -> 0107, a job's move records the job: task_transitions.job_id, inbound_queue_entries.job_id
+INFO  [alembic.runtime.migration] Running upgrade 0107 -> 0108, classify an evidence-decision note as its own queue origin
+INFO  [alembic.runtime.migration] Running upgrade 0108 -> 0109, spell an unknown footprint branch one way
+INFO  [alembic.runtime.migration] Running upgrade 0109 -> 0110, a loop's default agent is a staged edit like the rest of its definition
+INFO  [alembic.runtime.migration] Running upgrade 0110 -> 0111, the checkpoint grant says it reaches every checkpoint -- drop the unwritten visibility column
+INFO  [alembic.runtime.migration] Running upgrade 0111 -> 0112, a Copilot agent runs over ACP -- admit `copilot` as a runner CLI
+INFO  [alembic.runtime.migration] Running upgrade 0112 -> 0113, agents no longer register themselves -- drop the watchdog-era agent columns
+INFO  [alembic.runtime.migration] Running upgrade 0113 -> 0114, an Ask me card says what Workspace only would decide -- permission_requests.workspace_verdict
+INFO  [alembic.runtime.migration] Running upgrade 0114 -> 0115, a run reaches the Hub without MCP -- runs.harness_mcp_status, runs.plane_surface
+INFO  [alembic.runtime.migration] Running upgrade 0115 -> 0116, a Copilot run shows its credits -- turn_usage gains four nullable credit columns
+INFO  [alembic.runtime.migration] Running upgrade 0116 -> 0117, a Copilot run shows its credits -- worker_invocations gains two nullable credit columns
+INFO  [alembic.runtime.migration] Running upgrade 0117 -> 0118, a Copilot agent uses hooks and its own agents -- runners gain a nullable provider_config
+INFO  [alembic.runtime.migration] Running upgrade 0118 -> 0119, approval runs the project's checks -- projects.checks, task_check_runs, override_reason
+INFO  [alembic.runtime.migration] Running upgrade 0119 -> 0120, drift watches the files its evidence is about -- evidence_footprints.watched_from
+INFO  [alembic.runtime.migration] Running upgrade 0120 -> 0121, a capability can be archived -- relax ck_spec_documents_kind_phase
+INFO  [alembic.runtime.migration] Running upgrade 0121 -> 0122, a spec is written one step at a time -- spec_documents.step and .size
+INFO  [alembic.runtime.migration] Running upgrade 0122 -> 0123, the Hub's background jobs -- manager_jobs
+INFO  [alembic.runtime.migration] Running upgrade 0123 -> 0124, the knowledge vault's settings -- vault_settings
+INFO  [alembic.runtime.migration] Running upgrade 0124 -> 0125, a run divergence outlives its task -- run_divergences.task_id becomes nullable
+INFO  [alembic.runtime.migration] Running upgrade 0125 -> 0126, how often agents read each vault entry -- vault_fetches
+INFO  [alembic.runtime.migration] Running upgrade 0126 -> 0127, a held checkpoint successor waits for Continue -- inbound_queue_entries.awaits_continue
+INFO  [alembic.runtime.migration] Running upgrade 0127 -> 0128, project ids this database deleted -- deleted_projects
+INFO  [alembic.runtime.migration] Running upgrade 0128 -> 0129, worker spend counts against the budget -- worker_invocations.total_tokens, budget_exhausted
+INFO  [alembic.runtime.migration] Running upgrade 0129 -> 0130, evidence carries what it takes to judge it -- requirement_evidence.command, output, covers
+INFO  [alembic.runtime.migration] Running upgrade 0130 -> 0131, how a requirement changed -- spec_requirement_revisions.statement
+INFO  [alembic.runtime.migration] Running upgrade 0131 -> 0132, what a turn's runner reported -- runs.runner_version, turn_usage.session_totals
+INFO  [alembic.runtime.migration] Running upgrade 0132 -> 0133, runner configuration a workspace held at its last approved launch -- workspace_fingerprints
+INFO  [alembic.runtime.migration] Running upgrade 0133 -> 0134, a stopped turn's interrupted call, estimated -- turn_usage.estimated_input_tokens
+INFO  [alembic.runtime.migration] Running upgrade 0134 -> 0135, what an agent may reach -- projects.default_permission_mode, projects.reach_grants, agents.reach_grants
+INFO  [alembic.runtime.migration] Running upgrade 0135 -> 0137, traces of everything the Hub and its agents do -- trace_spans, trace_settings
+INFO  [alembic.runtime.migration] Running upgrade 0137 -> 0138, everything the Hub does is in a trace -- trace_settings.record_reads, ix_trace_spans_project_operation
+INFO  [alembic.runtime.migration] Running upgrade 0138 -> 0139, evidence footprints say whether the recorder named their commit -- evidence_footprints.commit_named
+INFO  [alembic.runtime.migration] Running upgrade 0139 -> 0140, which agents read each vault entry -- vault_readers
+INFO  [alembic.runtime.migration] Running upgrade 0140 -> 0141, stalls, and the mender's queue and conversation origin
+INFO  [alembic.runtime.migration] Running upgrade 0141 -> 0142, chapter versions, and a job's automatic choice
+INFO  [alembic.runtime.migration] Running upgrade 0142 -> 0143, a check run may be superseded -- widen ck_task_check_runs_state
+INFO  [alembic.runtime.migration] Running upgrade 0143 -> 0144, indexes for each agent's and conversation's newest context reading and output
+INFO  [alembic.runtime.migration] Running upgrade 0144 -> 0145, traces are kept for a bounded window -- trace_settings.retention_days
+INFO  [alembic.runtime.migration] Running upgrade 0145 -> 0146, agent_outputs loses two indexes that served nothing -- ix_agent_outputs_project_agent, ix_agent_outputs_agent
+INFO  [alembic.runtime.migration] Running upgrade 0146 -> 0147, a task transition may carry a note -- task_transitions.note
+INFO  [alembic.runtime.migration] Running upgrade 0147 -> 0148, a conversation's provider session records which CLI made it -- conversations.provider_session_cli
+INFO  [alembic.runtime.migration] Running upgrade 0148 -> 0149, retire the proposed phase, and name the last exploring step `build`
+INFO  [alembic.runtime.migration] Running upgrade 0149 -> 0150, a piece of evidence may be held -- widen two evidence CHECKs
+INFO  [alembic.runtime.migration] Running upgrade 0150 -> 0151, the Hub may override checks -- task_transitions.override_by, projects.checks_auto_override,
+tasks.merges_branch_tip
+INFO  [alembic.runtime.migration] Running upgrade 0151 -> 0152, a build has a driver, a level and its people -- builds; tasks.build_id/level/builder;
+task_transitions.level
+INFO  [alembic.runtime.migration] Running upgrade 0152 -> 0153, document rigor retires -- open contract/gate tasks keep their rule as a level; pending edit
+proposals are marked stale
+INFO  [alembic.runtime.migration] Running upgrade 0153 -> 0154, main is watched -- task_integrations.merged_sha, projects.main_tip_seen, main_notices
+INFO  [alembic.runtime.migration] Running upgrade 0154 -> 0155, approved work merges in batches -- task_landings, landing_batches; task_integrations.batch_id /
+override_reason
+INFO  [alembic.runtime.migration] Running upgrade 0155 -> 0156, the build plan lives in the spec -- builds.people
+INFO  [alembic.runtime.migration] Running upgrade 0156 -> 0157, every send-back says why -- task_transitions.reason_class, task_transitions.reason
+INFO  [alembic.runtime.migration] Running upgrade 0157 -> 0158, tickets have readable ids -- tasks.readable_id, acronyms, acronym_counters
+INFO  [alembic.runtime.migration] Running upgrade 0158 -> 0159, a build remembers its reopenings -- builds.reopenings
+INFO  [alembic.runtime.migration] Running upgrade 0159 -> 0160, a waiting task keeps its checker -- tasks.checker
+INFO  [alembic.runtime.migration] Running upgrade 0160 -> 0161, checks give way to the user -- projects.checks_give_way
+INFO  [alembic.runtime.migration] Running upgrade 0161 -> 0162, runs that did not judge the work -- task_check_runs.ended_by, and the checks_unjudged stall
+INFO  [alembic.runtime.migration] Running upgrade 0162 -> 0163, a checkpoint has a title -- checkpoints.title, summary, title_made_by, title_reason, unreadable_answer
+INFO  [alembic.runtime.migration] Running upgrade 0163 -> 0164, a check run records when it got its slot -- task_check_runs.slot_at
+INFO  [alembic.runtime.migration] Running upgrade 0164 -> 0165, a conversation records the checkpoint it started from -- conversations.started_from_checkpoint_id
+INFO  [alembic.runtime.migration] Running upgrade 0165 -> 0166, failures already known are on a list -- known_failing_tests, unlisted_test_failures,
+main_check_runs
+INFO  [alembic.runtime.migration] Running upgrade 0166 -> 0167, the Hub may override checks is removed -- drop projects.checks_auto_override
+INFO  [alembic.runtime.migration] Running upgrade 0167 -> 0168, a build lands as one pull request -- PR landing settings on projects, PR fields on builds
+INFO  [alembic.runtime.migration] Running upgrade 0168 -> 0169, the PR's CI is the full check -- the CI setting, its check names, interval and cutoff
+INFO  [alembic.runtime.migration] Running upgrade 0169 -> 0170, the PR's CI is the full check -- CI's result on the build and on each pushed task
+INFO  [alembic.runtime.migration] Running upgrade 0170 -> 0171, generated files are rebuilt when work lands -- projects.generated_files
+INFO  [alembic.runtime.migration] Running upgrade 0171 -> 0172, an agent the operator trusts can tidy the specs -- the switch, the marks, an agent's fold
+INFO  [alembic.runtime.migration] Running upgrade 0172 -> 0173, AGENTS.md as a project's instructions, where chosen -- projects.instructions_in_agents_md
+INFO  [alembic.runtime.migration] Running upgrade 0173 -> 0174, A reviewer's reproduction on an acceptance -- six nullable columns on evidence_reviews
+INFO  [alembic.runtime.migration] Running upgrade 0174 -> 0175, A project's dismissed set-up items -- setup_dismissals
+INFO  [alembic.runtime.migration] Running upgrade 0175 -> 0176, A spec's short tag -- spec_documents.tag
+INFO  [alembic.runtime.migration] Running upgrade 0176 -> 0177, A project's saved dashboards -- dashboards
+INFO  [alembic.runtime.migration] Running upgrade 0177 -> 0178, A dashboard's version, last editor and kept earlier version -- dashboards_edit_history
+INFO  [alembic.runtime.migration] Running upgrade 0178 -> 0179, Acknowledged gaps on a specification document -- spec_gap_acknowledgements
+INFO  [alembic.runtime.migration] Running upgrade 0179 -> 0180, Per-test history and the Hub's check concurrency -- test_history, hub_settings
+INFO  [alembic.runtime.migration] Running upgrade 0180 -> 0181, Each landing batch's record, and the landing dashboard for every project --
+landing_record_and_dashboard
+INFO  [alembic.runtime.migration] Running upgrade 0181 -> 0182, Quarantined tests, never-quarantine marks and the two quarantine settings -- quarantine
+INFO  [alembic.runtime.migration] Running upgrade 0182 -> 0183, profiles run in parallel -- projects.profiles_run_in_parallel
+INFO  [alembic.runtime.migration] Running upgrade 0183 -> 0184, a chat's own worktree -- conversations.own_worktree
+INFO  [alembic.runtime.migration] Running upgrade 0184 -> 0185, Confirmed acceptance criteria -- spec_criterion_confirmations
+INFO  [alembic.runtime.migration] Running upgrade 0185 -> 0186, A profile's pool of runners -- agent_pool_entries
+INFO  [alembic.runtime.migration] Running upgrade 0186 -> 0187, What a run launched with, and the entry a task keeps -- runs.runner_id/model/effort,
+tasks.builder_entry/checker_entry
+INFO  [alembic.runtime.migration] Running upgrade 0187 -> 0188, A conversation owns its document -- conversations.spec_document_id
+INFO  [alembic.runtime.migration] Running upgrade 0188 -> 0189, The profile an agent was folded into -- agents.folded_into
+INFO  [alembic.runtime.migration] Running upgrade 0189 -> 0190, a build remembers the operator dismissed it -- builds.attention_dismissed
+INFO  [alembic.runtime.migration] Running upgrade 0190 -> 0191, the operator's Overview visits and the manager's notes -- overview_visits, overview_notes
+WARNI [hub.main] Hub database: journal mode wal, synchronous full
+WARNI [hub.main] Tool server pinned at C:\Users\huida\.agentweave\hub\tool-server\6e9209165b2f65c8\mcp_server.py
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://127.0.0.1:8021 (Press CTRL+C to quit)
+INFO:     127.0.0.1:52979 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53365 - "GET /api/v1/projects HTTP/1.1" 401 Unauthorized
