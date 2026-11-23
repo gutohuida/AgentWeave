@@ -29,8 +29,9 @@ function documentName(path: string): string {
  *  first value. Null when the subject names nothing. */
 export function subjectLabel(subject: Record<string, unknown> | null | undefined, documents: SpecDocumentRecord[] | undefined): string | null {
   if (!subject) return null
-  const document = subject.document
-  if (typeof document === 'string') return documents?.find((d) => d.path === document)?.title ?? documentName(document)
+  // A spec-vault-check names the document by path; a build retrospective by id, with `path` beside it.
+  const document = typeof subject.path === 'string' ? subject.path : subject.document
+  if (typeof document === 'string') return documents?.find((d) => d.path === document || d.id === document)?.title ?? documentName(document)
   if (typeof subject.reason === 'string' && subject.reason) return subject.reason
   if (typeof subject.source === 'string') return `Vault source ${subject.source}`
   if (typeof subject.conversation_id === 'string') return 'A thread'
