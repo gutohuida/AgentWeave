@@ -323,3 +323,23 @@ Heuristic pass (Nielsen's ten):
 9. Recovering from errors: a failed list says so with Try again.
 10. Help: the dismiss tooltip says the build comes back if it needs you again.
 Not checkable by an agent: whether it feels calm at a glance, left to the operator's review.
+
+## The Vault page that says what it holds (mock, 2026-11-23)
+
+Spec `spec/changes/a-vault-page-that-says-what-it-holds`, slice `vault-that-explains-itself` of the
+project UI cleanup roadmap. The components are `src/components/vault/VaultOverview.tsx` (the
+Overview, the Facts list and the search results) with their pure rules in `vaultOverviewModel.ts`;
+`VaultLibrary` shows them only when its container passes `uses`, so the app is unchanged until it
+is wired. The proposed route contracts are the `VaultFactUse` and `VaultTextHit` types in
+`src/api/vault.ts`. The fixtures are this repository's own vault, recorded read-only by
+`py -3.11 mock/record_vault.py <db> <project> <repo root>` (map with read counts and readers, the
+facts specs cite or contradict, each source's text, each fact's citations); the search inside
+documents is worked out in the screen from the recorded texts.
+
+```
+http://localhost:5199/mock.html#tab/vault                       # Overview on the real vault
+http://localhost:5199/mock.html#tab/vault?state=no-uses         # uses-loading | uses-error | search-slow | search-error | no-uses
+http://localhost:5199/mock.html#tab/vault?data=replica          # the replica's small vault, as before
+```
+
+Awaiting the operator's look.

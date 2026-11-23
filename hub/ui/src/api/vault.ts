@@ -566,3 +566,37 @@ export function useVaultFactRecords(factIds: string[]) {
     })),
   })
 }
+
+/** A spec requirement that names a fact: one citing it in its `facts`, or one the manager's
+ *  spec-vault check judged to contradict it. Proposed `GET /vault/fact-uses`
+ *  (spec a-vault-page-that-says-what-it-holds); no route answers it yet. */
+export interface VaultSpecReference {
+  /** The document's path, `spec/changes/<name>/spec.json`. */
+  document: string
+  title: string
+  /** The requirement's identifier (`FR-3`); null where the document has not minted one. */
+  requirement: string | null
+  statement: string
+}
+
+/** A conflict the newest spec-vault-check firing of a document found, kept while its requirement
+ *  still says what it was judged against and its fact still stands. */
+export interface VaultSpecConflict extends VaultSpecReference {
+  explanation: string
+  checked_at?: string | null
+}
+
+/** What the project's specs do with one fact. A fact no spec names is not listed. */
+export interface VaultFactUse {
+  fact: string
+  citations: VaultSpecReference[]
+  conflicts: VaultSpecConflict[]
+}
+
+/** A source whose text holds the searched word: how many lines do, and the first of them, in
+ *  order. Proposed `GET /vault/search?q=` (spec a-vault-page-that-says-what-it-holds). */
+export interface VaultTextHit {
+  source: string
+  total: number
+  lines: Array<{ line: number; text: string }>
+}

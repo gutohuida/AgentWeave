@@ -279,3 +279,49 @@
 .vault-change > span:first-child { color: var(--text-2); font-weight: 500; }
 .vault-archived { display: flex; flex-direction: column; gap: 6px; margin-top: 18px; padding: 0 4px; }
 .vault-archived .vault-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 6px 8px; }
+
+/* ── The overview, the Facts view and search results (a-vault-page-that-says-what-it-holds) ── */
+.vault-overview { display: flex; flex-direction: column; gap: 26px; max-width: 980px; padding: 4px 6px 0; }
+.vault-ov-section { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.vault-ov-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; }
+.vault-ov-title { font-size: 13px; font-weight: 600; color: var(--text); }
+.vault-ov-lead { font-size: 15px; line-height: 1.5; color: var(--text-2); }
+.vault-ov-lead strong { color: var(--text); font-weight: 600; }
+.vault-ov-link { color: inherit; text-decoration: underline; text-decoration-color: var(--border-hi); text-underline-offset: 3px; border-radius: var(--radius-sm); }
+.vault-ov-link:hover { color: var(--text); text-decoration-color: currentColor; }
+.vault-ov-link:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--ring); }
+.vault-ov-kinds { display: flex; flex-wrap: wrap; gap: 6px; }
+.vault-ov-kind {
+  display: inline-flex; align-items: center; gap: 8px; height: 34px; padding: 0 12px 0 4px;
+  border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface);
+  font-size: 12.5px; color: var(--text-2);
+  transition: background-color var(--dur-fast) ease, color var(--dur-fast) ease;
+}
+.vault-ov-kind .vault-kind-mark { width: 24px; height: 24px; box-shadow: none; }
+.vault-ov-kind:hover { background: var(--row-hover); color: var(--text); }
+.vault-ov-kind:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--ring); }
+.vault-ov-kind-count { color: var(--text); font-weight: 600; }
+.vault-ov-notes { display: flex; flex-direction: column; gap: 4px; font-size: 12.5px; color: var(--text-2); }
+.vault-ov-notes li { display: flex; align-items: center; gap: 7px; }
+.vault-ov-notes li[data-tone="amber"] { color: var(--amber); }
+.vault-ov-quiet { font-size: 12.5px; line-height: 1.5; color: var(--text-2); max-width: 70ch; }
+.vault-ov-more { align-self: flex-start; }
+.vault-ov-facts { display: flex; flex-direction: column; }
+.vault-ov-facts > li + li { border-top: 1px solid var(--border); }
+.vault-ov-columns { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 26px 32px; }
+.vault-ov-list { display: flex; flex-direction: column; gap: 1px; }
+.vault-ov-source, .vault-result-source {
+  display: flex; align-items: flex-start; gap: 11px; width: 100%; padding: 8px 8px; border-radius: var(--radius-md); text-align: left;
+}
+.vault-ov-source:hover, .vault-result-source:hover, .vault-fact-row:hover { background: var(--row-hover); }
+.vault-ov-source:focus-visible, .vault-result-source:focus-visible, .vault-fact-row:focus-visible { outline: none; box-shadow: inset 0 0 0 2px var(--ring); }
+.vault-fact-row { display: flex; flex-direction: column; gap: 4px; width: 100%; padding: 10px 8px; border-radius: var(--radius-md); text-align: left; }
+.vault-fact-row-claim { font-size: 13.5px; line-height: 1.5; color: var(--text); }
+.vault-fact-row[data-superseded="true"] .vault-fact-row-claim { color: var(--text-2); text-decoration: line-through; text-decoration-color: var(--border-hi); }
+.vault-fact-row .vault-row-meta { color: var(--text-2); }
+.vault-match { background: color-mix(in oklab, var(--blue) 24%, transparent); color: var(--text); border-radius: 2px; padding: 0 1px; }
+.vault-results { display: flex; flex-direction: column; gap: 14px; padding-top: 2px; }
+.vault-result-lines { display: flex; flex-direction: column; gap: 3px; margin-top: 3px; }
+.vault-result-line { display: grid; grid-template-columns: 64px minmax(0, 1fr); gap: 8px; font-size: 12.5px; line-height: 1.5; color: var(--text-2); }
+.vault-result-lineno { color: var(--text-2); font-size: 11.5px; }
+.vault-chip:not([data-tone]) { background: var(--surface-2); color: var(--text-2); }.vault-ov-head .aw-segmented { max-width: 100%; overflow-x: auto; scrollbar-width: none; }
