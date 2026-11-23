@@ -27,7 +27,7 @@ stops it at the end; it refuses a port that already answers (F1121). Never :8000
 
 The project. Not proj-d85a82bf4216, whose working directory is the repository root: a real Haiku
 author there would read and could write the operator's checkout. The drive opens a throwaway git
-project under the main checkout's testbed/ (a project inside `.agentweave/tasks` is refused) on
+project under ~/.agentweave/hub/attention-drive/ (inside any registered project it is refused) on
 whichever Hub it drives, with its own Haiku runner and its author agent.
 
 The contract it fixes for the build (the document's design, Contract), in one place:
@@ -325,7 +325,9 @@ def assert_one_firing(key, base, path, doc_id, label, trigger, wait):
 # -- phases ---------------------------------------------------------------------------------------
 
 def setup():
-    root = main_checkout() / "testbed" / "attention-drive" / STAMP / "proj"
+    # Outside every registered project: on the trial Hub the repository root is proj-d85a82bf4216,
+    # so a project under its testbed/ is refused as nested (409 project_nested, 2026-11-23).
+    root = pathlib.Path.home() / ".agentweave" / "hub" / "attention-drive" / STAMP / "proj"
     root.mkdir(parents=True)
     git(root, "init", "-q", "-b", "main")
     (root / "README.md").write_text("A tiny HTTP service with one route, GET /hello.\n", encoding="utf-8")
