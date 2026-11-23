@@ -5548,6 +5548,9 @@ def submit_spec_document(
                  reason survives an edge case nobody listed.
       `party`    optional: "producer" (what a sender may emit) or "consumer" (what a receiver must
                  do with it). Collapsing them hides which side of a boundary a defect is on.
+      `facts`    optional: the vault facts the requirement rests on, by id (`fct-` and 12 hex
+                 characters, read with vault_map or vault_read). Leave it out when nothing in the
+                 vault backs the requirement.
 
     `acceptance_criteria` — objects with `key`, `requirement` (a requirement's key), and
       `given`/`when`/`then`, and `how_to_check` (the command or click path that shows it holds)

@@ -2940,6 +2940,7 @@ async def _render_hub_agent_context(
                                 for peer in roster
                             ],
                             problem_written=problem_written,
+                            pools=await spec_journey.open_pools(db, project_id),
                         )
                         or spec_journey.removed(row.step, row.size, steps)
                     )
