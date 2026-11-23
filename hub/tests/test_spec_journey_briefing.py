@@ -120,22 +120,23 @@ async def test_an_approved_document_is_briefed_by_its_phase_not_its_step(
 
 # asks / size-told / acceptance-duty (FR-4, FR-7, FR-8)
 @pytest.mark.parametrize("step", [s for s in ALL_STEPS if s != "build"])
-def test_every_step_says_what_it_writes_and_asks_to_advance(step):
+def test_every_step_says_what_it_writes_and_advances_itself(step):
     text = spec_journey.duty(step)
 
     assert "ask_user" not in text, "asked in the reply (F545)"
+    # `agent-advances` (D3) replaced the Continue here / fresh conversation / stop question.
     for choice in ("Continue here", "Continue in a fresh conversation", "Stop here"):
-        assert choice in text
-    assert "advance_spec_step" in text
+        assert choice not in text
+    assert "call `advance_spec_step(path)` yourself" in text
     assert "submit_spec_document" in text or "`design`" in text
 
 
 def test_intake_asks_in_the_reply_and_records_the_size_before_advancing():
     text = spec_journey.duty("intake")
 
-    assert "questions in your reply" in text
+    assert "Ask in your reply, then end your turn" in text
     assert text.index("set_spec_size") < text.index("advance_spec_step")
-    assert "confirm the size in your reply" in text
+    assert "do not ask them to confirm it" in text
 
 
 def test_acceptance_asks_how_and_who_per_must_and_tasks_starts_with_the_failing_drive():
@@ -292,3 +293,35 @@ async def test_a_roadmap_keeps_todays_exploring_duty(app, auth_headers, tmp_path
     # it is approved; the briefing said the second and sent the agent to draft early.
     assert "once the one before it is built" in text
     assert "once the one before it is approved" not in text
+
+
+# playback-duty-text (`intent-playback`, FR-13, D1): while the problem is unwritten, intake's
+# briefing makes the reply the intent playback alone; once it is written, no playback.
+@pytest.mark.asyncio
+async def test_intake_with_no_problem_is_briefed_with_the_playback_alone(
+    app, auth_headers, run_headers, tmp_path  # noqa: F811
+):
+    await _create(app, auth_headers)
+
+    text = await _briefing(app, auth_headers)
+
+    assert _markers(text) == ["intake"]
+    assert spec_journey.PLAYBACK in text
+    assert "your reply is the intent playback alone" in text
+    assert "plainer and simpler words than the operator used" in text
+    assert "without describing how it would be built" in text
+    assert "ask whether you got that right" in text
+    assert "Then end your turn" in text
+    assert "write the confirmed intent as the document's `problem`" in text
+    # The playback comes before the rest of intake's work.
+    assert text.index(spec_journey.PLAYBACK) < text.index("**Write the picture before any")
+
+    submitted = await _submit(app, run_headers, _document(problem="Searches are slow."))
+    assert submitted.status_code == 200, submitted.text
+    await _place(step="intake", size="small")
+
+    written = await _briefing(app, auth_headers)
+
+    assert _markers(written) == ["intake"]
+    assert "intent playback" not in written
+    assert "**Write the picture before any requirement**" in written

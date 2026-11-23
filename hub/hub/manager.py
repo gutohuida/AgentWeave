@@ -45,6 +45,7 @@ SPEC_VAULT_CHECK = "spec-vault-check"
 CHAPTERS = "chapters"
 MENDER = "mender"
 BUILD_RETROSPECTIVE = "build-retrospective"
+PRE_MORTEM = "pre-mortem"
 
 
 @dataclass(frozen=True)
@@ -143,6 +144,24 @@ JOBS = (
             button="Review this build",
             where="a spec document's page",
             automatic="after a document's last task is approved",
+        ),
+    ),
+    JobSpec(
+        key=PRE_MORTEM,
+        title="Pre-mortem",
+        description=(
+            "Reads a change document's drafted requirements and acceptance criteria and the code "
+            "they touch, assumes the change shipped and failed, and writes down how. Fires when a "
+            "document's acceptance criteria are written (automatic), and when you press Run a "
+            "pre-mortem on its page. Its author reads the findings in its next turn on the "
+            "document, fixes what it can and asks you about the rest. Needs a runner. Off: no "
+            "draft is pre-mortemed."
+        ),
+        trigger="criteria_written",
+        firing_choice=FiringChoice(
+            button="Run a pre-mortem",
+            where="a spec document's page",
+            automatic="when a document's acceptance criteria are written",
         ),
     ),
     # The one entry that is an agent, not a one-shot spawn (`stalls.py`): its runner and model

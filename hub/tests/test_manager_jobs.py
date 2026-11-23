@@ -59,7 +59,7 @@ async def test_the_listing_offers_the_firing_choice_on_exactly_the_jobs_with_a_b
 ):
     listed = (await app.get(f"{BASE}/manager/jobs", headers=auth_headers)).json()["jobs"]
     offered = {job["key"] for job in listed if job["firing_choice"]}
-    assert offered == {"chapters", "build-retrospective"} == set(manager.HAS_BUTTON)
+    assert offered == {"chapters", "build-retrospective", "pre-mortem"} == set(manager.HAS_BUTTON)
     retrospective = next(job for job in listed if job["key"] == "build-retrospective")
     assert retrospective["firing_choice"]["button"] == "Review this build"
 
@@ -101,8 +101,29 @@ async def test_each_job_says_whether_it_can_run_without_a_runner(app, auth_heade
         manager.SPEC_VAULT_CHECK: True,
         manager.CHAPTERS: True,
         manager.BUILD_RETROSPECTIVE: True,
+        manager.PRE_MORTEM: True,
         manager.MENDER: True,
     }
+
+
+# pre-mortem-listed-off (FR-11 of the-spec-journey-spends-the-operator-s-attention-only-on-their-
+# decisions): a project with no row lists the job off, needing a runner, with its firing choice.
+@pytest.mark.asyncio
+async def test_a_project_with_no_pre_mortem_row_lists_it_off_with_its_button(
+    app, auth_headers
+) -> None:
+    listed = (await app.get(f"{BASE}/manager/jobs", headers=auth_headers)).json()["jobs"]
+    job = next(job for job in listed if job["key"] == "pre-mortem")
+    assert job["title"] == "Pre-mortem"
+    assert job["enabled"] is False and job["runner_id"] is None and job["model"] is None
+    assert job["needs_runner"] is True
+    assert job["trigger"] == "criteria_written"
+    assert job["firing_choice"] == {
+        "button": "Run a pre-mortem",
+        "where": "a spec document's page",
+        "automatic": "when a document's acceptance criteria are written",
+    }
+    assert job["usage_total"] == {"firings": 0}
 
 
 @pytest.mark.asyncio

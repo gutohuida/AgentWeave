@@ -7,8 +7,7 @@ a project replaces that table with its own `spec/journey.json` (`a-project-order
 the built-ins in their order, custom steps anywhere among them, an instruction appended to any step.
 
 Moving is never refused for a missing output (D3): warn, never gate. What a step left empty is
-reported by the agent's advance tool and is the approval warnings' input.
-"""
+reported by the agent's advance tool and is the approval warnings' input.\n"""
 
 from __future__ import annotations
 
@@ -448,6 +447,14 @@ async def set_step(
     move = {"from": document.step, "to": step}
     document.step = step
     await record_event(session, document, kind="journey", actor=actor, detail={"step": move})
+    # Leaving the step that writes the criteria stages the pre-mortem (FR-11, D7); whether its job
+    # is on and automatic is judged when it fires, after this move commits.
+    from . import pre_mortem
+
+    if pre_mortem.leaves_criteria(
+        current_name(move["from"]), step, list((steps or BUILT_IN).order())
+    ):
+        pre_mortem.fire_after_commit(session, document)
     return move
 
 
@@ -524,26 +531,76 @@ def marker(step: str) -> str:
     return f"[step: {step}]"
 
 
-#: Appended to every step's duty but the build step's: the agent asks to advance, the operator decides
-#: (FR-4). Asked in the reply and acted on at the operator's next message, like every question an
-#: exploring turn asks (F545, `night-1010-5`).
-ASK_TO_ADVANCE = (
-    "- **When this step's output is written into the document, ask before moving on.** Ask it "
-    "in your reply, as one question offering three choices: **Continue here**, **Continue in a "
-    "fresh conversation**, **Stop here**, and end your turn. When the operator "
-    "answers, on **either** continue, call `advance_spec_step(path)` before anything else: it "
-    "records the move, tells you what this step left empty, and returns the next step's "
-    "instructions. A fresh conversation needs the move too, or it starts at this step again. Then, "
-    "on continue here, follow those instructions in that turn; on a fresh conversation, end your "
-    "turn. On stop, end your turn without advancing. Never advance without asking."
+#: Appended to every step's duty but the build step's: the agent moves itself on once the step is
+#: written and nothing is waiting on the operator (`agent-advances`, D3). It replaced the
+#: ask-to-advance protocol (Continue here / fresh conversation / stop), whose question the operator
+#: answered at every step without deciding anything; the step stays on the document, so they can
+#: still move it back or open a fresh conversation from the phase bar.
+ADVANCE_YOURSELF = (
+    "- **When this step's output is written into the document and you have no question for the "
+    "operator, call `advance_spec_step(path)` yourself**, in this turn: it records the move, tells "
+    "you what this step left empty, and returns the next step's instructions. Follow them in the "
+    "same turn, and say in your reply which step you moved to. Do not ask the operator whether to "
+    "go on, or where. End your turn waiting for them only when you ask something only they can "
+    "decide."
 )
 
-#: All of a step's questions in one reply rather than one per turn: the one-per-call limit existed
-#: for the question card's stepping, and in prose it would cost a turn per question (`night-1010-6`).
-_ASK_IN_REPLY = (
-    "Ask this step's questions in your reply, the most important first, offering choices where "
-    "you can, then end your turn; the operator answers in the composer. Write only this step's "
-    "part of the document; later steps write the rest."
+#: The one questioning rule every built-in step shares (D4, `few-deep-questions`,
+#: `describe-first`, `grounded-questions`, `volunteered-ideas`). It replaced a rule that asked for
+#: choices wherever possible, which the operator answered with "yes to all your recommendations".
+QUESTIONING = (
+    "- **How to ask.** Ask in your reply, then end your turn; the operator answers in the "
+    "composer. Ask **at most three questions** per reply, the deepest first. Each question names "
+    "the finding that makes it matter: code you read (`file:line`), behaviour you observed, or an "
+    "earlier answer. Ask a question others depend on first, and hold back the ones that depend on "
+    "its answer. Where you ask what the operator wants (what they are trying to achieve, how "
+    "something should behave or feel), ask them to describe it in their own words before "
+    "offering any options; offer options with a recommendation only for a fork between "
+    "alternatives you have named. When an answer opens a new branch or contradicts something "
+    "already written, follow it up before moving to a new topic.\n"
+    "- **Ideas apart.** Where the code or the operator's answers suggest an idea beyond the "
+    "request, offer it in a separate **Worth considering** list after your questions, not as one "
+    "of them. Never write an idea into the requirements or scope until the operator picks it up.\n"
+    "- Write only this step's part of the document; later steps write the rest."
+)
+
+#: What the operator is shown at the steps that write requirements and criteria (`contested-only`):
+#: the document is open beside the conversation, and they read the rest there when they want to.
+CONTESTED_ONLY = (
+    "- **Show the operator only what is contested:** the requirements and criteria you are unsure "
+    "of or that contradict something (the code, an earlier answer, another requirement), the "
+    "assumptions behind them, and the acceptance drive. Do not list the rest in your reply; point "
+    "at the document for it."
+)
+
+#: The plan steps (approach, tasks, build) are the agent's work, and the operator sees the whole plan
+#: at approval (`agent-advances`): a question there is only for what the code cannot settle.
+PLAN_ASKS = (
+    "- **Ask the operator here only what only they can decide:** a hazard (a migration, live "
+    "data, security) or a choice the code cannot settle. Decide the rest yourself and say what "
+    "you decided."
+)
+
+#: The intake's first reply on a document, while its problem is unwritten (D1, `intent-playback`).
+#: Gated on the document rather than a step of its own, so a fresh conversation on a document whose
+#: problem is written does not play the intent back again.
+PLAYBACK = (
+    "- **The problem is not written yet, so your reply is the intent playback alone.** Say, in "
+    "plainer and simpler words than the operator used, what you understood they are trying to "
+    "achieve and why, without describing how it would be built, and ask whether you got that "
+    "right. Then end your turn: no research findings, no other questions. Once the operator "
+    "confirms it (or corrects it), write the confirmed intent as the document's `problem` with "
+    "`submit_spec_document` before going on to the rest of this step."
+)
+
+#: What intake has covered before it ends (D5, `coverage-and-assumptions`).
+COVERAGE = (
+    "what the operator is trying to achieve and why",
+    "who it affects and their workflow",
+    "scope boundaries",
+    "failure and boundary cases",
+    "conflicts with existing behaviour",
+    "what success looks like",
 )
 
 _REQUIREMENTS = (
@@ -568,36 +625,50 @@ _ACCEPTANCE = (
 
 STEP_DUTIES: Dict[str, str] = {
     INTAKE: (
-        f"{marker(INTAKE)} **Intake: understand the request and size the work.** Do not implement "
-        "anything.\n"
-        "- Read the code the request touches before asking anything you could look up. "
-        + _ASK_IN_REPLY
-        + "\n"
+        f"{marker(INTAKE)} **Intake: understand the request, show where it lands, and size the "
+        "work.** Do not implement anything.\n"
+        "- Read the code the request touches before asking anything you could look up.\n"
+        "- **Write the picture before any requirement**, into the document's `design` with "
+        "`submit_spec_document`, under two headings. `## Today`: how the part of the system the "
+        "request touches works now, citing `file:line`. `## Proposed shape`: a before/after sketch "
+        "of how the change fits on top of it, what it would touch and what it changes for existing "
+        "behaviour, and, where there is a real choice, two or three approaches with your "
+        "recommendation. This holds for every size, a fix included. Summarise it in your reply so "
+        "the operator can correct it.\n"
+        "- **Grill, curious first, then relentless.** Before this step ends, challenge the request's "
+        "premise at least once (is this the right problem; would a smaller or different change "
+        "serve it?), and ask about the failure modes, boundary cases and conflicts with existing "
+        "behaviour that the code shows.\n"
+        "- **Cover:** " + "; ".join(COVERAGE) + ". End every reply with the items still open and "
+        "each **assumption** you are making in place of an answer, so nothing is silently assumed.\n"
         "- Settle the problem, who it affects, and what is out of scope. Write them as `problem` "
         "and `scope` (`in_scope`, `non_goals`) with `submit_spec_document`.\n"
-        "- Size the work: **fix** (a defect with a repro, or a change you can say in one sentence), "
-        "**small** (one demonstrable outcome, a few requirements), or **large** (several outcomes, "
-        "a migration, security, or a contract other parts rely on). Larger than one demonstrable "
-        "outcome is a `roadmap` plus the first slice's change document instead.\n"
-        "- Ask the operator to confirm the size in your reply: the options `fix`, `small` and "
-        "`large`, your recommendation first with its reason. When they answer, record it with "
-        "`set_spec_size(path, size, reason)`.\n"
-        "- **Ask whether the work is already built**, naming any commits on the main branch you "
-        "found that hold it. Record the answer as `already_built` with `submit_spec_document`: "
-        '`{"built": true, "commits": ["<sha>"]}` when it is, `{"built": false}` when it is not. '
+        "- **Size the work yourself:** **fix** (a defect with a repro, or a change you can say in "
+        "one sentence), **small** (one demonstrable outcome, a few requirements), or **large** "
+        "(several outcomes, a migration, security, or a contract other parts rely on). Larger than "
+        "one demonstrable outcome is a `roadmap` plus the first slice's change document instead. "
+        "Record it with `set_spec_size(path, size, reason)` and tell the operator the size and "
+        "your reason in your reply; do not ask them to confirm it. They can change it from the "
+        "phase bar.\n"
+        "- **Already built:** look for commits on the main branch that hold the work. Ask the "
+        "operator whether it is built only when you found candidate commits, naming them. "
+        'Otherwise record `{"built": false}` and say so. Record it as `already_built` with '
+        '`submit_spec_document`: `{"built": true, "commits": ["<sha>"]}` when it is. '
         "Approving a document recorded as built offers to close its tasks as already built "
-        "instead of building them."
+        "instead of building them.\n" + QUESTIONING
     ),
     REQUIREMENTS: (
         f"{marker(REQUIREMENTS)} **Requirements: say what must be true.** Do not implement "
-        "anything.\n" + _REQUIREMENTS + "\n- " + _ASK_IN_REPLY
+        "anything.\n" + _REQUIREMENTS + "\n" + CONTESTED_ONLY + "\n" + QUESTIONING
     ),
     ACCEPTANCE: (
         f"{marker(ACCEPTANCE)} **Acceptance: agree how each requirement is shown to hold.** This is "
         "the step that most decides whether the work can be trusted; take care with it.\n"
         + _ACCEPTANCE
-        + "\n- "
-        + _ASK_IN_REPLY
+        + "\n"
+        + CONTESTED_ONLY
+        + "\n"
+        + QUESTIONING
     ),
     REQUIREMENTS_AND_ACCEPTANCE: (
         f"{marker(REQUIREMENTS_AND_ACCEPTANCE)} **Requirements and acceptance: what must be true, "
@@ -605,17 +676,20 @@ STEP_DUTIES: Dict[str, str] = {
         + _REQUIREMENTS
         + "\n"
         + _ACCEPTANCE
-        + "\n- "
-        + _ASK_IN_REPLY
+        + "\n"
+        + CONTESTED_ONLY
+        + "\n"
+        + QUESTIONING
     ),
     APPROACH: (
         f"{marker(APPROACH)} **Approach: decide how it will be built.** Write short decision records "
-        "into `design`: each decision, the alternative rejected, and why. Name any hazard (a "
+        "into `design` under `## Decisions`, below the `## Today` and `## Proposed shape` that "
+        "intake wrote: each decision, the alternative rejected, and why. Name any hazard (a "
         "migration, live data, security) and its rollback. Do not implement anything.\n"
         "- **Name the contract** that the tasks and the drive share: each new setting field, route "
         "and response field with its exact name and shape, and any status path a drive walks. Name "
         "any existing guard or test the change relaxes. A name a builder has to guess is a gap in "
-        "this step."
+        "this step.\n" + PLAN_ASKS + "\n" + QUESTIONING
     ),
     TASKS: (
         f"{marker(TASKS)} **Tasks: split the work.** Write `tasks` with `submit_spec_document`.\n"
@@ -642,7 +716,7 @@ STEP_DUTIES: Dict[str, str] = {
         "model where the roster has one. A task's checker is never its builder; with one open "
         "agent, leave `checker` empty and let `checker_reason` say why. A task missing a pick or "
         "a reason draws a warning on the document, never a block. Still set `delivery.builder` "
-        "and `delivery.checker` as the defaults."
+        "and `delivery.checker` as the defaults.\n" + PLAN_ASKS + "\n" + QUESTIONING
     ),
     BUILD: (
         f"{marker(BUILD)} **Build: recommend how it will be built.** You recommend; the operator "
@@ -652,14 +726,16 @@ STEP_DUTIES: Dict[str, str] = {
         "empties. Recommend which agent works it, who checks, when it stops and how often it "
         "fires (every 5 minutes unless the operator says otherwise). Each check also tests the "
         "running product; the checker both tests and records the verdict (`delivery.checker`). "
-        "'No flow' is a valid recommendation. Ask in your reply "
-        "about any choice that is the operator's to make. Record the recommendation as "
+        "'No flow' is a valid recommendation. Record the recommendation as "
         "`delivery`, with `reasons`: one sentence for each choice, keyed `mode`, `agent`, "
         "`stop` and `cron`. Each task's builder and checker are recommended on the task, with "
         "their reasons, at the tasks step. Include `delivery` in every later submission. "
         "Each save returns a verdict: report the document to the operator as ready only when "
         "the latest save says `ready_to_approve` is true. Otherwise fix each open gap it lists, "
-        "or acknowledge it with a reason (`acknowledge_spec_gap`) where you judge it acceptable."
+        "or acknowledge it with a reason (`acknowledge_spec_gap`) where you judge it acceptable.\n"
+        + PLAN_ASKS
+        + "\n"
+        + QUESTIONING
     ),
 }
 
@@ -674,17 +750,13 @@ WRITE_WHERE = (
 #: An open agent and the model its runner is bound to ("" when it has none).
 Roster = List[Tuple[str, str]]
 
-#: The sources the operator may choose to judge models by (`asks-how-to-judge`).
-SOURCES = (
-    "what you already know",
-    "a web search",
-    "a review of this project's record (the per-model record tool)",
-)
-
 
 def people_brief(size: Optional[str], roster: Optional[Roster]) -> str:
     """What the tasks step adds once the roster and size are known: each open agent's model, and
-    for a document larger than a fix, the question of how to judge them (FR-2, FR-13)."""
+    for a document larger than a fix, the evidence the picks rest on (FR-2, FR-13). It no longer
+    asks the operator which sources to judge by (`agent-settles-process`, D6): the agent judges
+    from its own knowledge and the project's record, and the operator overturns a pick on the task.
+    """
     lines: List[str] = []
     if roster:
         lines.append(
@@ -699,12 +771,10 @@ def people_brief(size: Optional[str], roster: Optional[Roster]) -> str:
             )
     if size != "fix":
         lines.append(
-            "- **Before naming people, or keeping any you already named, state your current view** "
-            "of these models (cost, performance, where each is strong) and **ask the operator "
-            "which sources to judge by**, "
-            "in any combination: " + "; ".join(SOURCES) + ". Ask in your reply and end your turn. "
-            "Use only the sources they choose, and if a chosen source is unavailable say so rather "
-            "than presenting a guess as the finding.\n"
+            "- **Judge these models yourself** (cost, performance, where each is strong) from what "
+            "you already know and this project's record (`read_model_record`); do not ask the "
+            "operator how to judge them. If the record is unavailable or too small to tell, say "
+            "so rather than presenting a guess as the finding.\n"
             "- **Record what you found in the document's `evidence`, in the submission that names "
             'the people:** it is an object, `{"checked": [...], "limits": [...]}`, of strings. '
             "`checked` holds one line per source used, with any figures and their sample sizes "
@@ -722,9 +792,15 @@ def duty(
     *,
     size: Optional[str] = None,
     roster: Optional[Roster] = None,
+    problem_written: bool = False,
 ) -> str:
     """The step's instructions, the project's appended instruction for that step and no other
-    (FR-4), and the ask-to-advance protocol; "" for a step the project does not have."""
+    (FR-4), and the instruction to advance itself; "" for a step the project does not have.
+
+    At intake, while the document's `problem` is unwritten, the duty opens with the intent playback
+    (`intent-playback`, D1). The rest of intake stays in the text, because the turn the operator
+    confirms the playback in still starts with the problem unwritten.
+    """
     entry = (steps or BUILT_IN).get(step)
     if entry is None:
         return ""
@@ -732,13 +808,16 @@ def duty(
         text = f"{marker(entry.key)} **{entry.title}.**\n{entry.instructions}\n{WRITE_WHERE}"
     else:
         text = STEP_DUTIES[entry.key]
+        if entry.key == INTAKE and not problem_written:
+            head, _, rest = text.partition("\n")
+            text = head + "\n" + PLAYBACK + "\n" + rest
         if entry.key == TASKS:
             brief = people_brief(size, roster)
             if brief:
                 text += "\n" + brief
     if entry.append:
         text += "\n- **This project adds to this step:** " + entry.append
-    return text if entry.key == BUILD else text + "\n" + ASK_TO_ADVANCE
+    return text if entry.key == BUILD else text + "\n" + ADVANCE_YOURSELF
 
 
 def removed(step: str, size: Optional[str], steps: Optional[ProjectSteps] = None) -> str:

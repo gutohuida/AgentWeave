@@ -47,15 +47,16 @@ def test_the_prompt_names_every_open_agents_model_and_asks_for_cost_and_complexi
     assert "hazardous" in text and "routine" in text
 
 
-# ac-sources
-def test_a_large_document_asks_for_the_three_sources_and_a_fix_does_not():
+# ac-sources, superseded by `agent-settles-process` (process-settled-duty): the agent judges the
+# models itself from what it knows and the project's record, and still records the evidence.
+def test_a_large_document_judges_models_itself_and_a_fix_does_not():
     large = _tasks_prompt("large")
-    assert "state your current view" in large
-    for source in spec_journey.SOURCES:
-        assert source in large
+    assert "**Judge these models yourself**" in large
+    assert "read_model_record" in large
+    assert "which sources" not in large and "web search" not in large
     assert "evidence" in large and "unavailable" in large
     fix = _tasks_prompt("fix")
-    assert "which sources" not in fix and "web search" not in fix
+    assert "which sources" not in fix and "Judge these models" not in fix
 
 
 # ac-sources: an author sent `evidence` as a string, was refused with no shape to go on, and moved

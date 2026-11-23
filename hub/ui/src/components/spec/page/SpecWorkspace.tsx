@@ -47,7 +47,7 @@ export interface SpecSurfaceProps {
   buildActions?: React.ReactNode
   /** The dialogs the phase controls open (Build, Archive, Delete, Fold, Retire, Start a flow). */
   dialogs?: React.ReactNode
-  /** The document's build retrospective, under its builds. */
+  /** The document's pre-mortem and build retrospective, under its builds. */
   retrospective?: (context: { flash: string | null; onCopyLink: (anchor: string) => void }) => React.ReactNode
 }
 
@@ -234,7 +234,7 @@ type PanelTab = 'document' | 'tasks' | 'builds'
 
 function tabFor(anchor: string): PanelTab {
   if (anchor.startsWith('task-') || anchor === anchors.section('tasks')) return 'tasks'
-  if (anchor.startsWith('build-') || anchor === anchors.section('builds') || anchor === anchors.section('retrospective')) return 'builds'
+  if (anchor.startsWith('build-') || anchor === anchors.section('builds') || anchor === anchors.section('retrospective') || anchor === anchors.section('pre-mortem')) return 'builds'
   return 'document'
 }
 

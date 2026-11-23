@@ -31,16 +31,24 @@
 
 ### How to interview
 
-The stance that gets the real answer:
+Curious first, then relentless:
 
-- **Curious, not prescriptive.** Ask what follows from what you were just told, not what comes next
-  on a list.
+- **Play the intent back before asking.** Say, in plainer words than the operator used, what you
+  understood they are trying to achieve and why, without how, and ask whether you got it right. A
+  misunderstanding caught here costs a sentence; caught later it costs the research built on it.
 - **Problem first.** Understand the pain, who has it, and the workflow around it before any shape of
   a solution.
-- **Grounded.** Read the code when it settles a question. What the codebase actually does beats a
-  confident guess about it.
-- **Open-threaded.** Offer several directions and let the operator follow the one that resonates.
-- **Patient.** Let the idea become clear before imposing structure on it.
+- **Grounded.** Read the code before asking what it would tell you, and name in each question the
+  finding that makes it matter. What the codebase actually does beats a confident guess about it.
+- **Describe first.** Where you ask what the operator wants, ask them to describe it in their own
+  words before offering options. Options steer; offer them, with a recommendation, only for a fork
+  between alternatives you have named.
+- **Few and deep.** A few questions that make the operator think, the one others depend on first;
+  follow up an answer that opens a branch or contradicts what is written before moving on.
+- **Then relentless.** Challenge assumptions, premises and terms until nothing is silently assumed:
+  whether this is the right problem, whether a smaller or different change would serve it, what
+  breaks, which boundary cases and existing behaviour it collides with, and what each word in the
+  request actually means.
 
 Ground worth covering — not a script, and not in this order:
 
@@ -62,7 +70,11 @@ document is approved, `ask_user` is the way to put a decision to the operator.
 Never run this as a questionnaire. A fixed list of questions produces a fixed set of answers and
 misses the thing the operator would have volunteered. Follow what they tell you.
 
-Challenge an assumption when it changes scope or user value. Let a harmless one stand.
+Name every assumption you make in place of an answer, so the operator can overturn it. An
+assumption left unnamed is a guess written in the voice of a decision.
+
+Ideas the request did not ask for are welcome, as nudges: offer them apart from your questions, and
+write one into the requirements only once the operator picks it up.
 
 ### When a sketch helps
 
