@@ -36,8 +36,8 @@ The page contract it probes (LNFPT-2..5 may rename these; then the drive changes
 `project-ledger`; `conversation-pane`; `conversation-toggle-panel` (aria-label Hide/Show side
 panel); `panel-shell`; `panel-tab-<id>` in `panel-tab-strip`; `conversation-more`,
 `conversation-checkpoints-toggle`, `conversation-trace-open`; `checkpoints-panel` (data-view
-list|detail); `conversation-trace` (a thread's trace) or `trace-view`/`trace-subject`/
-`trace-waterfall` (a run's); `composer-input`; `.aw-loom` or
+list|detail); `trace-view`/`trace-subject`/`trace-waterfall` (run trace) or
+`conversation-trace` (thread trace); `composer-input`; `.aw-loom` or
 `.aw-thread-note` for Chapters; `.aw-overview-spend` for the spend button; `running-tab` rows
 `button.aw-run-row` titled "Open <name>"; a job row `.aw-job-item[data-open]` with `.aw-job-name`.
 
@@ -470,7 +470,7 @@ def step_panel_trace(page, hub, state):
     after = panel_tab_ids(page) if panel_open(page) else []
     added = [t for t in after if t not in before]
     stayed = in_thread(url_params(page), state["conversation"])
-    traced = visible(page, '[data-testid="panel-tab-content"] :is([data-testid="conversation-trace"], [data-testid="trace-view"], [data-testid="trace-subject"], [data-testid="trace-waterfall"])', 8000)
+    traced = visible(page, '[data-testid="panel-tab-content"] :is([data-testid="trace-view"], [data-testid="trace-subject"], [data-testid="trace-waterfall"], [data-testid="conversation-trace"])', 8000)
     shot(page, "08-panel-trace")
     ok = bool(added) and stayed and traced
     return ok, f"tabs before {before}, after {after} (added {added}); trace shown in panel: {traced}; URL stayed on the thread: {stayed} ({url_params(page)})"

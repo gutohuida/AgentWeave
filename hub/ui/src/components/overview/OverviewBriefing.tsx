@@ -1,5 +1,6 @@
 import * as React from 'react'
 import { Icon } from '@/components/common/Icon'
+import { hubDate } from '@/lib/hubTime'
 import { formatAgo, formatAgoLong, formatCost, formatDateTime, formatDay, formatMoney } from '@/lib/format'
 import '@/styles/overview-briefing.css'
 import type { NeedKind } from './OverviewView'
@@ -88,8 +89,8 @@ export function OverviewBriefing({ projectName, lastSeenAt, needs, running, fini
   const health = healthOf({ needs: needs.length, main, spend })
   const ratio = budgetRatio(spend)
   const branch = main.branch ?? 'main'
-  const seenMs = lastSeenAt ? new Date(lastSeenAt).getTime() : null
-  const since = seenMs == null ? finished : finished.filter((f) => new Date(f.at).getTime() > seenMs)
+  const seenMs = lastSeenAt ? hubDate(lastSeenAt).getTime() : null
+  const since = seenMs == null ? finished : finished.filter((f) => hubDate(f.at).getTime() > seenMs)
   const earlier = finished.length - since.length
   const words = lastSeenWords(lastSeenAt, now)
   const lines = summary({ lastSeenWords: words, finished: since, working: running })
