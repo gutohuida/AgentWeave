@@ -82,6 +82,9 @@ TRIGGER = "requested"
 HAIKU = "claude-haiku-4-5-20251001"
 NO_SUCH_MODEL = "claude-no-such-model-bwycs"
 DEFAULT_DOCUMENT = "spec/changes/the-model-catalog-tracks-the-newest-clis/spec.json"
+# reload-mid-run's: six requirements, so its check (~20 s on Haiku) outlasts a page load on the
+# trial Hub, whose `GET /projects` alone takes ~11 s over ~200 projects (BWYCS-7).
+MID_RUN_DOCUMENT = "spec/changes/a-requirement-is-checked-against-what-the-vault-recorded/spec.json"
 ORDER = [
     "working-icon",
     "indicator-count",
@@ -329,16 +332,52 @@ def serve_bundle(route):
     route.fulfill(status=200, body=target.read_bytes(), content_type=TYPES.get(target.suffix, "application/octet-stream"))
 
 
+_OTHERS = {}
+
+
+def other_projects(hub):
+    """Every other project collapsed in the sidebar, as an operator with ~200 would keep them: an
+    expanded project reads its threads and builds, and 200 of those fill the browser's queue."""
+    if hub.url not in _OTHERS:
+        code, out = hub.call("GET", "/projects")
+        rows = items(out, "projects") if code == 200 else []
+        _OTHERS[hub.url] = {row["id"]: True for row in rows if row.get("id") and row["id"] != hub.pid}
+    return _OTHERS[hub.url]
+
+
 def new_page(browser, hub):
     context = browser.new_context(viewport={"width": 1440, "height": 940}, device_scale_factor=1)
     if UI_DIR is not None:
         context.route(f"{hub.url}/**", serve_bundle)
     context.add_init_script(
         "try { sessionStorage.setItem('agentweave-session', JSON.stringify({apiKey: %s, hubUrl: %s}));"
-        "localStorage.setItem('agentweave-selected-project', %s); } catch (e) {}"
-        % (json.dumps(hub.key), json.dumps(hub.url), json.dumps(hub.pid))
+        "localStorage.setItem('agentweave-selected-project', %s);"
+        "localStorage.setItem('aw.projectRailCollapsed', %s); } catch (e) {}"
+        % (json.dumps(hub.key), json.dumps(hub.url), json.dumps(hub.pid), json.dumps(json.dumps(other_projects(hub))))
     )
-    return context.new_page()
+    page = context.new_page()
+    # The trial Hub holds ~200 projects; with them expanded a fresh page queued well over a hundred
+    # requests behind the browser's six connections to one host (BWYCS-7: Check now's POST waited
+    # 14 s in that queue). They start collapsed (`other_projects`), and `settle` waits for what is
+    # left to drain before a timed step, so its clock measures this change rather than that fan-out.
+    INFLIGHT[page] = set()
+    page.on("request", lambda r: INFLIGHT[page].add(r))
+    page.on("requestfinished", lambda r: INFLIGHT[page].discard(r))
+    page.on("requestfailed", lambda r: INFLIGHT[page].discard(r))
+    return page
+
+
+INFLIGHT = {}
+
+
+def settle(page, under=6, seconds=120):
+    """Wait until fewer than *under* requests are in flight (the event stream is one), or *seconds*."""
+    end = time.time() + seconds
+    while time.time() < end:
+        if len([r for r in INFLIGHT.get(page, ()) if "/events" not in r.url]) < under:
+            return True
+        page.wait_for_timeout(250)
+    return False
 
 
 def go(page, hub, **params):
@@ -352,6 +391,7 @@ def go(page, hub, **params):
             if attempt == 2:
                 raise Unreached("the app did not render its top bar")
     page.wait_for_timeout(1200)
+    settle(page)
 
 
 def shot(page, name):
@@ -392,6 +432,7 @@ def open_warnings(page, hub, document):
         item.first.click()
     if not visible(page, '[data-testid="spec-vault-warnings"]', 10000):
         raise Unreached("the spec's vault warnings did not open")
+    settle(page)
 
 
 def icon_state(page):
@@ -454,7 +495,7 @@ def step_working_icon(page, hub, state):
     state["pressed_at"] = time.time()
     ok, seen = wait_icon(page, "working", 5)
     shot(page, "01-working-icon")
-    running = running_run_on(hub, state["document"], seconds=2)
+    running = running_run_on(hub, state["document"], seconds=30)
     state["run"] = running
     state["page"] = page
     return ok, f"manager-icon states seen inside spec-vault-warnings within 5 s: {seen}, want working; running-now row: {running}"
@@ -549,16 +590,23 @@ def step_settings_log(page, hub, state):
 
 
 def step_reload_mid_run(page, hub, state):
+    document = state.get("mid_run_document") or state["document"]
+    go(page, hub)  # a loaded page first, so the reload below is a reload
     before = last_firing_id(hub)
     started = time.time()
-    start_check(hub, state["document"])
-    page.wait_for_timeout(10000)
-    if wait_for_firing(hub, state["document"], before, seconds=0.1):
+    start_check(hub, document)
+    if running_run_on(hub, document, seconds=15) is None:
+        raise Unreached("the check never showed as running in GET /manager/runs/running")
+    if wait_for_firing(hub, document, before, seconds=0.1):
         raise Unreached("the check ended before the reload, so nothing was in progress")
     go(page, hub)  # the reload: a fresh page load mid-run
-    text = count_text(page)
+    text = None
+    end = time.time() + 5
+    while time.time() < end and not (text or "").isdigit():
+        text = count_text(page)
+        page.wait_for_timeout(200)
     counted = text is not None and text.isdigit() and int(text) >= 1
-    run = running_run_on(hub, state["document"], seconds=2)
+    run = running_run_on(hub, document, seconds=10)
     expect = hub_seconds(run["started_at"]) if run else time.time() - started
     popover = hover_indicator(page)
     row = page.get_by_test_id(f"manager-popover-run-{run['run_id']}") if run and popover is not None else None
@@ -566,7 +614,7 @@ def step_reload_mid_run(page, hub, state):
     elapsed = seconds_in(row_text)
     close = elapsed is not None and abs(elapsed - expect) <= 5
     shot(page, "06-reload-mid-run")
-    wait_for_firing(hub, state["document"], before)  # let it end before the failure steps
+    wait_for_firing(hub, document, before)  # let it end before the failure steps
     ok = counted and bool(run) and close
     return ok, f"after reload count {text!r} (includes the run: {counted}); run {run and run.get('run_id')}; popover row {row_text[:120]!r} elapsed {elapsed}s vs {expect:.0f}s since start: {close}"
 
@@ -625,7 +673,7 @@ def step_failure_seen_b(page, hub, state):
     run_id = run_id_of(firing)
     go(page, hub)
     popover = hover_indicator(page)
-    listed = popover is not None and run_id is not None and page.get_by_test_id(f"manager-popover-run-{run_id}").count() > 0
+    listed = popover is not None and run_id is not None and visible(page, f'[data-testid="manager-popover-run-{run_id}"]', 5000)
     page.wait_for_timeout(2000)
     unseen = unseen_failures(hub)
     shot(page, "09a-failure-seen-b")
@@ -675,6 +723,7 @@ def main():
     parser.add_argument("--hub", default="http://127.0.0.1:8010", help="the trial Hub")
     parser.add_argument("--project", default="proj-d85a82bf4216")
     parser.add_argument("--document", default=DEFAULT_DOCUMENT, help="a spec with requirements")
+    parser.add_argument("--mid-run-document", default=MID_RUN_DOCUMENT, help="reload-mid-run's spec: one whose check outlasts a page load")
     parser.add_argument("--key", default="", help="the Hub's key (default: the trial profile's bootstrap key)")
     parser.add_argument("--db", default="", help="the Hub's SQLite (default: the trial profile's)")
     parser.add_argument("--only", default="", help="comma-separated step keys")
@@ -719,6 +768,7 @@ def main():
 
     try:
         state = seed(hub, args.document)
+        state["mid_run_document"] = args.mid_run_document
     except Setup as exc:
         for key_ in wanted:
             record(key_, False, False, f"setup failed: {exc}")
