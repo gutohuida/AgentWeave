@@ -3476,6 +3476,11 @@ async def _broadcast_run_lifecycle(
         severity="warn" if event_type == "run_failed" else "info",
     )
     await sse_manager.broadcast(project_id, event_type, payload)
+    from ... import stalls
+
+    if agent == stalls.MENDER:
+        # The mender's runs are manager runs too (`background-manager-work-you-can-see` FR-1).
+        await stalls.announce_mender_run(db, project_id, event_type, run_id, payload)
 
 
 #: Seconds between attempts at an observational write that met SQLite's lock (F359). Each attempt

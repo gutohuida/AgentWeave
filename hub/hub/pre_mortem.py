@@ -298,7 +298,25 @@ def _spawn(work: Any) -> None:
 
 
 async def _run_claimed(plan: Plan, trigger: str) -> None:
-    """A firing that holds its document's claim, and gives it up however it ends."""
+    """A firing that holds its document's claim, and gives it up however it ends. It is one run,
+    announced when it starts and ended with a record however it ends (`manager.manager_run`)."""
+    try:
+        async with manager.manager_run(
+            plan.project_id,
+            job=JOB,
+            trigger=trigger,
+            subject=subject_of(plan),
+            initiator=manager.OPERATOR if trigger == REQUESTED else manager.AUTONOMOUS,
+        ) as current:
+            current.uses(runner_id=plan.runner_id, cli=plan.cli, model=plan.model)
+            await _run_recorded(plan, trigger)
+    except Exception:  # noqa: BLE001 -- a background task must not raise
+        logger.warning("pre-mortem run failed for %s", plan.document_id, exc_info=True)
+    finally:
+        _running.discard((plan.project_id, plan.document_id))
+
+
+async def _run_recorded(plan: Plan, trigger: str) -> None:
     try:
         await run(plan, trigger=trigger)
     except Exception as exc:  # noqa: BLE001 -- a background task must not raise
@@ -322,8 +340,6 @@ async def _run_claimed(plan: Plan, trigger: str) -> None:
                 )
         except Exception:  # noqa: BLE001
             logger.warning("could not record a failed pre-mortem", exc_info=True)
-    finally:
-        _running.discard((plan.project_id, plan.document_id))
 
 
 async def request(db: AsyncSession, project_id: str, path: str) -> None:
@@ -357,9 +373,16 @@ async def _fire_automatic(project_id: str, document_id: str) -> None:
             plan = _plan(document, job, runner)
     except CannotRunError as refusal:
         if refusal.no_runner:
-            await manager.record_no_runner(
-                project_id, job=JOB, trigger=CRITERIA_WRITTEN, subject=subject
-            )
+            async with manager.manager_run(
+                project_id,
+                job=JOB,
+                trigger=CRITERIA_WRITTEN,
+                subject=subject,
+                initiator=manager.AUTONOMOUS,
+            ):
+                await manager.record_no_runner(
+                    project_id, job=JOB, trigger=CRITERIA_WRITTEN, subject=subject
+                )
         return
     except Exception:  # noqa: BLE001 -- a background task must not raise
         logger.warning("pre-mortem could not start for %s", document_id, exc_info=True)
