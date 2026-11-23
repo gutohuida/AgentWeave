@@ -4,7 +4,7 @@ import { MenuSelect } from '@/components/ui/menu'
 import { SettingsGroup, SettingsPage, SettingsRow } from '@/components/ui/settings'
 import { Switch } from '@/components/ui/switch'
 import { MarkdownMessage } from '@/components/agents/MarkdownMessage'
-import type { ManagerFiring, ManagerJob, ManagerJobInput } from '@/api/manager'
+import type { ManagerFiring, ManagerJob, ManagerJobInput, ManagerJobRunTotals, ManagerLoggedRun, ManagerRunDetail } from '@/api/manager'
 import type { Runner } from '@/api/runners'
 import type { ModelDescriptor } from '@/api/modelCatalog'
 import { formatDateTime, formatDuration, formatTokenBreakdown, formatUsage } from '@/lib/format'
@@ -25,14 +25,37 @@ const OUTCOME: Record<ManagerFiring['outcome'], { label: string; tone: string }>
   failed: { label: 'Failed', tone: 'bad' },
 }
 
-/** What a firing was about, in words: "Conversation conv-…" becomes the conversation's title when
+/** What a run was about, in words: "Conversation conv-…" becomes the conversation's title when
  *  the container knows it. */
-export type SubjectLabel = (firing: ManagerFiring) => string | null
+export type SubjectLabel = (run: { subject?: Record<string, unknown> | null }) => string | null
+
+/** What the log shows of the runs, and how it is narrowed and continued. */
+export interface RunLogView {
+  runs: ManagerLoggedRun[]
+  totals: Record<string, ManagerJobRunTotals>
+  hasMore: boolean
+  /** The job the log is narrowed to; null for every job. */
+  job: string | null
+  onJob: (job: string | null) => void
+  onShowOlder: () => void
+  loadingOlder?: boolean
+}
+
+/** The run a `run=<run_id>` link opened: the run once read, and why it could not be. */
+export interface RunDetailView {
+  runId: string
+  run: ManagerRunDetail | undefined
+  error?: string | null
+  onClose: () => void
+}
 
 export function ManagerSettings({
   jobs,
-  firings,
-  firingsError,
+  log,
+  logError,
+  detail,
+  onOpenRun,
+  onOpenConversation,
   runners,
   modelsFor,
   modelPart,
@@ -43,10 +66,16 @@ export function ManagerSettings({
   onChange,
 }: {
   jobs: ManagerJob[]
-  /** Undefined while the history is on its way. */
-  firings: ManagerFiring[] | undefined
-  /** Why the history could not be read; it is never shown as empty when it was not read. */
-  firingsError?: string | null
+  /** Undefined while the run log is on its way. */
+  log: RunLogView | undefined
+  /** Why the log could not be read; it is never shown as empty when it was not read. */
+  logError?: string | null
+  /** The run the location names, when it names one. */
+  detail?: RunDetailView | null
+  /** A row's link: open that run's detail (its address carries `run=<run_id>`). */
+  onOpenRun: (runId: string) => void
+  /** A mender row's link to the thread it ran in. */
+  onOpenConversation?: (conversationId: string) => void
   runners: Runner[]
   /** The models a runner's provider offers. */
   modelsFor: (runner: Runner | undefined) => ModelDescriptor[]
@@ -153,7 +182,7 @@ export function ManagerSettings({
               {job.usage_total ? (
                 <SettingsRow
                   label="Cost so far"
-                  description="Everything this job has spent in this project; each firing's own cost is in the history below."
+                  description="Everything this job has spent in this project; each run's own cost is in the run log below."
                   control={
                     <span className="tabular" data-testid={`manager-job-${job.key}-total`} title={formatTokenBreakdown(job.usage_total)}>
                       {job.usage_total.firings === 0
@@ -175,30 +204,58 @@ export function ManagerSettings({
         )
       })}
 
-      <SettingsGroup title="History" description="Every time a job called a model.">
-        <ManagerHistory firings={firings} error={firingsError} jobs={jobs} runners={runners} subjectLabel={subjectLabel} now={now} />
+      <SettingsGroup title="Run log" description="Every run of every job, the mender's included, newest first.">
+        {detail ? <RunDetail view={detail} jobs={jobs} subjectLabel={subjectLabel} now={now} onOpenConversation={onOpenConversation} /> : null}
+        <RunLog log={log} error={logError} jobs={jobs} subjectLabel={subjectLabel} now={now} selected={detail?.runId ?? null} onOpenRun={onOpenRun} onOpenConversation={onOpenConversation} />
       </SettingsGroup>
     </SettingsPage>
   )
 }
 
-function ManagerHistory({
-  firings,
+
+/** `check_now` → "Check now": the trigger as words. */
+function triggerLabel(trigger: string | null | undefined): string {
+  if (!trigger) return '—'
+  const words = trigger.replace(/[_-]+/g, ' ').trim()
+  return words.charAt(0).toUpperCase() + words.slice(1)
+}
+
+/** Whether the operator asked for the run (a button or a request) or the Hub started it. */
+function startedBy(run: { initiator?: string | null }): 'Manual' | 'Automatic' {
+  return run.initiator === 'operator' ? 'Manual' : 'Automatic'
+}
+
+/** A run's cost, or why it has none: never an empty cell, never a zero that was not measured. */
+function costOf(run: Pick<ManagerLoggedRun, 'usage' | 'no_cost_reason'>): { text: string; title?: string } {
+  if (run.usage && run.usage.cost_usd_micros != null) return { text: formatUsage(run.usage), title: formatTokenBreakdown(run.usage) }
+  return { text: run.no_cost_reason ?? 'No cost recorded', title: formatTokenBreakdown(run.usage) }
+}
+
+function totalsText(total: ManagerJobRunTotals): string {
+  const parts = [`${total.runs} ${total.runs === 1 ? 'run' : 'runs'}`, `${total.failed} failed`]
+  parts.push(total.cost_usd_micros == null ? 'no cost recorded' : formatUsage({ cost_usd_micros: total.cost_usd_micros }))
+  return parts.join(' · ')
+}
+
+function RunLog({
+  log,
   error,
   jobs,
-  runners,
   subjectLabel,
   now,
+  selected,
+  onOpenRun,
+  onOpenConversation,
 }: {
-  firings: ManagerFiring[] | undefined
+  log: RunLogView | undefined
   error?: string | null
   jobs: ManagerJob[]
-  runners: Runner[]
   subjectLabel?: SubjectLabel
   now: Date
+  selected: string | null
+  onOpenRun: (runId: string) => void
+  onOpenConversation?: (conversationId: string) => void
 }) {
-  const [open, setOpen] = React.useState<string | null>(null)
-  const [shown, setShown] = React.useState(8)
   if (error) {
     return (
       <p className="aw-inline-warning" role="alert">
@@ -206,70 +263,151 @@ function ManagerHistory({
       </p>
     )
   }
-  if (!firings) return <LoadingThread label="Loading activity" size="inline" className="my-3" />
-  if (firings.length === 0) return <p className="aw-empty-line">No job has spawned a model yet.</p>
+  if (!log) return <LoadingThread label="Loading run log" size="inline" className="my-3" />
+  const title = (key: string) => jobs.find((j) => j.key === key)?.title ?? key
+  const totalled = Object.entries(log.totals)
+  const filterOptions = [{ value: '', label: 'Every job' }, ...totalled.map(([key]) => ({ value: key, label: title(key) }))]
   return (
-    <div className="aw-history" role="table" aria-label="Manager history">
-      <div className="aw-history-row aw-history-head" role="row">
-        <span role="columnheader">When</span>
-        <span role="columnheader">Job</span>
-        <span role="columnheader">Result</span>
-        <span role="columnheader" className="text-right">Time</span>
-        <span role="columnheader" className="text-right">Cost</span>
-      </div>
-      {firings.slice(0, shown).map((firing, index) => {
-        const job = jobs.find((j) => j.key === firing.job)
-        const outcome = OUTCOME[firing.outcome] ?? { label: firing.outcome, tone: 'neutral' }
-        const expanded = open === firing.id
-        const runner = runners.find((r) => r.id === firing.runner_id)
-        return (
-          <div key={firing.id} className="aw-history-item" data-open={expanded ? 'true' : 'false'} data-testid={`manager-firing-${index}`}>
-            <button
-              type="button"
-              data-slot="history-row"
-              className="aw-history-row"
-              role="row"
-              aria-expanded={expanded}
-              onClick={() => setOpen(expanded ? null : firing.id)}
-            >
-              <span role="cell" className="aw-history-when" title={firing.at}>
-                <span className="aw-history-chevron" data-open={expanded ? 'true' : 'false'}>
-                  <Icon name="chevron_right" size={12} />
-                </span>
-                {formatDateTime(firing.at, now)}
-              </span>
-              <span role="cell" className="min-w-0 truncate">
-                <span className="aw-history-job">{job?.title ?? firing.job}</span>
-                <span className="aw-history-detail" data-testid={subjectLabel?.(firing) ? `manager-firing-${index}-subject` : undefined}>
-                  {subjectLabel?.(firing) ?? firing.detail ?? ''}
-                </span>
-              </span>
-              <span role="cell">
-                <span className="aw-state-chip" data-tone={outcome.tone}>
-                  <span className="aw-state-dot" />
-                  {outcome.label}
-                </span>
-              </span>
-              <span role="cell" className="tabular text-right">{formatDuration(firing.duration_ms / 1000)}</span>
-              <span role="cell" className="tabular text-right" title={formatTokenBreakdown(firing.usage)}>{formatUsage(firing.usage)}</span>
-            </button>
-            {expanded ? (
-              <div className="aw-history-answer">
-                <p className="aw-history-meta">
-                  {runner?.name ?? firing.cli} · {firing.model ?? 'runner’s model'}
-                </p>
-                {firing.detail && subjectLabel?.(firing) ? <p className="aw-history-meta">{firing.detail}</p> : null}
-                {firing.answer ? <MarkdownMessage content={firing.answer} /> : <p className="aw-empty-line">The model gave no answer.</p>}
-              </div>
-            ) : null}
+    <div className="aw-run-log">
+      <SettingsRow
+        label="Show"
+        description="Narrow the log to one job."
+        control={
+          <span data-testid="manager-run-filter">
+            <MenuSelect label="Filter the run log by job" value={log.job ?? ''} onChange={(v) => log.onJob(v || null)} options={filterOptions} />
+          </span>
+        }
+      />
+      {totalled.length ? (
+        <ul className="aw-run-totals" aria-label="Totals per job">
+          {totalled.map(([key, total]) => (
+            <li key={key} data-testid={`manager-job-${key}-totals`} data-active={log.job === key ? 'true' : 'false'}>
+              <span className="aw-history-job">{title(key)}</span> <span className="tabular">{totalsText(total)}</span>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      {log.runs.length === 0 ? (
+        <p className="aw-empty-line">{log.job ? `${title(log.job)} has not run yet.` : 'No job has run yet.'}</p>
+      ) : (
+        <div className="aw-history" role="table" aria-label="Manager run log">
+          <div className="aw-history-row aw-history-head" role="row">
+            <span role="columnheader">Started</span>
+            <span role="columnheader">Job</span>
+            <span role="columnheader">Result</span>
+            <span role="columnheader" className="text-right">Time</span>
+            <span role="columnheader" className="text-right">Cost</span>
           </div>
-        )
-      })}
-      {firings.length > shown ? (
-        <button type="button" data-slot="history-more" className="aw-history-more" onClick={() => setShown((n) => n + 20)}>
-          Show older ({firings.length - shown})
+          {log.runs.map((run) => {
+            const outcome = OUTCOME[run.outcome as ManagerFiring['outcome']] ?? { label: run.outcome, tone: 'neutral' }
+            const cost = costOf(run)
+            const subject = subjectLabel?.(run)
+            return (
+              <div key={run.run_id} className="aw-history-item" data-open={selected === run.run_id ? 'true' : 'false'} data-testid={`manager-run-${run.run_id}`}>
+                <div className="aw-history-row" role="row">
+                  <span role="cell" className="aw-history-when" title={run.started_at}>
+                    {formatDateTime(run.started_at, now)}
+                  </span>
+                  <span role="cell" className="min-w-0">
+                    <span className="aw-history-job">{title(run.job)}</span>
+                    <span className="aw-history-detail" data-testid={`manager-run-${run.run_id}-subject`}>{subject ?? ''}</span>
+                    <span className="aw-history-meta" data-testid={`manager-run-${run.run_id}-trigger`}>
+                      {triggerLabel(run.trigger)} · {startedBy(run)}
+                    </span>
+                    <button
+                      type="button"
+                      className="aw-history-link"
+                      data-testid={`manager-run-${run.run_id}-link`}
+                      aria-label={`Open run ${run.run_id}`}
+                      onClick={() => onOpenRun(run.run_id)}
+                    >
+                      {run.run_id}
+                    </button>
+                    {run.conversation_id && onOpenConversation ? (
+                      <button
+                        type="button"
+                        className="aw-history-link"
+                        data-testid={`manager-run-${run.run_id}-conversation`}
+                        onClick={() => onOpenConversation(run.conversation_id!)}
+                      >
+                        Open the thread
+                      </button>
+                    ) : null}
+                  </span>
+                  <span role="cell">
+                    <span className="aw-state-chip" data-tone={outcome.tone}>
+                      <span className="aw-state-dot" />
+                      {outcome.label}
+                    </span>
+                    {run.outcome === 'failed' && run.detail ? (
+                      <span className="aw-history-detail" data-testid={`manager-run-${run.run_id}-reason`}>{run.detail}</span>
+                    ) : null}
+                  </span>
+                  <span role="cell" className="tabular text-right">{run.duration_ms == null ? '—' : formatDuration(run.duration_ms / 1000)}</span>
+                  <span role="cell" className="tabular text-right" title={cost.title} data-testid={`manager-run-${run.run_id}-cost`}>{cost.text}</span>
+                </div>
+              </div>
+            )
+          })}
+          {log.hasMore ? (
+            <button type="button" data-slot="history-more" className="aw-history-more" disabled={log.loadingOlder} onClick={log.onShowOlder}>
+              Show older runs
+            </button>
+          ) : null}
+        </div>
+      )}
+    </div>
+  )
+}
+
+/** The run a link names, opened above the log: what it was about, how it went, and what the model
+ *  answered. A run the Hub does not know says so rather than showing nothing. */
+function RunDetail({
+  view,
+  jobs,
+  subjectLabel,
+  now,
+  onOpenConversation,
+}: {
+  view: RunDetailView
+  jobs: ManagerJob[]
+  subjectLabel?: SubjectLabel
+  now: Date
+  onOpenConversation?: (conversationId: string) => void
+}) {
+  const { run } = view
+  const close = (
+    <button type="button" className="aw-history-link" data-testid="manager-run-detail-close" onClick={view.onClose}>
+      Close
+    </button>
+  )
+  if (view.error) {
+    return (
+      <div className="aw-history-answer" data-testid="manager-run-detail" role="alert">
+        <p className="aw-inline-warning"><Icon name="warning" size={13} /> {view.error}</p>
+        {close}
+      </div>
+    )
+  }
+  if (!run) return <LoadingThread label="Loading run" size="inline" className="my-3" />
+  const outcome = OUTCOME[run.outcome as ManagerFiring['outcome']] ?? { label: run.outcome, tone: 'neutral' }
+  const cost = costOf(run)
+  return (
+    <div className="aw-history-answer" data-testid="manager-run-detail" data-run={run.run_id}>
+      <p className="aw-history-meta">
+        <span className="aw-history-job">{jobs.find((j) => j.key === run.job)?.title ?? run.job}</span> · {run.run_id} · {subjectLabel?.(run) ?? ''}
+      </p>
+      <p className="aw-history-meta">
+        {triggerLabel(run.trigger)} · {startedBy(run)} · started {formatDateTime(run.started_at, now)} · {run.duration_ms == null ? '—' : formatDuration(run.duration_ms / 1000)} · {outcome.label} · {cost.text}
+      </p>
+      {run.detail ? <p className="aw-history-meta" data-testid="manager-run-detail-reason">{run.detail}</p> : null}
+      {run.answer ? <MarkdownMessage content={run.answer} /> : <p className="aw-empty-line">The model gave no answer.</p>}
+      {run.conversation_id && onOpenConversation ? (
+        <button type="button" className="aw-history-link" data-testid="manager-run-detail-conversation" onClick={() => onOpenConversation(run.conversation_id!)}>
+          Open the thread
         </button>
       ) : null}
+      {close}
     </div>
   )
 }

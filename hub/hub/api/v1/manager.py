@@ -263,3 +263,32 @@ async def mark_runs_seen(
     """Mark the named runs' failures seen, once each; unknown ids are ignored."""
     await manager.mark_seen(session, project[0], body.run_ids)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.get("/runs")
+async def list_runs(
+    job: Optional[str] = None,
+    limit: int = Query(default=50, ge=1, le=200),
+    before: Optional[str] = None,
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """The run log, newest first, with every job's totals and whether older runs follow;
+    `before=<run_id>` continues after that run."""
+    log = await manager.list_runs(session, project[0], job=job, limit=limit, before=before)
+    if log is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"No run '{before}'")
+    return log
+
+
+# Declared after the fixed `/runs/...` paths above, which this would otherwise swallow.
+@router.get("/runs/{run_id}")
+async def get_run(
+    run_id: str,
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    run = await manager.get_run(session, project[0], run_id)
+    if run is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"No run '{run_id}'")
+    return run

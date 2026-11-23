@@ -1,6 +1,7 @@
+import * as React from 'react'
 import { useProjectConversations } from '@/api/agentChat'
 import { readableApiError } from '@/api/client'
-import { isNoManager, useManagerActivity, useManagerJobs, useUpdateManagerJob, type ManagerFiring } from '@/api/manager'
+import { isNoManager, useManagerJobs, useManagerRun, useManagerRunLog, useUpdateManagerJob } from '@/api/manager'
 import { useModelCatalog } from '@/api/modelCatalog'
 import { useRunners } from '@/api/runners'
 import { useVaultMap } from '@/api/vault'
@@ -12,34 +13,56 @@ import { ManagerSettings } from '../ManagerSettings'
 
 const DESCRIPTION = 'Work the Hub does in the background with a model. Each job runs only while it is on, on the runner and model you choose for it.'
 
-/** What a firing worked on, in words (F719): a conversation by its title, a vault entry by its name
- *  with its id kept (two entries may share a name), a document or report by its path. */
-function firingSubject(
-  firing: ManagerFiring,
+/** What a run worked on, in words (F719): a conversation by its title, a vault entry by its name
+ *  with its id kept (two entries may share a name), a document or report by its path, a mender's
+ *  stall by the reason it was woken. */
+function runSubject(
+  run: { subject?: Record<string, unknown> | null },
   entryNames: Map<string, string>,
   conversationTitles: Map<string, string>,
 ): string | null {
-  const subject = firing.subject
+  const subject = run.subject
   if (!subject) return null
+  const text = (key: string) => (typeof subject[key] === 'string' && subject[key] ? (subject[key] as string) : null)
   const entry = (id: string) => {
     const name = entryNames.get(id)
     return name ? `"${name}" (${id})` : id
   }
   const parts: string[] = []
-  if (subject.source) parts.push(`source ${entry(subject.source)}`)
-  if (subject.document) parts.push(`document ${subject.document}`)
-  if (subject.report) parts.push(`report ${subject.report}`)
-  if (subject.entry) parts.push(`on ${entry(subject.entry)}`)
-  if (subject.conversation_id) parts.push(conversationTitles.get(subject.conversation_id) ?? `thread ${subject.conversation_id}`)
+  const source = text('source')
+  const document = text('document')
+  const report = text('report')
+  const on = text('entry')
+  const conversation = text('conversation_id')
+  const reason = text('reason')
+  if (source) parts.push(`source ${entry(source)}`)
+  if (document) parts.push(`document ${document}`)
+  if (report) parts.push(`report ${report}`)
+  if (on) parts.push(`on ${entry(on)}`)
+  if (conversation) parts.push(conversationTitles.get(conversation) ?? `thread ${conversation}`)
+  if (reason) parts.push(reason)
   return parts.length ? parts.join(' ') : null
 }
 
 /** Project settings → Manager, on the Hub. Each control saves on change, sending only what it
  *  changed. A Hub that predates the manager answers its routes 404, which reads as a state. */
-export function ManagerSection() {
+export function ManagerSection({
+  run = null,
+  onOpenRun,
+  onOpenConversation,
+}: {
+  /** The run the location names (`run=<run_id>`): its detail opens. */
+  run?: string | null
+  /** A row's link, or the detail's Close (null): moves the location. */
+  onOpenRun?: (runId: string | null) => void
+  /** A mender row's link to the thread it ran in. */
+  onOpenConversation?: (conversationId: string) => void
+}) {
   const projectId = useConfigStore((state) => state.selectedProjectId)
   const jobs = useManagerJobs()
-  const activity = useManagerActivity()
+  const [job, setJob] = React.useState<string | null>(null)
+  const runLog = useManagerRunLog(job)
+  const opened = useManagerRun(run)
   const { data: runners = [], error: runnersError } = useRunners()
   const { data: catalog, error: catalogError } = useModelCatalog()
   const update = useUpdateManagerJob()
@@ -50,7 +73,7 @@ export function ManagerSection() {
     (conversations?.conversations ?? []).filter((c) => c.title?.trim()).map((c) => [c.id, c.title!.trim()]),
   )
 
-  if (isNoManager(jobs.error) || isNoManager(activity.error)) {
+  if (isNoManager(jobs.error) || isNoManager(runLog.error)) {
     return (
       <SettingsPage icon="memory" title="Manager" description={DESCRIPTION}>
         <p className="aw-empty-line">This Hub has no manager yet. It arrives when the Hub is restarted on a version that has one.</p>
@@ -85,12 +108,36 @@ export function ManagerSection() {
   return (
     <ManagerSettings
       jobs={jobs.data}
-      firings={activity.data}
-      firingsError={activity.error ? readableApiError(activity.error, "Could not read the manager's activity.") : null}
+      log={
+        runLog.data
+          ? {
+              runs: runLog.data.pages.flatMap((page) => page.runs),
+              totals: runLog.data.pages[0]?.totals ?? {},
+              hasMore: !!runLog.hasNextPage,
+              job,
+              onJob: setJob,
+              onShowOlder: () => void runLog.fetchNextPage(),
+              loadingOlder: runLog.isFetchingNextPage,
+            }
+          : undefined
+      }
+      logError={runLog.error ? readableApiError(runLog.error, "Could not read the manager's run log.") : null}
+      detail={
+        run
+          ? {
+              runId: run,
+              run: opened.data,
+              error: opened.error ? `Could not read run ${run}: ${readableApiError(opened.error, 'the Hub did not answer.')}` : null,
+              onClose: () => onOpenRun?.(null),
+            }
+          : null
+      }
+      onOpenRun={(runId) => onOpenRun?.(runId)}
+      onOpenConversation={onOpenConversation}
       runners={runners}
       modelsFor={(runner) => catalog?.providers.find((p) => p.provider === runner?.cli)?.models ?? []}
       modelPart={(runner) => runnerModelPart(runner, catalog)}
-      subjectLabel={(firing) => firingSubject(firing, entryNames, conversationTitles)}
+      subjectLabel={(item) => runSubject(item, entryNames, conversationTitles)}
       controlsUnavailable={controlsUnavailable}
       now={new Date()}
       notices={
@@ -102,7 +149,7 @@ export function ManagerSection() {
           ) : null}
           {vaultError ? (
             <SettingsNotice tone="info">
-              <p>{readableApiError(vaultError, 'The vault could not be read')}, so vault entries in the history are named by id.</p>
+              <p>{readableApiError(vaultError, 'The vault could not be read')}, so vault entries in the run log are named by id.</p>
             </SettingsNotice>
           ) : null}
         </>
