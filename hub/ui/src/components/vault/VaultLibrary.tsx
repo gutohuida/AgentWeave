@@ -69,6 +69,8 @@ export interface VaultLibraryProps {
   onEdit?: (id: string, content: string, version: string) => VaultActionResult
   onReplaceFile?: (id: string, file: File) => VaultActionResult
   onArchive?: (id: string) => VaultActionResult
+  /** Beside the list's title: the manager's distillation icon (`VaultDistillationStatus`). */
+  status?: React.ReactNode
   /** The open entry's reading state, past its first page. */
   reader?: {
     hasMore?: boolean
@@ -317,6 +319,7 @@ export function VaultLibrary(props: VaultLibraryProps) {
               {filter.kind === 'contradictions' ? contradictions.length : filter.kind === 'reports' ? reports.length : visible.length}
             </span>
           </h2>
+          {props.status}
           <Button variant="primary" size="sm" data-testid="vault-upload-open" onClick={() => openAdd()}>
             <Icon name="add" size={14} />
             Add

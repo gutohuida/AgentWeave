@@ -1,6 +1,7 @@
 import { QueryClient } from '@tanstack/react-query'
 import { useConfigStore } from '@/store/configStore'
 import { PROJECT_ID, projectConversations, projectSummaries } from './fixtures'
+import { seedManagerRuns } from './managerMock'
 
 /** The real rail fetches through React Query; the mock answers from the cache instead, under the
  *  very keys the hooks use, so the component on screen is the one the app ships. Nothing is ever
@@ -14,6 +15,7 @@ export function mockQueryClient(): QueryClient {
   for (const p of projectSummaries()) {
     if (p.id !== PROJECT_ID) client.setQueryData(['project', p.id, 'conversations', 'open'], { conversations: [], archived_count: 0 })
   }
+  seedManagerRuns(client, PROJECT_ID)
   useConfigStore.setState({ selectedProjectId: PROJECT_ID })
   return client
 }

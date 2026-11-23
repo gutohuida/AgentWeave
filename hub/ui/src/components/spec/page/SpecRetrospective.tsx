@@ -6,6 +6,10 @@ import { Icon } from '@/components/common/Icon'
 import { Button } from '@/components/ui/button'
 import { formatDateTime, formatDuration, formatUsage } from '@/lib/format'
 import { Section } from './SpecDocumentBody'
+import { ManagerIcon } from '@/components/manager/ManagerIcon'
+import { useManagerItem, type ManagerIconState } from '@/components/manager/useManagerItem'
+import { useQueryClient } from '@tanstack/react-query'
+import { useConfigStore } from '@/store/configStore'
 import '@/styles/spec-page.css'
 
 const TRIGGER_LABEL: Record<string, string> = {
@@ -36,11 +40,21 @@ function cost(micros: number | null | undefined): string {
   return micros == null ? 'not reported' : formatUsage({ cost_usd_micros: micros })
 }
 
-/** The document's retrospectives and the action that asks for one (FR-3, FR-9). Polled, because a
- *  firing is recorded as an event when it ends and nothing broadcasts it. */
+/** The document's retrospectives and the action that asks for one (FR-3, FR-9). The manager's icon
+ *  says whether one of this document is running (`background-manager-work-you-can-see`, FR-4), and
+ *  the list is read again when it ends (FR-5). The section is the retrospective's failure list, so
+ *  a failure shown here is seen (FR-6). */
 export function SpecRetrospective({ path, now, flash, onCopyLink }: { path: string; now: Date; flash: string | null; onCopyLink: (anchor: string) => void }) {
   const { data, error } = useBuildRetrospectives(path)
   const review = useReviewThisBuild(path)
+  const queryClient = useQueryClient()
+  const projectId = useConfigStore((state) => state.selectedProjectId)
+  const manager = useManagerItem({
+    job: 'build-retrospective',
+    matches: (subject) => subject.document === path,
+    seeOnShow: true,
+    onEnded: () => void queryClient.invalidateQueries({ queryKey: ['project', projectId, 'manager', 'retrospectives', path] }),
+  })
   const rows = data ?? []
   const newest = rows[0]?.id ?? null
   // The newest firing when a press was accepted: until the list moves on from it, one is running.
@@ -56,13 +70,17 @@ export function SpecRetrospective({ path, now, flash, onCopyLink }: { path: stri
     <SpecRetrospectiveSection
       retrospectives={rows}
       unreadable={error ? readableApiError(error, 'The Hub did not answer.') : null}
-      running={askedOver !== undefined && askedOver === newest}
+      running={manager.state === 'working' || (askedOver !== undefined && askedOver === newest)}
+      managerState={manager.state}
       refusal={review.isError ? readableApiError(review.error, 'The Hub did not answer.') : null}
       pending={review.isPending}
       now={now}
       flash={flash}
       onCopyLink={onCopyLink}
-      onReview={() => review.mutate(undefined, { onSuccess: () => setAskedOver(newest) })}
+      onReview={() => {
+        manager.starting()
+        review.mutate(undefined, { onSuccess: () => setAskedOver(newest), onError: manager.cancelStarting })
+      }}
     />
   )
 }
@@ -71,6 +89,7 @@ export function SpecRetrospectiveSection({
   retrospectives,
   unreadable,
   running,
+  managerState = 'idle',
   refusal,
   pending,
   now,
@@ -82,6 +101,8 @@ export function SpecRetrospectiveSection({
   retrospectives: BuildRetrospective[]
   unreadable: string | null
   running: boolean
+  /** The manager's icon on the section: working, failed unseen, or idle. */
+  managerState?: ManagerIconState
   /** What the Hub said when it refused the press: one is in progress, or the job has no runner. */
   refusal: string | null
   pending: boolean
@@ -103,10 +124,13 @@ export function SpecRetrospectiveSection({
       flash={flash}
       onCopyLink={onCopyLink}
       actions={
+        <>
+        <ManagerIcon state={managerState} job="build-retrospective" />
         <Button variant="outline" size="xs" disabled={pending} onClick={onReview}>
           <Icon name="play_arrow" size={13} />
           Review this build
         </Button>
+        </>
       }
     >
       {running ? (

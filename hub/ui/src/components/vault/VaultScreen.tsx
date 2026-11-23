@@ -35,6 +35,7 @@ import { Icon } from '@/components/common/Icon'
 import { toast } from '@/lib/toast'
 import type { VaultAddInput, VaultAddResult } from './VaultAddDialog'
 import { VaultLibrary } from './VaultLibrary'
+import { VaultDistillationStatus } from './VaultDistillationStatus'
 import type { VaultFact } from './VaultReader'
 import { hasTrackedFile } from './vaultKinds'
 import '@/styles/vault.css'
@@ -293,6 +294,7 @@ export function VaultScreen() {
 
   return (
     <VaultLibrary
+      status={<VaultDistillationStatus />}
       entries={entries}
       settings={settings.data ?? NO_SETTINGS}
       settingsError={settings.error ? readableApiError(settings.error, "Could not read the vault's settings.") : null}

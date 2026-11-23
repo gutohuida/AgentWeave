@@ -1,0 +1,70 @@
+/* The manager's robot (`background-manager-work-you-can-see`): on the item a run works on, and in
+   the top bar with its popover. Built on index.css's tokens. State is also in the glyph (a robot,
+   a crossed-out robot) and the accessible name, never colour alone. */
+
+.aw-manager-icon {
+  position: relative; display: inline-flex; align-items: center; justify-content: center; flex: none;
+  width: 20px; height: 20px; border-radius: var(--radius-md); color: var(--text-3);
+}
+button.aw-manager-icon { cursor: pointer; }
+button.aw-manager-icon:hover { background: var(--row-hover); }
+button.aw-manager-icon:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--ring); }
+.aw-manager-icon[data-state="working"] { color: var(--green); }
+.aw-manager-icon[data-state="failed"] { color: var(--red); }
+.aw-manager-icon-light {
+  position: absolute; top: 1px; right: 1px; width: 5px; height: 5px; border-radius: 999px;
+}
+.aw-manager-icon[data-state="working"] .aw-manager-icon-light {
+  background: var(--green); animation: aw-manager-blink 1.2s steps(2, jump-none) infinite;
+}
+/* A failure blinks red three times, then the robot stays "dead". */
+.aw-manager-icon[data-state="failed"] .aw-manager-icon-light {
+  background: var(--red); animation: aw-manager-blink .4s steps(2, jump-none) 3 forwards;
+}
+@keyframes aw-manager-blink { 0% { opacity: 1; } 100% { opacity: .15; } }
+
+/* The top bar's indicator. */
+.aw-manager-indicator-wrap { position: relative; display: inline-flex; }
+.aw-manager-indicator { position: relative; gap: 2px; width: auto; min-width: 30px; padding: 0 6px; }
+.aw-manager-indicator[data-running="true"] { color: var(--green); }
+.aw-manager-indicator[data-failed="true"][data-running="false"] { color: var(--red); }
+.aw-manager-indicator-count { margin-left: 2px; }
+.aw-manager-busy { display: inline-flex; align-items: center; }
+
+.aw-manager-popover {
+  position: absolute; top: calc(100% + 6px); right: 0; z-index: 60;
+  width: 360px; max-width: calc(100vw - 24px); max-height: 420px; overflow-y: auto;
+  padding: 4px; border-radius: var(--radius-lg); border: 1px solid var(--border-hi);
+  background: var(--surface-2); color: var(--text);
+  box-shadow: 0 16px 40px -18px rgb(0 0 0 / 0.55), 0 2px 6px rgb(0 0 0 / 0.18), inset 0 1px var(--lift-hi);
+}
+.aw-manager-popover-head { padding: 4px 8px 6px; font-size: 11px; font-weight: 600; color: var(--text-3); text-transform: uppercase; letter-spacing: .04em; }
+.aw-manager-popover-list { display: flex; flex-direction: column; gap: 1px; }
+.aw-manager-popover-empty { padding: 6px 8px; font-size: 12px; color: var(--text-3); }
+.aw-manager-popover-row { display: flex; flex-direction: column; }
+.aw-manager-popover-run {
+  display: grid; grid-template-columns: 16px minmax(0, 1fr) auto; align-items: start; gap: 8px;
+  width: 100%; padding: 6px 8px; border-radius: var(--radius-md); text-align: left; font-size: 12px; color: var(--text-2);
+}
+.aw-manager-popover-run:hover { background: var(--row-hover); }
+.aw-manager-popover-run:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--ring); }
+.aw-manager-popover-mark { display: inline-flex; align-items: center; justify-content: center; height: 16px; }
+.aw-manager-popover-row[data-outcome="running"] .aw-manager-popover-mark { color: var(--green); }
+.aw-manager-popover-row[data-outcome="failed"] .aw-manager-popover-mark { color: var(--red); }
+.aw-manager-popover-row[data-outcome="finished"] .aw-manager-popover-mark { color: var(--text-3); }
+.aw-manager-popover-text { display: flex; flex-direction: column; min-width: 0; }
+.aw-manager-popover-job { color: var(--text); font-weight: 600; }
+.aw-manager-popover-subject, .aw-manager-popover-detail { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.aw-manager-popover-detail { color: var(--red); }
+.aw-manager-popover-time { color: var(--text-3); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.aw-manager-popover-link { align-self: flex-start; margin: -2px 0 4px 32px; font-size: 11px; color: var(--text-2); text-decoration: underline; text-underline-offset: 2px; }
+.aw-manager-popover-link:hover { color: var(--text); }
+.aw-manager-popover-link:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--ring); border-radius: 3px; }
+
+/* A placement's failure, opened in place from the icon. */
+.aw-manager-failures { display: flex; flex-direction: column; gap: 2px; padding: 6px 8px; font-size: 12px; color: var(--text-2); }
+.aw-manager-failures strong { color: var(--red); }
+
+@media (prefers-reduced-motion: reduce) {
+  .aw-manager-icon-light { animation: none; }
+}

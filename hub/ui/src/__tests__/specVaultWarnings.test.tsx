@@ -92,7 +92,7 @@ describe('SpecVaultWarnings', () => {
     renderPanel()
     expect(screen.getByText('No vault warnings')).toBeInTheDocument()
     fireEvent.click(screen.getByTestId('spec-vault-warnings-check'))
-    expect(check).toHaveBeenCalledWith(PATH)
+    expect(check).toHaveBeenCalledWith(PATH, expect.anything())
   })
 
   it('asks the Hub to check the document again, for this path', async () => {
