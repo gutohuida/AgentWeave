@@ -29,7 +29,7 @@ import { toast } from '@/lib/toast'
 import type { ProjectSettings } from '@/api/projects'
 import type { Runner } from '@/api/runners'
 import type { Charter } from '@/api/charters'
-import type { ManagerFiring, ManagerJob } from '@/api/manager'
+import type { ManagerFiring, ManagerJob, ManagerLoggedRun } from '@/api/manager'
 import type { AccountingSnapshot } from '@/api/accounting'
 import type { ModelCatalogResponse } from '@/api/modelCatalog'
 import { formatCount } from '@/lib/format'
@@ -72,6 +72,12 @@ const PRE_MORTEM_JOB: ManagerJob = {
 }
 
 const firings = (managerActivityJson as unknown as { firings?: ManagerFiring[] }).firings ?? []
+/** The recorded firings as the run log lists them (`GET /manager/runs`, newest first). */
+const runs: ManagerLoggedRun[] = firings.map((f) => ({
+  run_id: f.run_id ?? `mrun-${f.id}`, job: f.job, subject: f.subject, trigger: f.trigger, initiator: f.initiator ?? 'autonomous',
+  started_at: f.started_at ?? f.at, ended_at: f.at, duration_ms: f.duration_ms, outcome: f.outcome, detail: f.detail,
+  usage: f.usage, no_cost_reason: f.usage ? null : 'never reached a model', conversation_id: null,
+}))
 const instructions = instructionsJson as unknown as { content: string; max_chars?: number }
 const status = statusJson as unknown as {
   message_counts: { pending: number; total: number }
@@ -279,11 +285,12 @@ export default function Settings({ route, go, now }: ScreenProps) {
       body = (
         <ManagerSettings
           jobs={jobs}
-          firings={firings}
+          log={{ runs, totals: {}, hasMore: false, job: null, onJob: () => {}, onShowOlder: () => {} }}
+          onOpenRun={() => {}}
           runners={runners}
           modelsFor={modelsFor}
           now={now}
-          subjectLabel={(f) => conversationTitle(f.subject.conversation_id) ?? f.detail}
+          subjectLabel={(r) => conversationTitle(typeof r.subject?.conversation_id === 'string' ? r.subject.conversation_id : undefined)}
           onChange={(key, input, said) => {
             setJobs((js) => js.map((j) => (j.key === key ? { ...j, ...input } : j)))
             say(said)

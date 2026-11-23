@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient, type InfiniteData } from '@tanstack/react-query'
 import { ApiError, getJson, patchJson, postJson } from './client'
 import { useConfigStore } from '@/store/configStore'
 
@@ -239,6 +239,73 @@ export function useManagerActivity(limit = 50) {
     enabled: isConfigured && !!projectId,
     retry: (count, error) => !isNoManager(error) && count < 2,
     refetchInterval: (query) => (isNoManager(query.state.error) ? false : 10_000),
+  })
+}
+
+/** One run of the log, as `GET /manager/runs` lists it: a job's run (`mrun-…`) or the mender's
+ *  (`run-…`, with its conversation). `no_cost_reason` says why `usage` has no cost. */
+export interface ManagerLoggedRun {
+  run_id: string
+  job: string
+  subject: Record<string, unknown>
+  trigger: string
+  initiator: ManagerInitiator | string | null
+  started_at: string
+  ended_at: string
+  duration_ms: number | null
+  outcome: ManagerFiring['outcome'] | string
+  detail: string | null
+  usage: Record<string, number> | null
+  no_cost_reason: string | null
+  conversation_id: string | null
+}
+
+/** A run with what its model answered (`GET /manager/runs/{run_id}`). */
+export interface ManagerRunDetail extends ManagerLoggedRun {
+  answer?: string | null
+}
+
+/** One job's totals over every run it has, whatever the log is narrowed to. */
+export interface ManagerJobRunTotals {
+  runs: number
+  failed: number
+  cost_usd_micros: number | null
+}
+
+export interface ManagerRunLogPage {
+  runs: ManagerLoggedRun[]
+  totals: Record<string, ManagerJobRunTotals>
+  has_more: boolean
+}
+
+/** The run log, newest first, narrowed to *job* when given; each page continues after the last run
+ *  of the one before. Polled while the section is open: a run's end is an event the log reads. */
+export function useManagerRunLog(job: string | null, pageSize = 50) {
+  const { isConfigured, selectedProjectId: projectId } = useConfigStore()
+  return useInfiniteQuery<ManagerRunLogPage, Error, InfiniteData<ManagerRunLogPage, string | null>, readonly unknown[], string | null>({
+    queryKey: ['project', projectId, 'manager', 'runs', 'log', job ?? 'all', pageSize],
+    initialPageParam: null,
+    queryFn: ({ pageParam }) => {
+      const params = new URLSearchParams({ limit: String(pageSize) })
+      if (job) params.set('job', job)
+      if (pageParam) params.set('before', pageParam)
+      return getJson<ManagerRunLogPage>(`/api/v1/projects/${projectId}/manager/runs?${params}`)
+    },
+    getNextPageParam: (last) => (last.has_more && last.runs.length ? last.runs[last.runs.length - 1].run_id : undefined),
+    enabled: isConfigured && !!projectId,
+    retry: (count, error) => !isNoManager(error) && count < 2,
+    refetchInterval: (query) => (isNoManager(query.state.error) ? false : 10_000),
+  })
+}
+
+/** One run with its answer, for the detail a `run=<run_id>` link opens. */
+export function useManagerRun(runId: string | null) {
+  const { isConfigured, selectedProjectId: projectId } = useConfigStore()
+  return useQuery<ManagerRunDetail>({
+    queryKey: ['project', projectId, 'manager', 'runs', 'one', runId],
+    queryFn: () => getJson<ManagerRunDetail>(`/api/v1/projects/${projectId}/manager/runs/${encodeURIComponent(runId ?? '')}`),
+    enabled: isConfigured && !!projectId && !!runId,
+    retry: (count, error) => !(error instanceof ApiError && error.status === 404) && count < 2,
   })
 }
 

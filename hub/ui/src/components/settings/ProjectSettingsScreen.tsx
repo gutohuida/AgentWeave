@@ -60,6 +60,9 @@ export function ProjectSettingsScreen({
   onOpenTask,
   setting,
   focus = null,
+  run = null,
+  onOpenRun,
+  onOpenConversation,
 }: {
   section: EnvironmentSection
   onSelectSection: (section: EnvironmentSection) => void
@@ -73,6 +76,12 @@ export function ProjectSettingsScreen({
   setting?: string | null
   /** The item the section opens (URL `focus`): a job id in Jobs, a run list in Traces. */
   focus?: string | null
+  /** Settings › Manager: the run whose detail opens (URL `run`). */
+  run?: string | null
+  /** A run's link in the Manager log, or its detail's Close (null). */
+  onOpenRun?: (runId: string | null) => void
+  /** A mender run's link to its thread. */
+  onOpenConversation?: (conversationId: string) => void
 }) {
   const projectId = useConfigStore((state) => state.selectedProjectId)
   const { data: projects = [] } = useProjects()
@@ -126,7 +135,7 @@ export function ProjectSettingsScreen({
       )
       break
     case 'manager':
-      body = <ManagerSection />
+      body = <ManagerSection run={run} onOpenRun={onOpenRun} onOpenConversation={onOpenConversation} />
       break
     // The Jobs and Logs views, hosted as they were on their retired tabs (leaner-navigation D3).
     case 'jobs':

@@ -34,7 +34,7 @@ import logging
 import time
 import uuid
 from dataclasses import asdict, dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, AsyncIterator, Dict, Iterable, List, Optional, Tuple
 
 from sqlalchemy import select
@@ -798,3 +798,163 @@ async def mark_seen(db: AsyncSession, project_id: str, run_ids: Iterable[str]) -
         defer_broadcast(db, project_id, SEEN_EVENT, {"run_ids": marked})
         await db.commit()
     return marked
+
+
+# ---------------------------------------------------------------------------
+# The run log (`background-manager-work-you-can-see` D6)
+# ---------------------------------------------------------------------------
+
+#: A firing from before runs had ids is a run of its own in the log, under this id prefix.
+LEGACY_RUN_PREFIX = "firing-"
+
+
+def _moment(text: Optional[str]) -> Optional[datetime]:
+    if not text:
+        return None
+    try:
+        parsed = datetime.fromisoformat(str(text).replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+
+
+def _no_cost_reason(usage: Optional[Dict[str, Any]], reached_model: bool) -> Optional[str]:
+    """Why a run shows no cost: it never reached a model, or the runner reported none."""
+    if usage is not None and usage.get("cost_usd_micros") is not None:
+        return None
+    return "the runner reported no cost" if reached_model else "never reached a model"
+
+
+def _log_run(firings: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """One run of the log from its firing events, oldest first, each `{id, at, data}`."""
+    first, last = firings[0], firings[-1]
+    data = first["data"]
+    run_id = data.get("run_id") or f"{LEGACY_RUN_PREFIX}{first['id']}"
+    ended = last["at"]
+    duration_ms = sum(int(f["data"].get("duration_ms") or 0) for f in firings)
+    started = _moment(data.get("started_at"))
+    if started is not None:
+        duration_ms = max(0, int((ended - started).total_seconds() * 1000))
+    else:
+        started = ended - timedelta(milliseconds=duration_ms)
+    outcome, detail = run_outcome([f["data"] for f in firings])
+    usage = summed_usage(f["data"] for f in firings)
+    reached = usage is not None or any(f["data"].get("runner_id") for f in firings)
+    return {
+        "run_id": run_id,
+        "job": data.get("job"),
+        "subject": data.get("subject") or {},
+        "trigger": data.get("trigger"),
+        "initiator": data.get("initiator"),
+        "started_at": _iso(started),
+        "ended_at": _iso(ended),
+        "duration_ms": duration_ms,
+        "outcome": outcome,
+        "detail": detail,
+        "usage": usage,
+        "no_cost_reason": _no_cost_reason(usage, reached),
+        "conversation_id": None,
+    }
+
+
+_LIGHT_FIELDS = (
+    "run_id",
+    "job",
+    "trigger",
+    "initiator",
+    "started_at",
+    "outcome",
+    "detail",
+    "runner_id",
+    "duration_ms",
+)
+
+
+async def _log_runs(db: AsyncSession, project_id: str) -> List[Dict[str, Any]]:
+    """Every run of the project's log, newest first: its jobs' runs from their `manager_job_fired`
+    events, the mender's from its `runs` rows joined to their `turn_usage`. The model's answer is
+    left out of the read (`get_run` brings it)."""
+    columns = [EventLog.data[name].as_string() for name in _LIGHT_FIELDS]
+    rows = (
+        await db.execute(
+            select(
+                EventLog.id,
+                EventLog.timestamp,
+                EventLog.data["subject"].as_json(),
+                EventLog.data["usage"].as_json(),
+                *columns,
+            )
+            .where(EventLog.project_id == project_id, EventLog.event_type == FIRED_EVENT)
+            .order_by(EventLog.timestamp, EventLog.id)
+        )
+    ).all()
+    groups: Dict[str, List[Dict[str, Any]]] = {}
+    for row in rows:
+        data = dict(zip(_LIGHT_FIELDS, row[4:], strict=True))
+        data["subject"], data["usage"] = row[2], row[3]
+        data["duration_ms"] = int(data["duration_ms"] or 0)
+        at = row[1] if row[1].tzinfo else row[1].replace(tzinfo=timezone.utc)
+        key = data["run_id"] or f"{LEGACY_RUN_PREFIX}{row[0]}"
+        groups.setdefault(key, []).append({"id": row[0], "at": at, "data": data})
+    runs = [_log_run(firings) for firings in groups.values()]
+    from . import stalls
+
+    runs.extend(await stalls.ended_mender_runs(db, project_id))
+    runs.sort(key=lambda run: (run["started_at"] or "", run["run_id"]), reverse=True)
+    return runs
+
+
+def _totals(runs: List[Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
+    totals: Dict[str, Dict[str, Any]] = {}
+    for run in runs:
+        total = totals.setdefault(run["job"], {"runs": 0, "failed": 0, "cost_usd_micros": None})
+        total["runs"] += 1
+        total["failed"] += run["outcome"] == "failed"
+        cost = (run["usage"] or {}).get("cost_usd_micros")
+        if cost is not None:
+            total["cost_usd_micros"] = (total["cost_usd_micros"] or 0) + int(cost)
+    return totals
+
+
+async def list_runs(
+    db: AsyncSession,
+    project_id: str,
+    *,
+    job: Optional[str] = None,
+    limit: int = 50,
+    before: Optional[str] = None,
+) -> Optional[Dict[str, Any]]:
+    """The run log: *limit* runs newest first, narrowed to *job*, and those after run *before* in
+    that order; with every job's totals whatever *job* narrows to, and whether more follow. None
+    when *before* names no run."""
+    everything = await _log_runs(db, project_id)
+    shown = [run for run in everything if job is None or run["job"] == job]
+    if before is not None:
+        at = next((i for i, run in enumerate(shown) if run["run_id"] == before), None)
+        if at is None:
+            return None
+        shown = shown[at + 1 :]
+    return {
+        "runs": shown[:limit],
+        "totals": _totals(everything),
+        "has_more": len(shown) > limit,
+    }
+
+
+async def get_run(db: AsyncSession, project_id: str, run_id: str) -> Optional[Dict[str, Any]]:
+    """One run of the log with the model's `answer` (the last firing's that kept one); None for an
+    unknown id."""
+    run = next((r for r in await _log_runs(db, project_id) if r["run_id"] == run_id), None)
+    if run is None:
+        return None
+    query = select(EventLog).where(
+        EventLog.project_id == project_id, EventLog.event_type == FIRED_EVENT
+    )
+    if run_id.startswith(LEGACY_RUN_PREFIX):
+        query = query.where(EventLog.id == run_id[len(LEGACY_RUN_PREFIX) :])
+    else:
+        query = query.where(EventLog.data["run_id"].as_string() == run_id)
+    answer = None
+    for row in (await db.execute(query.order_by(EventLog.timestamp, EventLog.id))).scalars():
+        answer = (row.data or {}).get("answer") or answer
+    return {**run, "answer": answer}

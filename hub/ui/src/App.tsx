@@ -656,6 +656,11 @@ export default function App() {
           section={destination.environmentSection}
           setting={destination.setting}
           focus={destination.focus}
+          run={destination.run}
+          onOpenRun={(runId) =>
+            navigateTo(runId ? managerRunDestination(destination.projectId, runId) : environmentDestination(destination.projectId, 'manager'))
+          }
+          onOpenConversation={(conversationId) => navigateTo(agentDestination(destination.projectId, MENDER_JOB, conversationId))}
           onOpenTask={(taskId) => openTasksFor(destination.projectId, [taskId])}
           onSelectSection={(section) => navigateTo(environmentDestination(destination.projectId, section))}
           onNavigate={navigate}
