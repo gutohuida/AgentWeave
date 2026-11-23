@@ -238,7 +238,6 @@ export default function Settings({ route, go, now }: ScreenProps) {
             }))
             say(said)
           }}
-          onOpenTraces={() => go({ kind: 'traces' })}
           onDownload={() => say('Download started')}
           onClear={() => toast({ title: 'Clear traces', description: 'Opens the type-to-confirm dialog (unchanged in this mock).' })}
         />

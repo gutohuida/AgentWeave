@@ -27,3 +27,24 @@ describe('F808 — the Overview with no agents', () => {
     expect(onAddAgent).toHaveBeenCalledTimes(1)
   })
 })
+
+// leaner-navigation FR-3 (overview-chapters-link): Chapters left the top bar for a link here.
+describe('the Overview’s Chapters link', () => {
+  it('is present and opens the chapters view', () => {
+    const onOpenChapters = vi.fn()
+    render(
+      <OverviewView
+        needs={[]}
+        running={[]}
+        finished={[]}
+        agents={[]}
+        spend={{ usd: 0, tokens: 0, period: 'so far' }}
+        onOpenLedger={vi.fn()}
+        onOpenChapters={onOpenChapters}
+        now={new Date('2026-10-21T09:00:00Z')}
+      />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: /chapters/i }))
+    expect(onOpenChapters).toHaveBeenCalledTimes(1)
+  })
+})

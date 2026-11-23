@@ -396,7 +396,7 @@ describe('checks-wait-less — a skipped check is in the story, not left out (FR
 })
 
 describe('the task’s run count', () => {
-  it('asks Activity → Traces for exactly this task’s runs', async () => {
+  it('asks Settings › Traces for exactly this task’s runs', async () => {
     const { useTracesRequestStore } = await import('@/store/tracesRequestStore')
     const { useConfigStore } = await import('@/store/configStore')
     useConfigStore.setState({ selectedProjectId: 'proj-a' })
@@ -404,6 +404,6 @@ describe('the task’s run count', () => {
     render(<TaskStory taskId="task-1" />)
     await userEvent.click(screen.getByTestId('task-story-runs-open-task-1'))
     expect(useTracesRequestStore.getState().request).toMatchObject({ task: 'task-1' })
-    expect(window.location.search).toContain('tab=activity')
+    expect(window.location.search).toContain('tab=environment&section=traces')
   })
 })

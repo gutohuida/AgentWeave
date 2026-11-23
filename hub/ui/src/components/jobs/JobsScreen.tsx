@@ -32,8 +32,9 @@ function errorDetail(error: unknown, fallback: string): string {
   }
 }
 
-/** The Jobs tab, wired: `JobsView` fed from the jobs hooks. Drop-in for the old `JobsPage`. */
-export function JobsScreen({ onOpenTasks }: { onOpenTasks?: (taskIds: string[]) => void }) {
+/** Project settings › Jobs, wired: `JobsView` fed from the jobs hooks. `focus` is the job the
+ *  address names (URL `focus`), opened expanded: the Running tab's way to one job (leaner-navigation FR-7). */
+export function JobsScreen({ onOpenTasks, focus = null }: { onOpenTasks?: (taskIds: string[]) => void; focus?: string | null }) {
   const { data: jobs, isLoading, error: jobsError } = useJobs()
   const { data: archived, error: archivedError } = useArchivedJobs()
   const { data: agents = [], error: agentsError } = useAgents()
@@ -94,7 +95,7 @@ export function JobsScreen({ onOpenTasks }: { onOpenTasks?: (taskIds: string[]) 
           })
         }}
         onNew={() => setShowForm(true)}
-        renderRow={(job, row) => <LiveJobRow job={job} row={row} onOpenTasks={onOpenTasks} />}
+        renderRow={(job, row) => <LiveJobRow job={job} row={row} onOpenTasks={onOpenTasks} focused={job.id === focus} />}
         renderArchivedRuns={(job) => <FlowRuns job={job} />}
         now={new Date()}
       />
@@ -112,11 +113,13 @@ export function JobsScreen({ onOpenTasks }: { onOpenTasks?: (taskIds: string[]) 
 /** One row's live state: open or not, and its history, fetched only while open (the list response
  *  carries none). A loop's row also holds its tasks' ids, which its progress link and its current
  *  items open on the Tasks tab. */
-function LiveJobRow(props: { job: Job; row: (extras: JobRowExtras) => React.ReactNode; onOpenTasks?: (taskIds: string[]) => void }) {
+type LiveRowProps = { job: Job; row: (extras: JobRowExtras) => React.ReactNode; onOpenTasks?: (taskIds: string[]) => void; focused?: boolean }
+
+function LiveJobRow(props: LiveRowProps) {
   return props.job.loop ? <LiveLoopJobRow {...props} /> : <LiveRow {...props} />
 }
 
-function LiveLoopJobRow(props: { job: Job; row: (extras: JobRowExtras) => React.ReactNode; onOpenTasks?: (taskIds: string[]) => void }) {
+function LiveLoopJobRow(props: LiveRowProps) {
   const { data: loopTaskPage, error: loopTasksError } = useTasks({ loopId: props.job.loop!.id })
   // Unknown, not none: a failed read leaves the loop's task link absent rather than empty.
   return <LiveRow {...props} loopTaskIds={loopTasksError ? undefined : loopTaskPage?.tasks?.map((t) => t.id)} />
@@ -126,14 +129,16 @@ function LiveRow({
   job,
   row,
   onOpenTasks,
+  focused = false,
   loopTaskIds,
-}: {
-  job: Job
-  row: (extras: JobRowExtras) => React.ReactNode
-  onOpenTasks?: (taskIds: string[]) => void
-  loopTaskIds?: string[]
-}) {
-  const [expanded, setExpanded] = React.useState(false)
+}: LiveRowProps & { loopTaskIds?: string[] }) {
+  const [expanded, setExpanded] = React.useState(focused)
+  // Named by the address after mounting (the Running tab opening another job): open it then too.
+  const [wasFocused, setWasFocused] = React.useState(focused)
+  if (focused !== wasFocused) {
+    setWasFocused(focused)
+    if (focused) setExpanded(true)
+  }
   const { data: fetched, isLoading, error: historyError } = useJobHistory(job.id, expanded)
   const history = job.history ?? fetched
   const canOpen = Boolean(onOpenTasks && loopTaskIds && loopTaskIds.length > 0)

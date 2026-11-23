@@ -17,6 +17,11 @@ import { SpecStepsSection } from './sections/SpecStepsSection'
 import { TracesSection } from './sections/TracesSection'
 import { WorktreesSection } from './sections/WorktreesSection'
 import { ProjectSetupList } from '@/components/overview/ProjectSetupList'
+import { JobsScreen } from '@/components/jobs/JobsScreen'
+import { LogsView } from '@/components/logs/LogsView'
+import { TracesBrowser } from '@/components/traces/TracesBrowser'
+import { ProjectLedger } from '@/components/activity/ProjectLedger'
+import { useTaskFilterStore } from '@/store/taskFilterStore'
 
 /** The section list, grouped as the operator approved it (`settings-in-the-app-s-style-where-you-expect-them`).
  *  General is gone: its groups are sections of their own, and its old id lands on Project. */
@@ -29,11 +34,13 @@ const SECTIONS: ReadonlyArray<{ id: EnvironmentSection; label: string; icon: str
   { id: 'charters', label: 'Charters', icon: 'menu_book', group: 'Profiles' },
   { id: 'checkpoints', label: 'Checkpoints', icon: 'book_marked', group: 'Profiles' },
   { id: 'manager', label: 'Manager', icon: 'memory', group: 'Profiles' },
+  { id: 'jobs', label: 'Jobs', icon: 'schedule', group: 'Profiles' },
   { id: 'checks', label: 'Checks', icon: 'verified_user', group: 'Landing work' },
   { id: 'landing', label: 'Landing', icon: 'git_merge', group: 'Landing work' },
   { id: 'worktrees', label: 'Worktrees', icon: 'call_split', group: 'Landing work' },
   { id: 'spec-steps', label: 'Spec steps', icon: 'list_tree', group: 'Specs and records' },
   { id: 'traces', label: 'Traces', icon: 'timeline', group: 'Specs and records' },
+  { id: 'logs', label: 'Logs', icon: 'description', group: 'Specs and records' },
   { id: 'diagnostics', label: 'Diagnostics', icon: 'monitoring', group: 'Specs and records' },
 ]
 
@@ -50,16 +57,22 @@ export function ProjectSettingsScreen({
   onSelectSection,
   onNavigate,
   onOpenAppSettings,
+  onOpenTask,
   setting,
+  focus = null,
 }: {
   section: EnvironmentSection
   onSelectSection: (section: EnvironmentSection) => void
-  /** A section pointing elsewhere (Traces → the Activity traces view). */
+  /** A section pointing elsewhere (a loop's open tasks → Tasks). */
   onNavigate?: (value: string) => void
+  /** A ledger row opening its task. */
+  onOpenTask?: (taskId: string) => void
   /** Where sound, notifications, appearance and the Hub connection are: the operator's own. */
   onOpenAppSettings?: () => void
   /** The setting the location names, to land on. */
   setting?: string | null
+  /** The item the section opens (URL `focus`): a job id in Jobs, a run list in Traces. */
+  focus?: string | null
 }) {
   const projectId = useConfigStore((state) => state.selectedProjectId)
   const { data: projects = [] } = useProjects()
@@ -87,16 +100,52 @@ export function ProjectSettingsScreen({
       body = <GeneralSection part={section} />
       break
     case 'budgets':
-      body = <BudgetsSection />
+      // Spend sits beside the limits that govern it (leaner-navigation FR-15).
+      body = (
+        <>
+          <BudgetsSection />
+          <div className="aw-settings-embed" data-testid="budgets-ledger">
+            <ProjectLedger onOpenTask={(taskId) => onOpenTask?.(taskId)} />
+          </div>
+        </>
+      )
       break
     case 'spec-steps':
       body = <SpecStepsSection />
       break
     case 'traces':
-      body = <TracesSection onOpenTraces={() => onNavigate?.('traces')} />
+      // The settings, then the project-wide Traces view itself, so no 'Browse traces' button
+      // (leaner-navigation FR-14).
+      body = (
+        <>
+          <TracesSection />
+          <div className="aw-settings-embed" data-testid="settings-traces-view">
+            <TracesBrowser key={focus ?? ''} focus={focus} />
+          </div>
+        </>
+      )
       break
     case 'manager':
       body = <ManagerSection />
+      break
+    // The Jobs and Logs views, hosted as they were on their retired tabs (leaner-navigation D3).
+    case 'jobs':
+      body = (
+        <JobsScreen
+          focus={focus}
+          onOpenTasks={(taskIds) => {
+            useTaskFilterStore.getState().setActiveTaskIds(taskIds)
+            onNavigate?.('tasks')
+          }}
+        />
+      )
+      break
+    case 'logs':
+      body = (
+        <div className="aw-settings-logs" style={{ height: 'min(640px, 70vh)', minHeight: 360, border: '1px solid var(--border)', borderRadius: 10, overflow: 'auto' }}>
+          <LogsView />
+        </div>
+      )
       break
     case 'charters':
       body = <ChartersSection />

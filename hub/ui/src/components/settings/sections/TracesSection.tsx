@@ -30,7 +30,7 @@ function sinceFor(range: TraceRange): string | undefined {
 /** Project settings → Traces, on the Hub. Retention, the collector switch and the endpoint apply
  *  on change; headers are replaced through the dialog; download and clear act on the chosen span,
  *  and clearing is confirmed first. */
-export function TracesSection({ onOpenTraces }: { onOpenTraces?: () => void } = {}) {
+export function TracesSection() {
   const projectId = useConfigStore((state) => state.selectedProjectId)
   const { data: settings, error, refetch } = useTraceSettings()
   const update = useUpdateTraceSettings()
@@ -93,7 +93,6 @@ export function TracesSection({ onOpenTraces }: { onOpenTraces?: () => void } = 
         notices={notices}
         downloading={downloading}
         onRangeChange={setRange}
-        onOpenTraces={onOpenTraces}
         onDownload={() => void download()}
         onClear={() => {
           clear.reset()

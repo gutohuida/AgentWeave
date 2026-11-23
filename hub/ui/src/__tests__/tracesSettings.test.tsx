@@ -61,11 +61,11 @@ afterEach(() => {
 })
 
 describe('Traces settings', () => {
-  it('has no Save button and no native checkbox, date input or select, and links to Activity → Traces', async () => {
-    const onOpenTraces = vi.fn()
-    render(<TracesSection onOpenTraces={onOpenTraces} />, { wrapper })
-    fireEvent.click(await screen.findByTestId('open-traces-view'))
-    expect(onOpenTraces).toHaveBeenCalledTimes(1)
+  it('has no Save button, no native checkbox, date input or select, and no Browse traces button (leaner-navigation FR-14)', async () => {
+    render(<TracesSection />, { wrapper })
+    expect(await screen.findByTestId('trace-counts')).toBeInTheDocument()
+    expect(screen.queryByTestId('open-traces-view')).toBeNull()
+    expect(screen.queryByRole('button', { name: /browse traces/i })).toBeNull()
     expect(screen.queryByRole('button', { name: /^save/i })).toBeNull()
     expect(document.querySelector('input[type=checkbox], input[type=date], select')).toBeNull()
     expect(fetchMock.mock.calls.map(([url]) => String(url)).some((url) => /\/traces\?/.test(url))).toBe(false)

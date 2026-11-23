@@ -1,5 +1,5 @@
 /**
- * A run count elsewhere opens Activity → Traces on exactly those runs
+ * A run count elsewhere opens Project settings › Traces on exactly those runs
  * (a-traces-view-with-filters-grouping-and-stats, FR-12). Each count asks through
  * `openTraces`; the traces view takes the request in and sends it to the traces route as a filter.
  */
@@ -10,7 +10,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { ReactElement } from 'react'
 import type { WorkTally } from '@/api/stats'
 import type { TraceSummary } from '@/api/traces'
-import { ActivityScreen } from '@/components/activity/ActivityScreen'
+import { TracesBrowser } from '@/components/traces/TracesBrowser'
 import { WorkView } from '@/components/activity/ProjectWork'
 import { SpecBuildsSection } from '@/components/spec/page/SpecBuilds'
 import type { BuildView } from '@/components/spec/page/model'
@@ -23,8 +23,6 @@ vi.mock('@/api/logs', () => ({
 }))
 vi.mock('@/api/accounting', () => ({ useAccounting: () => ({ data: { recent_turns: [] } }) }))
 vi.mock('@/api/agents', () => ({ useAgents: () => ({ data: [{ name: 'dev', color_index: 1 }] }) }))
-vi.mock('@/components/activity/ProjectLedger', () => ({ ProjectLedger: () => <div data-testid="ledger-stub" /> }))
-vi.mock('@/components/logs/LogsView', () => ({ LogsView: () => <div data-testid="logs-stub" /> }))
 
 const TALLY = payload as unknown as WorkTally
 
@@ -92,7 +90,7 @@ describe('a count asks for its runs', () => {
     render(<WorkView tally={TALLY} grouping="spec" onGrouping={vi.fn()} since="" onSince={vi.fn()} />)
     await userEvent.click(within(screen.getByTestId('work-build-b-a1')).getByTestId('work-runs-open'))
     expect(useTracesRequestStore.getState().request).toMatchObject({ build: 'b-a1' })
-    expect(window.location.search).toContain('tab=activity')
+    expect(window.location.search).toContain('tab=environment&section=traces')
   })
 
   it('an agent’s row asks for that agent’s runs since the chosen day, and the total row for the project’s', async () => {
@@ -148,12 +146,11 @@ describe('a count asks for its runs', () => {
   })
 })
 
-describe('Activity → Traces takes the request in', () => {
+describe('Project settings › Traces takes the request in (leaner-navigation FR-14)', () => {
   it('lists the runs of a build through the route’s build filter, and lets go of it on request', async () => {
     useTracesRequestStore.getState().ask({ build: 'build-7', label: 'build 3' })
-    withClient(<ActivityScreen onOpenTask={vi.fn()} />)
+    withClient(<TracesBrowser />)
     expect(await screen.findByTestId('traces-view')).toBeInTheDocument()
-    expect(screen.getByRole('radio', { name: 'Traces' })).toHaveAttribute('aria-checked', 'true')
     await waitFor(() => expect(urls.some((u) => u.includes('build_id=build-7'))).toBe(true))
     expect(urls[0]).toContain('operation=invoke_agent')
     expect(screen.getByTestId('traces-request-note')).toHaveTextContent('build 3')
@@ -167,14 +164,19 @@ describe('Activity → Traces takes the request in', () => {
 
   it('lists the runs of a task through the route’s task filter', async () => {
     useTracesRequestStore.getState().ask({ task: 'task-1', label: 'task A task' })
-    withClient(<ActivityScreen onOpenTask={vi.fn()} />)
+    withClient(<TracesBrowser />)
     await waitFor(() => expect(urls.some((u) => u.includes('task_id=task-1'))).toBe(true))
     expect(urls.some((u) => u.includes('build_id'))).toBe(false)
   })
 
-  it('is untouched when nothing asked: the Ledger leads', () => {
-    withClient(<ActivityScreen onOpenTask={vi.fn()} />)
-    expect(screen.getByTestId('ledger-stub')).toBeInTheDocument()
-    expect(urls).toEqual([])
+  it('lists every run when nothing asked', async () => {
+    withClient(<TracesBrowser />)
+    await waitFor(() => expect(urls.length).toBeGreaterThan(0))
+    expect(urls.some((u) => u.includes('build_id') || u.includes('task_id') || u.includes('run_id'))).toBe(false)
+  })
+
+  it('opens on the run the address names (`focus`)', async () => {
+    withClient(<TracesBrowser focus="run-42,run-43" />)
+    await waitFor(() => expect(urls.some((u) => u.includes('run_id=run-42'))).toBe(true))
   })
 })

@@ -105,7 +105,7 @@ const NOW = Date.now()
 const hoursAgo = (h: number) => new Date(NOW - h * 3600_000).toISOString()
 const AGENT: AgentSummary = { name: 'dev', status: 'idle', message_count: 0, active_task_count: 0, runner: 'claude' }
 
-function renderConversation(handlers: { onOpenJobs?: () => void; onOpenQuestions?: () => void } = {}) {
+function renderConversation(handlers: { onOpenJobs?: (jobId?: string) => void; onOpenQuestions?: () => void } = {}) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(
     <QueryClientProvider client={queryClient}>
@@ -219,11 +219,12 @@ describe('Running rows open their item and Answer goes to the question (FR-4, FR
     expect(screen.getByTestId('loop-stub')).toHaveTextContent('loop-2')
   })
 
-  it('ac-open: a job opens the Jobs page', () => {
+  // leaner-navigation FR-7: the job itself, so Project settings › Jobs can open it expanded.
+  it('ac-open: a job opens Project settings › Jobs on that job', () => {
     const onOpenJobs = vi.fn()
     openRunning({ onOpenJobs })
     fireEvent.click(screen.getByTitle('Open Weekly digest'))
-    expect(onOpenJobs).toHaveBeenCalledTimes(1)
+    expect(onOpenJobs).toHaveBeenCalledExactlyOnceWith('job-9')
   })
 
   it('ac-question: Answer takes the operator to where the question is answered', () => {

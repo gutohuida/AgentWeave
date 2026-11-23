@@ -171,6 +171,22 @@ afterEach(() => {
 })
 
 describe('the wired Overview', () => {
+  // leaner-navigation FR-3: the Chapters link asks for the chapters view (App's `thread`).
+  it('opens the chapters view from its Chapters link', () => {
+    const onNavigate = vi.fn()
+    render(<OverviewScreen onNavigate={onNavigate} />)
+    fireEvent.click(screen.getByTestId('overview-chapters'))
+    expect(onNavigate).toHaveBeenLastCalledWith('thread')
+  })
+
+  // leaner-navigation FR-15: the spend button opens the ledger where it now lives, Budgets.
+  it('opens Project settings › Budgets from its spend button', () => {
+    const onNavigate = vi.fn()
+    const { container } = render(<OverviewScreen onNavigate={onNavigate} />)
+    fireEvent.click(container.querySelector('[data-slot="spend-line"]')!)
+    expect(onNavigate).toHaveBeenLastCalledWith('budgets')
+  })
+
   it('says "seen just now", not "seen now ago", for an entry seen seconds ago', () => {
     vi.useFakeTimers({ toFake: ['Date'] })
     vi.setSystemTime(new Date('2026-10-20T12:00:00Z'))

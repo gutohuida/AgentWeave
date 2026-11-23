@@ -459,7 +459,8 @@ export function OverviewScreen({
       taskTotal={taskPage?.total}
       heldByBudget={heldByBudget}
       onOpenTasks={() => onNavigate('tasks')}
-      onOpenLedger={() => onNavigate('activity')}
+      onOpenLedger={() => onNavigate('budgets')}
+      onOpenChapters={() => onNavigate('thread')}
       onOpenQuestions={() => onNavigate('questions')}
       onAddAgent={onAddAgent}
       setup={<ProjectSetupList place="overview" />}

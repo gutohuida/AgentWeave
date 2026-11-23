@@ -97,7 +97,6 @@ vi.mock('@/components/agents/AgentOutputPanel', () => ({
 
 vi.mock('@/components/tasks/TasksScreen', () => ({ TasksScreen: () => <div /> }))
 vi.mock('@/components/questions/QuestionsPanel', () => ({ QuestionsPanel: () => <div /> }))
-vi.mock('@/components/activity/ActivityScreen', () => ({ ActivityScreen: () => <div /> }))
 vi.mock('@/components/jobs/JobsScreen', () => ({ JobsScreen: () => <div /> }))
 vi.mock('@/components/settings/ProjectSettingsScreen', () => ({ ProjectSettingsScreen: () => <div /> }))
 vi.mock('@/components/spec/SpecPage', () => ({ SpecPage: () => <div /> }))

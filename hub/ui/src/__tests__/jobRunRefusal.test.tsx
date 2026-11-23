@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { JobsScreen } from '@/components/jobs/JobsScreen'
+import { JobsSection } from './support/JobsSection'
 import { ApiError } from '@/api/client'
 import type { Job } from '@/api/jobs'
 
@@ -65,7 +65,7 @@ function renderPage() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(
     <QueryClientProvider client={client}>
-      <JobsScreen />
+      <JobsSection />
     </QueryClientProvider>,
   )
 }

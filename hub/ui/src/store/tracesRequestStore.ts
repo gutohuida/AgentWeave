@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { projectDestination, goTo } from '@/lib/navigation'
+import { environmentDestination, goTo } from '@/lib/navigation'
 
 /** What a screen outside the traces view asks it to open filtered to: the runs of a build, of a
  *  task, of an agent since a day. Only the fields given narrow the list. */
@@ -7,6 +7,8 @@ export interface TracesRequest {
   build?: string
   task?: string
   agent?: string
+  /** One run's id (the address's `focus`, in Project settings › Traces). */
+  run?: string
   /** An ISO date-time; runs that started at or after it. */
   since?: string
   /** What the filtered list is called while it is in force ("Build 2", "task AW-5"). */
@@ -14,7 +16,7 @@ export interface TracesRequest {
 }
 
 interface TracesRequestState {
-  /** Set by a run count elsewhere, read by Activity → Traces when it mounts. `nonce` makes two
+  /** Set by a run count elsewhere, read by Project settings › Traces when it mounts. `nonce` makes two
    *  identical requests in a row still count as two, so the view re-reads the second one. */
   request: (TracesRequest & { nonce: number }) | null
   ask: (request: TracesRequest) => void
@@ -29,9 +31,9 @@ export const useTracesRequestStore = create<TracesRequestState>((set) => ({
   clear: () => set({ request: null }),
 }))
 
-/** Follow a run count: ask the traces view for those runs, then go to Activity (which opens on
- *  Traces while a request is waiting). */
+/** Follow a run count: ask the traces view for those runs, then go to Project settings › Traces,
+ *  which holds that view now Activity is gone (leaner-navigation FR-14). */
 export function openTraces(projectId: string, request: TracesRequest): void {
   useTracesRequestStore.getState().ask(request)
-  goTo(projectDestination(projectId, 'activity'))
+  goTo(environmentDestination(projectId, 'traces'))
 }

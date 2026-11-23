@@ -8,6 +8,7 @@ import { ApiError } from '@/api/client'
 import { ActivityLog } from './ActivityLog'
 import { LoadingThread } from '@/components/common/LoadingThread'
 import { ProjectWork } from './ProjectWork'
+import '@/styles/activity.css'
 
 /**
  * The project's ledger (slice project-ledger): what merged into main, what was spent and on what,

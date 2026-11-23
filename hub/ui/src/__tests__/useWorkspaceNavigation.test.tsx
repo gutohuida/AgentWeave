@@ -43,14 +43,14 @@ describe('phase 5 useWorkspaceNavigation', () => {
   })
 
   it('does not fall back while the project collection is still loading', () => {
-    setSearch('?project=proj-not-yet-loaded&tab=jobs')
+    setSearch('?project=proj-not-yet-loaded&tab=vault')
     type Props = { availableProjectIds: string[] | null; lastOpenedProjectId: string | null }
     const initialProps: Props = { availableProjectIds: null, lastOpenedProjectId: null }
     const { result, rerender } = renderHook(
       (props: Props) => useWorkspaceNavigation(props),
       { initialProps },
     )
-    expect(result.current.destination).toEqual(projectDestination('proj-not-yet-loaded', 'jobs'))
+    expect(result.current.destination).toEqual(projectDestination('proj-not-yet-loaded', 'vault'))
 
     // The collection finishes loading and turns out not to contain that project.
     act(() => {
