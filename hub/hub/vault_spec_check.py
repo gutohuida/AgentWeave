@@ -24,7 +24,7 @@ import asyncio
 import logging
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 
 from pydantic import BaseModel, Field
 from sqlalchemy import select
@@ -150,6 +150,38 @@ def _warning(requirement: Dict[str, Any], kind: str, fact: str, message: str) ->
     }
 
 
+def standing_fact_ids(project_root: Path, private_root: Path) -> Set[str]:
+    """The ids of the facts that stand: neither overruled by a decision nor superseded."""
+    return {f["id"] for f in vault.dated_facts(project_root, private_root, current_only=True)}
+
+
+def standing_conflicts(
+    requirements: List[Dict[str, Any]],
+    firing: Optional[Dict[str, Any]],
+    standing: Callable[[], Set[str]],
+) -> List[Tuple[Dict[str, Any], Dict[str, Any]]]:
+    """Each conflict of *firing* still worth showing, with the requirement it names: the one rule
+    `GET /vault/warnings` and `GET /vault/fact-uses` both apply. A conflict whose requirement is
+    gone or has been reworded since it was judged is dropped, and so is one whose fact no longer
+    stands. *standing* answers the standing fact ids, and is called only when a conflict gets that
+    far."""
+    by_key = {requirement["key"]: requirement for requirement in requirements}
+    ids: Optional[Set[str]] = None
+    current = []
+    for conflict in (firing or {}).get("conflicts") or []:
+        requirement = by_key.get(conflict.get("requirement"))
+        if requirement is None or requirement["statement"] != conflict.get("statement"):
+            continue
+        if ids is None:
+            ids = standing()
+        # A conflict names a fact the check judged against; one the operator has since overruled,
+        # or that is no longer here, points at nothing real (D5), whatever the check said.
+        if conflict.get("fact") not in ids:
+            continue
+        current.append((requirement, conflict))
+    return current
+
+
 def document_warnings(
     project_root: Path,
     private_root: Path,
@@ -168,22 +200,9 @@ def document_warnings(
         for fact in dict.fromkeys(requirement["facts"])
         for found in derived.get(fact, [])
     ]
-    by_key = {requirement["key"]: requirement for requirement in requirements}
-    standing = None
-    current = []
-    for conflict in (firing or {}).get("conflicts") or []:
-        requirement = by_key.get(conflict.get("requirement"))
-        if requirement is None or requirement["statement"] != conflict.get("statement"):
-            continue
-        if standing is None:
-            standing = {
-                f["id"] for f in vault.dated_facts(project_root, private_root, current_only=True)
-            }
-        # A conflict names a fact the check judged against; one the operator has since overruled,
-        # or that is no longer here, points at nothing real (D5), whatever the check said.
-        if conflict.get("fact") not in standing:
-            continue
-        current.append((requirement, conflict))
+    current = standing_conflicts(
+        requirements, firing, lambda: standing_fact_ids(project_root, private_root)
+    )
     if current:
         named = vault.name_facts(project_root, private_root, [c["fact"] for _, c in current])
         for requirement, conflict in current:
@@ -234,6 +253,93 @@ async def warnings_for(
         stored,
         firing,
     )
+
+
+async def newest_firings(session: AsyncSession, project_id: str) -> Dict[str, Dict[str, Any]]:
+    """Every document's newest spec-vault-check firing, by document path, in one read of the
+    event log: each is its event's payload plus `at`, when it was recorded."""
+    query = (
+        select(EventLog)
+        .where(
+            EventLog.project_id == project_id,
+            EventLog.event_type == manager.FIRED_EVENT,
+            EventLog.data["job"].as_string() == JOB,
+        )
+        .order_by(EventLog.timestamp.desc(), EventLog.id.desc())
+    )
+    newest: Dict[str, Dict[str, Any]] = {}
+    for row in (await session.execute(query)).scalars():
+        data = row.data or {}
+        path = (data.get("subject") or {}).get("document")
+        if isinstance(path, str) and path not in newest:
+            newest[path] = {**data, "at": row.timestamp.isoformat()}
+    return newest
+
+
+def _reference(path: str, title: str, requirement: Dict[str, Any]) -> Dict[str, Any]:
+    return {
+        "document": path,
+        "title": title,
+        "requirement": requirement["identifier"],
+        "statement": requirement["statement"],
+    }
+
+
+def fact_uses(
+    documents: List[Tuple[str, str, Optional[Dict[str, Any]]]],
+    firings: Dict[str, Dict[str, Any]],
+    standing: Callable[[], Set[str]],
+) -> List[Dict[str, Any]]:
+    """What the project's specs do with each fact (`a-vault-page-that-says-what-it-holds` FR-3):
+    per fact, the requirements citing it in their `facts` and the conflicts of each document's
+    newest firing that `standing_conflicts` keeps, as `GET /vault/warnings` keeps them. Each of
+    *documents* is (path, title, stored payload); *standing* answers the standing fact ids, as
+    `standing_fact_ids` does. A fact no spec names is not listed; facts are in the order they are
+    first named."""
+    uses: Dict[str, Dict[str, Any]] = {}
+
+    def use(fact: str) -> Dict[str, Any]:
+        return uses.setdefault(fact, {"fact": fact, "citations": [], "conflicts": []})
+
+    for path, title, stored in documents:
+        requirements = requirements_of(stored)
+        for requirement in requirements:
+            for fact in dict.fromkeys(requirement["facts"]):
+                use(fact)["citations"].append(_reference(path, title, requirement))
+        firing = firings.get(path)
+        for requirement, conflict in standing_conflicts(requirements, firing, standing):
+            use(conflict["fact"])["conflicts"].append(
+                {
+                    **_reference(path, title, requirement),
+                    "explanation": (conflict.get("explanation") or "").strip(),
+                    "checked_at": (firing or {}).get("at"),
+                }
+            )
+    return list(uses.values())
+
+
+def any_conflicts(firings: Dict[str, Dict[str, Any]]) -> bool:
+    """Whether any of *firings* found a conflict, so that the standing facts need reading."""
+    return any(firing.get("conflicts") for firing in firings.values())
+
+
+def read_documents(
+    workspace: ProjectWorkspace, listed: List[Tuple[str, str]]
+) -> Tuple[List[Tuple[str, str, Optional[Dict[str, Any]]]], List[Dict[str, str]]]:
+    """Each of *listed* (path, title) with its stored payload, and those that could not be read,
+    each with the reason: one unreadable file does not cost the other documents' uses."""
+    read, unreadable = [], []
+    for path, title in listed:
+        try:
+            stored = spec_documents.read_payload(workspace, path)
+        except Exception as exc:  # noqa: BLE001 -- named in the answer, never raised
+            logger.warning("could not read %s for the facts' uses", path, exc_info=True)
+            unreadable.append({"document": path, "reason": str(exc) or type(exc).__name__})
+            continue
+        if isinstance(stored, dict) and isinstance(stored.get("title"), str) and not title:
+            title = stored["title"]
+        read.append((path, title or path, stored))
+    return read, unreadable
 
 
 def _compared(facts: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
