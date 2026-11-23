@@ -278,7 +278,8 @@ export function AgentCheckpointsSettings({
   note?: React.ReactNode
   notices?: React.ReactNode
   onChange: (patch: Partial<Pick<AgentSummary, 'checkpoint_mode' | 'checkpoint_threshold_mode' | 'checkpoint_threshold_value'>>, said: string) => void
-  onShowCheckpoints: () => void
+  /** The link out, for a caller that does not give `list`. */
+  onShowCheckpoints?: () => void
   /** The profile's own checkpoints, listed here with one openable in place (`CheckpointsPanel`). Given, it
    *  replaces the link out to the project's Checkpoints tab (leaner-navigation). */
   list?: React.ReactNode

@@ -19,6 +19,8 @@ export function CheckpointsPanel({
   rawAnswer,
   onShowRaw,
   onOpenConversation,
+  onStart,
+  startAgents,
   emptyText = 'No checkpoint has been taken here yet.',
   now,
 }: {
@@ -32,6 +34,9 @@ export function CheckpointsPanel({
   rawAnswer?: string | null
   onShowRaw?: (checkpointId: string) => void
   onOpenConversation?: (agent: string | null, conversationId: string) => void
+  /** Start a thread from the opened checkpoint, as the Checkpoints page offered. */
+  onStart?: (checkpointId: string, agent: string, message: string) => Promise<void>
+  startAgents?: string[]
   emptyText?: string
   now?: Date
 }) {
@@ -45,7 +50,7 @@ export function CheckpointsPanel({
         </button>
         <CheckpointDetail
           checkpoint={opened}
-          props={{ conversationLabel, onSelect: onOpen, agents: [], notes, rawAnswer, onShowRaw, onOpenConversation, now }}
+          props={{ conversationLabel, onSelect: onOpen, agents: startAgents ?? [], startAgents, notes, rawAnswer, onShowRaw, onOpenConversation, onStart, now }}
         />
       </div>
     )

@@ -1,5 +1,5 @@
 import { useConfigStore } from '@/store/configStore'
-import { checkpointsDestination, goTo } from '@/lib/navigation'
+import { checkpointsDestination, goTo, threadCheckpointsDestination } from '@/lib/navigation'
 import { useCheckpointOperationStore } from '@/store/checkpointOperationStore'
 
 export function CheckpointStatusBanner() {
@@ -27,7 +27,14 @@ export function CheckpointStatusBanner() {
           data-testid="checkpoint-status-open"
           className="aw-link"
           onClick={() => {
-            goTo(checkpointsDestination(projectId, { checkpoint: operation.checkpointId }))
+            // Its thread's Checkpoints panel tab, on it (FR-10): directly when the agent is known,
+            // else through the lookup of the checkpoint's owner.
+            const checkpointId = operation.checkpointId!
+            goTo(
+              operation.agent
+                ? threadCheckpointsDestination(projectId, operation.agent, operation.conversationId, checkpointId)
+                : checkpointsDestination(projectId, { checkpoint: checkpointId }),
+            )
             dismiss(key)
           }}
         >

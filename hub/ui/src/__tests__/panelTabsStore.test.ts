@@ -524,3 +524,33 @@ describe('the Watch tab id', () => {
     expect(migrated[P1].activeTabId).toBe('watch')
   })
 })
+
+describe('on-demand tabs: Checkpoints and Trace (leaner-navigation D4)', () => {
+  const P = 'proj-on-demand'
+  beforeEach(() => {
+    usePanelTabsStore.setState({ projects: {}, targets: {} })
+  })
+
+  it('opens each once, retargets in place, persists the tab but not its target, and clears the target on close', () => {
+    const store = usePanelTabsStore.getState()
+    store.openTraceTab(P, { scope: 'thread' })
+    store.openTraceTab(P, { scope: 'run', runId: 'run-3' })
+    store.openCheckpointsTab(P, 'ckpt-1')
+    let state = usePanelTabsStore.getState()
+    expect(state.projects[P].tabs.map((tab) => tab.id)).toEqual(['trace', 'checkpoints'])
+    expect(state.projects[P].activeTabId).toBe('checkpoints')
+    expect(state.targets[P]).toEqual({ trace: { scope: 'run', runId: 'run-3' }, checkpoints: { checkpointId: 'ckpt-1' } })
+
+    const stored = JSON.parse(window.localStorage.getItem(KEY) ?? '{}')
+    expect(stored.projects[P].tabs.map((tab: { id: string }) => tab.id)).toEqual(['trace', 'checkpoints'])
+    expect(JSON.stringify(stored)).not.toContain('ckpt-1')
+    expect(migratePanelTabs(stored.projects, PANEL_TABS_VERSION)[P].tabs.map((tab) => tab.id)).toEqual(['trace', 'checkpoints'])
+
+    usePanelTabsStore.getState().closeTab(P, 'trace')
+    state = usePanelTabsStore.getState()
+    expect(state.projects[P].tabs.map((tab) => tab.id)).toEqual(['checkpoints'])
+    expect(state.targets[P].trace).toBeUndefined()
+    expect(tabKind('checkpoints')).toBe('checkpoints')
+    expect(tabKind('trace')).toBe('trace')
+  })
+})
