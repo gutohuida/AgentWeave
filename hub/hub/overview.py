@@ -99,6 +99,13 @@ def _aware(value: Optional[datetime]) -> Optional[datetime]:
     return value if value.tzinfo is not None else value.replace(tzinfo=timezone.utc)
 
 
+def _utc(value: datetime) -> datetime:
+    """*value* in UTC, for a SQL bound. `UTCDateTime` relabels values on the way out only, and
+    SQLite compares the bound's wall-clock digits with the stored UTC ones, so a local-offset
+    bound (the client's day start, D6) would be off by its offset."""
+    return (_aware(value) or value).astimezone(timezone.utc)
+
+
 def _iso(value: Optional[datetime]) -> Optional[str]:
     moment = _aware(value)
     return moment.isoformat() if moment is not None else None
@@ -674,6 +681,7 @@ async def finished(
     """What ended since *since*, newest first (FR-7): tasks that landed, were sent back or were
     closed (stopped), and turns that failed or were stopped. A task's cost is every turn bound to
     it; a turn's, its own. Unknown is null, never zero."""
+    since = _utc(since)
     items: List[Tuple[datetime, Dict[str, Any]]] = []
     titles: Dict[str, Tuple[str, Optional[str]]] = {}
 
@@ -806,8 +814,8 @@ async def spend(
             TurnUsage.premium_requests,
         ).where(
             TurnUsage.project_id == project.id,
-            TurnUsage.observed_at >= first,
-            TurnUsage.observed_at < end,
+            TurnUsage.observed_at >= _utc(first),
+            TurnUsage.observed_at < _utc(end),
         )
     ):
         at = _aware(observed_at)

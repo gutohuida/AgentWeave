@@ -694,6 +694,55 @@ async def test_finished_lists_todays_outcomes_with_their_costs(app, auth_headers
     assert "Landed yesterday" not in {i["title"] for i in finished}
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize("offset_hours", [2, -3])
+async def test_a_local_day_start_bounds_finished_and_spend_at_its_real_moment(
+    app, auth_headers, offset_hours
+):
+    """The client sends local midnight with its offset (D6). Stored times are UTC, and SQLite
+    compares a bound's wall-clock digits, so the bound must be converted before the query: a
+    merge and a turn made after local midnight are today's at any offset, and one made just
+    before it is not."""
+    local = timezone(timedelta(hours=offset_hours))
+    day_start = (NOW - timedelta(hours=3)).astimezone(local)
+    await _add(
+        _task("t-today", title="Merged after midnight", status="approved"),
+        _task("t-before", title="Merged before midnight", status="approved"),
+        TaskIntegration(
+            id="tint-today",
+            project_id=P,
+            task_id="t-today",
+            outcome="merged",
+            actor_kind="operator",
+            created_at=ago(hours=2),
+        ),
+        TaskIntegration(
+            id="tint-before",
+            project_id=P,
+            task_id="t-before",
+            outcome="merged",
+            actor_kind="operator",
+            created_at=ago(hours=3, minutes=10),
+        ),
+        Run(id="run-u-now", project_id=P, agent="dev", status="completed"),
+        Run(id="run-u-early", project_id=P, agent="dev", status="completed"),
+    )
+    await _add(
+        _usage("u-now", ago(minutes=10), total_tokens=100, api_equivalent_usd_micros=1_000_000),
+        _usage(
+            "u-early", ago(hours=3, minutes=10), total_tokens=7, api_equivalent_usd_micros=5_000
+        ),
+    )
+
+    body = await _read(app, auth_headers, day_start)
+
+    assert [i["title"] for i in body["finished"]] == ["Merged after midnight"]
+    today, yesterday = body["spend"]["days"][-1], body["spend"]["days"][-2]
+    assert today["day"] == day_start.date().isoformat()
+    assert today["usd"] == 1.0 and today["tokens"] == 100
+    assert yesterday["usd"] == 0.005 and yesterday["tokens"] == 7
+
+
 # --- ac-build-stage ------------------------------------------------------------------------------
 
 
