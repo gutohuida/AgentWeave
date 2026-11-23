@@ -32,6 +32,7 @@ from .messages import router as messages_router
 from .model_catalog import router as model_catalog_router
 from .native_dialog import router as native_dialog_router
 from .notify_settings import router as notify_settings_router
+from .overview import router as overview_router
 from .permissions import router as permissions_router
 from .projects import router as projects_router
 from .questions import router as questions_router
@@ -66,6 +67,7 @@ v1_router.include_router(instance_work_router)
 project_resources_router = APIRouter(prefix="/projects/{project_id}")
 project_resources_router.include_router(accounting_router)
 project_resources_router.include_router(ledger_router)
+project_resources_router.include_router(overview_router)
 project_resources_router.include_router(stats_router)
 project_resources_router.include_router(thread_router)
 project_resources_router.include_router(messages_router)
