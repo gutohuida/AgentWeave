@@ -23,7 +23,7 @@ baseline names each one's own failure:
                     lists, and the button 'Transcripts: 1' is there;
   cited-by-spec     picking the radio 'Cited by a spec' lists the refund fact ('Open fact: <claim>')
                     saying 'Cited by <FR-n> of Refund limits';
-  agents-open       the region 'What agents open' lists 'Open transcript: <name>' with 'Opened 1x'
+  agents-open       the region 'What profiles open' lists 'Open transcript: <name>' with 'Opened 1x'
                     and 'by <agent>';
   search-facts      '437' typed in 'Search the vault': the region 'Facts holding 437' lists the
                     refund fact with 437 in a <mark>;
@@ -422,9 +422,9 @@ def check_cited_by_spec(page, seeded):
 
 
 def check_agents_open(page, seeded):
-    section = region(page, "What agents open")
+    section = region(page, "What profiles open")
     if not poll(lambda: section.count() == 1, 15):
-        return False, "no region 'What agents open' on the page"
+        return False, "no region 'What profiles open' on the page"
     row = section.get_by_role("button", name=f"Open transcript: {NAME}", exact=True)
     if not poll(lambda: row.count() == 1, 10):
         return False, f"the transcript is not listed; region text={section.inner_text()[:300]!r}"
