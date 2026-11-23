@@ -525,15 +525,8 @@ async def distil_vault_source(
         plan = await distillation.prepare(project[0], source_id)
     except distillation.CannotDistilError as exc:
         raise HTTPException(status_code=exc.status, detail=exc.reason) from exc
-    background.add_task(_distil_quietly, plan)
+    background.add_task(distillation.distil_requested, plan)
     return {"source": source_id, "queued": True}
-
-
-async def _distil_quietly(plan: distillation.Plan) -> None:
-    try:
-        await distillation.distil(plan, trigger=distillation.REQUESTED)
-    except Exception:  # noqa: BLE001 -- the answer has been sent; nothing can raise into it
-        distillation.logger.warning("vault distillation failed", exc_info=True)
 
 
 @router.get("/map")
@@ -608,15 +601,8 @@ async def review_vault_report(
         plan = await vault_reports.prepare(project[0], report_id)
     except vault_reports.CannotReviewError as exc:
         raise HTTPException(status_code=exc.status, detail=exc.reason) from exc
-    background.add_task(_review_quietly, plan)
+    background.add_task(vault_reports.review_requested, plan)
     return {"report": report_id, "queued": True}
-
-
-async def _review_quietly(plan: vault_reports.Plan) -> None:
-    try:
-        await vault_reports.review(plan, trigger=vault_reports.REQUESTED)
-    except Exception:  # noqa: BLE001 -- the answer has been sent; nothing can raise into it
-        vault_reports.logger.warning("vault report review failed", exc_info=True)
 
 
 @router.post("/reports/{report_id}/close")
@@ -676,12 +662,6 @@ async def check_vault_warnings(
     if idle is not None:
         # F735: "queued" for a check that would spawn nothing and record nothing was a dead end.
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=idle)
-    background.add_task(_check_quietly, plan)
+    # Announced as a run when it starts and ended on every exit (`manager.manager_run`).
+    background.add_task(vault_spec_check.check_requested, plan)
     return {"document": plan.path, "queued": True}
-
-
-async def _check_quietly(plan: vault_spec_check.Plan) -> None:
-    try:
-        await vault_spec_check.check(plan, trigger=vault_spec_check.REQUESTED)
-    except Exception:  # noqa: BLE001 -- the answer has been sent; nothing can raise into it
-        vault_spec_check.logger.warning("spec vault check failed", exc_info=True)
