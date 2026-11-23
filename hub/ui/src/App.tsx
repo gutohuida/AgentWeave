@@ -45,6 +45,7 @@ import {
   threadDestination,
   topBarTabFor,
   withDocument,
+  type WorkspaceDestination,
 } from '@/lib/navigation'
 import { findCheckpointOwner } from '@/api/checkpoints'
 import { toast } from '@/lib/toast'
@@ -104,6 +105,12 @@ export function HubConnectionState({ state, onRetry }: { state: 'pending' | 'unr
 
 const SIDEBAR_WIDTH_KEY = 'aw.sidebarWidth'
 const SIDEBAR_COLLAPSED_KEY = 'aw.sidebarCollapsed'
+
+/** A conversation destination's pending `checkpoint`, carried across the address rewrites that only
+ *  settle which thread or document is open, so the link is not lost before the view consumes it. */
+function keptCheckpoint(destination: WorkspaceDestination): { checkpoint?: string } {
+  return destination.kind === 'conversation' && destination.checkpoint ? { checkpoint: destination.checkpoint } : {}
+}
 
 export default function App() {
   const { isConfigured, mode, bootstrapState, selectedProjectId: projectId } = useConfigStore()
@@ -218,7 +225,7 @@ export default function App() {
     if (destination.document === held) return
     if (destination.document === null) {
       navigateTo(
-        agentDestination(destination.projectId, destination.agent ?? '', syncedConversationId, held),
+        { ...agentDestination(destination.projectId, destination.agent ?? '', syncedConversationId, held), ...keptCheckpoint(destination) },
         { replace: true },
       )
     } else {
@@ -229,9 +236,10 @@ export default function App() {
         { conversationId, path: destination.document },
         {
           onError: () =>
-            navigateTo(agentDestination(destination.projectId, destination.agent ?? '', conversationId, held), {
-              replace: true,
-            }),
+            navigateTo(
+              { ...agentDestination(destination.projectId, destination.agent ?? '', conversationId, held), ...keptCheckpoint(destination) },
+              { replace: true },
+            ),
         },
       )
     }
@@ -250,12 +258,10 @@ export default function App() {
     if (destination.conversationId !== null) return
     if (!resolvedConversationId) return
     navigateTo(
-      agentDestination(
-        destination.projectId,
-        destination.agent,
-        resolvedConversationId,
-        destination.document,
-      ),
+      {
+        ...agentDestination(destination.projectId, destination.agent, resolvedConversationId, destination.document),
+        ...keptCheckpoint(destination),
+      },
       { replace: true },
     )
   }, [destination, resolvedConversationId, navigateTo])
@@ -437,6 +443,12 @@ export default function App() {
         conversationId={resolvedConversationId}
         projectId={destination.projectId}
         document={destination.document}
+        checkpoint={destination.checkpoint ?? null}
+        onCheckpointConsumed={() => {
+          const { checkpoint: _consumed, ...rest } = conversationDestination
+          void _consumed
+          navigateTo(rest, { replace: true })
+        }}
         onSelectConversation={(conversationId) => {
           if (destination.conversationId !== conversationId) {
             // A conversation owns its document: the one switched to shows its own, or none,

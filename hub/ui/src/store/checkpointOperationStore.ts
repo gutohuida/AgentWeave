@@ -5,6 +5,8 @@ import { readableApiError } from '@/api/client'
 export type CheckpointOperation = {
   projectId: string
   conversationId: string
+  /** The thread's agent, when the caller knew it: its link then opens the thread directly. */
+  agent?: string
   status: 'writing' | 'succeeded' | 'failed'
   message: string
   successorConversationId?: string
@@ -39,6 +41,7 @@ const inFlight = new Map<string, Promise<CutoverResult | null>>()
 export function writeCheckpoint(
   projectId: string,
   conversationId: string,
+  agent?: string,
 ): Promise<CutoverResult | null> {
   const key = checkpointOperationKey(projectId, conversationId)
   const existing = inFlight.get(key)
@@ -49,6 +52,7 @@ export function writeCheckpoint(
     useCheckpointOperationStore.getState().setOperation(key, {
       projectId,
       conversationId,
+      ...(agent ? { agent } : {}),
       startedAt,
       ...operation,
     })

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, beforeAll } from 'vitest'
 import { loadAllScreens } from '@/lib/lazyScreens'
-import { render, screen, fireEvent, cleanup, within } from '@testing-library/react'
+import { render, screen, fireEvent, cleanup, within, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
 import { useConfigStore } from '@/store/configStore'
@@ -350,7 +350,14 @@ describe('phase 5 App.tsx: rail-only navigation, tabs own project content', () =
     const params = new URLSearchParams(window.location.search)
     expect(params.get('agent')).toBe('claude')
     expect(params.get('conversation')).toBe('conv-1')
-    expect(params.get('checkpoint')).toBe('ckpt-7')
+    // The thread opens with its Checkpoints panel tab on that checkpoint, and the address drops the
+    // checkpoint once it has been consumed (leaner-navigation FR-10, D4).
+    await waitFor(() => expect(new URLSearchParams(window.location.search).get('checkpoint')).toBeNull())
+    const panel = usePanelTabsStore.getState().projects['proj-test']
+    expect(panel.tabs.map((tab) => tab.id)).toContain('checkpoints')
+    expect(panel.activeTabId).toBe('checkpoints')
+    expect(usePanelTabsStore.getState().targets['proj-test']?.checkpoints).toEqual({ checkpointId: 'ckpt-7' })
+    expect(new URLSearchParams(window.location.search).get('conversation')).toBe('conv-1')
   })
 
   it('lands on the Overview, not a blank page, when the checkpoint cannot be found', async () => {

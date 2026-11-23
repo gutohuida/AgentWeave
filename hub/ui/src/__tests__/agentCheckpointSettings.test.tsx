@@ -37,6 +37,27 @@ vi.mock('@/api/modelCatalog', async (importOriginal) => {
   return { ...actual, useModelCatalog: () => ({ data: MODEL_CATALOG_FIXTURE, isLoading: false }) }
 })
 
+// The profile's own checkpoints, newest first as the route returns them.
+const listedFilters: Array<Record<string, unknown>> = []
+vi.mock('@/api/checkpoints', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/api/checkpoints')>()
+  const row = (id: string, title: string, created_at: string) => ({
+    id, title, created_at, conversation_id: 'conv-7', agent: 'claude-1', trigger: 'operator', status: 'ready' as const,
+    lineage_id: id, body: 'Body', covered_runs: [], files_changed: ['src/parser.ts'],
+  })
+  return {
+    ...actual,
+    useProjectCheckpoints: (filters: Record<string, unknown> = {}) => {
+      listedFilters.push(filters)
+      return {
+        data: { checkpoints: [row('ckpt-2', 'Tighten the parser', '2026-11-22T12:00:00Z'), row('ckpt-1', 'First pass', '2026-11-21T12:00:00Z')], lineage: null },
+        isLoading: false, error: null, refetch: () => {},
+      }
+    },
+    useCheckpointNotes: () => ({ data: { notes: [] }, error: null, refetch: () => {} }),
+  }
+})
+
 /** The project's saved threshold, which an agent with no override of its own inherits (D10). */
 /** `null` stands for a project settings read that failed. */
 let projectThreshold: { checkpoint_mode?: string; checkpoint_threshold_mode: 'percent' | 'tokens' | null; checkpoint_threshold_value: number | null } | null = {
@@ -99,16 +120,23 @@ describe('per-agent checkpoint policy', () => {
     roster = [agent()]
   })
 
-  // The Checkpoints tab is gone (leaner-navigation): an agent's checkpoints are its own page's.
-  it("opens this agent's checkpoint list on its own page (FR-5)", () => {
+  // The Checkpoints tab is gone (leaner-navigation FR-9): a profile's checkpoints are listed and
+  // read on its own page, with a way back to the list, and nothing navigates.
+  it('profile-checkpoints-list: lists its checkpoints, opens one in place, and goes back (FR-9)', () => {
     useConfigStore.setState({ selectedProjectId: 'proj-test' })
-    window.history.replaceState(null, '', '/')
+    window.history.replaceState(null, '', '/?project=proj-test&tab=profiles&profile=claude-1&section=checkpoints')
     render(<QueryClientProvider client={new QueryClient()}><AgentSettingsPage agent="claude-1" section="checkpoints" /></QueryClientProvider>)
-    fireEvent.click(screen.getByTestId('agent-checkpoints-link'))
-    const params = new URLSearchParams(window.location.search)
-    expect(params.get('tab')).toBe('profiles')
-    expect(params.get('profile')).toBe('claude-1')
-    expect(params.get('section')).toBe('checkpoints')
+    expect(listedFilters).toContainEqual({ agent: 'claude-1' })
+    expect(screen.queryByTestId('agent-checkpoints-link')).toBeNull()
+    expect(screen.getByText('Its checkpoints · 2')).toBeInTheDocument()
+    const list = screen.getByTestId('checkpoints-list')
+    fireEvent.click(within(list).getByText('Tighten the parser'))
+    expect(screen.getByTestId('checkpoints-panel')).toHaveAttribute('data-view', 'detail')
+    expect(screen.getByTestId('checkpoint-detail-title')).toHaveTextContent('Tighten the parser')
+    expect(screen.getByTestId('checkpoint-files')).toHaveTextContent('src/parser.ts')
+    fireEvent.click(screen.getByText('All checkpoints'))
+    expect(screen.getByTestId('checkpoints-list')).toBeInTheDocument()
+    expect(window.location.search).toBe('?project=proj-test&tab=profiles&profile=claude-1&section=checkpoints')
   })
 
   it('names the project’s mode when the agent has none of its own (ac-unset-shows-project)', () => {

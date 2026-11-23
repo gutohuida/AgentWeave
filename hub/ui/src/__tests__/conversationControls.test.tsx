@@ -852,6 +852,17 @@ describe('the conversation’s own trace of its latest run (FR-11)', () => {
     expect(screen.queryByTestId('checkpoints-panel')).not.toBeInTheDocument()
   })
 
+  it('opens this thread’s Checkpoints panel tab from the menu, in the thread (FR-8)', async () => {
+    window.history.replaceState(null, '', '/?project=proj-test&agent=claude&conversation=conv-old')
+    const onOpenCheckpointsPanel = vi.fn()
+    render(<AgentOutputPanel agent={idleAgent} conversationId="conv-old" onOpenCheckpointsPanel={onOpenCheckpointsPanel} />)
+    await waitFor(() => expect(screen.getByTestId('session-continuity')).toHaveTextContent('A conversation'))
+    await userEvent.setup().click(screen.getByTestId('conversation-more'))
+    await userEvent.setup().click(await screen.findByTestId('conversation-checkpoints-toggle'))
+    expect(onOpenCheckpointsPanel).toHaveBeenCalledWith(null)
+    expect(window.location.search).toBe('?project=proj-test&agent=claude&conversation=conv-old')
+  })
+
   it('opens the third run’s trace from the menu, and each turn still links its own run', async () => {
     const out = (id: string, run: string, at: string): TimelineEntry => ({
       id,
@@ -872,12 +883,16 @@ describe('the conversation’s own trace of its latest run (FR-11)', () => {
       'run-3': { status: 'completed', started_at: '2026-08-02T10:10:00Z', ended_at: '2026-08-02T10:11:00Z' },
       'run-1': { status: 'completed', started_at: '2026-08-02T10:00:00Z', ended_at: '2026-08-02T10:01:00Z' },
     }
-    render(<AgentOutputPanel agent={idleAgent} conversationId="conv-old" />)
+    const onOpenTracePanel = vi.fn()
+    window.history.replaceState(null, '', '/?project=proj-test&agent=claude&conversation=conv-old')
+    render(<AgentOutputPanel agent={idleAgent} conversationId="conv-old" onOpenTracePanel={onOpenTracePanel} />)
     await waitFor(() => expect(screen.getByTestId('session-continuity')).toHaveTextContent('A conversation'))
 
     await userEvent.setup().click(screen.getByTestId('conversation-more'))
     await userEvent.setup().click(await screen.findByRole('menuitem', { name: 'Trace of the latest run' }))
-    expect(screen.getByTestId('latest-trace-drawer')).toHaveAttribute('data-run', 'run-3')
+    // It opens the side panel's Trace tab on that run; nothing navigates (leaner-navigation FR-4).
+    expect(onOpenTracePanel).toHaveBeenCalledWith({ scope: 'run', runId: 'run-3' })
+    expect(window.location.search).toBe('?project=proj-test&agent=claude&conversation=conv-old')
 
     for (const run of ['run-1', 'run-2', 'run-3']) {
       expect(screen.getByTestId(`turn-trace-${run}`)).toHaveAttribute('data-run', run)
@@ -888,7 +903,8 @@ describe('the conversation’s own trace of its latest run (FR-11)', () => {
   it('offers “Trace of this thread” only once the conversation has a run, and opens that conversation', async () => {
     recordedEntries = []
     chatRuns = {}
-    const { unmount } = render(<AgentOutputPanel agent={idleAgent} conversationId="conv-old" />)
+    const onOpenTracePanel = vi.fn()
+    const { unmount } = render(<AgentOutputPanel agent={idleAgent} conversationId="conv-old" onOpenTracePanel={onOpenTracePanel} />)
     await waitFor(() => expect(screen.getByTestId('session-continuity')).toHaveTextContent('A conversation'))
     await userEvent.setup().click(screen.getByTestId('conversation-more'))
     await screen.findByRole('menuitem', { name: 'Fold all turns' })
@@ -897,11 +913,11 @@ describe('the conversation’s own trace of its latest run (FR-11)', () => {
 
     recordedEntries = [{ id: 'o1', kind: 'agent_output', content: 'reply', timestamp: '2026-08-02T10:00:00Z', delivery_state: 'delivered', run_id: 'run-1' } as TimelineEntry]
     chatRuns = { 'run-1': { status: 'completed', started_at: '2026-08-02T10:00:00Z', ended_at: '2026-08-02T10:01:00Z' } }
-    render(<AgentOutputPanel agent={idleAgent} conversationId="conv-old" />)
+    render(<AgentOutputPanel agent={idleAgent} conversationId="conv-old" onOpenTracePanel={onOpenTracePanel} />)
     await waitFor(() => expect(screen.getByTestId('session-continuity')).toHaveTextContent('A conversation'))
     await userEvent.setup().click(screen.getByTestId('conversation-more'))
     await userEvent.setup().click(await screen.findByRole('menuitem', { name: 'Trace of this thread' }))
-    expect(screen.getByTestId('conversation-trace-drawer')).toHaveAttribute('data-conversation-id', 'conv-old')
+    expect(onOpenTracePanel).toHaveBeenCalledWith({ scope: 'thread' })
     chatRuns = {}
   })
 

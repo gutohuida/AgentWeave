@@ -29,16 +29,22 @@ export const PANEL_TABS_STORAGE_KEY = STORAGE_KEY
 // exhaustively type-checkable; kinds are never constructed at runtime from external input.
 
 export type IndexTabId = 'specs' | 'files' | 'running' | 'changes' | 'terminal' | 'watch'
+/** Tabs opened on demand only (leaner-navigation D4): fixed, single-instance ids that are never in
+ *  the shell's plus menu, so they are absent from the row until something opens them, and close
+ *  like a detail tab. What each shows is its target, held beside the tab (`PanelTargets`). */
+export type OnDemandTabId = 'checkpoints' | 'trace'
 export type SpecTabId = `spec:${string}`
 export type FileTabId = `file:${string}`
 export type LoopTabId = `loop:${string}`
-export type TabId = IndexTabId | SpecTabId | FileTabId | LoopTabId
+export type TabId = IndexTabId | OnDemandTabId | SpecTabId | FileTabId | LoopTabId
 
-export type TabKind = 'specs' | 'files' | 'running' | 'changes' | 'terminal' | 'watch' | 'spec' | 'file' | 'loop'
+export type TabKind =
+  | 'specs' | 'files' | 'running' | 'changes' | 'terminal' | 'watch' | 'checkpoints' | 'trace' | 'spec' | 'file' | 'loop'
 
 /** Derived from the id rather than stored beside it, so the two cannot disagree. */
 export function tabKind(id: TabId): TabKind {
   if (id === 'specs' || id === 'files' || id === 'running' || id === 'changes' || id === 'terminal' || id === 'watch') return id
+  if (id === 'checkpoints' || id === 'trace') return id
   if (id.startsWith('spec:')) return 'spec'
   if (id.startsWith('loop:')) return 'loop'
   return 'file'
@@ -130,11 +136,30 @@ export function isLoopTabId(id: TabId): id is LoopTabId {
 function isTabId(value: unknown): value is TabId {
   if (typeof value !== 'string') return false
   if (value === 'specs' || value === 'files' || value === 'running' || value === 'changes' || value === 'terminal' || value === 'watch') return true
+  if (value === 'checkpoints' || value === 'trace') return true
   if (value.startsWith('spec:')) return value.length > 'spec:'.length
   if (value.startsWith('file:')) return value.length > 'file:'.length
   if (value.startsWith('loop:')) return value.length > 'loop:'.length
   return false
 }
+
+/** What the Checkpoints tab is on: one checkpoint, or (null) the thread's list. */
+export interface CheckpointsTarget {
+  checkpointId: string | null
+}
+
+/** What the Trace tab shows: the whole thread's trace, or one run's. */
+export type TraceTarget = { scope: 'thread' } | { scope: 'run'; runId: string }
+
+/** The on-demand tabs' targets, per project. Not persisted: a restored Checkpoints tab opens on the
+ *  thread's list and a restored Trace tab on the thread's trace, which are both things that exist,
+ *  whereas a remembered checkpoint or run could point at another thread's. */
+export interface PanelTargets {
+  checkpoints?: CheckpointsTarget
+  trace?: TraceTarget
+}
+
+const EMPTY_TARGETS: PanelTargets = Object.freeze({})
 
 export interface PanelTab {
   id: TabId
@@ -342,6 +367,11 @@ export interface WorkspaceInventory {
 
 interface PanelTabsState {
   projects: StoredProjects
+  targets: Record<string, PanelTargets>
+  /** Opens (or refocuses) the Checkpoints tab on one checkpoint, or on the list with `null`. */
+  openCheckpointsTab: (projectId: string, checkpointId: string | null) => void
+  /** Opens (or refocuses) the Trace tab on the thread's trace or one run's. */
+  openTraceTab: (projectId: string, target: TraceTarget) => void
   /** Opens `id`, or refocuses and re-reveals it when already open — never a second tab for the
    *  same item. Opening always makes the tab visible and the shell open. */
   openTab: (projectId: string, id: TabId) => void
@@ -366,6 +396,12 @@ interface PanelTabsState {
   reconcile: (projectId: string, inventory: WorkspaceInventory) => void
 }
 
+/** One project's on-demand tab targets; never undefined. */
+export function selectPanelTargets(state: Pick<PanelTabsState, 'targets'>, projectId: string | null): PanelTargets {
+  if (!projectId) return EMPTY_TARGETS
+  return state.targets[projectId] ?? EMPTY_TARGETS
+}
+
 /** Reads one project's configuration. Never returns undefined — a project never opened yet has the
  *  same shape as one whose tabs were all closed. */
 export function selectProjectPanel(
@@ -388,8 +424,26 @@ export const usePanelTabsStore = create<PanelTabsState>()((set, get) => {
     set({ projects })
   }
 
+  function setTarget<K extends keyof PanelTargets>(projectId: string, key: K, value: PanelTargets[K] | undefined): void {
+    const current = { ...(get().targets[projectId] ?? {}) }
+    if (value === undefined) delete current[key]
+    else current[key] = value
+    set({ targets: { ...get().targets, [projectId]: current } })
+  }
+
   return {
     projects: loadProjects(),
+    targets: {},
+
+    openCheckpointsTab: (projectId, checkpointId) => {
+      setTarget(projectId, 'checkpoints', { checkpointId })
+      get().openTab(projectId, 'checkpoints')
+    },
+
+    openTraceTab: (projectId, target) => {
+      setTarget(projectId, 'trace', target)
+      get().openTab(projectId, 'trace')
+    },
 
     openTab: (projectId, id) =>
       update(projectId, (panel) => {
@@ -416,7 +470,8 @@ export const usePanelTabsStore = create<PanelTabsState>()((set, get) => {
         }
       }),
 
-    closeTab: (projectId, id) =>
+    closeTab: (projectId, id) => {
+      if (id === 'checkpoints' || id === 'trace') setTarget(projectId, id, undefined)
       update(projectId, (panel) => {
         const index = panel.tabs.findIndex((tab) => tab.id === id)
         if (index === -1) return panel
@@ -429,7 +484,8 @@ export const usePanelTabsStore = create<PanelTabsState>()((set, get) => {
             panel.activeTabId === id ? promoteAfterRemoval(tabs, index) : panel.activeTabId,
           isOpen: panel.isOpen,
         }
-      }),
+      })
+    },
 
     replaceTabId: (projectId, previousId, nextId) =>
       update(projectId, (panel) => {

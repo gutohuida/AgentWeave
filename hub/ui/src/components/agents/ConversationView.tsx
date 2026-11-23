@@ -19,7 +19,9 @@ import { LoopTab } from '@/components/spec/LoopTab'
 import { useLoops } from '@/api/loops'
 import { TerminalTabContainer } from '@/components/panel/TerminalTabContainer'
 import { WatchTabContainer } from '@/components/panel/WatchTabContainer'
-import { buildDestination, buildHref, goTo } from '@/lib/navigation'
+import { THREAD_CHECKPOINTS_LIST, agentDestination, buildDestination, buildHref, goTo } from '@/lib/navigation'
+import { CheckpointsPanelContainer } from '@/components/checkpoints/CheckpointsPanelContainer'
+import { TraceTab } from '@/components/traces/TraceTab'
 import { RunningTabContainer } from '@/components/panel/RunningTabContainer'
 import { runningCount, useRunningItems } from '@/components/panel/useRunningItems'
 import type { RunningItem } from '@/components/panel/runningModel'
@@ -50,6 +52,7 @@ import {
   isSpecTabId,
   loopId as loopIdFromTab,
   loopTabId,
+  selectPanelTargets,
   selectProjectPanel,
   specDocumentId,
   specTabId,
@@ -58,6 +61,7 @@ import {
   type PanelTab,
   type SpecTabId,
   type TabId,
+  type TraceTarget,
 } from '@/store/panelTabsStore'
 import { AgentOutputPanel } from './AgentOutputPanel'
 
@@ -98,6 +102,10 @@ interface ConversationViewProps {
   onOpenQuestions?: () => void
   /** The Watch tab's Talk to: another agent's (or this agent's) conversation becomes the main view. */
   onOpenAgentConversation?: (agent: string, conversationId: string) => void
+  /** The destination's `checkpoint`: open the Checkpoints panel tab on it (or on its list, for
+   *  `THREAD_CHECKPOINTS_LIST`) once, then `onCheckpointConsumed` drops it from the address. */
+  checkpoint?: string | null
+  onCheckpointConsumed?: () => void
 }
 
 /**
@@ -126,6 +134,8 @@ export function ConversationView({
   onOpenJobs,
   onOpenQuestions,
   onOpenAgentConversation,
+  checkpoint = null,
+  onCheckpointConsumed,
 }: ConversationViewProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const measuredWidth = useWorkspaceWidth(containerRef)
@@ -192,6 +202,9 @@ export function ConversationView({
   const closeTab = usePanelTabsStore((state) => state.closeTab)
   const replaceTabId = usePanelTabsStore((state) => state.replaceTabId)
   const setShellOpen = usePanelTabsStore((state) => state.setShellOpen)
+  const openCheckpointsTab = usePanelTabsStore((state) => state.openCheckpointsTab)
+  const openTraceTab = usePanelTabsStore((state) => state.openTraceTab)
+  const panelTargets = usePanelTabsStore((state) => selectPanelTargets(state, projectId))
   const panelActiveTabId = usePanelTabsStore(
     (state) => selectProjectPanel(state, projectId).activeTabId,
   )
@@ -315,6 +328,33 @@ export function ConversationView({
   }, [document])
   const overlayTriggerRef = useRef<HTMLButtonElement>(null)
 
+  /* The on-demand tabs (leaner-navigation D4). In a narrow window the panel is a drawer, so opening
+   * one opens the drawer too, as the toggle does (F634). */
+  const openCheckpoints = useCallback(
+    (checkpointId: string | null) => {
+      openCheckpointsTab(projectId, checkpointId)
+      if (!fitsAsColumn) setOverlayOpen(true)
+    },
+    [openCheckpointsTab, projectId, fitsAsColumn],
+  )
+  const openTrace = useCallback(
+    (target: TraceTarget) => {
+      openTraceTab(projectId, target)
+      if (!fitsAsColumn) setOverlayOpen(true)
+    },
+    [openTraceTab, projectId, fitsAsColumn],
+  )
+  /* A link to one checkpoint arrives as the destination's `checkpoint` (leaner-navigation D4): it
+   * opens the Checkpoints tab once and is dropped from the address, the composer insert request's
+   * consume-once shape, so a reload or Back does not reopen what the operator has since closed. */
+  const consumeCheckpointRef = useRef(onCheckpointConsumed)
+  consumeCheckpointRef.current = onCheckpointConsumed
+  useEffect(() => {
+    if (!checkpoint) return
+    openCheckpoints(checkpoint === THREAD_CHECKPOINTS_LIST ? null : checkpoint)
+    consumeCheckpointRef.current?.()
+  }, [checkpoint, openCheckpoints])
+
   const documentNode = document ? inventory.byPath.get(document) : undefined
 
   // Section 3's first index tenant: the plus affordance can always offer the specs browser,
@@ -366,6 +406,8 @@ export function ConversationView({
       if (id === 'running') return { id, label: 'Running', icon: 'sync' }
       if (id === 'terminal') return { id, label: 'Terminal', icon: 'terminal' }
       if (id === 'watch') return { id, label: 'Watch', icon: 'visibility' }
+      if (id === 'checkpoints') return { id, label: 'Checkpoints', icon: 'event_note' }
+      if (id === 'trace') return { id, label: 'Trace', icon: 'monitoring' }
       if (isFileTabId(id)) {
         const path = filePath(id)
         const owner = fileOwner(id)
@@ -479,6 +521,37 @@ export function ConversationView({
             onOpenBuild={(buildId, task) => goTo(buildDestination(projectId, buildId, { task }))}
           />
       }
+      if (tab.id === 'checkpoints') {
+        if (!conversationId) {
+          return (
+            <p className="p-4 text-xs" data-testid="checkpoints-tab-empty" style={{ color: 'var(--text-3)' }}>
+              A new thread has no checkpoints yet.
+            </p>
+          )
+        }
+        return (
+          <CheckpointsPanelContainer
+            key={conversationId}
+            scope={{ conversationId }}
+            openedId={panelTargets.checkpoints?.checkpointId ?? null}
+            onOpen={(checkpointId) => openCheckpointsTab(projectId, checkpointId)}
+            onOpenConversation={(owner, target) =>
+              onOpenAgentConversation ? onOpenAgentConversation(owner, target) : goTo(agentDestination(projectId, owner, target))
+            }
+            emptyText="No checkpoint has been taken in this thread yet."
+          />
+        )
+      }
+      if (tab.id === 'trace') {
+        return (
+          <TraceTab
+            target={panelTargets.trace ?? { scope: 'thread' }}
+            conversationId={conversationId}
+            title={conversationTitle ?? 'This thread'}
+            agent={agent.name}
+          />
+        )
+      }
       if (isLoopTabId(tab.id)) {
         return <LoopTab loopId={loopIdFromTab(tab.id)} onClose={() => closeTab(projectId, tab.id)} />
       }
@@ -530,6 +603,9 @@ export function ConversationView({
       buildsRequest,
       onOpenAgentConversation,
       onSelectConversation,
+      panelTargets,
+      openCheckpointsTab,
+      conversationTitle,
     ],
   )
   const panel = shellVisible ? (
@@ -618,6 +694,8 @@ export function ConversationView({
       }}
       specBusy={createDocument.isPending}
       insertRequest={insertRequest}
+      onOpenCheckpointsPanel={openCheckpoints}
+      onOpenTracePanel={openTrace}
       onTogglePanel={() => {
         const opening = !shellIsOpen
         setShellOpen(projectId, opening)

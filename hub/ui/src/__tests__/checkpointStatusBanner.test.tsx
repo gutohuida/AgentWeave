@@ -57,6 +57,27 @@ describe('checkpoint status across navigation', () => {
     expect(params.get('checkpoint')).toBe('ckpt-9')
   })
 
+  it('single-checkpoint-links: opens the checkpoint in its thread’s Checkpoints panel tab when the thread is known (FR-10)', () => {
+    window.history.replaceState(null, '', '/')
+    useCheckpointOperationStore.getState().setOperation('proj-test:conv-old', {
+      projectId: 'proj-test',
+      conversationId: 'conv-old',
+      agent: 'claude',
+      status: 'succeeded',
+      message: 'Checkpoint written — continuing in the successor thread.',
+      checkpointId: 'ckpt-9',
+      startedAt: 1,
+    })
+    render(<CheckpointStatusBanner />)
+    fireEvent.click(screen.getByTestId('checkpoint-status-open'))
+    const params = new URLSearchParams(window.location.search)
+    expect(params.get('agent')).toBe('claude')
+    expect(params.get('conversation')).toBe('conv-old')
+    expect(params.get('checkpoint')).toBe('ckpt-9')
+    expect(params.get('tab')).toBeNull()
+    expect(screen.queryByTestId('checkpoint-global-status')).toBeNull()
+  })
+
   it('offers nothing to open while the checkpoint is still being written', () => {
     useCheckpointOperationStore.getState().setOperation('proj-test:conv-old', {
       projectId: 'proj-test',

@@ -44,7 +44,9 @@ import {
   AgentWorkspaceSettings,
   type ModelChoice,
 } from './settings/AgentSettingsPages'
-import { checkpointsDestination, environmentDestination, goTo, type AgentSettingsSection } from '@/lib/navigation'
+import { agentDestination, environmentDestination, goTo, type AgentSettingsSection } from '@/lib/navigation'
+import { useProjectCheckpoints } from '@/api/checkpoints'
+import { CheckpointsPanelContainer } from '@/components/checkpoints/CheckpointsPanelContainer'
 import { useConfigStore } from '@/store/configStore'
 import { PERMISSION_WAIT_FALLBACK_SECONDS, QUESTION_WAIT_FALLBACK_SECONDS } from '@/lib/agentWaits'
 
@@ -392,6 +394,10 @@ function PermissionsSection({ agent }: { agent: AgentSummary }) {
 }
 
 function CheckpointsSection({ agent }: { agent: AgentSummary }) {
+  // The profile's own checkpoints are read here, on its page (leaner-navigation FR-9): the list,
+  // then one opened in place with a way back. The same query the list reads, so the count is free.
+  const [openedCheckpoint, setOpenedCheckpoint] = React.useState<string | null>(null)
+  const taken = useProjectCheckpoints({ agent: agent.name })
   const mode = useUpdateAgentCheckpointMode()
   const threshold = useUpdateAgentCheckpointOverride()
   const { run, notices } = usePatchWrites()
@@ -438,9 +444,18 @@ function CheckpointsSection({ agent }: { agent: AgentSummary }) {
         }
         run(writes, said)
       }}
-      onShowCheckpoints={() => {
-        if (projectId) goTo(checkpointsDestination(projectId, { agent: agent.name }))
-      }}
+      taken={taken.data?.checkpoints.length}
+      list={
+        <CheckpointsPanelContainer
+          scope={{ agent: agent.name }}
+          openedId={openedCheckpoint}
+          onOpen={setOpenedCheckpoint}
+          onOpenConversation={(owner, conversationId) => {
+            if (projectId) goTo(agentDestination(projectId, owner, conversationId))
+          }}
+          emptyText={`No checkpoint has been taken in ${agent.name}'s threads yet.`}
+        />
+      }
     />
   )
 }

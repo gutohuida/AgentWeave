@@ -35,7 +35,7 @@ interface Viewed {
  * route), the Hub's totals over the turns shown (as since/until), and a turn's spans only once the
  * turn is first unfolded. Mounted only while the drawer is open, so a closed one costs no request.
  */
-function ConversationTraceBody({
+export function ConversationTraceBody({
   conversationId,
   title,
   agent,

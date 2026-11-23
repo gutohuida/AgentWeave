@@ -5,6 +5,7 @@ import type { AgentOutputLine, AgentSummary } from '@/api/agents'
 import type { AgentConversation } from '@/api/agentChat'
 import { useConfigStore } from '@/store/configStore'
 
+import { AgentOutputPanel } from '@/components/agents/AgentOutputPanel'
 import { ControlledConversation } from './support/ControlledConversation'
 import { setComposerText } from './testUtils/composerField'
 
@@ -313,6 +314,40 @@ describe('agent conversation handoff', () => {
     const params = new URLSearchParams(window.location.search)
     expect(params.get('tab')).toBe('checkpoints')
     expect(params.get('checkpoint')).toBe('ckpt-auto')
+  })
+
+  it('single-checkpoint-links: a cited checkpoint of this thread opens in its Checkpoints panel tab, in place (FR-10)', async () => {
+    useConfigStore.setState({ selectedProjectId: 'proj-test' })
+    window.history.replaceState(null, '', '/?project=proj-test&agent=claude&conversation=conv-old')
+    offeredCheckpoints = [{
+      id: 'ckpt-auto', conversation_id: 'conv-old', agent: 'claude', trigger: 'context_pressure',
+      status: 'ready', lineage_id: 'ckpt-auto',
+    }]
+    const onOpenCheckpointsPanel = vi.fn()
+    const user = userEvent.setup()
+    render(<AgentOutputPanel agent={agent} conversationId="conv-old" onOpenCheckpointsPanel={onOpenCheckpointsPanel} />)
+    await user.click(screen.getByTestId('banner-dismiss-checkpoint-offered'))
+    expect(onOpenCheckpointsPanel).toHaveBeenCalledWith('ckpt-auto')
+    expect(window.location.search).toBe('?project=proj-test&agent=claude&conversation=conv-old')
+  })
+
+  it('single-checkpoint-links: a cited checkpoint of another thread opens that thread through the address (FR-10)', async () => {
+    useConfigStore.setState({ selectedProjectId: 'proj-test' })
+    conversationLineage = {
+      checkpoints: [],
+      lineage: {
+        conversation_id: 'conv-successor',
+        started_from: { checkpoint_id: 'ckpt-c', conversation_id: 'conv-old', title: 'Routes list checkpoints' },
+        carried_into: null,
+      },
+    }
+    const onOpenCheckpointsPanel = vi.fn()
+    const user = userEvent.setup()
+    render(<AgentOutputPanel agent={agent} conversationId="conv-successor" onOpenCheckpointsPanel={onOpenCheckpointsPanel} />)
+    await user.click(screen.getByTestId('banner-dismiss-checkpoint-started-from'))
+    expect(onOpenCheckpointsPanel).not.toHaveBeenCalled()
+    // The owner lookup (App, tested in App-mount) then opens conv-old with its tab on ckpt-c.
+    expect(new URLSearchParams(window.location.search).get('checkpoint')).toBe('ckpt-c')
   })
 
   it('opens the failed automatic checkpoint its notice names (FR-14)', async () => {
