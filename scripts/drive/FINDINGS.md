@@ -42152,3 +42152,18 @@ OGDBT-4's second real `hub-ui` run, `chk-8a0346b6d22b` on merged sha `86ec96d7`,
 
 - The check should take its turn behind other full runs, as `scripts/checks/hub_suite.py` does for the Hub suite (F1122), or retry a timed-out file once before failing the task.
 - Until then, every UI task risks a `broken-check` send-back it cannot fix.
+## F1212 (A) -- a fact superseded by a re-distil still counts as current, so the spec-vault check keeps warning with it
+
+**Status:** open
+**Source:** found by the operator, 2026-11-17, approving `a-build-view-showing-every-task-and-run-of-a-build`; diagnosed by the Architect by reading the code and calling it read-only.
+**Theme:** Knowledge vault
+**Ready:** yes
+**Tier:** 0
+
+FR-7 was corrected to five evidence states, and the vault note's passage was rewritten to match (`vault_replace_passage`). The re-distil marked the old fact `fct-c40175cb07db` "SUPERSEDED by a later distillation … at 22:46:09" (its `superseded_at` and `superseded_by` are set, and `vault_read` says so). The spec's `vault_warning` still cites that fact. The manager's check compared FR-7 against it and judged a contradiction.
+
+The cause is that `vault.dated_facts(..., current_only=True)` (`hub/hub/vault.py:696`) leaves out only facts that `_all_flags` marks superseded, which means facts superseded by a contradiction decision or a corrected report (F586's fix). It does not leave out a fact whose own meta carries `superseded_at` from a re-distil. Read-only check on this repository: `fct-c40175cb07db` is in `dated_facts(current_only=True)`, and `_all_flags` holds nothing for it.
+
+`vault_spec_check` uses that set in two places: as what it sends to the model (`prepare`, line ~295), and as the "fact still stands" filter on stored conflicts (`document_warnings`, line ~180). So a fact its own source no longer says keeps producing warnings until something else supersedes it. `distillation._check` also uses `current_only` and may compare new facts against such dead ones.
+
+**Expected:** a fact with `superseded_at` is not current: `current_only` leaves it out, and a stored conflict naming it is no longer shown. **Test seam:** `dated_facts(current_only=True)` after a `vault_replace_passage` re-distil that drops a claim. The test fails today.

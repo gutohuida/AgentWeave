@@ -10,6 +10,7 @@ import { VaultAddDialog, type VaultAddInput, type VaultAddResult } from './Vault
 import { VaultReader, type VaultFact, type VaultFilePreview } from './VaultReader'
 import { ContradictionCard, ReportCard, type VaultActionResult } from './VaultReview'
 import { VaultStorageDialog } from './VaultStorageDialog'
+import { VaultFactList, VaultOverview, VaultSearchResults, type FactUses, type TextSearch } from './VaultOverview'
 import {
   VAULT_KINDS,
   baseName,
@@ -71,6 +72,14 @@ export interface VaultLibraryProps {
   onArchive?: (id: string) => VaultActionResult
   /** Beside the list's title: the manager's distillation icon (`VaultDistillationStatus`). */
   status?: React.ReactNode
+  /** The facts' uses by specs (spec a-vault-page-that-says-what-it-holds). Given, the page opens on
+   *  its Overview, lists Facts in their own right and searches facts and text; absent, it is the
+   *  library as it was. */
+  uses?: FactUses
+  /** The search inside documents' text for the current query; absent while nothing is searched. */
+  textSearch?: TextSearch
+  /** Called as the search changes, so the container can ask the Hub to search the text. */
+  onQueryChange?: (query: string) => void
   /** The open entry's reading state, past its first page. */
   reader?: {
     hasMore?: boolean
@@ -85,6 +94,8 @@ export interface VaultLibraryProps {
 }
 
 type Filter =
+  | { kind: 'overview' }
+  | { kind: 'facts' }
   | { kind: 'all' }
   | { kind: 'type'; type: string }
   | { kind: 'folder'; folder: string }
@@ -115,8 +126,20 @@ export function VaultLibrary(props: VaultLibraryProps) {
   }, [entries])
   const openContradictions = contradictions.filter((c) => c.status === 'open').length
   const referredReports = reports.filter((r) => r.status === 'referred').length
-  const [query, setQuery] = React.useState('')
-  const [filter, setFilter] = React.useState<Filter>({ kind: 'all' })
+  const overviewOn = props.uses !== undefined
+  const [query, setQueryState] = React.useState('')
+  const onQueryChange = props.onQueryChange
+  const setQuery = React.useCallback(
+    (next: string) => {
+      setQueryState(next)
+      onQueryChange?.(next)
+    },
+    [onQueryChange],
+  )
+  const [filter, setFilter] = React.useState<Filter>(overviewOn ? { kind: 'overview' } : { kind: 'all' })
+  const sourceTotal = entries.filter((e) => e.kind !== 'fact').length
+  const factTotal = entries.length - sourceTotal
+  const searching = overviewOn && Boolean(query.trim())
   const [adding, setAdding] = React.useState(false)
   const [addMode, setAddMode] = React.useState<'files' | 'text'>('files')
   const [dropped, setDropped] = React.useState<File[] | undefined>(undefined)
@@ -161,10 +184,15 @@ export function VaultLibrary(props: VaultLibraryProps) {
   }, [sources])
 
   const reviewing = filter.kind === 'contradictions' || filter.kind === 'reports'
+  const showResults = searching && !reviewing
+  const showOverview = !showResults && filter.kind === 'overview'
+  const showFacts = !showResults && filter.kind === 'facts'
   const visible = sources.filter(
     (e) =>
+      // With the Facts view, a fact whose source is not in the map is listed there, not here.
+      !(overviewOn && e.kind === 'fact') &&
       matchesQuery(e, query) &&
-      (filter.kind === 'all' ||
+      (filter.kind === 'all' || filter.kind === 'overview' || filter.kind === 'facts' ||
         (filter.kind === 'type' ? e.type === filter.type : filter.kind === 'folder' ? folderOf(e) === filter.folder : false)),
   )
   const grouped = filter.kind === 'all' && !query.trim()
@@ -192,9 +220,14 @@ export function VaultLibrary(props: VaultLibraryProps) {
     )
   }
 
-  const filterTitle =
-    filter.kind === 'all'
-      ? 'All entries'
+  const filterTitle = showResults
+    ? 'Search results'
+    : filter.kind === 'overview'
+      ? 'Overview'
+      : filter.kind === 'facts'
+        ? 'Facts'
+        : filter.kind === 'all'
+      ? overviewOn ? 'All sources' : 'All entries'
       : filter.kind === 'type'
         ? kindOf(filter.type).plural
         : filter.kind === 'folder'
@@ -237,10 +270,29 @@ export function VaultLibrary(props: VaultLibraryProps) {
         </div>
 
         <ul className="vault-side-list">
+          {overviewOn ? (
+            <SideRow
+              icon="library"
+              label="Overview"
+              active={filter.kind === 'overview'}
+              testId="vault-side-overview"
+              onClick={() => setFilter({ kind: 'overview' })}
+            />
+          ) : null}
+          {overviewOn ? (
+            <SideRow
+              icon="sparkles"
+              label="Facts"
+              count={factTotal}
+              active={filter.kind === 'facts'}
+              testId="vault-side-facts"
+              onClick={() => setFilter({ kind: 'facts' })}
+            />
+          ) : null}
           <SideRow
             icon="vault_all"
-            label="All entries"
-            count={sources.length}
+            label={overviewOn ? 'All sources' : 'All entries'}
+            count={overviewOn ? sourceTotal : sources.length}
             active={filter.kind === 'all'}
             onClick={() => setFilter({ kind: 'all' })}
           />
@@ -315,9 +367,17 @@ export function VaultLibrary(props: VaultLibraryProps) {
         <header className="vault-list-head">
           <h2 className="vault-list-title">
             {filterTitle}
-            <span className="vault-list-count">
-              {filter.kind === 'contradictions' ? contradictions.length : filter.kind === 'reports' ? reports.length : visible.length}
-            </span>
+            {showOverview || showResults ? null : (
+              <span className="vault-list-count">
+                {filter.kind === 'contradictions'
+                  ? contradictions.length
+                  : filter.kind === 'reports'
+                    ? reports.length
+                    : showFacts
+                      ? factTotal
+                      : visible.length}
+              </span>
+            )}
           </h2>
           {props.status}
           <Button variant="primary" size="sm" data-testid="vault-upload-open" onClick={() => openAdd()}>
@@ -333,7 +393,35 @@ export function VaultLibrary(props: VaultLibraryProps) {
               <span>{notice}</span>
             </p>
           ))}
-          {filter.kind === 'contradictions' ? (
+          {showResults ? (
+            <VaultSearchResults
+              entries={entries}
+              query={query}
+              text={props.textSearch ?? { state: 'ready', hits: [] }}
+              onOpen={onSelect}
+              onClear={() => setQuery('')}
+            />
+          ) : showOverview ? (
+            <VaultOverview
+              entries={entries}
+              uses={props.uses ?? { state: 'loading' }}
+              contradictions={contradictions}
+              reports={reports}
+              onOpen={onSelect}
+              onShowKind={(type) => setFilter({ kind: 'type', type })}
+              onShowFacts={() => setFilter({ kind: 'facts' })}
+              onShowReview={(which) => setFilter({ kind: which })}
+              now={now}
+            />
+          ) : showFacts ? (
+            factTotal ? (
+              <VaultFactList entries={entries} query="" onOpen={onSelect} />
+            ) : (
+              <div className="vault-list-none">
+                <p>No facts yet. The manager draws them from each source you add; Extract facts on a source asks it now.</p>
+              </div>
+            )
+          ) : filter.kind === 'contradictions' ? (
             <div className="vault-review" data-testid="vault-contradictions">
               <p className="vault-review-intro">
                 Two sources state different things. Until you decide, profiles are told both are disputed and that the
@@ -391,7 +479,7 @@ export function VaultLibrary(props: VaultLibraryProps) {
               <EntryRow key={e.id} entry={e} factCount={factCounts[e.id] ?? 0} active={e.id === selectedId} wide={!selected} ambiguous={duplicates.has(e.name)} onOpen={() => onSelect(e.id)} onExtract={props.onExtractFacts} onDelete={props.onDelete} now={now} />
             ))
           )}
-          {!reviewing && archived.length ? (
+          {!reviewing && !showOverview && !showFacts && !showResults && archived.length ? (
             <section className="vault-archived" data-testid="vault-archived" aria-label="Archived sources">
               <p className="vault-group-head">
                 Archived
@@ -472,7 +560,8 @@ function SideRow({
   icon: string
   kind?: string
   label: string
-  count: number
+  /** Absent for a row that is a view, not a set (Overview). */
+  count?: number
   active: boolean
   /** Something here waits for the operator: the count is amber. */
   attention?: boolean
@@ -496,7 +585,7 @@ function SideRow({
           <Icon name={icon} size={14} />
         </span>
         <span className="min-w-0 flex-1 truncate">{label}</span>
-        <span className="vault-side-count">{count}</span>
+        {count !== undefined ? <span className="vault-side-count">{count}</span> : null}
       </button>
     </li>
   )

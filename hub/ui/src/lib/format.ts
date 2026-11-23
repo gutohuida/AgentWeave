@@ -15,6 +15,11 @@ export function formatCount(value: number): string {
   return Math.abs(value) < 1000 ? WHOLE.format(value) : COMPACT.format(value)
 }
 
+/** The exact figure with thousands separators, for a count read as a whole: 1357 → "1,357". */
+export function formatWhole(value: number): string {
+  return WHOLE.format(value)
+}
+
 /** 31843065 → "31.8M tokens"; 1 → "1 token". */
 export function formatTokens(value: number): string {
   return `${formatCount(value)} ${value === 1 ? 'token' : 'tokens'}`
