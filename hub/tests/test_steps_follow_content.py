@@ -84,3 +84,41 @@ def test_no_step_text_declares_the_document_ready_and_the_last_tells_the_author_
             assert "ready" not in text.lower().replace("already", ""), step
     last = spec_journey.STEP_DUTIES[spec_journey.BUILD]
     assert "ready_to_approve" in last and "only when" in last
+
+
+@pytest.mark.asyncio
+async def test_a_save_that_moves_the_step_says_so_with_the_new_steps_instructions(
+    app, auth_headers, run_headers  # noqa: F811
+):
+    """agent-advances (SJSOS-5): in drive phase 3 the save placed the document at acceptance and
+    its answer said nothing, so the author stopped there; advancing again would have skipped it."""
+    await _create(app, auth_headers)
+    await _place(step="intake", size="large")
+
+    saved = (await _submit(app, run_headers, _checked(design="Decision one.", tasks=[]))).json()
+
+    moved = saved["step_moved"]
+    assert (moved["from"], moved["to"]) == ("intake", "approach")
+    assert spec_journey.marker("approach") in moved["instructions"]
+    assert spec_journey.marker("intake") not in moved["instructions"]
+    assert "Do not call advance_spec_step" in moved["message"]
+    assert "approach" in moved["message"]
+
+
+@pytest.mark.asyncio
+async def test_a_save_that_leaves_the_step_carries_no_move(
+    app, auth_headers, run_headers  # noqa: F811
+):
+    await _create(app, auth_headers)
+    await _place(step="build", size="large")
+
+    saved = (await _submit(app, run_headers, _checked(tasks=[]))).json()
+
+    assert "step_moved" not in saved
+
+
+def test_the_advance_duty_says_a_save_moved_step_is_followed_not_advanced_past():
+    text = spec_journey.duty("requirements", size="large")
+    assert "`step_moved`" in text
+    assert "Do not call `advance_spec_step` for that move" in text
+    assert "follow `step_moved.instructions` in the same turn" in text

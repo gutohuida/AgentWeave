@@ -508,12 +508,22 @@ def journey_moves_via(db_path):
         finally:
             con.close()
         # An advance records `{"step": ...}` alone (`advance_spec_step`, `set_step`); a size change
-        # that re-places the step records `{"size": ..., "step": ...}` and is not an advance.
-        found = []
+        # that re-places the step records `{"size": ..., "step": ...}` and is not an advance. A save
+        # that holds later steps' output places the step itself (`{"step": ..., "by": "save"}`):
+        # that is the Hub's placement, not the author's advance, so it counts only when the author
+        # then worked on: a later step event of its own, or a later save of its own (it followed
+        # the placed step's instructions) moving the step on again.
+        found, placed = [], False
         for run, detail in rows:
             detail = json.loads(detail) if isinstance(detail, str) else (detail or {})
-            if run in runs and "step" in detail and "size" not in detail:
-                found.append((run, detail["step"]))
+            if run not in runs or "step" not in detail or "size" in detail:
+                continue
+            if detail.get("by") == "save":
+                if placed:
+                    found.append((run, detail["step"]))
+                placed = True
+                continue
+            found.append((run, detail["step"]))
         return found
     return moves
 

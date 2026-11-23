@@ -3231,7 +3231,7 @@ async def submit_spec_document(
     await sse_manager.broadcast(
         actor.project_id, "spec_updated", {"path": result.path, "phase": result.phase}
     )
-    return {
+    answer: Dict[str, Any] = {
         "path": result.path,
         "phase": result.phase,
         "identifiers": result.identifiers,
@@ -3244,4 +3244,44 @@ async def submit_spec_document(
         "warnings": result.warnings,
         "notes": result.notes,
         "acknowledged": result.acknowledged,
+    }
+    if result.step_moved is not None:
+        # `agent-advances`: a save that holds a later step's output moves the step itself. Said
+        # here with the new step's instructions, or its author stops (it was already placed) or
+        # advances again (and skips the step it was placed at); both were seen in drive phase 3.
+        answer["step_moved"] = await _save_moved_step(
+            session, actor.project_id, workspace, result.step_moved, document.size, body.document
+        )
+    return answer
+
+
+async def _save_moved_step(
+    session: AsyncSession,
+    project_id: str,
+    workspace: Any,
+    move: Dict[str, Optional[str]],
+    size: Optional[str],
+    payload: Any,
+) -> Dict[str, Any]:
+    """What a save that moved the document's step tells its author: the move and the instructions
+    of the step it now stands at, as `advance_spec_step` would return them."""
+    from ... import spec_journey
+
+    steps = spec_journey.load(workspace)
+    target = move.get("to")
+    return {
+        "from": move.get("from"),
+        "to": target,
+        "instructions": spec_journey.duty(
+            target,
+            steps,
+            size=size,
+            roster=await spec_journey.open_roster(session, project_id),
+            problem_written=bool(payload.get("problem")) if isinstance(payload, dict) else False,
+        ),
+        "message": f"this save moved the document from {move.get('from')} to {target}, because "
+        f"it already holds what the steps before {target} produce. Do not call "
+        f"advance_spec_step for this move: that would leave {target} unworked. Follow these "
+        f"instructions for {target} now, in this run, and say in your reply that the document "
+        f"is at {target}.",
     }
