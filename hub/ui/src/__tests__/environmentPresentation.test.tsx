@@ -71,8 +71,8 @@ describe('configuration surface presentation', () => {
     const nav = screen.getByRole('navigation', { name: 'Project settings' })
     expect(within(nav).getByText('Website')).toBeInTheDocument()
     expect(within(nav).getAllByRole('button').map((b) => b.textContent)).toEqual([
-      'Project', 'Collaboration', 'Permissions', 'Budgets', 'Instructions', 'Charters1', 'Checkpoints', 'Manager1 on',
-      'Checks', 'Landing', 'Worktrees', 'Spec steps', 'Traces', 'Diagnostics',
+      'Project', 'Collaboration', 'Permissions', 'Budgets', 'Instructions', 'Charters1', 'Checkpoints', 'Manager1 on', 'Jobs',
+      'Checks', 'Landing', 'Worktrees', 'Spec steps', 'Traces', 'Logs', 'Diagnostics',
     ])
     expect([...nav.querySelectorAll('.aw-settings-nav-group')].map((g) => g.textContent)).toEqual([
       'Project', 'Profiles', 'Landing work', 'Specs and records',

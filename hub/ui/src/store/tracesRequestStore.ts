@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { projectDestination, goTo } from '@/lib/navigation'
+import { environmentDestination, goTo } from '@/lib/navigation'
 
 /** What a screen outside the traces view asks it to open filtered to: the runs of a build, of a
  *  task, of an agent since a day. Only the fields given narrow the list. */
@@ -29,9 +29,9 @@ export const useTracesRequestStore = create<TracesRequestState>((set) => ({
   clear: () => set({ request: null }),
 }))
 
-/** Follow a run count: ask the traces view for those runs, then go to Activity (which opens on
- *  Traces while a request is waiting). */
+/** Follow a run count: ask the traces view for those runs, then go to Project settings › Traces,
+ *  which holds that view now Activity is gone (leaner-navigation FR-14). */
 export function openTraces(projectId: string, request: TracesRequest): void {
   useTracesRequestStore.getState().ask(request)
-  goTo(projectDestination(projectId, 'activity'))
+  goTo(environmentDestination(projectId, 'traces'))
 }

@@ -1,13 +1,9 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { describe, expect, it, vi } from 'vitest'
+import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import type { ProjectCheckpoint, ProjectCheckpointList } from '@/api/checkpoints'
+import type { ProjectCheckpoint } from '@/api/checkpoints'
 import { CheckpointsPage, type CheckpointsPageProps } from '@/components/checkpoints/CheckpointsPage'
-import { CheckpointsScreen } from '@/components/checkpoints/CheckpointsScreen'
 import { NO_FILTERS, statusWords, triggerWords } from '@/components/checkpoints/checkpointModel'
-import { checkpointsDestination, parseDestination, serializeDestination, type ProjectTabDestination } from '@/lib/navigation'
-import { useConfigStore } from '@/store/configStore'
 import { chooseMenuOption } from './support/menuSelect'
 
 const getJson = vi.fn()
@@ -274,113 +270,5 @@ describe('an opened checkpoint', () => {
       },
     })
     expect(screen.getByTestId('checkpoints-started-from')).toHaveTextContent('started from The source checkpoint')
-  })
-})
-
-describe('the Checkpoints address', () => {
-  it('round-trips an opened checkpoint and its narrowing, apart from the conversation parameters', () => {
-    const destination = checkpointsDestination('proj-1', {
-      checkpoint: 'ckpt-1', agent: 'Builder', trigger: 'operator', conversation: 'conv-b2',
-    })
-    const search = serializeDestination(destination)
-    const params = new URLSearchParams(search)
-    expect(params.get('tab')).toBe('checkpoints')
-    expect(params.has('agent')).toBe(false)
-    expect(params.has('conversation')).toBe(false)
-    expect(parseDestination(search)).toEqual(destination)
-  })
-
-  it('drops a value that does not parse rather than failing', () => {
-    expect(checkpointsDestination('proj-1', { checkpoint: '../x/..\n' })).toEqual({
-      kind: 'project', projectId: 'proj-1', tab: 'checkpoints',
-    })
-  })
-})
-
-describe('the Checkpoints tab, wired to the route', () => {
-  const ROWS: ProjectCheckpoint[] = [
-    checkpoint({ id: 'b-op-new', agent: 'Builder', trigger: 'operator', conversation_id: 'conv-b2', created_at: '2026-10-17T12:00:00Z' }),
-    checkpoint({ id: 'b-task', agent: 'Builder', trigger: 'task_completion', conversation_id: 'conv-b2', created_at: '2026-10-17T11:00:00Z' }),
-    checkpoint({ id: 'q-op', agent: 'QA', trigger: 'operator', conversation_id: 'conv-q1', created_at: '2026-10-17T10:00:00Z' }),
-    checkpoint({ id: 'b-op-old', agent: 'Builder', trigger: 'operator', conversation_id: 'conv-b1', created_at: '2026-10-16T10:00:00Z' }),
-  ]
-
-  /** The route as the Hub answers it: filtered, newest first. */
-  function route(path: string): unknown {
-    const url = new URL(path, 'http://hub')
-    if (url.pathname.endsWith('/checkpoint-notes')) return { notes: [] }
-    const agent = url.searchParams.get('agent')
-    const trigger = url.searchParams.get('trigger')
-    const conversation = url.searchParams.get('conversation_id')
-    const checkpoints = ROWS.filter(
-      (row) =>
-        (!agent || row.agent === agent) &&
-        (!trigger || row.trigger === trigger) &&
-        (!conversation || row.conversation_id === conversation),
-    )
-    return { checkpoints, lineage: null } satisfies ProjectCheckpointList
-  }
-
-  function mount(destination: ProjectTabDestination) {
-    const onNavigate = vi.fn()
-    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-    const view = render(
-      <QueryClientProvider client={client}>
-        <CheckpointsScreen destination={destination} onNavigate={onNavigate} onOpenConversation={vi.fn()} />
-      </QueryClientProvider>,
-    )
-    return { onNavigate, ...view }
-  }
-
-  beforeEach(() => {
-    getJson.mockReset()
-    getJson.mockImplementation((path: string) => Promise.resolve(route(path)))
-    useConfigStore.setState({ isConfigured: true, selectedProjectId: 'proj-1' })
-  })
-
-  it('lists every checkpoint with no narrowing, newest first, naming conversations by title', async () => {
-    mount(checkpointsDestination('proj-1'))
-    const list = await screen.findByTestId('checkpoints-list')
-    expect(within(list).getAllByRole('button').map((row) => row.getAttribute('data-testid'))).toEqual(
-      ROWS.map((row) => `checkpoint-row-${row.id}`),
-    )
-    expect(within(list).getAllByTestId('checkpoint-row-conversation').map((node) => node.textContent)).toEqual([
-      'Wire the tab', 'Wire the tab', 'Review the fill', 'Routes work',
-    ])
-  })
-
-  it('asks the route for the agent, trigger and conversation named in the address, combined (FR-4)', async () => {
-    mount(checkpointsDestination('proj-1', { agent: 'Builder', trigger: 'operator', conversation: 'conv-b2' }))
-    const list = await screen.findByTestId('checkpoints-list')
-    expect(within(list).getAllByRole('button')).toHaveLength(1)
-    const url = new URL(getJson.mock.calls.map((call) => call[0] as string).find((p) => p.includes('/checkpoints?'))!, 'http://hub')
-    expect(url.searchParams.get('agent')).toBe('Builder')
-    expect(url.searchParams.get('trigger')).toBe('operator')
-    expect(url.searchParams.get('conversation_id')).toBe('conv-b2')
-  })
-
-  it('narrows to an agent, then to its operator-asked checkpoints, keeping the earlier narrowing', async () => {
-    const user = userEvent.setup()
-    const { onNavigate } = mount(checkpointsDestination('proj-1', { agent: 'Builder' }))
-    await screen.findByTestId('checkpoints-list')
-    expect(screen.queryByTestId('checkpoint-row-q-op')).not.toBeInTheDocument()
-    await chooseMenuOption(user, 'What triggered it', 'The operator asked')
-    expect(onNavigate).toHaveBeenLastCalledWith(
-      checkpointsDestination('proj-1', { agent: 'Builder', trigger: 'operator' }),
-    )
-  })
-
-  it('opens the checkpoint the address names, even when the narrowing hides it', async () => {
-    mount(checkpointsDestination('proj-1', { agent: 'QA', checkpoint: 'b-task' }))
-    expect(await screen.findByTestId('checkpoint-detail')).toHaveTextContent('Title of b-task')
-    expect(screen.queryByTestId('checkpoint-row-b-task')).not.toBeInTheDocument()
-  })
-
-  it('carries a changed selection into the address', async () => {
-    const { onNavigate } = mount(checkpointsDestination('proj-1', { agent: 'Builder' }))
-    fireEvent.click(await screen.findByTestId('checkpoint-row-b-task'))
-    await waitFor(() =>
-      expect(onNavigate).toHaveBeenCalledWith(checkpointsDestination('proj-1', { agent: 'Builder', checkpoint: 'b-task' })),
-    )
   })
 })

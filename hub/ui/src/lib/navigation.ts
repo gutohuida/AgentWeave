@@ -23,21 +23,30 @@ export interface RailProject {
  *  is still how that is done. This is the other thing: a place to go when the specification is what
  *  you are working on rather than what you are working *beside* — the document and its navigation,
  *  no conversation (operator, 2026-08-10: "just to focus on spec"). */
-export const PROJECT_TABS = ['overview', 'thread', 'tasks', 'profiles', 'spec', 'checkpoints', 'vault', 'jobs', 'activity', 'dashboards'] as const
+export const PROJECT_TABS = ['overview', 'thread', 'tasks', 'profiles', 'spec', 'vault', 'dashboards'] as const
 /** `profiles` is the Profiles index; one profile's own page is the `agent-settings` destination,
  *  shown under the same tab (FR-12, FR-13). */
 export type ProjectTab = (typeof PROJECT_TABS)[number]
 
-/** What each project tab is called on screen (the top bar). */
+/** What the top bar draws, in order (leaner-navigation FR-1). Every one is a routable tab, but not
+ *  every routable tab is drawn: `thread` (the Chapters view) is reached from the Overview's link,
+ *  and the bar highlights Overview while it is open. Activity, Jobs and Checkpoints are not
+ *  destinations at all any more; their addresses resolve to new homes (`RETIRED_PROJECT_TABS`). */
+export const TOP_BAR_TABS = ['overview', 'tasks', 'profiles', 'spec', 'vault', 'dashboards'] as const satisfies readonly ProjectTab[]
+export type TopBarTab = (typeof TOP_BAR_TABS)[number]
+
+/** Which top-bar tab stands for a routable tab: itself, or Overview for the Chapters view. */
+export function topBarTabFor(tab: ProjectTab): TopBarTab {
+  return tab === 'thread' ? 'overview' : tab
+}
+
+/** What each project tab is called on screen (the top bar, and the palette's Go to group). */
 export const TAB_LABELS: Record<ProjectTab, string> = {
   overview: 'Overview',
   thread: 'Chapters',
   tasks: 'Tasks',
   spec: 'Spec',
-  checkpoints: 'Checkpoints',
   vault: 'Vault',
-  jobs: 'Jobs',
-  activity: 'Activity',
   dashboards: 'Dashboards',
   profiles: 'Profiles',
 }
@@ -56,8 +65,10 @@ export const ENVIRONMENT_SECTIONS = [
   'checks',
   'landing',
   'worktrees',
+  'jobs',
   'spec-steps',
   'traces',
+  'logs',
   'diagnostics',
 ] as const
 export type EnvironmentSection = (typeof ENVIRONMENT_SECTIONS)[number]
@@ -179,14 +190,17 @@ export type WorkspaceDestination =
       buildFilter?: 'needs-you' | null
       // The Thread tab's address (FR-10): the knot to bring into view with its ancestors open.
       knot?: string | null
-      // The Checkpoints tab's address: the checkpoint opened, and how the list is narrowed. Named
-      // apart from `agent`/`conversation` because those two URL parameters mean a conversation.
-      checkpoint?: string | null
-      checkpointAgent?: string | null
-      checkpointTrigger?: string | null
-      checkpointConversation?: string | null
     }
-  | { kind: 'project'; projectId: string; tab: 'environment'; environmentSection: EnvironmentSection; setting?: string }
+  // `setting` scrolls to one setting's row. `focus` is the item the section opens (URL `focus`):
+  // in Jobs a job id, opened expanded; in Traces a comma-separated list of the runs requested.
+  | {
+      kind: 'project'
+      projectId: string
+      tab: 'environment'
+      environmentSection: EnvironmentSection
+      setting?: string
+      focus?: string
+    }
   // `agent` is null only on the new-conversation surface reached from the recency view, where
   // no agent is implied by where the operator started — that surface asks for one.
   //
@@ -199,7 +213,15 @@ export type WorkspaceDestination =
       agent: string | null
       conversationId: string | null
       document: string | null
+      // The checkpoint to open in the thread's Checkpoints panel tab (URL `checkpoint`), or
+      // `THREAD_CHECKPOINTS_LIST` for the tab on its list. Consumed once by the conversation view,
+      // which then drops it from the address.
+      checkpoint?: string | null
     }
+  // A checkpoint address whose thread is not in it (`tab=checkpoints&checkpoint=X`, or a
+  // `ckptConversation` with no agent): the app looks the owner up, then replaces this with the
+  // conversation destination, or the Overview and a toast if the lookup fails (design D2).
+  | { kind: 'checkpoint-lookup'; projectId: string; checkpoint: string | null; conversation: string | null }
   // One profile's own page under the Profiles tab, open at one of its settings sections (FR-13).
   // Its own kind rather than an `ENVIRONMENT_SECTIONS` entry: those address a project and carry no
   // subject, so they cannot say *which* profile is open. `agent` is non-null by construction.
@@ -255,6 +277,10 @@ export function threadDestination(
 
 const CHECKPOINT_TOKEN = /^[A-Za-z0-9_.:@ -]{1,80}$/
 
+/** A conversation destination's `checkpoint` when it asks for the Checkpoints panel tab on its
+ *  list rather than on one checkpoint. Checkpoint ids are `ckpt-...`, so it names none. */
+export const THREAD_CHECKPOINTS_LIST = 'all'
+
 export interface CheckpointsAddress {
   checkpoint?: string | null
   agent?: string | null
@@ -262,23 +288,84 @@ export interface CheckpointsAddress {
   conversation?: string | null
 }
 
-/** The Checkpoints tab: open one checkpoint, or the list narrowed to an agent, a trigger or a
- *  conversation. A value that does not parse is dropped, never an error. */
-export function checkpointsDestination(
-  projectId: string,
-  address: CheckpointsAddress = {},
-): ProjectTabDestination {
+/** Where an address into the retired Checkpoints tab now lands (FR-2, design D2): one checkpoint
+ *  opens in its thread's side panel and a conversation's list likewise, both through a lookup of
+ *  the owner; an agent alone opens that profile's checkpoint list. With nothing named there is no
+ *  project-wide list any more, so it opens the project's Checkpoints settings. A value that does
+ *  not parse is dropped, never an error. */
+export function checkpointsDestination(projectId: string, address: CheckpointsAddress = {}): WorkspaceDestination {
   const clean = (value: string | null | undefined) => (value && CHECKPOINT_TOKEN.test(value) ? value : null)
-  const destination: ProjectTabDestination = { kind: 'project', projectId, tab: 'checkpoints' }
   const checkpoint = clean(address.checkpoint)
-  const agent = clean(address.agent)
-  const trigger = clean(address.trigger)
   const conversation = clean(address.conversation)
-  if (checkpoint) destination.checkpoint = checkpoint
-  if (agent) destination.checkpointAgent = agent
-  if (trigger) destination.checkpointTrigger = trigger
-  if (conversation) destination.checkpointConversation = conversation
-  return destination
+  const agent = clean(address.agent)
+  if (checkpoint || conversation) {
+    return { kind: 'checkpoint-lookup', projectId, checkpoint, conversation: checkpoint ? null : conversation }
+  }
+  if (agent) return agentSettingsDestination(projectId, agent, 'checkpoints')
+  return environmentDestination(projectId, 'checkpoints')
+}
+
+/** A thread with its Checkpoints panel tab open, on one checkpoint or on its list. */
+export function threadCheckpointsDestination(
+  projectId: string,
+  agent: string,
+  conversationId: string,
+  checkpoint: string = THREAD_CHECKPOINTS_LIST,
+): Extract<WorkspaceDestination, { kind: 'conversation' }> {
+  return { ...agentDestination(projectId, agent, conversationId), checkpoint }
+}
+
+/** Activity's views, and the Project settings section each now lives in. */
+const ACTIVITY_VIEW_HOMES: Readonly<Record<string, EnvironmentSection>> = {
+  ledger: 'budgets',
+  activity: 'budgets',
+  logs: 'logs',
+  traces: 'traces',
+}
+
+/** Tabs that no longer exist, and how an address naming one resolves to its new home (FR-2,
+ *  design D2), beside `RETIRED_ENVIRONMENT_SECTIONS`. Every caller (a URL, a toast, the palette)
+ *  goes through `projectAddress`, so a saved link never opens a blank or unknown page. */
+const RETIRED_PROJECT_TABS: Readonly<Record<string, (projectId: string, params: URLSearchParams) => WorkspaceDestination>> = {
+  activity: (projectId, params) =>
+    environmentDestination(projectId, ACTIVITY_VIEW_HOMES[params.get('view') ?? ''] ?? 'budgets'),
+  ledger: (projectId) => environmentDestination(projectId, 'budgets'),
+  logs: (projectId) => environmentDestination(projectId, 'logs'),
+  traces: (projectId, params) => environmentDestination(projectId, 'traces', null, params.get('focus')),
+  jobs: (projectId, params) => environmentDestination(projectId, 'jobs', null, params.get('focus')),
+  checkpoints: (projectId, params) =>
+    checkpointsDestination(projectId, {
+      checkpoint: params.get('checkpoint'),
+      agent: params.get('ckptAgent'),
+      trigger: params.get('ckptTrigger'),
+      conversation: params.get('ckptConversation'),
+    }),
+}
+
+/** What the command palette's Go to group offers: the top bar's tabs, Chapters, and the retired
+ *  tabs by their old names, each opening where it now lives. */
+export const GO_TO_NAMES = [...TOP_BAR_TABS, 'thread', 'jobs', 'logs', 'traces', 'activity'] as const
+export type GoToName = (typeof GO_TO_NAMES)[number]
+export const GO_TO_LABELS: Readonly<Record<GoToName, string>> = {
+  ...TAB_LABELS,
+  jobs: 'Jobs',
+  logs: 'Logs',
+  traces: 'Traces',
+  activity: 'Ledger',
+}
+
+/** A project address by tab name, current or retired: the one resolver behind `parseDestination`,
+ *  the palette and every caller that names a tab as a string. An unknown name opens the Overview. */
+export function projectAddress(
+  projectId: string,
+  name: string | null | undefined,
+  params: URLSearchParams = new URLSearchParams(),
+): WorkspaceDestination {
+  const retired = name ? RETIRED_PROJECT_TABS[name] : undefined
+  if (retired) return retired(projectId, params)
+  const tab: ProjectTab = (PROJECT_TABS as readonly string[]).includes(name ?? '') ? (name as ProjectTab) : DEFAULT_TAB
+  if (tab === 'thread') return threadDestination(projectId, params.get('knot'))
+  return projectDestination(projectId, tab, parseSpecDocument(params.get('document')), params.get('anchor'))
 }
 
 /** The Spec tab's evidence view, optionally focused on a task id or a requirement identifier. */
@@ -356,15 +443,21 @@ export function environmentDestination(
   section: EnvironmentSection = DEFAULT_ENVIRONMENT_SECTION,
   /** The row to land on: its label. Part of the location, so a reload or Back returns to it. */
   setting?: string | null,
+  /** The item the section opens: a job id in Jobs, a comma-separated run list in Traces. */
+  focus?: string | null,
 ): Extract<WorkspaceDestination, { kind: 'project' }> {
+  const cleanFocus = focus && ENVIRONMENT_FOCUS.test(focus) ? focus : null
   return {
     kind: 'project',
     projectId,
     tab: 'environment',
     environmentSection: resolveEnvironmentSection(section) ?? DEFAULT_ENVIRONMENT_SECTION,
     ...(setting ? { setting } : {}),
+    ...(cleanFocus ? { focus: cleanFocus } : {}),
   }
 }
+
+const ENVIRONMENT_FOCUS = /^[A-Za-z0-9_.:,-]{1,2000}$/
 
 /** `document` defaults to null: a conversation owns its document (the Hub holds it), so changing
  *  conversation carries nothing across. Only opening a document, and the specification entry
@@ -534,19 +627,21 @@ export function serializeDestination(destination: WorkspaceDestination): string 
     if (destination.document && isSpecDocumentPath(destination.document)) {
       params.set('document', destination.document)
     }
+    if (destination.checkpoint) params.set('checkpoint', destination.checkpoint)
+    return `?${params.toString()}`
+  }
+  if (destination.kind === 'checkpoint-lookup') {
+    // Written as the retired address it stands for, so a reload looks the owner up again.
+    params.set('tab', 'checkpoints')
+    if (destination.checkpoint) params.set('checkpoint', destination.checkpoint)
+    else if (destination.conversation) params.set('ckptConversation', destination.conversation)
     return `?${params.toString()}`
   }
   params.set('tab', destination.tab)
   if (destination.tab === 'environment') {
     params.set('section', destination.environmentSection ?? DEFAULT_ENVIRONMENT_SECTION)
     if (destination.setting) params.set('setting', destination.setting)
-  }
-  if (destination.tab === 'checkpoints') {
-    if (destination.checkpoint) params.set('checkpoint', destination.checkpoint)
-    if (destination.checkpointAgent) params.set('ckptAgent', destination.checkpointAgent)
-    if (destination.checkpointTrigger) params.set('ckptTrigger', destination.checkpointTrigger)
-    if (destination.checkpointConversation) params.set('ckptConversation', destination.checkpointConversation)
-    return `?${params.toString()}`
+    if (destination.focus) params.set('focus', destination.focus)
   }
   if (destination.tab === 'thread' && destination.knot) {
     params.set('knot', destination.knot)
@@ -628,7 +723,7 @@ export function parseDestination(search: string): WorkspaceDestination | null {
   // The agentless new-conversation surface has no `agent` to key on, so the sentinel is what
   // identifies it — otherwise a reload there would land on the project overview.
   if (agent || conversation === NEW_CONVERSATION_ID) {
-    return {
+    const destination: Extract<WorkspaceDestination, { kind: 'conversation' }> = {
       kind: 'conversation',
       projectId,
       agent,
@@ -636,24 +731,23 @@ export function parseDestination(search: string): WorkspaceDestination | null {
       // An illegal path resolves to "no document", never to an error page.
       document: parseSpecDocument(params.get('document')),
     }
+    const checkpoint = params.get('checkpoint')
+    if (checkpoint && CHECKPOINT_TOKEN.test(checkpoint)) destination.checkpoint = checkpoint
+    return destination
   }
 
   if (rawTab === 'environment') {
     const rawSection = params.get('section')
-    return environmentDestination(projectId, resolveEnvironmentSection(rawSection) ?? DEFAULT_ENVIRONMENT_SECTION, params.get('setting'))
+    return environmentDestination(
+      projectId,
+      resolveEnvironmentSection(rawSection) ?? DEFAULT_ENVIRONMENT_SECTION,
+      params.get('setting'),
+      params.get('focus'),
+    )
   }
-  const tab: ProjectTab = (PROJECT_TABS as readonly string[]).includes(rawTab ?? '')
-    ? (rawTab as ProjectTab)
-    : DEFAULT_TAB
-  if (tab === 'thread') return threadDestination(projectId, params.get('knot'))
-  if (tab === 'checkpoints') {
-    return checkpointsDestination(projectId, {
-      checkpoint: params.get('checkpoint'),
-      agent: params.get('ckptAgent'),
-      trigger: params.get('ckptTrigger'),
-      conversation: params.get('ckptConversation'),
-    })
-  }
+  // Every tab but Spec's views, retired tabs included, resolves in one place.
+  if (rawTab !== 'spec') return projectAddress(projectId, rawTab, params)
+  const tab = rawTab
   if (tab === 'spec' && params.get('view') === 'evidence') {
     return evidenceDestination(projectId, params.get('focus'))
   }
