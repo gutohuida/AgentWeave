@@ -194,9 +194,11 @@ async def test_setting_the_old_step_name_moves_to_build():
 
 def test_no_step_text_says_propose():
     texts = [spec_journey.duty(step) for step in spec_journey.STEP_ORDER]
-    texts += [spec_journey.ASK_TO_ADVANCE, spec_journey.removed("gone", None)]
+    texts += [spec_journey.ADVANCE_YOURSELF, spec_journey.removed("gone", None)]
     texts += _strings(HUB / "spec_journey.py", docstrings=False)
-    found = [text for text in texts if PROPOSE.search(text)]
+    # Intake's `## Proposed shape` heading (`today-and-shape`, D2) names the change's shape, not
+    # the retired phase.
+    found = [text for text in texts if PROPOSE.search(text.replace("Proposed shape", ""))]
     assert found == []
 
 
@@ -251,3 +253,80 @@ def test_the_spec_charter_sends_questions_to_ask_user_after_approval():
     text = (CHARTERS / "spec.md").read_text(encoding="utf-8")
 
     assert "Once the\ndocument is approved, `ask_user` is the way" in text
+
+
+# ---------------------------------------------------------------------------------------------
+# The spec journey spends the operator's attention only on their decisions: how every step asks,
+# keeps ideas apart, and advances itself (FR-4, FR-5, FR-7, FR-14).
+# ---------------------------------------------------------------------------------------------
+
+
+def _every_duty():
+    """Every built-in step's duty at every size, intake both before and after its playback."""
+    texts = []
+    for size in (None, *spec_journey.SIZES):
+        for step in spec_journey.STEP_ORDER:
+            texts.append((step, spec_journey.duty(step, size=size)))
+            if step == spec_journey.INTAKE:
+                texts.append((step, spec_journey.duty(step, size=size, problem_written=True)))
+    return texts
+
+
+# no-choice-by-default (FR-4)
+def test_describe_first_and_no_choices_by_default():
+    from hub.launchability import EXPLORING_ASKS_IN_REPLY, spec_turn_notice
+
+    notices = [EXPLORING_ASKS_IN_REPLY] + [
+        spec_turn_notice("exploring", kind=kind) for kind in (None, "change-spec", "roadmap")
+    ]
+    for _, text in _every_duty():
+        assert "offering choices where you can" not in text
+    for text in notices:
+        assert "offering choices where you can" not in text
+
+    intake = spec_journey.duty(spec_journey.INTAKE, problem_written=True)
+    assert "ask them to describe it in their own words before offering any options" in intake
+    assert (
+        "offer options with a recommendation only for a fork between alternatives you have named"
+        in intake
+    )
+
+
+# three-questions-duty (FR-5)
+def test_three_questions_at_most_and_follow_up_before_a_new_topic():
+    for step, text in _every_duty():
+        assert "Ask **at most three questions** per reply" in text, step
+        assert (
+            "When an answer opens a new branch or contradicts something already written, follow "
+            "it up before moving to a new topic" in text
+        ), step
+
+
+# ideas-apart-duty (FR-14)
+@pytest.mark.parametrize(
+    "step",
+    [spec_journey.INTAKE, spec_journey.REQUIREMENTS, spec_journey.ACCEPTANCE],
+)
+def test_ideas_are_offered_apart_and_never_written_unpicked(step):
+    text = spec_journey.duty(step, problem_written=True)
+
+    assert "offer it in a separate **Worth considering** list after your questions" in text
+    assert (
+        "Never write an idea into the requirements or scope until the operator picks it up" in text
+    )
+
+
+# no-continue-prompt (FR-7)
+def test_every_step_but_build_advances_itself_and_the_tool_says_so():
+    for step, text in _every_duty():
+        assert "Continue in a fresh conversation" not in text, step
+        assert "Never advance without asking" not in text, step
+        if step == spec_journey.BUILD:
+            assert "advance_spec_step(path)` yourself" not in text
+            continue
+        assert "call `advance_spec_step(path)` yourself" in text, step
+        assert "say in your reply which step you moved to" in text, step
+
+    (tool,) = [doc for name, doc in _tool_descriptions() if name == "advance_spec_step"]
+    assert "Call it yourself" in tool
+    assert "only after" not in tool and "chose to continue" not in tool
