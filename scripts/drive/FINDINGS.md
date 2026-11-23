@@ -42128,3 +42128,15 @@ Authoring slice 1 of `profiles-rollout-ui-ux-and-flow-fixes` on 2026-11-21, a sa
 **Tier:** 0
 
 A flow handed TPBCD-1 to Developer at 14:35:00; `git worktree add -b agentweave/task/task-09dd80eb9515 ... master` ran past 30 s and raised `TimeoutExpired`, which is not a `GitCommandError`, so it escaped the trigger. `schedule_accepted` logged it as non-transient and left the entry `queued` with no reason and no count; nothing re-drained it. The flow's walk counted the queued briefing as attendance and answered "already being worked ... nothing is wrong" for a turn that never existed. Git finished on its own after the kill. **Not covered:** any other non-`TriggerAgentError` raised inside a trigger still lands in `schedule_accepted`'s log-and-keep branch with nothing to re-drain it.
+
+## F1210 (B) -- re-completing a task whose check failed on load replays the same failed check run instead of running it again
+
+**Status:** open
+**Source:** found by driving (flow `Overview at a glance`, OGDBT-4, 2026-11-23)
+**Theme:** checks and landing
+**Ready:** yes
+
+OGDBT-4's `hub-ui` check failed once, `chk-37a0da77db4d` on merged sha `eacbe239`. It took 844 s against about 300 s alone, and three short synchronous render tests (`checkpointStatusBanner.test.tsx` ×2, `ErrorBoundary.test.tsx`) hit the 20 s `testTimeout`. They pass locally in 2.6 s, and the full suite passes 3172/3172. The builder found no defect and completed the task again without changing it. Each completion, at 10:19:38, 10:21:34 and 10:22:31, was sent back as `broken-check` within 17–57 s, naming the same `chk-37a0da77db4d`: `task_check_runs` holds only two rows for the task. A check result is reused while the merged tree is unchanged, so a failure caused by load can never be retried, and the flow keeps re-briefing the builder to redo work that has nothing to fix.
+
+- A completion with no new commit should either re-run a failed check, or be refused up front saying it would replay the same result. It should not be accepted and then bounced.
+- There is no tool a builder can use to ask for a check to run again. Changing the tree is the only way to trigger one.
