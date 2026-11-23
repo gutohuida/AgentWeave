@@ -614,9 +614,27 @@ export function useVaultFactUses() {
 }
 
 /** A source whose text holds the searched word: how many lines do, and the first of them, in
- *  order. Proposed `GET /vault/search?q=` (spec a-vault-page-that-says-what-it-holds). */
+ *  order. `GET /vault/search?q=` (spec a-vault-page-that-says-what-it-holds). */
 export interface VaultTextHit {
   source: string
   total: number
   lines: Array<{ line: number; text: string }>
+}
+
+/** Sources whose text holds `query`, newest first. Asked only from two characters; the Hub refuses
+ *  fewer with 400. Archived sources and text held on another machine are not searched. */
+export function useVaultTextSearch(query: string) {
+  const { isConfigured, selectedProjectId: projectId } = useConfigStore()
+  const typed = query.trim()
+  return useQuery<VaultTextHit[]>({
+    queryKey: ['project', projectId, 'vault', 'search', typed],
+    queryFn: async () =>
+      (
+        await getJson<{ hits: VaultTextHit[] }>(
+          `/api/v1/projects/${projectId}/vault/search?q=${encodeURIComponent(typed)}`,
+        )
+      ).hits,
+    enabled: isConfigured && !!projectId && typed.length >= 2,
+    retry: (count, error) => !isNoVault(error) && count < 2,
+  })
 }
