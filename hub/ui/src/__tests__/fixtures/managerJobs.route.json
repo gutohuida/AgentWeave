@@ -113,6 +113,26 @@
       }
     },
     {
+      "key": "overview-note",
+      "title": "Overview note",
+      "description": "Writes the Briefing's short note on what changed since your last visit and anything that looks wrong, such as a build that stopped moving or spend well above its usual day. Fires when you open the Overview more than 30 minutes after your last visit and something changed since the last note (automatic), and when you press Refresh note. Never on a timer. Needs a runner. Off: the Briefing shows no new note.",
+      "trigger": "overview_visit",
+      "needs_runner": true,
+      "enabled": false,
+      "runner_id": null,
+      "model": null,
+      "automatic": true,
+      "mode": "automatic",
+      "firing_choice": {
+        "button": "Refresh note",
+        "where": "the Overview's Briefing",
+        "automatic": "when a new visit to the Overview starts and something changed"
+      },
+      "usage_total": {
+        "firings": 0
+      }
+    },
+    {
       "key": "mender",
       "title": "Mender",
       "description": "When the project's work stalls -- a merge skipped or failed, a loop with nothing it can start, a refused turn, a dead run, or no progress for 30 minutes -- the mender reads the cause and unblocks the agents on its own: it resolves conflicts and lands the work without review. Before anything hardcore, such as touching changes it did not make, it leaves you a note under Needs you and does not do it; your answer wakes it later. Runs on the runner's CLI default model unless you choose one. Needs a runner. Off: stalls are only recorded.",

@@ -4034,3 +4034,40 @@ class HubSettings(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     check_concurrency: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+
+
+class OverviewVisit(Base):
+    """When the operator last opened a project's Overview (`overview-at-a-glance-with-dashboard-
+    and-briefing-tabs`, FR-9, D2, migration 0191). One row per project, written only by
+    `POST /overview/visit` (algorithm 'record-visit'): a visit within 30 minutes of `last_visit_at`
+    moves only that; a later one first moves it into `previous_visit_at`, which the Briefing's
+    'since you last looked' counts from. No row: the Overview was never opened.
+    """
+
+    __tablename__ = "overview_visits"
+
+    project_id: Mapped[str] = mapped_column(String(64), ForeignKey("projects.id"), primary_key=True)
+    last_visit_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
+    previous_visit_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), nullable=True)
+
+
+class OverviewNote(Base):
+    """A note the overview-note manager job wrote for the Briefing (FR-11, D5, migration 0191).
+
+    Kept, not overwritten: the latest is shown, and a failed or refused firing writes no row, so the
+    previous note stays. `cites` is `[{type, id, label}]`, each resolved to a task, build, profile or
+    question of the project when it was written. `firing_event_id` is the `manager_job_fired` event
+    that wrote it.
+    """
+
+    __tablename__ = "overview_notes"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    project_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("projects.id"), nullable=False, index=True
+    )
+    written_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, nullable=False)
+    trigger: Mapped[str] = mapped_column(String(16), nullable=False)
+    text: Mapped[str] = mapped_column(Text, nullable=False)
+    cites: Mapped[list] = mapped_column(JSON, default=list, nullable=False)
+    firing_event_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)

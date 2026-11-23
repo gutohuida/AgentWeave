@@ -11,7 +11,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from sqlalchemy import case, func, literal_column, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from .db.models import Project, Run, TurnUsage, WorkerInvocation
+from .db.models import Agent, Project, Run, TurnUsage, WorkerInvocation
 from .runner_events import AccountingSample
 from .utils import short_id
 
@@ -427,6 +427,10 @@ def _aggregate_columns() -> tuple[Any, ...]:
 MAX_TOKEN_BUDGET = 2**63 - 1
 
 
+#: The mender's agent name (`stalls.MENDER`): its turns count as manager work, a workers line.
+MENDER_KIND = "mender"
+
+
 #: Worker outcomes for a call that spawned, so it cost something whether or not it reported usage.
 #: The others (`unsupported_cli`, `unknown_model`, `spawn_failed`, `budget_exhausted`) never ran.
 _SPAWNED_WORKER_OUTCOMES = ("ok", "nonzero_exit", "timeout", "unparseable", "schema_invalid")
@@ -571,15 +575,53 @@ async def accounting_snapshot(
             project_summary[figure], *(line[figure] for line in workers)
         )
 
+    # The Hub's mender is the agent marked `hub_role == "mender"`; a project's own agent that
+    # merely shares the name is an ordinary agent (stalls.HUB_ROLE).
+    mender_names = [
+        a.name
+        for a in (await db.execute(select(Agent).where(Agent.project_id == project_id)))
+        .scalars()
+        .all()
+        if (a.config or {}).get("hub_role") == MENDER_KIND
+    ]
     agent_result = await db.execute(
         select(TurnUsage.agent, *_aggregate_columns())
-        .where(TurnUsage.project_id == project_id)
+        .where(TurnUsage.project_id == project_id, TurnUsage.agent.not_in(mender_names))
         .group_by(TurnUsage.agent)
         .order_by(TurnUsage.agent)
     )
     agents: List[Dict[str, Any]] = [
         _summary_from_row(row, agent=row.agent) for row in agent_result.all()
     ]
+    # The mender is the Hub's own manager work (FR-11): its turns are a workers line, not an
+    # agent's. The project figures above already hold them, so the line is added after, not summed.
+    mender_row = (
+        await db.execute(
+            select(*_aggregate_columns()).where(
+                TurnUsage.project_id == project_id, TurnUsage.agent.in_(mender_names)
+            )
+        )
+    ).one()
+    mender = _summary_from_row(mender_row)
+    if mender["measured_turns"] or mender["unavailable_turns"]:
+        workers = sorted(
+            [
+                *workers,
+                {
+                    "kind": MENDER_KIND,
+                    "input_tokens": mender["input_tokens"],
+                    "output_tokens": mender["output_tokens"],
+                    "total_tokens": mender["total_tokens"],
+                    "measured_calls": mender["measured_turns"],
+                    "credited_calls": 0,
+                    "unmeasured_calls": mender["unavailable_turns"],
+                    "api_equivalent_usd_micros": mender["api_equivalent_usd_micros"],
+                    "ai_nano_aiu": mender["ai_nano_aiu"],
+                    "premium_requests": mender["premium_requests"],
+                },
+            ],
+            key=lambda line: line["kind"],
+        )
 
     recent_result = await db.execute(
         select(TurnUsage)

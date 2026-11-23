@@ -48,6 +48,8 @@ from hub.db.models import (
     ManagerJob,
     Message,
     NeverQuarantineMark,
+    OverviewNote,
+    OverviewVisit,
     PermissionRequest,
     Project,
     ProjectInstructions,
@@ -170,6 +172,9 @@ PROJECT_SCOPED_TABLE_NAMES = [
     "dashboard_versions",
     # Every test's outcome in every check run (`landing-time-and-test-flakiness-are-measured`).
     "test_history",
+    # The operator's Overview visits and the manager's notes (`overview-at-a-glance-...`).
+    "overview_visits",
+    "overview_notes",
     # Quarantine (`the-slow-checks-run-once-per-landing-not-once-per-task-and-flaky-tests-are-
     # quarantined`).
     "quarantined_tests",
@@ -568,6 +573,12 @@ async def _seed_full_project(session, project_id: str, tag: str) -> None:
         )
     )
     session.add(SetupDismissal(project_id=project_id, item="repository"))
+    session.add(OverviewVisit(project_id=project_id, last_visit_at=datetime.now(timezone.utc)))
+    session.add(
+        OverviewNote(
+            id=f"onote-{tag}", project_id=project_id, trigger="button", text="A note.", cites=[]
+        )
+    )
     session.add(
         Dashboard(
             id=f"dash-{tag}",
