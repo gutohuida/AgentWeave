@@ -1555,14 +1555,30 @@ async def _record_failure(plan: Plan, trigger: str, subject: Dict[str, Any], why
 
 
 async def _run_claimed(plan: Plan, trigger: str, subject: Dict[str, Any]) -> None:
-    """A firing that holds its document's claim, and gives it up however it ends."""
+    """A firing that holds its document's claim, and gives it up however it ends. It is one run,
+    announced when it starts and ended with a record however it ends (`manager.manager_run`)."""
     try:
-        await review(plan, trigger=trigger, subject=subject)
-    except Exception as exc:  # noqa: BLE001 -- a background task must not raise
-        logger.warning("retrospective failed for %s", plan.document_id, exc_info=True)
-        await _record_failure(plan, trigger, subject, f"The firing failed: {exc}")
+        async with manager.manager_run(
+            plan.project_id,
+            job=JOB,
+            trigger=trigger,
+            subject=subject,
+            initiator=_initiator(trigger),
+        ) as run:
+            run.uses(runner_id=plan.runner_id, cli=plan.cli, model=plan.model)
+            try:
+                await review(plan, trigger=trigger, subject=subject)
+            except Exception as exc:  # noqa: BLE001 -- a background task must not raise
+                logger.warning("retrospective failed for %s", plan.document_id, exc_info=True)
+                await _record_failure(plan, trigger, subject, f"The firing failed: {exc}")
+    except Exception:  # noqa: BLE001 -- a background task must not raise
+        logger.warning("retrospective run failed for %s", plan.document_id, exc_info=True)
     finally:
         _running.discard((plan.project_id, plan.document_id))
+
+
+def _initiator(trigger: str) -> str:
+    return manager.OPERATOR if trigger == REQUESTED else manager.AUTONOMOUS
 
 
 def _plan(document: SpecDocument, job: Any, runner: Runner) -> Plan:
@@ -1648,9 +1664,16 @@ async def _fire_automatic(project_id: str, document_id: str, task_id: str) -> No
             plan = _plan(document, job, runner)
     except CannotReviewError as refusal:
         if refusal.no_runner:
-            await manager.record_no_runner(
-                project_id, job=JOB, trigger=LAST_TASK_APPROVED, subject=subject
-            )
+            async with manager.manager_run(
+                project_id,
+                job=JOB,
+                trigger=LAST_TASK_APPROVED,
+                subject=subject,
+                initiator=manager.AUTONOMOUS,
+            ):
+                await manager.record_no_runner(
+                    project_id, job=JOB, trigger=LAST_TASK_APPROVED, subject=subject
+                )
         return
     except Exception:  # noqa: BLE001 -- a background task must not raise
         logger.warning("retrospective could not start for %s", document_id, exc_info=True)
