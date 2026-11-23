@@ -633,6 +633,116 @@ async def wake(db: AsyncSession, stall: Stall) -> bool:
     return True
 
 
+#: The mender's trigger, as its Manager entry names it.
+MENDER_TRIGGER = "stall_recorded"
+#: A mender run's end, from its lifecycle event, in the manager's outcome words.
+_MENDER_OUTCOMES = {"run_completed": "answered", "run_failed": "failed", "run_stopped": "failed"}
+
+
+def _utc(moment: datetime) -> datetime:
+    return moment if moment.tzinfo else moment.replace(tzinfo=timezone.utc)
+
+
+def _iso(moment: Optional[datetime]) -> Optional[str]:
+    return _utc(moment).isoformat() if moment is not None else None
+
+
+async def _mender_run_view(db: AsyncSession, run: Run) -> Dict[str, Any]:
+    """A mender run as the manager lists a run (`background-manager-work-you-can-see`): its id is
+    the `runs` row's, its subject the stall whose thread it ran in."""
+    stall = None
+    if run.conversation_id:
+        stall = await db.scalar(
+            select(Stall)
+            .where(Stall.project_id == run.project_id, Stall.conversation_id == run.conversation_id)
+            .order_by(Stall.first_seen_at.desc())
+            .limit(1)
+        )
+    subject: Dict[str, Any] = (
+        {"stall": stall.id, "reason": stall.reason} if stall is not None else {"stall": None}
+    )
+    return {
+        "run_id": run.id,
+        "job": MENDER,
+        "subject": subject,
+        "trigger": MENDER_TRIGGER,
+        "initiator": run.initiator or "autonomous",
+        "started_at": _iso(run.started_at),
+        "conversation_id": run.conversation_id,
+    }
+
+
+async def _is_hub_mender(db: AsyncSession, project_id: str) -> bool:
+    agent = await db.scalar(
+        select(Agent).where(Agent.project_id == project_id, Agent.name == MENDER)
+    )
+    return is_mender(agent)
+
+
+async def running_mender_runs(db: AsyncSession, project_id: str) -> List[Dict[str, Any]]:
+    """The Hub mender's runs in progress, oldest first: its `runs` rows are the truth (D1)."""
+    if not await _is_hub_mender(db, project_id):
+        return []
+    rows = (
+        (
+            await db.execute(
+                select(Run)
+                .where(Run.project_id == project_id, Run.agent == MENDER, Run.status == "running")
+                .order_by(Run.started_at, Run.id)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    return [await _mender_run_view(db, row) for row in rows]
+
+
+async def announce_mender_run(
+    db: AsyncSession, project_id: str, event_type: str, run_id: str, fields: Dict[str, Any]
+) -> None:
+    """Publish a mender run's start or end as a manager run's (`manager_run_started`,
+    `manager_run_ended`), from its lifecycle event. A no-op for any other agent's run, and never
+    raises into the run it describes."""
+    try:
+        run = await db.get(Run, run_id)
+        if run is None or run.agent != MENDER or not await _is_hub_mender(db, project_id):
+            return
+        from . import manager
+
+        view = await _mender_run_view(db, run)
+        if event_type == "run_started":
+            manager.publish(project_id, manager.RUN_STARTED_EVENT, view)
+            return
+        outcome = _MENDER_OUTCOMES.get(event_type)
+        if outcome is None:
+            return
+        ended = _utc(run.ended_at or datetime.now(timezone.utc))
+        duration_ms = (
+            int((ended - _utc(run.started_at)).total_seconds() * 1000)
+            if run.started_at is not None
+            else None
+        )
+        detail = None
+        if outcome == "failed":
+            detail = str(fields.get("error") or run.error or "") or (
+                "Stopped." if event_type == "run_stopped" else "The run failed."
+            )
+        manager.publish(
+            project_id,
+            manager.RUN_ENDED_EVENT,
+            {
+                **view,
+                "ended_at": _iso(ended),
+                "duration_ms": duration_ms,
+                "outcome": outcome,
+                "detail": detail,
+                "usage": None,
+            },
+        )
+    except Exception:  # noqa: BLE001
+        logger.warning("could not announce mender run %s", run_id, exc_info=True)
+
+
 def _git(root: Path, *args: str) -> str:
     try:
         result = subprocess.run(

@@ -325,23 +325,51 @@ async def _review(plan: Plan, trigger: str) -> str:
 @traces.traced_work("vault_report", attributes={"aw.vault.report.id": "report_id"})
 async def review_in_background(project_id: str, report_id: str) -> None:
     """The background entry point: a report that is not looked into now stays pending, and
-    nothing here raises into the event loop."""
-    try:
-        plan = await prepare(project_id, report_id)
-    except CannotReviewError as refusal:
-        if refusal.no_runner:
-            await manager.record_no_runner(
-                project_id,
-                job=manager.REPORTS,
-                trigger=TRIGGER,
-                subject={"report": report_id},
-                then=STILL_PENDING,
-            )
-        return
-    except Exception:  # noqa: BLE001 -- a background task must not raise
-        logger.warning("vault report review could not start for %s", report_id, exc_info=True)
+    nothing here raises into the event loop. With the job on, it is one run that ends with a record
+    however it ends (`manager.manager_run`)."""
+    if not await manager.job_enabled(project_id, manager.REPORTS):
         return
     try:
-        await review(plan)
+        async with manager.manager_run(
+            project_id,
+            job=manager.REPORTS,
+            trigger=TRIGGER,
+            subject={"report": report_id},
+            initiator=manager.AUTONOMOUS,
+        ) as run:
+            try:
+                plan = await prepare(project_id, report_id)
+            except CannotReviewError as refusal:
+                if refusal.no_runner:
+                    await manager.record_no_runner(
+                        project_id,
+                        job=manager.REPORTS,
+                        trigger=TRIGGER,
+                        subject={"report": report_id},
+                        then=STILL_PENDING,
+                    )
+                else:
+                    run.ends("failed", f"Did not look into it: {refusal.reason}")
+                return
+            run.subject = {"report": report_id, "entry": plan.report["entry"]}
+            run.uses(runner_id=plan.runner_id, cli=plan.cli, model=plan.model)
+            await review(plan)
     except Exception:  # noqa: BLE001 -- a background task must not raise
         logger.warning("vault report review failed for %s", report_id, exc_info=True)
+
+
+async def review_requested(plan: Plan) -> None:
+    """The review's run on a report `prepare` has already planned, after the answer is sent:
+    operator work, announced and ended like every run. Never raises."""
+    try:
+        async with manager.manager_run(
+            plan.project_id,
+            job=manager.REPORTS,
+            trigger=REQUESTED,
+            subject={"report": plan.report["id"], "entry": plan.report["entry"]},
+            initiator=manager.OPERATOR,
+        ) as run:
+            run.uses(runner_id=plan.runner_id, cli=plan.cli, model=plan.model)
+            await review(plan, trigger=REQUESTED)
+    except Exception:  # noqa: BLE001 -- the answer has been sent; nothing can raise into it
+        logger.warning("vault report review failed for %s", plan.report["id"], exc_info=True)
