@@ -2,7 +2,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest'
 import { render, screen, within } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { JobForm } from '@/components/jobs/JobForm'
-import { JobsScreen } from '@/components/jobs/JobsScreen'
+import { JobsSection } from './support/JobsSection'
 import userEvent from '@testing-library/user-event'
 import type { Job, JobRun } from '@/api/jobs'
 
@@ -76,7 +76,7 @@ function renderCard(job: Job) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(
     <QueryClientProvider client={client}>
-      <JobsScreen />
+      <JobsSection />
     </QueryClientProvider>,
   )
 }
@@ -247,7 +247,7 @@ describe('the schedule is labelled UTC, which is the clock it actually uses (F2)
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
     render(
       <QueryClientProvider client={client}>
-        <JobsScreen />
+        <JobsSection />
       </QueryClientProvider>,
     )
     expect(screen.getByText('Times in UTC')).toBeInTheDocument()

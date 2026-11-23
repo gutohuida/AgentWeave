@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event'
 import * as React from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { Job } from '@/api/jobs'
-import { JobsScreen } from '@/components/jobs/JobsScreen'
+import { JobsSection } from './support/JobsSection'
 import { Dialog, DialogContent } from '@/components/ui/dialog'
 
 /** The shared DialogContent (F1029): it gives focus back to whatever opened it, and keeps its
@@ -75,7 +75,7 @@ describe('DialogContent', () => {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
     render(
       <QueryClientProvider client={client}>
-        <JobsScreen />
+        <JobsSection />
       </QueryClientProvider>,
     )
     const more = await screen.findByRole('button', { name: 'More for Nightly' })

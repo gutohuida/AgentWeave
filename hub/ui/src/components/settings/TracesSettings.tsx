@@ -81,7 +81,6 @@ export function TracesSettings({
   downloading,
   onRangeChange,
   onChange,
-  onOpenTraces,
   onDownload,
   onClear,
 }: {
@@ -92,7 +91,6 @@ export function TracesSettings({
   downloading?: boolean
   onRangeChange: (range: TraceRange) => void
   onChange: (input: TraceSettingsInput, said: string) => void
-  onOpenTraces?: () => void
   onDownload: () => void
   /** Opens the confirm the container owns. */
   onClear: () => void
@@ -104,13 +102,6 @@ export function TracesSettings({
       icon="timeline"
       title="Traces"
       description="Every run is recorded as a trace: its model calls, tool calls, permission decisions and waits, and what the Hub did around them."
-      actions={
-        onOpenTraces ? (
-          <Button variant="outline" size="sm" data-testid="open-traces-view" onClick={onOpenTraces}>
-            Browse traces <Icon name="arrow_forward" size={13} />
-          </Button>
-        ) : null
-      }
     >
       {notices}
       <SettingsGroup title="Kept here">

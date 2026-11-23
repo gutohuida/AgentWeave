@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { describe, expect, it } from 'vitest'
 import { vi } from 'vitest'
-import { JobsScreen } from '@/components/jobs/JobsScreen'
+import { JobsSection } from './support/JobsSection'
 import { JobForm } from '@/components/jobs/JobForm'
 
 // Task 1.11: `JobForm`'s header carries a Close button that is first in DOM order, ahead of the
@@ -35,7 +35,7 @@ function renderJobsPage() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(
     <QueryClientProvider client={client}>
-      <JobsScreen />
+      <JobsSection />
     </QueryClientProvider>,
   )
 }
