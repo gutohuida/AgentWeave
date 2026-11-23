@@ -21,6 +21,7 @@ import {
   type AgentConversation,
 } from '@/api/agentChat'
 import { NEW_CONVERSATION_ID, checkpointsDestination, goTo } from '@/lib/navigation'
+import type { TraceTarget } from '@/store/panelTabsStore'
 import { useQueueStatus, useQueuedEntries, releaseQueueEntry, withdrawQueueEntry } from '@/api/queue'
 import { useRunners } from '@/api/runners'
 import { overridesForRunner, runnerSetsModel } from '@/lib/runnerProvider'
@@ -55,8 +56,6 @@ import { activeQuestionFor, isWaitedOn } from '@/lib/pendingQuestions'
 import { useAnswerQuestion, useDeclineQuestion, useQuestions } from '@/api/questions'
 import { handoffLabel, handoffReason, type HandoffState } from '@/lib/checkpointControl'
 import { ConversationBar } from '@/components/conversation/ConversationBar'
-import { TraceDrawerPanel } from '@/components/traces/TraceDrawer'
-import { ConversationTraceDrawer } from '@/components/traces/ConversationTraceDrawer'
 import type { ComposerInsertRequest } from '@/components/agents/Composer'
 import { foldedComposerReason } from '@/lib/foldPresentation'
 import { ConversationComposerDock } from '@/components/conversation/ConversationComposerDock'
@@ -112,6 +111,12 @@ interface AgentOutputPanelProps {
   /** Whether the shell is currently open, for the toggle's pressed state. Meaningless without
    *  `onTogglePanel`. */
   panelOpen?: boolean
+  /** Opens this thread's Checkpoints side-panel tab on one checkpoint, or on its list with `null`
+   *  (leaner-navigation FR-8, FR-10). Omitted, a checkpoint opens in its thread through the address. */
+  onOpenCheckpointsPanel?: (checkpointId: string | null) => void
+  /** Opens the Trace side-panel tab on this thread's trace or one run's (FR-4). Omitted, the ⋯
+   *  menu offers no trace. */
+  onOpenTracePanel?: (target: TraceTarget) => void
 }
 
 /* Both prompts that used to live here are gone, and nothing replaces them.
@@ -208,6 +213,8 @@ export function AgentOutputPanel({
   insertRequest = null,
   onTogglePanel,
   panelOpen = false,
+  onOpenCheckpointsPanel,
+  onOpenTracePanel,
 }: AgentOutputPanelProps) {
   // `lines` is no longer read here. Its only consumer was the effect that watched the output
   // stream for a completed run in order to call a handoff "ready" — the exact inference this
@@ -569,8 +576,6 @@ export function AgentOutputPanel({
       .map(([id, facts]) => ({ id, at: hubDate(facts.started_at).getTime() }))
       .filter((run) => !Number.isNaN(run.at))
       .sort((a, b) => b.at - a.at)[0]?.id ?? null
-  const [latestTraceOpen, setLatestTraceOpen] = useState(false)
-  const [conversationTraceOpen, setConversationTraceOpen] = useState(false)
 
   /** When the turn running now began, from its run row (the newest one with no end), so the bar's
    *  "working · 2m 14s" reads the same after a reload as it did when the turn started. */
@@ -827,8 +832,14 @@ export function AgentOutputPanel({
   const startedFrom =
     conversationLineage?.lineage?.started_from ?? conversationLineage?.lineage?.started_from_checkpoint ?? null
   const carriedInto = conversationLineage?.lineage?.carried_into ?? null
+  /* A checkpoint of this thread opens in its own side panel; one of another thread (the one this
+   * thread started from) opens that thread with its panel on it, through the address (FR-10). */
   const openCheckpoint = (checkpointId: string) => {
-    if (projectId) goTo(checkpointsDestination(projectId, { checkpoint: checkpointId }))
+    if (onOpenCheckpointsPanel && checkpoints.some((checkpoint) => checkpoint.id === checkpointId)) {
+      onOpenCheckpointsPanel(checkpointId)
+    } else if (projectId) {
+      goTo(checkpointsDestination(projectId, { checkpoint: checkpointId }))
+    }
   }
   const offeredCheckpoint = checkpoints.find(
     (checkpoint) =>
@@ -1193,7 +1204,7 @@ export function AgentOutputPanel({
     setHandoffState('preparing')
     setSessionNotice('Writing checkpoint…')
     try {
-      const result = await writeCheckpoint(projectId, currentConversationId)
+      const result = await writeCheckpoint(projectId, currentConversationId, agent.name)
       if (!result) {
         setHandoffState('idle')
         const operation = useCheckpointOperationStore.getState().operations[
@@ -1364,20 +1375,6 @@ export function AgentOutputPanel({
       style={{ background: 'var(--bg)' }}
       data-testid="conversation-panel"
     >
-      <TraceDrawerPanel
-        open={latestTraceOpen && latestRunId !== null}
-        onOpenChange={setLatestTraceOpen}
-        runId={latestRunId ?? undefined}
-      />
-      {currentConversationId && latestRunId ? (
-        <ConversationTraceDrawer
-          conversationId={currentConversationId}
-          title={currentConversation ? conversationLabel(currentConversation) : 'This thread'}
-          agent={agent.name}
-          open={conversationTraceOpen}
-          onOpenChange={setConversationTraceOpen}
-        />
-      ) : null}
       <ConversationBar
         barRef={headerRef}
         agent={agent}
@@ -1407,11 +1404,18 @@ export function AgentOutputPanel({
         onFoldAll={() => setFoldAllSignal((n) => n + 1)}
         onOpenCheckpoints={
           currentConversationId && projectId
-            ? () => goTo(checkpointsDestination(projectId, { conversation: currentConversationId }))
+            ? () =>
+                onOpenCheckpointsPanel
+                  ? onOpenCheckpointsPanel(null)
+                  : goTo(checkpointsDestination(projectId, { conversation: currentConversationId }))
             : undefined
         }
-        onOpenConversationTrace={currentConversationId && latestRunId ? () => setConversationTraceOpen(true) : undefined}
-        onOpenTrace={latestRunId ? () => setLatestTraceOpen(true) : undefined}
+        onOpenConversationTrace={
+          onOpenTracePanel && currentConversationId && latestRunId ? () => onOpenTracePanel({ scope: 'thread' }) : undefined
+        }
+        onOpenTrace={
+          onOpenTracePanel && latestRunId ? () => onOpenTracePanel({ scope: 'run', runId: latestRunId }) : undefined
+        }
         onOpenAgentSettings={onOpenAgentSettings}
         onTogglePanel={onTogglePanel}
         panelOpen={panelOpen}

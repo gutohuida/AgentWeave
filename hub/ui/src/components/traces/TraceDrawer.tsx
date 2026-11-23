@@ -9,7 +9,7 @@ const DRAWER_WIDTH = 920
 
 /** Reads a trace by run or by trace id; only one of the two queries is ever enabled. Mounted
  *  only while the drawer is open, so a closed affordance costs no request. */
-function TraceDrawerBody({ runId, traceId }: { runId?: string; traceId?: string }) {
+export function TraceDrawerBody({ runId, traceId }: { runId?: string; traceId?: string }) {
   const [offset, setOffset] = useState(0)
   const { data: runData, isLoading: runLoading, error: runError } = useRunTrace(
     runId ?? null,
