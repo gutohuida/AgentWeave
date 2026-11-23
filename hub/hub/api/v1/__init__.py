@@ -40,6 +40,7 @@ from .runners import router as runners_router
 from .runs import router as runs_router
 from .session_sync import router as session_sync_router
 from .setup import router as setup_router
+from .spec import instance_builds_router
 from .spec import router as spec_router
 from .stats import router as stats_router
 from .status import instance_router as instance_work_router
@@ -62,6 +63,7 @@ v1_router.include_router(native_dialog_router)
 v1_router.include_router(notify_settings_router)
 v1_router.include_router(hub_settings_router)
 v1_router.include_router(instance_conversations_router)
+v1_router.include_router(instance_builds_router)
 v1_router.include_router(instance_work_router)
 
 project_resources_router = APIRouter(prefix="/projects/{project_id}")

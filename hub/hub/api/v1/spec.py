@@ -68,7 +68,7 @@ from ... import (
 from ... import (
     spec_payload as spec_payload_module,
 )
-from ...auth import get_project
+from ...auth import get_operator, get_project
 from ...db.engine import get_session
 from ...db.models import (
     DRIFT_STATES,
@@ -77,6 +77,7 @@ from ...db.models import (
     EvidenceFootprint,
     EvidenceReview,
     Loop,
+    OperatorCredential,
     Project,
     RequirementDrift,
     RequirementEvidence,
@@ -105,6 +106,8 @@ from ...utils import persist_event
 from .jobs import _hand_job_to_scheduler, build_flow_rows
 
 router = APIRouter(prefix="/project", tags=["spec"])
+#: Routes over several projects at once, mounted at `/api/v1` beside the projects router.
+instance_builds_router = APIRouter(prefix="/builds", tags=["spec"])
 
 logger = logging.getLogger(__name__)
 
@@ -5344,6 +5347,11 @@ async def list_builds(
     its loop, its tasks' progress and the blocking question its work is waiting on: what the side
     panel's Running tab lists, without opening each document (`the-side-panel-s-running-tab`)."""
     project_id, _ = project
+    return await _project_builds(session, project_id)
+
+
+async def _project_builds(session: AsyncSession, project_id: str) -> Dict[str, Any]:
+    """`GET /builds`'s body, which the many-project route answers for each project it names."""
     try:
         workspace = await _workspace(session, project_id)
     except HTTPException:
@@ -5351,6 +5359,30 @@ async def list_builds(
         # capabilities rather than the list turning into an error.
         workspace = None
     return {"builds": await builds.project_rows(session, project_id, workspace)}
+
+
+#: How many projects one many-project builds request may name; the rail sends more in batches.
+BUILDS_LISTING_LIMIT = 200
+
+
+@instance_builds_router.get("")
+async def list_builds_of_projects(
+    project_id: List[str] = Query(..., min_length=1, max_length=BUILDS_LISTING_LIMIT),
+    operator: OperatorCredential = Depends(get_operator),
+    session: AsyncSession = Depends(get_session),
+):
+    """Several projects' `GET /builds` in one request: what the rail reads on first open (BWYCS-8).
+
+    The rail lists every registered project's builds, and one request per project was ~200 reads
+    queued six at a time behind the browser's connections to the Hub, ahead of the open page's own.
+    Each body is built by the same function as the per-project route, so the two cannot disagree;
+    a project this Hub does not have is listed in `missing`, which that route would answer 404.
+    """
+    del operator
+    wanted = list(dict.fromkeys(project_id))
+    known = set((await session.execute(select(Project.id).where(Project.id.in_(wanted)))).scalars())
+    projects = {pid: await _project_builds(session, pid) for pid in wanted if pid in known}
+    return {"projects": projects, "missing": [pid for pid in wanted if pid not in known]}
 
 
 @router.post("/builds/{build_id}/attention/dismiss")

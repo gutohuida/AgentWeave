@@ -18,19 +18,29 @@ export interface ManyAnswer<V> {
  * it did before, and so does every key when the many-key request fails. A key the many-key route
  * reports missing is refused as the single-key route refuses it, with a 404, so callers cannot
  * tell the two transports apart.
+ *
+ * `maxKeys` is how many keys the many-key route accepts in one request. More keys than that leave
+ * in several requests of at most `maxKeys` each: a route that refuses a long list would otherwise
+ * send every key to its own route (BWYCS-8: 215 projects against a limit of 200 were 215 reads).
  */
 export function coalescedReads<V>(
   readOne: (key: string) => Promise<V>,
   readMany: (keys: string[]) => Promise<ManyAnswer<V>>,
   missingDetail: (key: string) => string,
+  maxKeys = Infinity,
 ): (key: string) => Promise<V> {
-  let waiting: Map<string, Array<{ resolve: (value: V) => void; reject: (error: unknown) => void }>> | null = null
+  type Callers = Map<string, Array<{ resolve: (value: V) => void; reject: (error: unknown) => void }>>
+  let waiting: Callers | null = null
 
   const flush = () => {
     const batch = waiting
     waiting = null
     if (!batch) return
     const keys = [...batch.keys()]
+    for (let start = 0; start < keys.length; start += maxKeys) send(batch, keys.slice(start, start + maxKeys))
+  }
+
+  const send = (batch: Callers, keys: string[]) => {
     const settle = (key: string, outcome: { value: V } | { error: unknown }) => {
       for (const caller of batch.get(key) ?? []) {
         if ('value' in outcome) caller.resolve(outcome.value)

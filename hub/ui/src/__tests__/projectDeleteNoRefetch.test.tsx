@@ -52,6 +52,15 @@ vi.stubGlobal(
       const body = { projects: Object.fromEntries(ids.map((id) => [id, []])), missing: [] }
       return { ok: true, status: 200, json: async () => body } as unknown as Response
     }
+    if (path.startsWith('/api/v1/builds?')) {
+      // Every project's builds, read in one request (BWYCS-8): a deleted project is reported
+      // missing, as the Hub's route reports it.
+      const ids = new URLSearchParams(path.split('?')[1]).getAll('project_id')
+      const gone = ids.filter((id) => deleted && id === 'proj-alpha')
+      const found = ids.filter((id) => !gone.includes(id)).map((id) => [id, { builds: [] }])
+      const body = { projects: Object.fromEntries(found), missing: gone }
+      return { ok: true, status: 200, json: async () => body } as unknown as Response
+    }
     if (deleted && path.includes('/projects/proj-alpha')) {
       return { ok: false, status: 404, json: async () => ({}), text: async () => '{"detail":"Project not found"}' } as unknown as Response
     }

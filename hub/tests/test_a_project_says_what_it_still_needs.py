@@ -271,3 +271,57 @@ async def test_archiving_the_last_agent_raises_the_profiles_offer_and_tells_the_
     assert archived.status_code == 200, archived.text
     assert ("proj-test", SETUP_CHANGED) in broadcasts
     assert "profiles" in _ids((await _setup(app, auth_headers, "proj-test"))["items"])
+
+
+@pytest.mark.asyncio
+async def test_the_list_answers_each_projects_own_items_when_several_differ(
+    app, auth_headers, tmp_path, add_agent, monkeypatch
+) -> None:
+    """BWYCS-8: the list works every project's items out together (`project_setups`), and must
+    answer each one exactly what that project's own read answers, however their states differ."""
+    monkeypatch.setattr(adapter_base.shutil, "which", lambda name, *a, **k: f"/bin/{name}")
+    fresh = await _open(app, auth_headers, _folder(tmp_path, "fresh", specs=False))
+    ready = await _open(app, auth_headers, _folder(tmp_path, "ready", git=True))
+    await add_agent("Builder", project_id=ready)
+    runner = await app.post(
+        f"/api/v1/projects/{ready}/runners",
+        json={"name": "claude-runner", "cli": "claude"},
+        headers=auth_headers,
+    )
+    assert runner.status_code == 201, runner.text
+    bound = await app.patch(
+        f"/api/v1/projects/{ready}/agents/Builder",
+        json={"runner_id": runner.json()["id"]},
+        headers=auth_headers,
+    )
+    assert bound.status_code == 200, bound.text
+    unbound = await _open(app, auth_headers, _folder(tmp_path, "unbound", git=True))
+    await add_agent("Idle", project_id=unbound)
+    dismissing = await _open(app, auth_headers, _folder(tmp_path, "dismissing"))
+    dismissed = await app.put(
+        f"/api/v1/projects/{dismissing}/setup/dismissed/repository", headers=auth_headers
+    )
+    assert dismissed.status_code == 200, dismissed.text
+    moved_root = _folder(tmp_path, "moved", git=True)
+    moved = await _open(app, auth_headers, moved_root)
+    moved_root.rename(tmp_path / "elsewhere")
+
+    listed = await app.get("/api/v1/projects", headers=auth_headers)
+    assert listed.status_code == 200, listed.text
+    setups = {project["id"]: project["setup"] for project in listed.json()}
+
+    expected = {
+        fresh: (["repository", "profiles", "specification"], []),
+        ready: ([], []),
+        unbound: (["can-run-Idle"], []),
+        dismissing: (["profiles"], ["repository"]),
+        moved: (["folder", "profiles"], []),
+    }
+    for project_id, (items, gone) in expected.items():
+        assert (_ids(setups[project_id]["items"]), _ids(setups[project_id]["dismissed"])) == (
+            items,
+            gone,
+        ), project_id
+        one = await app.get(f"/api/v1/projects/{project_id}", headers=auth_headers)
+        assert one.status_code == 200, one.text
+        assert one.json()["setup"] == setups[project_id], project_id
