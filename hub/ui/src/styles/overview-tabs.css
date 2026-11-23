@@ -1,0 +1,66 @@
+/* The Overview's tab row (Dashboard, Briefing) and the live screen's own pieces around the two
+   views. Tokens only; every button carries a data-slot, so index.css's baseline button rule does
+   not apply and these rules own the look. */
+
+.aw-ov-live { display: flex; flex-direction: column; min-height: 100%; }
+.aw-ov-live-head {
+  width: min(100%, 1180px); margin-inline: auto;
+  padding: 18px clamp(16px, 3vw, 32px) 0;
+  display: flex; flex-direction: column; gap: 12px;
+}
+
+.aw-ovt { display: flex; align-items: flex-end; gap: 2px; border-bottom: 1px solid var(--border-region); }
+.aw-ovt .aw-ovt-tab {
+  display: inline-flex; align-items: center; gap: 7px;
+  height: 34px; padding: 0 14px; margin-bottom: -1px;
+  font: inherit; font-size: 13.5px; color: var(--text-2);
+  background: transparent; border: 1px solid transparent; border-bottom: 0;
+  border-radius: var(--radius-md) var(--radius-md) 0 0;
+  cursor: grab; user-select: none;
+  transition: transform 120ms ease, opacity 120ms ease, background-color 120ms ease;
+}
+.aw-ovt .aw-ovt-tab:hover { color: var(--text); background: var(--row-hover); }
+.aw-ovt .aw-ovt-tab[aria-selected="true"] {
+  color: var(--text); font-weight: 600;
+  background: var(--surface); border-color: var(--border-region);
+}
+.aw-ovt .aw-ovt-tab:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--ring); }
+/* Held: lifted and see-through, so the tab being moved is plain while it moves. */
+.aw-ovt .aw-ovt-tab[data-dragging="true"] { opacity: 0.55; transform: translateY(-2px) scale(0.98); cursor: grabbing; border-style: dashed; border-color: var(--border-hi); }
+.aw-ovt .aw-ovt-tab[data-drop="before"] { box-shadow: inset 3px 0 0 var(--blue); }
+.aw-ovt .aw-ovt-tab[data-drop="after"] { box-shadow: inset -3px 0 0 var(--blue); }
+@media (prefers-reduced-motion: reduce) { .aw-ovt .aw-ovt-tab { transition: none; } }
+
+/* The restart notice over the previous Overview, for a Hub older than GET /overview. */
+.aw-ov-restart {
+  width: min(100%, 1180px); margin: 18px auto 0; padding: 12px 16px;
+  display: flex; align-items: center; gap: 10px;
+  border: 1px solid var(--border); border-left: 4px solid var(--amber); border-radius: var(--radius-lg);
+  background: color-mix(in oklab, var(--amber) 6%, var(--surface)); font-size: 13.5px;
+}
+
+.aw-ov-placeholder {
+  width: min(100%, 1180px); margin: 22px auto; padding: 18px 20px;
+  border: 1px dashed var(--border-hi); border-radius: var(--radius-lg); color: var(--text-2); font-size: 13.5px;
+}
+
+/* Checks and profiles: the rehomed lists, reached by their links (FR-13). */
+.aw-ov-more { display: flex; flex-direction: column; gap: 10px; }
+.aw-ov-more-links { display: flex; flex-wrap: wrap; gap: 6px; }
+.aw-ov-more .aw-ov-more-link {
+  display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 12px;
+  border-radius: var(--radius-md); border: 1px solid var(--border); font-size: 13px; color: var(--text-2);
+}
+.aw-ov-more .aw-ov-more-link:hover { background: var(--row-hover); color: var(--text); }
+.aw-ov-more .aw-ov-more-link[aria-expanded="true"] { color: var(--text); border-color: var(--border-hi); background: var(--surface-2, var(--row-hover)); }
+.aw-ov-more-panel { border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 12px 14px; background: var(--surface); }
+.aw-ov-more-panel h2 { font-size: 13.5px; font-weight: 600; margin: 0 0 8px; }
+.aw-ov-profile-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
+.aw-ov-profile { border: 1px solid var(--border); border-radius: var(--radius-md); padding: 10px 12px; min-width: 0; }
+.aw-ov-profile-name { display: flex; align-items: center; gap: 6px; font-weight: 600; font-size: 13px; }
+
+/* The build row's "Needs you" word: the flag in words, never by colour alone. */
+.aw-od-needs-flag {
+  margin-left: 4px; padding: 0 6px; border-radius: 999px; font-size: 11.5px; font-weight: 600; white-space: nowrap;
+  background: color-mix(in oklab, var(--amber) 22%, transparent); color: var(--text);
+}

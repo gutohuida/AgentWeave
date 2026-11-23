@@ -96,7 +96,15 @@ const SSE_EVENT_TYPES = [
   'project_settings_updated',
   'agent_archived',
   'agent_unarchived',
+  // The Overview's manager note: one being written, written, or not written (`overview-note`).
+  'overview_note_started',
+  'overview_note_written',
+  'overview_note_failed',
 ]
+
+/** Events that move something the one Overview read (`GET /overview`) shows (design D10): the same
+ *  events that refresh its parts, plus the note's own three. */
+const OVERVIEW_EVENT = /^(task_|build_|stall_|question_|permission_|run_|overview_note_)|^(known_failing_changed|checks_flaky|main_moved|main_notice_seen|next_slice_offered|next_slice_answered|accounting_budget_updated|agent_created|agent_archived|agent_unarchived)$/
 
 const MAX_BUFFERED = 200
 
@@ -528,6 +536,7 @@ function invalidateSpecShownPhase(inv: (f?: InvalidateFilters) => void, pid: str
 function applyInvalidation(queryClient: QueryClient, event: SSEEvent): void {
   const inv = (filters?: InvalidateFilters) => invalidateOncePerEvent(queryClient, event, filters)
   const pid = (event.data as { project_id?: string } | null)?.project_id
+  if (OVERVIEW_EVENT.test(event.type)) inv({ queryKey: ['project', pid, 'overview'] })
   switch (event.type) {
         case 'message_created':
         case 'message_read':
