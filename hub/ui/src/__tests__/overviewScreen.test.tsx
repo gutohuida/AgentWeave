@@ -4,7 +4,7 @@ import type { Question } from '@/api/questions'
 import type { Stall } from '@/api/stalls'
 import type { QuarantineBody } from '@/api/quarantine'
 import type { ClearStableResult, DisturbedRun, KnownFailingEntry } from '@/api/knownFailing'
-import { OverviewScreen } from '@/components/overview/OverviewScreen'
+import { OverviewClassicScreen as OverviewScreen } from '@/components/overview/OverviewClassicScreen'
 import { useTaskFilterStore } from '@/store/taskFilterStore'
 
 // The Overview reads main notices and next-slice offers (`amendments-main-watch-and-the-next-slice`).
