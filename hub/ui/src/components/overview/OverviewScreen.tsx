@@ -98,8 +98,9 @@ function LiveOverview({
 }
 
 function LiveDashboard({ projectId, body, screen }: { projectId: string; body: OverviewBody; screen: OverviewScreenProps }) {
-  const { data: projects = [] } = useProjects()
-  const { data: agents = [] } = useAgents()
+  // A failed read of either only loses a name or a colour; say so rather than show them blank.
+  const { data: projects = [], error: projectsError, refetch: refetchProjects } = useProjects()
+  const { data: agents = [], error: agentsError, refetch: refetchAgents } = useAgents()
   const open = useOverviewOpeners(projectId, screen)
   const now = new Date()
   const colorOf = (name: string | null) => (name ? agents.find((a) => a.name === name)?.color_index : undefined)
@@ -147,20 +148,28 @@ function LiveDashboard({ projectId, body, screen }: { projectId: string; body: O
   }))
 
   return (
-    <OverviewDashboard
-      projectName={projects.find((p) => p.id === projectId)?.name ?? ''}
-      needs={needs}
-      running={running}
-      finished={finished}
-      finishedToday={finishedToday}
-      spend={spend}
-      main={main}
-      builds={builds}
-      onNavigate={open.openPlace}
-      now={now}
-    >
-      <ChecksAndProfiles onNavigate={screen.onNavigate} onOpenTask={open.openTask} />
-    </OverviewDashboard>
+    <>
+      <QueryErrorNotice
+        failures={[
+          ['the project list', projectsError, refetchProjects],
+          ['the profiles', agentsError, refetchAgents],
+        ]}
+      />
+      <OverviewDashboard
+        projectName={projects.find((p) => p.id === projectId)?.name ?? ''}
+        needs={needs}
+        running={running}
+        finished={finished}
+        finishedToday={finishedToday}
+        spend={spend}
+        main={main}
+        builds={builds}
+        onNavigate={open.openPlace}
+        now={now}
+      >
+        <ChecksAndProfiles onNavigate={screen.onNavigate} onOpenTask={open.openTask} />
+      </OverviewDashboard>
+    </>
   )
 }
 
