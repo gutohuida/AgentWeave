@@ -142,7 +142,7 @@ export function VaultOverview(props: VaultOverviewProps) {
               options={[
                 { value: 'conflicts', label: 'Contradicted a spec', count: counts.conflicts },
                 { value: 'citations', label: 'Cited by a spec', count: counts.citations },
-                { value: 'reads', label: 'Opened by agents', count: counts.reads },
+                { value: 'reads', label: 'Opened by profiles', count: counts.reads },
               ]}
             />
           ) : null}
@@ -172,13 +172,13 @@ export function VaultOverview(props: VaultOverviewProps) {
       </section>
 
       <div className="vault-ov-columns">
-        <section className="vault-ov-section" aria-label="What agents open">
-          <h3 className="vault-ov-title">What agents open</h3>
+        <section className="vault-ov-section" aria-label="What profiles open">
+          <h3 className="vault-ov-title">What profiles open</h3>
           <p className="vault-ov-quiet">
-            Counted when an agent opens an entry. Every turn also lists each fact, and that is not counted.
+            Counted when a profile opens an entry. Every run also lists each fact, and that is not counted.
           </p>
           {read.length === 0 ? (
-            <p className="vault-ov-quiet">No agent has opened a source yet.</p>
+            <p className="vault-ov-quiet">No profile has opened a source yet.</p>
           ) : (
             <ol className="vault-ov-list">
               {read.map((s) => (
@@ -188,7 +188,7 @@ export function VaultOverview(props: VaultOverviewProps) {
                     onOpen={props.onOpen}
                     meta={
                       <>
-                        <span className="tabular" title="Times agents opened this source">
+                        <span className="tabular" title="Times profiles opened this source">
                           Opened {s.fetches}×
                         </span>
                         {s.last_fetched_at ? (
@@ -232,7 +232,7 @@ export function VaultOverview(props: VaultOverviewProps) {
 const NONE: Record<ImportantBy, string> = {
   conflicts: 'The manager has not found a fact that contradicts a spec. It checks a spec when you press Check on it.',
   citations: 'No spec requirement cites a fact yet. A requirement cites the facts its author linked to it.',
-  reads: 'No agent has opened a fact on its own yet. Agents see every fact in the vault list each turn; that is not counted.',
+  reads: 'No profile has opened a fact on its own yet. Profiles see every fact in the vault list each run; that is not counted.',
 }
 
 function ImportantWhy({ item, by, now }: { item: ImportantFact; by: ImportantBy; now: Date }) {
