@@ -3,7 +3,13 @@
 import pytest
 
 from hub.db.engine import async_session_factory
-from hub.db.models import Run, TurnUsage
+from hub.db.models import Agent, Run, TurnUsage
+
+
+def _mender_agent(name: str = "mender") -> Agent:
+    return Agent(
+        id=f"agent-{name}", project_id="proj-test", name=name, config={"hub_role": "mender"}
+    )
 
 
 def _turn(agent: str, model: str, micros: int, tokens: int) -> tuple[Run, TurnUsage]:
@@ -28,6 +34,7 @@ async def test_mender_spend_is_a_workers_line_and_the_project_total_is_unchanged
     app, auth_headers
 ) -> None:
     async with async_session_factory() as session:
+        session.add(_mender_agent())
         for run, usage in (
             _turn("claude", "M-agent", 50_000, 100),
             _turn("mender", "M", 100_000, 40),
@@ -47,10 +54,9 @@ async def test_mender_spend_is_a_workers_line_and_the_project_total_is_unchanged
     # The same $0.15 and 140 tokens as when the mender was counted among the agents.
     assert data["project"]["api_equivalent_usd_micros"] == 150_000
     assert data["project"]["total_tokens"] == 140
-    # The row still names the model it ran on, which is what a by-model breakdown reads.
-    async with async_session_factory() as session:
-        row = await session.get(TurnUsage, "usage-mender")
-        assert row.model == "M"
+    # Spend by model reads each row's own model: the mender's $0.10 stays under M.
+    by_model = {t["model"]: t["api_equivalent_usd_micros"] for t in data["recent_turns"]}
+    assert by_model["M"] == 100_000
 
 
 @pytest.mark.asyncio
@@ -61,4 +67,18 @@ async def test_no_mender_turns_adds_no_mender_line(app, auth_headers) -> None:
         session.add(usage)
         await session.commit()
     data = (await app.get("/api/v1/projects/proj-test/accounting", headers=auth_headers)).json()
+    assert [w["kind"] for w in data["workers"]] == []
+
+
+@pytest.mark.asyncio
+async def test_a_project_agent_named_mender_without_the_hub_role_stays_an_agent(
+    app, auth_headers
+) -> None:
+    async with async_session_factory() as session:
+        run, usage = _turn("mender", "M", 100_000, 40)
+        session.add(run)
+        session.add(usage)
+        await session.commit()
+    data = (await app.get("/api/v1/projects/proj-test/accounting", headers=auth_headers)).json()
+    assert [a["agent"] for a in data["agents"]] == ["mender"]
     assert [w["kind"] for w in data["workers"]] == []

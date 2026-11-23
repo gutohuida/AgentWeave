@@ -11,7 +11,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from sqlalchemy import case, func, literal_column, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from .db.models import Project, Run, TurnUsage, WorkerInvocation
+from .db.models import Agent, Project, Run, TurnUsage, WorkerInvocation
 from .runner_events import AccountingSample
 from .utils import short_id
 
@@ -575,9 +575,18 @@ async def accounting_snapshot(
             project_summary[figure], *(line[figure] for line in workers)
         )
 
+    # The Hub's mender is the agent marked `hub_role == "mender"`; a project's own agent that
+    # merely shares the name is an ordinary agent (stalls.HUB_ROLE).
+    mender_names = [
+        a.name
+        for a in (await db.execute(select(Agent).where(Agent.project_id == project_id)))
+        .scalars()
+        .all()
+        if (a.config or {}).get("hub_role") == MENDER_KIND
+    ]
     agent_result = await db.execute(
         select(TurnUsage.agent, *_aggregate_columns())
-        .where(TurnUsage.project_id == project_id, TurnUsage.agent != MENDER_KIND)
+        .where(TurnUsage.project_id == project_id, TurnUsage.agent.not_in(mender_names))
         .group_by(TurnUsage.agent)
         .order_by(TurnUsage.agent)
     )
@@ -589,7 +598,7 @@ async def accounting_snapshot(
     mender_row = (
         await db.execute(
             select(*_aggregate_columns()).where(
-                TurnUsage.project_id == project_id, TurnUsage.agent == MENDER_KIND
+                TurnUsage.project_id == project_id, TurnUsage.agent.in_(mender_names)
             )
         )
     ).one()
