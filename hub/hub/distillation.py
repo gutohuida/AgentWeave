@@ -804,22 +804,56 @@ async def unread_note(project_id: str, source_id: str, word: str) -> str:
 )
 async def distil_in_background(project_id: str, source_id: str, *, trigger: str) -> None:
     """The background entry point: a source that cannot be distilled now is a silent no-op (the
-    upload's floor is the source itself), and nothing here raises into the event loop."""
-    try:
-        plan = await prepare(project_id, source_id)
-    except CannotDistilError as refusal:
-        if refusal.no_runner:
-            await manager.record_no_runner(
-                project_id, job=manager.DISTILLATION, trigger=trigger, subject={"source": source_id}
-            )
+    upload's floor is the source itself), and nothing here raises into the event loop. With the
+    job on, it is one run that ends with a record however it ends (`manager.manager_run`)."""
+    if not await manager.job_enabled(project_id, manager.DISTILLATION):
         return
-    except Exception:  # noqa: BLE001 -- a background task must not raise
-        logger.warning("vault distillation could not start for %s", source_id, exc_info=True)
-        return
+    subject = {"source": source_id}
     try:
-        await distil(plan, trigger=trigger)
+        async with manager.manager_run(
+            project_id,
+            job=manager.DISTILLATION,
+            trigger=trigger,
+            subject=subject,
+            initiator=initiator_for(trigger),
+        ) as run:
+            try:
+                plan = await prepare(project_id, source_id)
+            except CannotDistilError as refusal:
+                if refusal.no_runner:
+                    await manager.record_no_runner(
+                        project_id, job=manager.DISTILLATION, trigger=trigger, subject=subject
+                    )
+                else:
+                    run.ends("failed", f"Did not distil: {refusal.reason}")
+                return
+            await _distilled(run, plan, trigger)
     except Exception:  # noqa: BLE001 -- a background task must not raise
         logger.warning("vault distillation failed for %s", source_id, exc_info=True)
+
+
+async def _distilled(run: manager.ManagerRun, plan: Plan, trigger: str) -> None:
+    run.uses(runner_id=plan.runner_id, cli=plan.cli, model=plan.model)
+    # A distillation that spawns nothing (a source with no text, or a file replaced while it was
+    # read, distilled again next) still ends with a record; a spawn's own firing takes precedence.
+    run.ends("empty", "Nothing was distilled: the source had no text to read.")
+    await distil(plan, trigger=trigger)
+
+
+async def distil_requested(plan: Plan) -> None:
+    """Distil's run on a source `prepare` has already planned, after the answer is sent: operator
+    work, announced and ended like every run. Never raises."""
+    try:
+        async with manager.manager_run(
+            plan.project_id,
+            job=manager.DISTILLATION,
+            trigger=REQUESTED,
+            subject={"source": plan.source["id"]},
+            initiator=initiator_for(REQUESTED),
+        ) as run:
+            await _distilled(run, plan, REQUESTED)
+    except Exception:  # noqa: BLE001 -- the answer has been sent; nothing can raise into it
+        logger.warning("vault distillation failed for %s", plan.source["id"], exc_info=True)
 
 
 # ---------------------------------------------------------------------------
