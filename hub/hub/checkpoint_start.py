@@ -120,6 +120,14 @@ async def start_from_checkpoint(
     conversation.title = started_title(checkpoint)
     conversation.title_set_by_operator = True
     conversation.started_from_checkpoint_id = checkpoint.id
+    # The document of the conversation the checkpoint summarises, so the new one carries on with it.
+    conversation.spec_document_id = (
+        await db.execute(
+            select(Conversation.spec_document_id).where(
+                Conversation.id == checkpoint.conversation_id
+            )
+        )
+    ).scalar_one_or_none()
     await give_own_worktree_if_parallel(db, conversation)
     db.add(conversation)
 

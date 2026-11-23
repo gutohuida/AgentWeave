@@ -158,6 +158,27 @@ async def test_a_peer_binding_follows_the_line_of_work_across_a_cutover(app):
     assert successor.bound_sender_conversation_id == "conv-sender"
 
 
+# --------------------------------------------------------------------------- document
+
+
+@pytest.mark.asyncio
+async def test_cutover_binding_a_continued_conversation_keeps_its_document(app):
+    """FR-2: the successor of a cutover and a conversation started from the checkpoint are both
+    bound to the document the original was, so their next briefing carries its step."""
+    from hub.checkpoint_start import start_from_checkpoint
+
+    async with async_session_factory() as db:
+        db.add(Agent(id="agent-other", project_id=PROJECT, name="other-1"))
+        await db.commit()
+        conversation = await _conversation(db, spec_document_id="spdoc-keep")
+        checkpoint = await _ready_checkpoint(db, conversation)
+        started, _ = await start_from_checkpoint(db, checkpoint, agent="other-1")
+        successor, _ = await cut_over(db, conversation, checkpoint)
+
+    assert successor.spec_document_id == "spdoc-keep"
+    assert started.spec_document_id == "spdoc-keep"
+
+
 # --------------------------------------------------------------------------- lineage
 
 
