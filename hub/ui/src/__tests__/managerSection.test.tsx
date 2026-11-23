@@ -365,8 +365,9 @@ describe('Project settings → Manager', () => {
     render(<ManagerSection />, { wrapper })
     await waitFor(() => expect(menuSelect('Build retrospective firing')).toHaveTextContent('Automatic'))
     expect(menuSelect('Thread chapters firing')).toHaveTextContent('Automatic')
+    expect(menuSelect('Pre-mortem firing')).toHaveTextContent('Automatic')
     for (const { key, title, firing_choice } of managerJobsRoute.jobs) {
-      if (key !== 'build-retrospective' && key !== 'chapters') {
+      if (key !== 'build-retrospective' && key !== 'chapters' && key !== 'pre-mortem') {
         expect(firing_choice).toBeNull()
         expect(screen.queryByRole('button', { name: `${title} firing` })).toBeNull()
       }

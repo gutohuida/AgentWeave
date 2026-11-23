@@ -93,6 +93,26 @@
       }
     },
     {
+      "key": "pre-mortem",
+      "title": "Pre-mortem",
+      "description": "Reads a change document's drafted requirements and acceptance criteria and the code they touch, assumes the change shipped and failed, and writes down how. Fires when a document's acceptance criteria are written (automatic), and when you press Run a pre-mortem on its page. Its author reads the findings in its next turn on the document, fixes what it can and asks you about the rest. Needs a runner. Off: no draft is pre-mortemed.",
+      "trigger": "criteria_written",
+      "needs_runner": true,
+      "enabled": false,
+      "runner_id": null,
+      "model": null,
+      "automatic": true,
+      "mode": "automatic",
+      "firing_choice": {
+        "button": "Run a pre-mortem",
+        "where": "a spec document's page",
+        "automatic": "when a document's acceptance criteria are written"
+      },
+      "usage_total": {
+        "firings": 0
+      }
+    },
+    {
       "key": "mender",
       "title": "Mender",
       "description": "When the project's work stalls -- a merge skipped or failed, a loop with nothing it can start, a refused turn, a dead run, or no progress for 30 minutes -- the mender reads the cause and unblocks the agents on its own: it resolves conflicts and lands the work without review. Before anything hardcore, such as touching changes it did not make, it leaves you a note under Needs you and does not do it; your answer wakes it later. Runs on the runner's CLI default model unless you choose one. Needs a runner. Off: stalls are only recorded.",

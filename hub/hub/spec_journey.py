@@ -447,6 +447,14 @@ async def set_step(
     move = {"from": document.step, "to": step}
     document.step = step
     await record_event(session, document, kind="journey", actor=actor, detail={"step": move})
+    # Leaving the step that writes the criteria stages the pre-mortem (FR-11, D7); whether its job
+    # is on and automatic is judged when it fires, after this move commits.
+    from . import pre_mortem
+
+    if pre_mortem.leaves_criteria(
+        current_name(move["from"]), step, list((steps or BUILT_IN).order())
+    ):
+        pre_mortem.fire_after_commit(session, document)
     return move
 
 

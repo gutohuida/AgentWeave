@@ -3016,6 +3016,11 @@ async def _render_hub_agent_context(
                     "is not is authoring this document through anything but `submit_spec_document`."
                 )
             lines.append("")
+            # The latest written pre-mortem reaches the author in its next turn here (FR-11).
+            if row is not None and row.kind == "change-spec":
+                from ... import pre_mortem
+
+                lines.extend(await pre_mortem.briefing_lines(db, project_id, row.id))
 
     # A project with nobody else in it gets no Team section at all — not a Team section saying the
     # team is empty. `roster` includes the agent being addressed (that is what the `<- you` marker

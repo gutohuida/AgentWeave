@@ -278,6 +278,37 @@ export function useReviewThisBuild(path: string) {
   })
 }
 
+/** A document's pre-mortems, newest first. Polled: a firing is recorded when it ends, not broadcast. */
+export function usePreMortems(path: string) {
+  const { isConfigured, selectedProjectId: projectId } = useConfigStore()
+  return useQuery<PreMortem[]>({
+    queryKey: ['project', projectId, 'manager', 'pre-mortems', path],
+    queryFn: async () =>
+      (
+        await getJson<{ pre_mortems: PreMortem[] }>(
+          `/api/v1/projects/${projectId}/manager/jobs/pre-mortem/pre-mortems?path=${encodeURIComponent(path)}`,
+          { background: true },
+        )
+      ).pre_mortems,
+    enabled: isConfigured && !!projectId && !!path,
+    retry: (count, error) => !isNoManager(error) && count < 2,
+    refetchInterval: (query) => (isNoManager(query.state.error) ? false : 10_000),
+  })
+}
+
+/** "Run a pre-mortem": refused with 409 and a sentence while the job is off, has no runner, or one
+ *  of this document is in progress. */
+export function useRunPreMortem(path: string) {
+  const queryClient = useQueryClient()
+  const projectId = useConfigStore((state) => state.selectedProjectId)
+  return useMutation({
+    mutationFn: () => postJson<unknown>(`/api/v1/projects/${projectId}/manager/jobs/pre-mortem/run`, { path }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['project', projectId, 'manager'] })
+    },
+  })
+}
+
 export function useUpdateManagerJob() {
   const queryClient = useQueryClient()
   const projectId = useConfigStore((state) => state.selectedProjectId)
