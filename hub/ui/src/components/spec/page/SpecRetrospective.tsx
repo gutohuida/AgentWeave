@@ -52,7 +52,8 @@ export function SpecRetrospective({ path, now, flash, onCopyLink }: { path: stri
   const projectId = useConfigStore((state) => state.selectedProjectId)
   const manager = useManagerItem({
     job: 'build-retrospective',
-    matches: (subject) => subject.document === path,
+    // The Hub names a retrospective's document by id, with its path beside it (subject_of).
+    matches: (subject) => subject.path === path,
     onEnded: () => void queryClient.invalidateQueries({ queryKey: ['project', projectId, 'manager', 'retrospectives', path] }),
   })
   const rows = data ?? []

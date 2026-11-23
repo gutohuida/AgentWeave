@@ -26,6 +26,9 @@ import { managerRunDestination, parseDestination, serializeDestination } from '@
 const PID = 'proj-a'
 const SPEC_A = 'spec/changes/refunds/spec.json'
 const SPEC_B = 'spec/changes/payouts/spec.json'
+// The subject the Hub gives a build retrospective: the document's id, and its path beside it
+// (build_retrospective.py subject_of).
+const RETRO_B = { document: 'spdoc-payouts', path: SPEC_B }
 
 const ago = (seconds: number) => new Date(Date.now() - seconds * 1000).toISOString()
 
@@ -83,7 +86,12 @@ beforeEach(() => {
           ],
         })
       if (url.endsWith('/project/documents'))
-        return respond({ documents: [{ id: 'd1', path: SPEC_A, title: 'Refunds', kind: 'change-spec', phase: 'approved' }] })
+        return respond({
+          documents: [
+            { id: 'd1', path: SPEC_A, title: 'Refunds', kind: 'change-spec', phase: 'approved' },
+            { id: RETRO_B.document, path: SPEC_B, title: 'Payouts', kind: 'change-spec', phase: 'approved' },
+          ],
+        })
       if (url.includes('/vault/warnings?')) return count('warnings'), respond({ warnings: [], checked: true })
       if (url.includes('/retrospectives?')) return count('retrospectives'), respond({ retrospectives: [] })
       if (url.endsWith('/vault/map')) return count('map'), respond({ entries: [] })
@@ -151,6 +159,7 @@ describe('popover-rows-link (FR-8)', () => {
   beforeEach(() => {
     running = [
       run('mrun-run', 'spec-vault-check', { document: SPEC_A }, 20),
+      run('mrun-retro', 'build-retrospective', RETRO_B, 10),
       run('run-mend', 'mender', { stall: 'stall-1', reason: 'Task stuck in review' }, 5, { conversation_id: 'conv-m', trigger: 'stall' }),
     ]
     // Newest first, as `/activity` lists firings.
@@ -171,13 +180,15 @@ describe('popover-rows-link (FR-8)', () => {
     expect(runningRow).toHaveTextContent('Spec vault check')
     expect(runningRow).toHaveTextContent('Refunds')
     expect(runningRow.textContent).toMatch(/Running 2\ds/)
+    // A retrospective names its document by id; the row still gives the spec's title.
+    expect(within(popover).getByTestId('manager-popover-run-mrun-retro')).toHaveTextContent('Payouts')
     expect(within(popover).getByTestId('manager-popover-run-mrun-fin')).toHaveTextContent(/Finished/)
     expect(within(popover).getByTestId('manager-popover-run-mrun-bad')).toHaveTextContent(/Failed/)
     expect(within(popover).getByTestId('manager-popover-run-mrun-bad')).toHaveTextContent('The model does not exist')
     expect(within(popover).getByTestId('manager-popover-run-run-mend')).toHaveTextContent('Mender')
     expect(within(popover).getByTestId('manager-popover-run-run-mend')).toHaveTextContent('Task stuck in review')
     // A firing from before runs had ids is not a run.
-    expect(popover.querySelectorAll('[data-testid^="manager-popover-run-"]:not([data-testid$="-conversation"])')).toHaveLength(4)
+    expect(popover.querySelectorAll('[data-testid^="manager-popover-run-"]:not([data-testid$="-conversation"])')).toHaveLength(5)
   })
 
   it('opens a finished row in Settings › Manager, and a mender row in its conversation too', async () => {
@@ -235,7 +246,7 @@ describe('icon-placements (FR-4)', () => {
   })
 
   it("shows working on spec B's retrospective and idle on spec A's", async () => {
-    running = [run('mrun-r', 'build-retrospective', { document: SPEC_B })]
+    running = [run('mrun-r', 'build-retrospective', RETRO_B)]
     const props = { now: new Date(), flash: null, onCopyLink: () => {} }
     wrap(
       <>
@@ -294,7 +305,7 @@ describe('products-refresh (FR-5)', () => {
     await screen.findByTestId('manager-icon')
     await streamOpen()
     const before = hits.retrospectives ?? 0
-    await act(async () => push('manager_run_ended', ended('mrun-r', 'build-retrospective', { document: SPEC_B })))
+    await act(async () => push('manager_run_ended', ended('mrun-r', 'build-retrospective', RETRO_B)))
     await waitFor(() => expect(hits.retrospectives).toBeGreaterThan(before))
   })
 
@@ -423,7 +434,7 @@ describe('failure-persists on the spec page, with the warning list closed (FR-6)
 
 describe('a failed retrospective is seen only when its icon is opened (FR-6)', () => {
   beforeEach(() => {
-    unseen = [{ run_id: 'mrun-rfail', job: 'build-retrospective', subject: { document: SPEC_B }, ended_at: ago(600), detail: 'runner timed out' }]
+    unseen = [{ run_id: 'mrun-rfail', job: 'build-retrospective', subject: RETRO_B, ended_at: ago(600), detail: 'runner timed out' }]
   })
 
   it('shows failed with its reason, marks it seen only on opening, and keeps it shown', async () => {
