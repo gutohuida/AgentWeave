@@ -229,10 +229,12 @@ export function VaultOverview(props: VaultOverviewProps) {
   )
 }
 
+// Why a reason's list is empty: two of the three start empty on a real project, and an empty list
+// that says nothing reads as "nothing matters".
 const NONE: Record<ImportantBy, string> = {
-  conflicts: 'The manager has not found a fact that contradicts a spec. It checks a spec when you press Check on it.',
-  citations: 'No spec requirement cites a fact yet. A requirement cites the facts its author linked to it.',
-  reads: 'No profile has opened a fact on its own yet. Profiles see every fact in the vault list each run; that is not counted.',
+  conflicts: 'No spec check has found a conflict with a fact yet. The manager checks a spec against the vault when you press Check on it.',
+  citations: 'No spec requirement lists a fact yet. A requirement lists the facts it rests on in its facts.',
+  reads: 'No profile has opened a fact yet. Profiles see every fact in the vault list each run; that is not counted.',
 }
 
 function ImportantWhy({ item, by, now }: { item: ImportantFact; by: ImportantBy; now: Date }) {

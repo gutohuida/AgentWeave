@@ -19,10 +19,12 @@ import {
   useVaultContradictions,
   useVaultEntry,
   useVaultFactRecords,
+  useVaultFactUses,
   useVaultFile,
   useVaultMap,
   useVaultReports,
   useVaultSettings,
+  useVaultTextSearch,
   vaultFileMediaType,
   vaultFileRefusal,
   type VaultContradiction,
@@ -36,6 +38,7 @@ import { toast } from '@/lib/toast'
 import type { VaultAddInput, VaultAddResult } from './VaultAddDialog'
 import { VaultLibrary } from './VaultLibrary'
 import { VaultDistillationStatus } from './VaultDistillationStatus'
+import type { FactUses, TextSearch } from './VaultOverview'
 import type { VaultFact } from './VaultReader'
 import { hasTrackedFile } from './vaultKinds'
 import '@/styles/vault.css'
@@ -59,6 +62,9 @@ const WATCH_EVERY_MS = 3000
 // Shown until the settings arrive, and if they cannot be read; the storage dialog says why.
 const NO_SETTINGS: VaultSettings = { private_location: null, effective_private_location: '', default_visibility: 'tracked' }
 
+// The search inside documents is asked once typing pauses; until then Documents says it is searching.
+const SEARCH_PAUSE_MS = 250
+
 export function VaultScreen() {
   const [watching, setWatching] = React.useState(0)
   const every = watching ? WATCH_EVERY_MS : false
@@ -66,6 +72,16 @@ export function VaultScreen() {
   const settings = useVaultSettings()
   const contradictions = useVaultContradictions(every)
   const reports = useVaultReports(every)
+  const factUses = useVaultFactUses()
+  // What is typed, and what was typed when typing last paused: the text search asks for the latter,
+  // keyed by it, so an earlier word's answer lands under its own key and never replaces this one's.
+  const [query, setQuery] = React.useState('')
+  const [asked, setAsked] = React.useState('')
+  React.useEffect(() => {
+    const timer = setTimeout(() => setAsked(query.trim()), SEARCH_PAUSE_MS)
+    return () => clearTimeout(timer)
+  }, [query])
+  const textSearch = useVaultTextSearch(asked)
   const [selectedId, setSelectedId] = React.useState<string | null>(null)
   const [focusFactId, setFocusFactId] = React.useState<string | null>(null)
   // The source being read for facts, and how many facts it had when that started.
@@ -149,6 +165,33 @@ export function VaultScreen() {
       </div>
     )
   }
+
+  // A Hub that predates the facts' uses answers 404: the library is shown as it was, not an
+  // Overview that cannot say which facts matter.
+  const uses: FactUses | undefined = isNoVault(factUses.error)
+    ? undefined
+    : factUses.error
+      ? { state: 'error', message: readableApiError(factUses.error, 'Could not read which facts the specs name.') }
+      : factUses.data
+        ? { state: 'ready', uses: factUses.data.uses }
+        : { state: 'loading' }
+
+  const typed = query.trim()
+  const text: TextSearch | undefined = !typed
+    ? undefined
+    : typed.length < 2
+      ? // The Hub searches text from two characters; one is matched against names and claims only.
+        { state: 'ready', hits: [] }
+      : typed !== asked || textSearch.isPending
+        ? { state: 'searching' }
+        : textSearch.error
+          ? {
+              state: 'error',
+              message: isNoVault(textSearch.error)
+                ? 'This Hub cannot search inside documents yet.'
+                : readableApiError(textSearch.error, 'Could not search inside documents.'),
+            }
+          : { state: 'ready', hits: textSearch.data ?? [] }
 
   /** Open a source, or a fact: under its source with it marked, or on its own when its source is
    *  not in the map. */
@@ -295,6 +338,9 @@ export function VaultScreen() {
   return (
     <VaultLibrary
       status={<VaultDistillationStatus />}
+      uses={uses}
+      textSearch={text}
+      onQueryChange={setQuery}
       entries={entries}
       settings={settings.data ?? NO_SETTINGS}
       settingsError={settings.error ? readableApiError(settings.error, "Could not read the vault's settings.") : null}
