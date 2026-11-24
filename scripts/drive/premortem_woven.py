@@ -385,6 +385,14 @@ def pm_gap(findings):
     return None
 
 
+def says_unanswered(gap, n, total):
+    """The gap's message names *n* as the unanswered count: '<n> unanswered' or, as the Hub words
+    it, '<n> of <total> pre-mortem findings unanswered' (SPUWH-7: the literal '<n> unanswered' read
+    the Hub's '4 of 4 ... unanswered' as missing). The total after 'of' is never read as the count."""
+    message = (gap or {}).get("message", "")
+    return re.search(rf"(?<!\d)(?<!of ){n}(?: of {total})?(?!\d)[^.:]{{0,40}}\bunanswered", message) is not None
+
+
 def check_document(base):
     code, out = api("POST", f"{base}/project/documents/check?path={q(DOC)}")
     if code != 200 or not isinstance(out, dict):
@@ -591,7 +599,7 @@ def step_cutover(state):
     save_artefact("check_cutover.json", out)
     state["gap_seen"] = gap is not None
     total = len(findings)
-    criterion(ready is False and gap is not None and f"{total} unanswered" in (gap or {}).get("message", ""),
+    criterion(ready is False and says_unanswered(gap, total, total),
               f"cutover: the Check says ready false with the pre-mortem gap, {total} unanswered "
               f"(ready={ready}, gap={gap})")
     assert_panel(state, successor, "cutover", findings)
@@ -622,7 +630,7 @@ def step_answer_one(state):
     ready, gap, out = check_document(base)
     save_artefact("check_answer_one.json", out)
     state["gap_seen"] = state.get("gap_seen") or gap is not None
-    criterion(ready is False and gap is not None and f"{open_} unanswered" in (gap or {}).get("message", ""),
+    criterion(ready is False and says_unanswered(gap, open_, len(findings)),
               f"answer-one: the Check's gap says {open_} unanswered (ready={ready}, gap={gap})")
     assert_briefing("answer-one", briefing(base, attached(base, successor)), findings)
     assert_panel(state, successor, "answer-one", findings)
