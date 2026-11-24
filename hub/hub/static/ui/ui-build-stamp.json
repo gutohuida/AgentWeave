@@ -1,11 +1,5 @@
 {
-<<<<<<< HEAD
-  "src_fingerprint": "7efbd4bebb7008f65345d6318e01d0897fb2d1c34b46641e3644c49808556b43",
-  "src_commit": "7e2af874f791f57da315af46a06ba1324ea3eb28",
-  "built_at": "2026-11-24T00:58:32+00:00"
-=======
-  "src_fingerprint": "67f32fccb03d70bb4b3ef6ef4eaacbc7cfd92eed313877db3fbd920e820aaa07",
-  "src_commit": "b1a6eb7b037b5203b457c936ce898109a9ce6ed9",
-  "built_at": "2026-11-23T23:00:02+00:00"
->>>>>>> master
+  "src_fingerprint": "8243ec60a6e8f803d9dded17c58ac4c405a872a803b9ce782e4e60162e4e5aa9",
+  "src_commit": "7a06880c9741b5a2cc12abddaede2c2ca40405ab",
+  "built_at": "2026-11-24T01:21:55+00:00"
 }
