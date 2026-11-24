@@ -267,4 +267,21 @@ describe('possible-not-final (FR-10, the UI half)', () => {
     expect(screen.queryByTestId('spec-possible-facts')).toBeNull()
     expect(screen.queryByText(POSSIBLE.claim)).toBeNull()
   })
+
+  it('a warnings read that failed says the possible facts could not be read, not that there are none', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        if (new URL(url).pathname.endsWith('/vault/warnings')) return new Response(JSON.stringify({ detail: 'vault check broke' }), { status: 500 })
+        const body = route(url)
+        if (body === undefined) return new Response(JSON.stringify({ detail: 'not stubbed' }), { status: 404 })
+        return new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } })
+      }),
+    )
+    renderPage()
+    // The warnings hook retries a failed read twice before it gives up.
+    const notes = await screen.findAllByTestId('spec-possible-facts-unreadable', {}, { timeout: 8000 })
+    expect(notes[0]).toHaveTextContent('Possible backing facts could not be read')
+    expect(screen.queryByTestId('spec-possible-facts')).toBeNull()
+  })
 })
