@@ -17,7 +17,7 @@ from sqlalchemy.orm.attributes import set_committed_value
 from . import traces
 from .conversations import get_conversation_by_id
 from .db.engine import async_session_factory
-from .db.models import Conversation, InboundQueueEntry, Project, Run, Task
+from .db.models import Conversation, InboundQueueEntry, Project, Run, SpecDocument, Task
 from .inbound_queue import (
     DELIVERY_ATTEMPT_LIMIT,
     can_start,
@@ -764,6 +764,18 @@ async def _attempt_turn(
     # several entries, and the operator's own is the one whose viewing position describes
     # what they asked. An agent's or a job's entry never carries one.
     spec_document = controlling_operator.spec_document if controlling_operator is not None else None
+    # No operator entry names one -- a checkpoint delivery, an auto-continued successor -- so the
+    # conversation's own document briefs the turn: a continued line of work keeps its step
+    # instructions.
+    if not spec_document and conversation.spec_document_id:
+        spec_document = (
+            await db.execute(
+                select(SpecDocument.path).where(
+                    SpecDocument.id == conversation.spec_document_id,
+                    SpecDocument.project_id == project_id,
+                )
+            )
+        ).scalar_one_or_none()
 
     # Captured before the call because the refusal branch rolls the session back, and a
     # rollback expires every row this function loaded (`expire_on_commit=False` does not cover
