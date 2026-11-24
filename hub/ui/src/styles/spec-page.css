@@ -183,11 +183,12 @@ button.aw-sp-check-pill:focus-visible { outline: none; box-shadow: 0 0 0 2px var
 
 .aw-sp-section { margin-top: 30px; scroll-margin-top: 60px; border-radius: var(--radius-lg); }
 .aw-sp-section-title {
-  display: flex; align-items: center; gap: 8px; margin-bottom: 10px;
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; margin-bottom: 10px;
   font-size: 15px; font-weight: 600; letter-spacing: -.01em;
 }
+.aw-sp-section-name { display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; }
 .aw-sp-section-count {
-  display: inline-flex; align-items: center; height: 18px; padding: 0 6px; border-radius: 999px;
+  flex: none; display: inline-flex; align-items: center; height: 18px; padding: 0 6px; border-radius: 999px;
   background: var(--surface-2); font-size: 11px; font-weight: 500; color: var(--text-2); font-variant-numeric: tabular-nums;
 }
 .aw-sp-section-actions { margin-left: auto; display: inline-flex; gap: 6px; }
