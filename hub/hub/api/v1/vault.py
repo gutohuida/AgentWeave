@@ -537,6 +537,24 @@ async def get_vault_map(
     return await read_map(session, project[0])
 
 
+@router.get("/search")
+async def search_vault_text(
+    q: str = Query(...),
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """The sources whose text holds `q`, ignoring case (`a-vault-page-that-says-what-it-holds`
+    FR-9): per source its id, how many lines match and the first three as {line, text}. Archived
+    sources and private text held on another machine are not searched; 400 for a query of fewer
+    than two characters."""
+    root, private = await roots(session, project[0])
+    try:
+        hits = await asyncio.to_thread(vault.search_text, root, private, q)
+    except vault.VaultError as exc:
+        raise _refused(exc) from exc
+    return {"hits": hits}
+
+
 @router.get("/entries/{entry_id}")
 async def get_vault_entry(
     entry_id: str,

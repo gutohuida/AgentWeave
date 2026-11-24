@@ -348,6 +348,8 @@ export function VaultReader({
                 <Icon name="alert_triangle" size={14} />
                 <span>{error}</span>
               </p>
+            ) : draft === null && entry.kind === 'fact' ? (
+              <FactAlone entry={entry} page={page} />
             ) : draft === null ? (
               <EntryText entry={entry} page={page} ranges={ranges} onShowFormatted={() => setCiting(null)} />
             ) : null}
@@ -366,6 +368,8 @@ export function VaultReader({
             extracting={extracting}
             extractable={canExtract(entry)}
             focusFactId={focusFactId ?? null}
+            sourceId={entry.id}
+            text={page?.content ?? null}
             onExtract={() => onExtractFacts(entry.id)}
             onResolve={onResolve}
             onCite={(id) => {
@@ -452,6 +456,49 @@ function EntryText({
     )
   }
   return <div data-testid="vault-entry-text">{body}</div>
+}
+
+/** A fact whose source is not in the map, opened on its own: its claim, and why there is no
+ *  source to show it in. Not an error. */
+function FactAlone({ entry, page }: { entry: VaultEntry; page: VaultEntryPage | null }) {
+  return (
+    <div className="flex max-w-[78ch] flex-col gap-2" data-testid="vault-fact-alone">
+      <blockquote className="vault-statement" data-kind="note">
+        {page?.claim ?? entry.opening ?? entry.name}
+      </blockquote>
+      <p className="vault-note">
+        <Icon name="info" size={14} />
+        <span>Its source is not in the vault, so this fact is shown on its own.</span>
+      </p>
+    </div>
+  )
+}
+
+/** The lines a focused fact cites, with one line either side, marked as the text view marks them.
+ *  A fact citing no lines of this source shows none. */
+function CitedLines({ text, ranges }: { text: string; ranges: ReadonlyArray<readonly [number, number]> }) {
+  if (!ranges.length) return null
+  const lines = (text.endsWith('\n') ? text.slice(0, -1) : text).split('\n')
+  const shown = new Set<number>()
+  for (const [start, end] of ranges) for (let n = Math.max(1, start - 1); n <= Math.min(lines.length, end + 1); n++) shown.add(n)
+  if (!shown.size) return null
+  return (
+    <div className="vault-lines" data-testid="vault-fact-lines">
+      {[...shown].sort((a, b) => a - b).map((number) => (
+        <div
+          key={number}
+          className="vault-line"
+          data-testid={`vault-line-${number}`}
+          data-highlighted={ranges.some(([start, end]) => number >= start && number <= end) ? 'true' : 'false'}
+        >
+          <span className="vault-line-number" aria-hidden="true">
+            {number}
+          </span>
+          <span className="vault-line-text">{lines[number - 1] || ' '}</span>
+        </div>
+      ))}
+    </div>
+  )
 }
 
 function PrivateNote({ entry }: { entry: VaultEntry }) {
@@ -548,6 +595,8 @@ function FactsView({
   extracting,
   extractable,
   focusFactId,
+  sourceId,
+  text,
   onExtract,
   onResolve,
   onCite,
@@ -558,6 +607,9 @@ function FactsView({
   extracting?: boolean
   extractable: boolean
   focusFactId: string | null
+  sourceId: string
+  /** The source's text as far as it has been read; the focused fact shows its cited lines in it. */
+  text: string | null
   onExtract: () => void
   onResolve: (contradictionId: string, stands: string | null, note: string) => VaultActionResult
   onCite: (factId: string) => void
@@ -621,7 +673,7 @@ function FactsView({
                   data-testid={`vault-stale-${fact.id}`}
                   title="Its source changed after this fact was drawn and has not been extracted since."
                 >
-                  Stale
+                  Stale: source changed
                 </span>
               ) : null}
             </p>
@@ -633,6 +685,12 @@ function FactsView({
                 <q>{c.quote}</q>
               </p>
             ))}
+            {fact.id === focusFactId && text !== null ? (
+              <CitedLines
+                text={text}
+                ranges={(fact.citations ?? []).filter((c) => c.source === sourceId).map((c) => [c.line_start, c.line_end] as const)}
+              />
+            ) : null}
             <p className="vault-fact-foot">
               {fact.available ? (
                 <Button variant="ghost" size="xs" data-testid={`vault-fact-link-${fact.id}`} onClick={() => onCite(fact.id)}>
