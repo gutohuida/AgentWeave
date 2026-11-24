@@ -552,6 +552,7 @@ async def readiness(
         *_steps_skipped(workspace, document),
         *await _amendments_unreviewed(session, document),
         *await _vault_warnings(session, workspace, document),
+        *(await _pre_mortem_gap(session, document) if change else []),
     ]
     if for_save:
         findings.extend(await _unclaimed_slices(session, workspace, document.project_id, payload))
@@ -1749,6 +1750,32 @@ async def _vault_warnings(
             "vault_warning", f"requirements[{warning['index']}]", warning["message"]
         )
         for warning in warnings
+    ]
+
+
+async def _pre_mortem_gap(
+    session: AsyncSession, document: SpecDocument
+) -> List[spec_completeness.Finding]:
+    """The `pre_mortem_unanswered` gap while the newest written pre-mortem has unanswered findings
+    (`the-spec-process-uses-what-the-hub-already-knows` FR-5): a gap the operator may approve
+    over, never a refusal, and nothing with no written pre-mortem or every finding answered."""
+    from . import pre_mortem
+
+    try:
+        counted = await pre_mortem.unanswered(session, document)
+    except Exception:  # noqa: BLE001 -- a gap, never a gate
+        logger.warning("pre-mortem answers could not be read for %s", document.path, exc_info=True)
+        return []
+    if counted is None or counted[0] == 0:
+        return []
+    left, total = counted
+    return [
+        spec_completeness.Finding(
+            "pre_mortem_unanswered",
+            "pre_mortem",
+            f"{left} of {total} pre-mortem findings unanswered: the author answers each with a "
+            "note of what it did (answer_pre_mortem)",
+        )
     ]
 
 

@@ -13,6 +13,7 @@ import { CorpusStartOffer } from './page/CorpusStartOffer'
 import { SpecDocList } from './page/SpecDocList'
 import { SpecPlainDocument } from './page/SpecPlainDocument'
 import { SpecWorkspace } from './page/SpecWorkspace'
+import { usePossibleFactsAside } from './page/possibleFactsAside'
 import { useSpecListData, useSpecSurface } from './page/useSpecSurface'
 import { SpecDocumentPicker } from './SpecDocumentPicker'
 import { SpecListFooter } from './SpecListFooter'
@@ -245,8 +246,10 @@ function OpenDocument({
     onDeleted: () => onOpenDocument(null),
     initialAnchor: anchor,
   })
+  // Possible backing facts show on the full spec page only, never in the side panel (FR-10).
+  const requirementAside = usePossibleFactsAside(path)
   if (result.status === 'ready') {
-    return <SpecWorkspace {...result.surface} entries={list.entries} listPrefs={list.prefs} onListPrefsChange={list.setPrefs} onNew={() => toast(NEW_CHANGE_HINT)} layout="column" listFooter={footer} onShowList={onShowList} />
+    return <SpecWorkspace {...result.surface} requirementAside={requirementAside} entries={list.entries} listPrefs={list.prefs} onListPrefsChange={list.setPrefs} onNew={() => toast(NEW_CHANGE_HINT)} layout="column" listFooter={footer} onShowList={onShowList} />
   }
   return (
     <div className="aw-sp" data-layout="column">

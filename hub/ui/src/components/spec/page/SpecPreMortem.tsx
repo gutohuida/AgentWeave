@@ -1,7 +1,9 @@
 import * as React from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { isNoManager, useManagerJobs, usePreMortems, useRunPreMortem, type PreMortem, type PreMortemFinding } from '@/api/manager'
 import { readableApiError } from '@/api/client'
 import { Icon } from '@/components/common/Icon'
+import { useManagerItem } from '@/components/manager/useManagerItem'
 import { Button } from '@/components/ui/button'
 import { formatDateTime, formatUsage } from '@/lib/format'
 import { environmentDestination, goTo } from '@/lib/navigation'
@@ -31,6 +33,14 @@ export function SpecPreMortem({ path, now, flash, onCopyLink }: { path: string; 
   const { data: jobList, error: jobsError } = useManagerJobs()
   const run = useRunPreMortem(path)
   const projectId = useConfigStore((state) => state.selectedProjectId)
+  const queryClient = useQueryClient()
+  // A firing of this document in progress, whoever started it: the automatic one shows running too
+  // (spec the-spec-process-uses-what-the-hub-already-knows, FR-7), and the list is read when it ends.
+  const manager = useManagerItem({
+    job: 'pre-mortem',
+    matches: (subject) => subject.path === path,
+    onEnded: () => void queryClient.invalidateQueries({ queryKey: ['project', projectId, 'manager', 'pre-mortems', path] }),
+  })
   const rows = data ?? []
   const newest = rows[0]?.id ?? null
   // The newest firing when a press was accepted: until the list moves on from it, one is running.
@@ -48,7 +58,7 @@ export function SpecPreMortem({ path, now, flash, onCopyLink }: { path: string; 
     <SpecPreMortemSection
       preMortems={rows}
       jobOff={job ? !job.enabled : false}
-      running={askedOver !== undefined && askedOver === newest}
+      running={manager.state === 'working' || (askedOver !== undefined && askedOver === newest)}
       refusal={run.isError ? readableApiError(run.error, 'The Hub did not answer.') : unreadable ? readableApiError(unreadable, 'The Hub did not answer.') : null}
       pending={run.isPending}
       now={now}
@@ -166,10 +176,10 @@ export function SpecPreMortemSection({
           </dl>
           <Findings rows={written.findings} now={now} answered={Boolean(answers)} />
         </article>
-      ) : !unwritten && !jobOff ? (
+      ) : !unwritten && !running ? (
         <div className="aw-sp-empty">
           <Icon name="history" size={18} />
-          <span>No pre-mortem yet.</span>
+          <span>No pre-mortem has run yet.</span>
         </div>
       ) : null}
       {earlier.length ? <Earlier preMortems={earlier} now={now} /> : null}

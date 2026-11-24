@@ -1,15 +1,7 @@
+import type { SpecPossibleFact } from '@/api/vault'
 import '@/styles/spec-page.css'
 
-/** A fact the spec-vault check named as possibly backing a requirement (spec
- *  the-spec-process-uses-what-the-hub-already-knows, FR-9). Nobody reviewed it: it is never a fact
- *  the requirement lists, raises no warning and counts as no citation (FR-10). */
-export interface SpecPossibleFact {
-  requirement: string
-  fact: string
-  claim: string
-  /** The name of the fact's source, or null when its source is not in the vault. */
-  source: string | null
-}
+export type { SpecPossibleFact }
 
 /** A requirement's possible backing facts, under its statement on the full spec page only. Draws
  *  nothing for a requirement the check named none for. */
