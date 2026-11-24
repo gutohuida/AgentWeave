@@ -46,7 +46,8 @@ MISSING = "fct-000000000000"
 
 class _Worker:
     """Stands in for `run_worker`: answers each call with the next scripted list of conflicts,
-    each a (requirement, fact, explanation) tuple, or None for a spawn that failed."""
+    each a (requirement, fact, explanation) tuple, or None for a spawn that failed. A dict is the
+    model's whole JSON answer, validated as `run_worker` validates it."""
 
     def __init__(self, *answers, on_call=None) -> None:
         self.answers = list(answers)
@@ -60,6 +61,8 @@ class _Worker:
         answer = self.answers.pop(0) if self.answers else []
         if answer is None:
             return WorkerResult("spawn_failed", error="boom")
+        if isinstance(answer, dict):
+            return WorkerResult("ok", parsed=vault_spec_check.CheckAnswer.model_validate(answer))
         conflicts = [
             vault_spec_check.ConflictDraft(requirement=r, fact=f, explanation=e)
             for r, f, e in answer
@@ -369,7 +372,7 @@ async def test_the_warnings_route_says_whether_a_check_ever_ran(
     await _create(app, auth_headers)
     await _saved(app, run_headers, _requirement("alpha", "It responds within 200ms"))
     listed = await app.get(f"{PROJECT}/vault/warnings", params={"path": PATH}, headers=auth_headers)
-    assert listed.json() == {"warnings": [], "checked": False}, listed.text
+    assert listed.json() == {"warnings": [], "checked": False, "possible_facts": []}, listed.text
 
 
 @pytest.mark.asyncio
@@ -680,3 +683,156 @@ async def _place_at_the_end():
     from .test_spec_journey_briefing import _place
 
     await _place(step="build", size="large")
+
+
+# ---------------------------------------------------------------------------
+# possible-facts-rule, possible-not-final (the-spec-process-uses-what-the-hub-already-knows
+# FR-9, FR-10)
+# ---------------------------------------------------------------------------
+
+
+async def _possible_facts(app, auth_headers, path: str = PATH) -> list:
+    listed = await app.get(f"{PROJECT}/vault/warnings", params={"path": path}, headers=auth_headers)
+    assert listed.status_code == 200, listed.text
+    return listed.json()["possible_facts"]
+
+
+@pytest.mark.asyncio
+async def test_the_check_names_possible_backing_facts_in_its_one_call_by_the_conflicts_rules(
+    app, auth_headers, run_headers, worker, tmp_path  # noqa: F811
+) -> None:
+    january = await _source(app, auth_headers, JANUARY, "2026-01-10")
+    refunds = await _fact(app, auth_headers, tmp_path, january, "Refunds up to 300 need none.")
+    cards = await _fact(app, auth_headers, tmp_path, january, "Refunds go to the card.")
+    await _enable(app, auth_headers)
+    await _create(app, auth_headers)
+    a = _requirement("r-a", "Refunds up to 300 euros need no approval.")
+    await _saved(app, run_headers, a, _requirement("r-b", "Refunds are paid to the card."))
+    fake = worker(
+        {
+            "conflicts": [],
+            "possible_facts": [
+                {"requirement": "r-a", "fact": refunds},
+                {"requirement": "r-b", "fact": cards},
+                {"requirement": "r-a", "fact": MISSING},
+                {"requirement": "r-z", "fact": cards},
+            ],
+        },
+        {
+            "conflicts": [{"requirement": "r-a", "fact": cards, "explanation": "Cash or card."}],
+            "possible_facts": [{"requirement": "r-a"}],
+        },
+    )
+
+    await _check(app, auth_headers)
+    assert len(fake.calls) == 1
+    prompt = fake.calls[0]["prompt"]
+    assert "possible_facts" in prompt and "possibly back" in prompt
+    fired = (await _firings())[-1]
+    assert fired["outcome"] == "written" and fired["conflicts"] == []
+    # The nonexistent fact and requirement are dropped when kept, not only when read.
+    assert [(p["requirement"], p["fact"]) for p in fired["possible_facts"]] == [
+        ("r-a", refunds),
+        ("r-b", cards),
+    ]
+    assert await _possible_facts(app, auth_headers) == [
+        {
+            "requirement": "FR-1",
+            "fact": refunds,
+            "claim": "Refunds up to 300 need none.",
+            "source": JANUARY,
+        },
+        {
+            "requirement": "FR-2",
+            "fact": cards,
+            "claim": "Refunds go to the card.",
+            "source": JANUARY,
+        },
+    ]
+    # Possible facts are never warnings.
+    assert await _warnings(app, auth_headers) == []
+
+    # B reworded: its possible fact was judged against the old wording, so it is not answered.
+    await _saved(app, run_headers, a, _requirement("r-b", "Refunds are paid in cash or card."))
+    assert [p["requirement"] for p in await _possible_facts(app, auth_headers)] == ["FR-1"]
+
+    # A malformed possible-facts part costs nothing of the conflicts, and the newest firing is
+    # current: A's possible fact from the first firing is no longer answered.
+    again = await _check_now(app, auth_headers)
+    assert again.status_code == 202, again.text
+    assert len(fake.calls) == 2
+    fired = (await _firings())[-1]
+    assert fired["outcome"] == "written" and fired["possible_facts"] == []
+    assert [(c["requirement"], c["fact"]) for c in fired["conflicts"]] == [("r-a", cards)]
+    assert [(w["key"], w["kind"]) for w in await _warnings(app, auth_headers)] == [
+        ("r-a", "conflict")
+    ]
+    assert await _possible_facts(app, auth_headers) == []
+
+
+def test_a_possible_facts_part_that_is_missing_or_malformed_is_dropped_whole() -> None:
+    conflict = {"requirement": "r1", "fact": "fct-1", "explanation": "x"}
+    for part in (None, "fct-1", {"r1": "fct-1"}, [{"requirement": "r1", "fact": 3}], ["fct-1"]):
+        body = {"conflicts": [conflict]}
+        if part is not None:
+            body["possible_facts"] = part
+        answer = vault_spec_check.CheckAnswer.model_validate(body)
+        assert answer.possible_facts == [] and len(answer.conflicts) == 1, part
+    # The schema a schema-taking runner (Codex) is handed still types the part.
+    schema = vault_spec_check.CheckAnswer.model_json_schema()
+    assert schema["properties"]["possible_facts"]["type"] == "array"
+
+
+@pytest.mark.asyncio
+async def test_a_disputed_possible_fact_raises_no_warning_and_is_not_a_listed_fact(
+    app, auth_headers, run_headers, tmp_path  # noqa: F811
+) -> None:
+    january = await _source(app, auth_headers, JANUARY, "2026-01-10")
+    march = await _source(app, auth_headers, MARCH, "2026-03-01")
+    disputed = await _fact(app, auth_headers, tmp_path, january, "Refunds up to 300 need none.")
+    newer = await _fact(app, auth_headers, tmp_path, march, "Refunds up to 500 need none.")
+    await _contradiction(app, auth_headers, tmp_path, (disputed, newer), newer)
+    await _create(app, auth_headers)
+    statement = "Refunds up to 300 euros need no approval."
+    await _saved(app, run_headers, _requirement("r1", statement))
+    async with async_session_factory() as db:
+        await manager.record_firing(
+            db,
+            "proj-test",
+            job=JOB,
+            trigger="document_proposed",
+            subject={"document": PATH},
+            runner_id="runner-x",
+            cli="claude",
+            model=HAIKU,
+            outcome="written",
+            detail="1 possible backing fact kept",
+            duration_ms=1,
+            usage=None,
+            extra={
+                "conflicts": [],
+                "possible_facts": [{"requirement": "r1", "fact": disputed, "statement": statement}],
+            },
+        )
+
+    # Served, with its claim, beside the warnings: a cited fact this disputed would warn.
+    assert await _possible_facts(app, auth_headers) == [
+        {
+            "requirement": "FR-1",
+            "fact": disputed,
+            "claim": "Refunds up to 300 need none.",
+            "source": JANUARY,
+        }
+    ]
+    assert await _warnings(app, auth_headers) == []
+    # It is not a fact the requirement lists: the document is unchanged, so no read built on a
+    # requirement's `facts` (the cited-fact warnings, the facts' uses) counts it as a citation.
+    stored = parse_stored((tmp_path / PATH).read_text(encoding="utf-8"))
+    assert [r["facts"] for r in vault_spec_check.requirements_of(stored)] == [[]]
+
+    # Once the author lists it, it is a cited fact (and warns), no longer a possible one.
+    await _saved(app, run_headers, _requirement("r1", statement, [disputed]))
+    assert await _possible_facts(app, auth_headers) == []
+    assert [(w["key"], w["kind"]) for w in await _warnings(app, auth_headers)] == [
+        ("r1", "disputed")
+    ]
