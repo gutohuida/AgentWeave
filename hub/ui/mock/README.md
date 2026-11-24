@@ -338,7 +338,7 @@ documents is worked out in the screen from the recorded texts.
 
 ```
 http://localhost:5199/mock.html#tab/vault                       # Overview on the real vault
-http://localhost:5199/mock.html#tab/vault?state=no-uses         # uses-loading | uses-error | search-slow | search-error | no-uses
+http://localhost:5199/mock.html#tab/vault?state=no-uses         # uses-loading | uses-error | search-slow | search-error | no-uses | unusual
 http://localhost:5199/mock.html#tab/vault?data=replica          # the replica's small vault, as before
 ```
 
