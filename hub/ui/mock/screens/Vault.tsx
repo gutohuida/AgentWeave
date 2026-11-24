@@ -32,7 +32,7 @@ const STATE = query.get('state') ?? ''
 const REPLICA = query.get('data') === 'replica'
 
 // mock state: the recording is of 2026-11-23; the mock's clock sits just after it, not at the
-// replica's October clock, so "last opened 3d ago" reads as it will.
+// replica's October clock, so "last opened 3 days ago" reads as it will.
 const PROJECT_NOW = new Date('2026-11-23T21:00:00Z')
 
 const settings = settingsJson as unknown as VaultSettings

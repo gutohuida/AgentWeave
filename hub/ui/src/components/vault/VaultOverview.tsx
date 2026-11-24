@@ -3,7 +3,7 @@ import type { VaultContradiction, VaultEntry, VaultFactUse, VaultReport } from '
 import { Icon } from '@/components/common/Icon'
 import { Button } from '@/components/ui/button'
 import { Segmented } from '@/components/ui/segmented'
-import { formatAgo, formatCount, formatDateTime, formatDay, formatWhole } from '@/lib/format'
+import { formatAgoLong, formatCount, formatDateTime, formatDay, formatWhole } from '@/lib/format'
 import { baseName, kindOf, plainOpening } from './vaultKinds'
 import {
   aroundMatch,
@@ -192,7 +192,7 @@ export function VaultOverview(props: VaultOverviewProps) {
                           Opened {s.fetches}×
                         </span>
                         {s.last_fetched_at ? (
-                          <span title={`Last opened ${formatDateTime(s.last_fetched_at, now)}`}>last {formatAgo(s.last_fetched_at, now)} ago</span>
+                          <span title={`Last opened ${formatDateTime(s.last_fetched_at, now)}`}>last opened {formatAgoLong(s.last_fetched_at, now)}</span>
                         ) : null}
                         {s.readers?.length ? <span>by {s.readers.map((r) => r.agent).join(', ')}</span> : null}
                       </>
