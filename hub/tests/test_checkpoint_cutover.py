@@ -158,6 +158,27 @@ async def test_a_peer_binding_follows_the_line_of_work_across_a_cutover(app):
     assert successor.bound_sender_conversation_id == "conv-sender"
 
 
+# --------------------------------------------------------------------------- document
+
+
+@pytest.mark.asyncio
+async def test_cutover_binding_a_continued_conversation_keeps_its_document(app):
+    """FR-2: the successor of a cutover and a conversation started from the checkpoint are both
+    bound to the document the original was, so their next briefing carries its step."""
+    from hub.checkpoint_start import start_from_checkpoint
+
+    async with async_session_factory() as db:
+        db.add(Agent(id="agent-other", project_id=PROJECT, name="other-1"))
+        await db.commit()
+        conversation = await _conversation(db, spec_document_id="spdoc-keep")
+        checkpoint = await _ready_checkpoint(db, conversation)
+        started, _ = await start_from_checkpoint(db, checkpoint, agent="other-1")
+        successor, _ = await cut_over(db, conversation, checkpoint)
+
+    assert successor.spec_document_id == "spdoc-keep"
+    assert started.spec_document_id == "spdoc-keep"
+
+
 # --------------------------------------------------------------------------- lineage
 
 
@@ -1667,3 +1688,58 @@ async def test_checkpoint_now_on_a_conversation_already_handed_over_is_refused_u
     assert successor_id in response.json()["detail"]
     async with async_session_factory() as db:
         assert [c.id for c in await _checkpoints_of(db, "conv-1")] == [first_id]
+
+
+@pytest.mark.asyncio
+async def test_cutover_binding_the_first_turn_of_each_new_conversation_carries_the_document(app):
+    """FR-2: the checkpoint delivery names no document itself, so the turn reads the
+    conversation's, and its step instructions brief the first turn of a successor and of a
+    conversation started from the checkpoint."""
+    from hub.api.v1.agent_trigger import TriggerAgentError
+    from hub.checkpoint_start import start_from_checkpoint
+    from hub.db.models import SpecDocument
+    from hub.turn_scheduler import schedule_agent
+
+    async with async_session_factory() as db:
+        db.add(Agent(id="agent-1", project_id=PROJECT, name=AGENT))
+        db.add(Agent(id="agent-other", project_id=PROJECT, name="other-1"))
+        db.add(
+            SpecDocument(
+                id="spdoc-keep",
+                project_id=PROJECT,
+                path="spec/changes/keep/spec.json",
+                title="Keep",
+                kind="change-spec",
+                phase="exploring",
+            )
+        )
+        project = await db.get(Project, PROJECT)
+        project.hop_budget = 6
+        await db.commit()
+        conversation = await _conversation(db, spec_document_id="spdoc-keep")
+        checkpoint = await _ready_checkpoint(db, conversation)
+        started, _ = await start_from_checkpoint(db, checkpoint, agent="other-1")
+        successor, _ = await cut_over(db, conversation, checkpoint)
+        # Continue pressed (or auto-continue on): the entries no longer wait for the operator.
+        for entry in (await db.execute(select(InboundQueueEntry))).scalars():
+            entry.awaits_continue = False
+        await db.commit()
+
+    seen = {}
+
+    async def deliver(**kwargs):
+        seen[kwargs["conversation_id"]] = kwargs["spec_document"]
+        raise TriggerAgentError(
+            409, "stop here; the document the turn was given is what is under test"
+        )
+
+    for agent in (AGENT, "other-1"):
+        with patch(
+            "hub.api.v1.agent_trigger.trigger_agent_directly", AsyncMock(side_effect=deliver)
+        ):
+            await schedule_agent(PROJECT, agent)
+
+    assert seen == {
+        successor.id: "spec/changes/keep/spec.json",
+        started.id: "spec/changes/keep/spec.json",
+    }

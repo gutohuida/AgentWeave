@@ -192,6 +192,9 @@ async def cut_over(
     # A chat with its own worktree keeps it across the cutover: the worktree and branch are named
     # by the lineage (`conversations.thread_of`), so the successor carries on in the same one.
     successor.own_worktree = predecessor.own_worktree
+    # The document open in the conversation stays open: it is the line of work's, and a successor
+    # without it would brief the next turn with no step instructions.
+    successor.spec_document_id = predecessor.spec_document_id
     db.add(successor)
 
     entry = new_entry(
