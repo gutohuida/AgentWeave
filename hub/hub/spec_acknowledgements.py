@@ -18,8 +18,10 @@ from .db.models import SpecDocument, SpecGapAcknowledgement
 from .utils import short_id
 
 #: Gaps only the operator may acknowledge: an unreviewed amendment is the operator's own review,
-#: and a vault contradiction disputes what the business recorded (FR-12).
-OPERATOR_ONLY_CODES = frozenset({"amendments_unreviewed", "vault_warning"})
+#: and a vault contradiction disputes what the business recorded (FR-12). An unanswered pre-mortem
+#: finding is the author's to answer, not to leave (`the-spec-process-uses-what-the-hub-already-knows`
+#: FR-5).
+OPERATOR_ONLY_CODES = frozenset({"amendments_unreviewed", "vault_warning", "pre_mortem_unanswered"})
 
 
 class AcknowledgementRefusedError(Exception):

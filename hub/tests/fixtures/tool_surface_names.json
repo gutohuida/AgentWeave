@@ -19,6 +19,12 @@
     "requirement",
     "task"
   ],
+  "answer_pre_mortem": [
+    "finding",
+    "firing",
+    "note",
+    "path"
+  ],
   "approve_tool_call": [
     "input",
     "tool_name",

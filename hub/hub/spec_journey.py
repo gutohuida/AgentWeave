@@ -305,6 +305,29 @@ async def open_roster(session: AsyncSession, project_id: str) -> Roster:
     )
 
 
+async def open_pools(session: AsyncSession, project_id: str) -> Pools:
+    """Every open agent's pool entries, by agent name, default first then in the operator's order."""
+    from sqlalchemy import select
+
+    from .db.models import Agent, AgentPoolEntry, Runner
+
+    rows = (
+        await session.execute(
+            select(Agent.name, AgentPoolEntry, Runner.model)
+            .join(AgentPoolEntry, AgentPoolEntry.agent_id == Agent.id)
+            .join(Runner, Runner.id == AgentPoolEntry.runner_id)
+            .where(Agent.project_id == project_id, Agent.lifecycle == "open")
+            .order_by(Agent.name, AgentPoolEntry.position, AgentPoolEntry.created_at)
+        )
+    ).all()
+    pools: Pools = {}
+    for name, entry, model in rows:
+        pools.setdefault(name, []).append(
+            (entry.runner_id, model or "", entry.effort or "", bool(entry.is_default))
+        )
+    return pools
+
+
 def journey(size: Optional[str], steps: Optional[ProjectSteps] = None) -> List[str]:
     """The steps a document of this size visits, in the project's order (FR-2)."""
     return [step.key for step in (steps or BUILT_IN).steps if step.in_journey(size)]
@@ -611,7 +634,10 @@ COVERAGE = (
 _REQUIREMENTS = (
     "- Write the requirements with `submit_spec_document`: each a single testable statement with "
     "its modal (MUST, SHOULD, MAY), and a rationale where the reason is not obvious. Ground each in "
-    "what the code does today. A slice is about a dozen requirements or fewer."
+    "what the code does today. A slice is about a dozen requirements or fewer.\n"
+    "- A requirement may list, in `facts`, the vault facts you used for it, by id (`fct-` and 12 "
+    "hex characters, read with `vault_map` or `vault_read`). A requirement nothing in the vault "
+    "backs lists none; that is fine and draws no warning."
 )
 
 _ACCEPTANCE = (
@@ -755,14 +781,45 @@ WRITE_WHERE = (
 #: An open agent and the model its runner is bound to ("" when it has none).
 Roster = List[Tuple[str, str]]
 
+#: An open agent's pool: `(runner id, model, effort or "", is default)` per entry, by agent name.
+Pools = Dict[str, List[Tuple[str, str, str, bool]]]
 
-def people_brief(size: Optional[str], roster: Optional[Roster]) -> str:
+
+def pool_brief(pools: Optional[Pools]) -> str:
+    """Every entry of every open agent's pool, and how a task names one that is not the default
+    (`the-spec-process-uses-what-the-hub-already-knows`, FR-1)."""
+    if not pools:
+        return ""
+    lines = ["- **Each open agent's pool** (runner id, model, effort when set):"]
+    for name in sorted(pools):
+        entries = "; ".join(
+            f"`{runner_id}` {model or 'no model set'}"
+            + (f", effort {effort}" if effort else "")
+            + (" (default)" if is_default else "")
+            for runner_id, model, effort, is_default in pools[name]
+        )
+        lines.append(f"  - `{name}`: {entries}")
+    lines.append(
+        "- A task runs on its agent's default entry unless it names another: set `builder_entry` "
+        'or `checker_entry` to `{"runner_id": "<runner id>", "effort": "<effort or null>"}` for an '
+        "entry of that agent's pool. State the pick's reason (`builder_reason`, `checker_reason`) "
+        "in terms of that entry's model, not the agent's default."
+    )
+    return "\n".join(lines)
+
+
+def people_brief(
+    size: Optional[str], roster: Optional[Roster], pools: Optional[Pools] = None
+) -> str:
     """What the tasks step adds once the roster and size are known: each open agent's model, and
     for a document larger than a fix, the evidence the picks rest on (FR-2, FR-13). It no longer
     asks the operator which sources to judge by (`agent-settles-process`, D6): the agent judges
     from its own knowledge and the project's record, and the operator overturns a pick on the task.
     """
     lines: List[str] = []
+    pool_lines = pool_brief(pools)
+    if pool_lines:
+        lines.append(pool_lines)
     if roster:
         lines.append(
             "- **Open agents and their models:** "
@@ -798,6 +855,7 @@ def duty(
     size: Optional[str] = None,
     roster: Optional[Roster] = None,
     problem_written: bool = False,
+    pools: Optional[Pools] = None,
 ) -> str:
     """The step's instructions, the project's appended instruction for that step and no other
     (FR-4), and the instruction to advance itself; "" for a step the project does not have.
@@ -817,7 +875,7 @@ def duty(
             head, _, rest = text.partition("\n")
             text = head + "\n" + PLAYBACK + "\n" + rest
         if entry.key == TASKS:
-            brief = people_brief(size, roster)
+            brief = people_brief(size, roster, pools)
             if brief:
                 text += "\n" + brief
     if entry.append:

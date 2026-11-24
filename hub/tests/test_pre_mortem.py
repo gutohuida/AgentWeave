@@ -150,7 +150,8 @@ async def test_the_button_fires_once_and_the_route_lists_it(
     assert listed["id"] == firing["id"] and listed["outcome"] == "written"
     assert listed["trigger"] == "requested" and listed["model"] == HAIKU
     assert listed["cost_usd_micros"] == 900
-    assert listed["findings"] == firing["findings"]
+    # The read adds each finding's answer, null until the author answers it.
+    assert listed["findings"] == [{**f, "answer": None} for f in firing["findings"]]
     # The reader is given the drafted requirement under its identifier, with its criterion.
     (call,) = fake.calls
     assert call["initiator"] == "operator" and call["kind"] == JOB

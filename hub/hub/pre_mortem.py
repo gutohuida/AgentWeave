@@ -12,6 +12,14 @@ runner) and, while the job is on with automatic firing, when a change document l
 writes its acceptance criteria (`fire_after_commit`, staged by `spec_journey.set_step` and run after
 the move commits). One runs per document at a time. The findings reach the document's author in its
 next turn on the document (`briefing_lines`), which fixes what it can and asks the operator the rest.
+
+`the-spec-process-uses-what-the-hub-already-knows` (FR-3 to FR-6): the automatic firing happens only
+while the document has no completed firing (written or empty; a failed one does not count), so a
+later one is the operator's button. The author (`spec_amendments.authors`) answers the newest written
+firing's findings, one or every unanswered one at once, each with a note (`answer`). An answer is an
+appended `pre_mortem_answered` event naming its firing -- still no table -- so findings are read with
+their answers (`list_for_document`), the briefing lists only the unanswered ones, and the document
+check reports them as the `pre_mortem_unanswered` gap (`unanswered`).
 """
 
 from __future__ import annotations
@@ -41,6 +49,10 @@ CRITERIA_WRITTEN = "criteria_written"
 PROMPT_VERSION = "pre-mortem-1"
 TIMEOUT_SECONDS = 15 * 60
 HEADING = "### Pre-mortem findings"
+ANSWER_EVENT = "pre_mortem_answered"
+#: The outcomes that count as the document's one automatic pre-mortem: the firing completed.
+COMPLETED = ("written", "empty")
+NOTE_CHARS = 4000
 
 #: The steps that write a change document's acceptance criteria: leaving one fires the job.
 #: Named here, not imported, because `spec_journey` imports this module lazily inside `set_step`.
@@ -60,6 +72,26 @@ class Finding(BaseModel):
 
 class PreMortemAnswer(BaseModel):
     findings: List[Finding] = Field(default_factory=list)
+
+
+class AnswerRefusedError(Exception):
+    """Why an answer is not recorded, with the status and code the answer route refuses it with.
+    Nothing is written when it is raised; `newest` names the firing that is answerable now."""
+
+    def __init__(
+        self, reason: str, *, code: str, status: int = 422, newest: Optional[str] = None
+    ) -> None:
+        super().__init__(reason)
+        self.reason = reason
+        self.code = code
+        self.status = status
+        self.newest = newest
+
+    def detail(self) -> Dict[str, Any]:
+        detail: Dict[str, Any] = {"message": self.reason, "code": self.code}
+        if self.newest is not None:
+            detail["newest"] = self.newest
+        return detail
 
 
 class CannotRunError(Exception):
@@ -370,6 +402,9 @@ async def _fire_automatic(project_id: str, document_id: str) -> None:
             document = await db.get(SpecDocument, document_id)
             if document is None:
                 return
+            # Automatic only until one has completed; after that a re-run is the button's (FR-6).
+            if await has_completed(db, project_id, document_id):
+                return
             plan = _plan(document, job, runner)
     except CannotRunError as refusal:
         if refusal.no_runner:
@@ -460,13 +495,74 @@ async def _events(db: AsyncSession, project_id: str, document_id: str) -> List[E
     )
 
 
+def _newest_written(rows: List[EventLog]) -> Optional[EventLog]:
+    """The newest firing that wrote findings, of *rows* newest first: the one to answer (FR-6)."""
+    return next(
+        (
+            row
+            for row in rows
+            if (row.data or {}).get("outcome") == "written" and (row.data or {}).get("findings")
+        ),
+        None,
+    )
+
+
+async def has_completed(db: AsyncSession, project_id: str, document_id: str) -> bool:
+    """Whether the document has a firing that wrote findings or found none; a failed one does not
+    count, so the automatic firing tries again (FR-6)."""
+    return any(
+        (row.data or {}).get("outcome") in COMPLETED
+        for row in await _events(db, project_id, document_id)
+    )
+
+
+async def answers_by_firing(
+    db: AsyncSession, project_id: str, document_id: str
+) -> Dict[str, Dict[int, Dict[str, Any]]]:
+    """Each firing's answers, by firing id then finding number (1-based), as `{note, by, at}`. A
+    later answer to the same finding replaces an earlier one."""
+    rows = (
+        (
+            await db.execute(
+                select(EventLog)
+                .where(
+                    EventLog.project_id == project_id,
+                    EventLog.event_type == ANSWER_EVENT,
+                    EventLog.data["document"].as_string() == document_id,
+                )
+                .order_by(EventLog.timestamp, EventLog.id)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    answers: Dict[str, Dict[int, Dict[str, Any]]] = {}
+    for row in rows:
+        data = row.data or {}
+        firing = data.get("firing")
+        if not firing:
+            continue
+        given = {
+            "note": data.get("note") or "",
+            "by": row.agent or data.get("by") or "",
+            "at": row.timestamp.isoformat(),
+        }
+        for number in data.get("findings") or []:
+            if isinstance(number, int):
+                answers.setdefault(firing, {})[number] = given
+    return answers
+
+
 async def list_for_document(
     db: AsyncSession, project_id: str, document_id: str
 ) -> List[Dict[str, Any]]:
-    """The document's pre-mortems, written or not, newest first (the contract's `PreMortem`)."""
+    """The document's pre-mortems, written or not, newest first (the contract's `PreMortem`). Each
+    finding carries its `answer` (the contract's `PreMortemAnswer`), or null while unanswered."""
+    answers = await answers_by_firing(db, project_id, document_id)
     listed = []
     for row in await _events(db, project_id, document_id):
         data = row.data or {}
+        given = answers.get(row.id, {})
         listed.append(
             {
                 "id": row.id,
@@ -476,39 +572,183 @@ async def list_for_document(
                 "outcome": data.get("outcome"),
                 "detail": data.get("detail"),
                 "cost_usd_micros": (data.get("usage") or {}).get("cost_usd_micros"),
-                "findings": data.get("findings") or [],
+                "findings": [
+                    {**finding, "answer": given.get(number)}
+                    for number, finding in enumerate(data.get("findings") or [], start=1)
+                ],
             }
         )
     return listed
 
 
-async def briefing_lines(db: AsyncSession, project_id: str, document_id: str) -> List[str]:
-    """The `### Pre-mortem findings` block of a turn with the document open: the latest written
-    firing's findings and what to do with them. Empty when the document has no written firing."""
-    latest = next(
-        (
-            row
-            for row in await _events(db, project_id, document_id)
-            if (row.data or {}).get("outcome") == "written" and (row.data or {}).get("findings")
-        ),
-        None,
-    )
+@dataclass(frozen=True)
+class OpenFindings:
+    """The newest written firing of a document and which of its findings are unanswered."""
+
+    firing: EventLog
+    findings: List[Dict[str, Any]]
+    unanswered: List[int]
+
+
+async def open_findings(
+    db: AsyncSession, project_id: str, document_id: str
+) -> Optional[OpenFindings]:
+    """The newest written firing and its unanswered finding numbers, or None with no written one."""
+    latest = _newest_written(await _events(db, project_id, document_id))
     if latest is None:
+        return None
+    findings = list(latest.data["findings"])
+    given = (await answers_by_firing(db, project_id, document_id)).get(latest.id, {})
+    left = [number for number in range(1, len(findings) + 1) if number not in given]
+    return OpenFindings(latest, findings, left)
+
+
+async def unanswered(db: AsyncSession, document: SpecDocument) -> Optional[Tuple[int, int]]:
+    """`(unanswered, total)` of the document's newest written pre-mortem, or None with none
+    written: what the check's `pre_mortem_unanswered` gap reports (FR-5)."""
+    found = await open_findings(db, document.project_id, document.id)
+    if found is None:
+        return None
+    return len(found.unanswered), len(found.findings)
+
+
+async def answer(
+    db: AsyncSession,
+    document: SpecDocument,
+    *,
+    agent: str,
+    firing: str,
+    note: str,
+    finding: Optional[int] = None,
+    run_id: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Record the author's answer to finding *finding* of *firing*, or to every unanswered finding
+    of it when *finding* is None (FR-4). Refused with `AnswerRefusedError`, writing nothing: an
+    empty note (422 `note_required`), an agent that is not one of the document's authors (403
+    `not_author`), a document with no written pre-mortem (404 `no_written_pre_mortem`), a firing
+    that is not the newest written one, unknown ids included (409 `firing_not_newest`, naming the
+    newest), a finding number the firing does not have (422 `finding_unknown`), and an answer to
+    all when none is left (409 `nothing_unanswered`). The caller commits."""
+    from . import spec_amendments
+    from .utils import persist_event
+
+    text = (note or "").strip()
+    if not text:
+        raise AnswerRefusedError(
+            "an answer needs a note saying what you did about the finding (what you changed in "
+            "the document, or why it needs no change); nothing was recorded",
+            code="note_required",
+        )
+    if len(text) > NOTE_CHARS:
+        raise AnswerRefusedError(
+            f"the note is longer than {NOTE_CHARS} characters", code="note_too_long"
+        )
+    writers = await spec_amendments.authors(db, document)
+    if agent not in writers:
+        named = ", ".join(writers) or "nobody yet"
+        raise AnswerRefusedError(
+            "only the document's author answers its pre-mortem (a profile that saved its "
+            f"content before its first approval: {named}); tell the author what you found "
+            "instead",
+            code="not_author",
+            status=403,
+        )
+    found = await open_findings(db, document.project_id, document.id)
+    if found is None:
+        raise AnswerRefusedError(
+            "this document has no written pre-mortem, so there is nothing to answer",
+            code="no_written_pre_mortem",
+            status=404,
+        )
+    if firing != found.firing.id:
+        raise AnswerRefusedError(
+            f"'{firing}' is not this document's newest written pre-mortem: answer "
+            f"'{found.firing.id}', whose findings are the ones still to answer",
+            code="firing_not_newest",
+            status=409,
+            newest=found.firing.id,
+        )
+    if finding is not None:
+        if finding < 1 or finding > len(found.findings):
+            raise AnswerRefusedError(
+                f"the pre-mortem '{firing}' has findings 1 to {len(found.findings)}, not {finding}",
+                code="finding_unknown",
+            )
+        numbers = [finding]
+    else:
+        numbers = list(found.unanswered)
+        if not numbers:
+            raise AnswerRefusedError(
+                f"every finding of the pre-mortem '{firing}' is already answered",
+                code="nothing_unanswered",
+                status=409,
+            )
+    await persist_event(
+        db,
+        document.project_id,
+        ANSWER_EVENT,
+        {
+            "document": document.id,
+            "path": document.path,
+            "firing": firing,
+            "findings": numbers,
+            "note": text,
+            "by": agent,
+            "run_id": run_id,
+        },
+        agent=agent,
+        commit=False,
+    )
+    return {
+        "path": document.path,
+        "firing": firing,
+        "answered": numbers,
+        "unanswered": [number for number in found.unanswered if number not in numbers],
+        "total": len(found.findings),
+    }
+
+
+async def briefing_lines(
+    db: AsyncSession, project_id: str, document_id: str, agent: Optional[str] = None
+) -> List[str]:
+    """The `### Pre-mortem findings` block of the author's turn with the document open: the newest
+    written firing's unanswered findings and how to answer them (FR-3). Empty when the document has
+    no written firing, when every finding is answered, and for an *agent* that is not its author."""
+    found = await open_findings(db, project_id, document_id)
+    if found is None or not found.unanswered:
         return []
+    document = await db.get(SpecDocument, document_id)
+    if document is None:
+        return []
+    if agent is not None:
+        from . import spec_amendments
+
+        if agent not in await spec_amendments.authors(db, document):
+            return []
+    latest = found.firing
     lines = [
         HEADING,
-        f"- A pre-mortem of this document ({latest.timestamp.date().isoformat()}) assumed the "
-        "change shipped and failed, and found these ways it fails:",
+        f"- A pre-mortem of this document (`{latest.id}`, "
+        f"{latest.timestamp.date().isoformat()}) assumed the change shipped and failed. "
+        f"{len(found.unanswered)} of its {len(found.findings)} findings are unanswered:",
     ]
-    for finding in latest.data["findings"]:
+    for number in found.unanswered:
+        finding = found.findings[number - 1]
         tag = f"{finding['requirement']}: " if finding.get("requirement") else ""
         cites = f" (cites: {', '.join(finding['cites'])})" if finding.get("cites") else ""
-        lines.append(f"  - {tag}{finding.get('story', '')}{cites}")
+        lines.append(f"  {number}. {tag}{finding.get('story', '')}{cites}")
     lines.append(
         "- **Fix what you can in the document yourself** -- a missing case, a criterion that would "
         "pass for the wrong reason, a conflict the design does not name -- and say what you "
         "changed. **Bring the rest to the operator as questions**, under the questioning rule, "
         "where only they can decide."
+    )
+    lines.append(
+        "- **Answer each finding once you have dealt with it**, with a note of what you did: "
+        f'`answer_pre_mortem(path="{document.path}", firing="{latest.id}", note=...)` with '
+        "`finding=<number>` for one, or without `finding` for every unanswered one at once. Until "
+        "each is answered, the document's check reports a `pre_mortem_unanswered` gap and it is "
+        "not ready to approve."
     )
     lines.append("")
     return lines
