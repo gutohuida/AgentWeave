@@ -47,11 +47,10 @@ export interface SpecSurfaceProps {
   buildActions?: React.ReactNode
   /** The dialogs the phase controls open (Build, Archive, Delete, Fold, Retire, Start a flow). */
   dialogs?: React.ReactNode
-  /** The document's pre-mortem and build retrospective, under its builds. */
+  /** The document's build retrospective, under its builds. */
   retrospective?: (context: { flash: string | null; onCopyLink: (anchor: string) => void }) => React.ReactNode
   /** The pre-mortem at the end of the document part, in both layouts (spec
-   *  the-spec-process-uses-what-the-hub-already-knows, FR-7). Until a container passes it the
-   *  pre-mortem stays where `retrospective` draws it. */
+   *  the-spec-process-uses-what-the-hub-already-knows, FR-7). Nothing draws it under Builds. */
   preMortem?: (context: { flash: string | null; onCopyLink: (anchor: string) => void }) => React.ReactNode
   /** A requirement's possible backing facts, on the full spec page only (same spec, FR-10). */
   requirementAside?: (identifier: string) => React.ReactNode
@@ -172,7 +171,7 @@ export function SpecWorkspace(props: SpecWorkspaceProps) {
                 </button>
               ) : null}
               <span className="aw-sp-outline-menu-slot">
-                <SpecOutlineMenu doc={doc} findings={findings} builds={props.builds} active={active} onJump={nav.jump} />
+                <SpecOutlineMenu doc={doc} findings={findings} builds={props.builds} active={active} onJump={nav.jump} preMortemInDocument={Boolean(props.preMortem)} />
               </span>
             </>
           }
@@ -229,7 +228,7 @@ export function SpecWorkspace(props: SpecWorkspaceProps) {
               />
             </div>
             <div className="aw-sp-rail">
-              <SpecOutlineRail doc={doc} findings={findings} builds={props.builds} active={active} onJump={nav.jump} />
+              <SpecOutlineRail doc={doc} findings={findings} builds={props.builds} active={active} onJump={nav.jump} preMortemInDocument={Boolean(props.preMortem)} />
             </div>
           </div>
         </div>
@@ -308,7 +307,7 @@ export function SpecSidePanel(props: SpecSurfaceProps & { onClose?: () => void; 
           compact
           trailing={
             <>
-              <SpecOutlineMenu doc={doc} findings={findings} builds={props.builds} active={active} onJump={jump} />
+              <SpecOutlineMenu doc={doc} findings={findings} builds={props.builds} active={active} onJump={jump} preMortemInDocument={inDocument} />
               {props.onInsert ? <SpecInsertButton spec={{ id: doc.id, title: doc.title }} onInsert={props.onInsert} header /> : null}
               {props.onClose ? (
                 <button data-slot="icon-button" type="button" className="aw-icon-button" data-testid="spec-document-close" onClick={props.onClose} aria-label="Close document" title="Close document">

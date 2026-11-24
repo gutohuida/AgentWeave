@@ -269,9 +269,13 @@ export function Section({
   return (
     <section className="aw-sp-section aw-reveal-host" data-enter="" id={anchor} data-anchor={anchor} data-flash={flash === anchor ? 'true' : undefined}>
       <h2 className="aw-sp-section-title">
-        {title}
-        {count ? <span className="aw-sp-section-count">{count}</span> : null}
-        <CopyLink onCopy={() => onCopyLink(anchor)} label={`Copy a link to ${title}`} />
+        {/* The title, its count and its link stay on one line; at a narrow width the actions wrap
+            below them rather than squeezing the title ('Pre-/mortem' in a 760px side panel). */}
+        <span className="aw-sp-section-name">
+          {title}
+          {count ? <span className="aw-sp-section-count">{count}</span> : null}
+          <CopyLink onCopy={() => onCopyLink(anchor)} label={`Copy a link to ${title}`} />
+        </span>
         {actions ? <span className="aw-sp-section-actions">{actions}</span> : null}
       </h2>
       {findings.map((f) => (

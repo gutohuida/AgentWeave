@@ -383,14 +383,15 @@ export function useSpecSurface(path: string, host: SpecSurfaceHost): SpecSurface
     health,
     buildActions: controls?.buildActions,
     dialogs: controls?.dialogs,
+    // The pre-mortem ends the document part on every surface, and nothing draws it under Builds
+    // (spec the-spec-process-uses-what-the-hub-already-knows, FR-7).
+    preMortem:
+      doc.kind === 'change-spec'
+        ? ({ flash, onCopyLink }) => <SpecPreMortem path={path} now={now} flash={flash} onCopyLink={onCopyLink} />
+        : undefined,
     retrospective:
       doc.kind === 'change-spec'
-        ? ({ flash, onCopyLink }) => (
-            <>
-              <SpecPreMortem path={path} now={now} flash={flash} onCopyLink={onCopyLink} />
-              <SpecRetrospective path={path} now={now} flash={flash} onCopyLink={onCopyLink} />
-            </>
-          )
+        ? ({ flash, onCopyLink }) => <SpecRetrospective path={path} now={now} flash={flash} onCopyLink={onCopyLink} />
         : undefined,
   }
   return { status: 'ready', surface }

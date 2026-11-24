@@ -521,9 +521,30 @@ export function useVaultChecked(path: string) {
   return useVaultWarningsBody(path, (body) => body.checked !== false)
 }
 
+/** A fact the spec-vault check named as possibly backing a requirement (spec
+ *  the-spec-process-uses-what-the-hub-already-knows, FR-9), as `GET /vault/warnings` answers it
+ *  beside the warnings. Nobody reviewed it: it is never a fact the requirement lists, raises no
+ *  warning and counts as no citation (FR-10). */
+export interface SpecPossibleFact {
+  /** The requirement's identifier (its key while it has none). */
+  requirement: string
+  fact: string
+  claim: string
+  /** The name of the fact's source, or null when its source is not in the vault. */
+  source: string | null
+}
+
+/** A document's possible backing facts (spec the-spec-process-uses-what-the-hub-already-knows,
+ *  FR-9, FR-10), answered beside its warnings and never among them. A Hub older than the field
+ *  answers none. */
+export function useSpecPossibleFacts(path: string) {
+  return useVaultWarningsBody(path, (body) => body.possible_facts ?? [])
+}
+
 interface VaultWarningsBody {
   warnings: VaultWarning[]
   checked?: boolean
+  possible_facts?: SpecPossibleFact[]
 }
 
 function useVaultWarningsBody<T>(path: string, select: (body: VaultWarningsBody) => T) {
