@@ -5949,6 +5949,40 @@ def confirm_acceptance_criteria(path: str, confirmations: List[Dict[str, str]]) 
 
 
 @_tool()
+def answer_pre_mortem(
+    path: str, firing: str, note: str, finding: Optional[int] = None
+) -> Dict[str, Any]:
+    """Answer the pre-mortem of a document you wrote: one finding, or every unanswered one at once.
+
+    Each run of yours on the document is briefed the newest written pre-mortem's unanswered
+    findings, each by number, with the firing's id. Deal with a finding first -- fix the document,
+    or ask the operator -- then answer it with a note of what you did. Until every finding is
+    answered, the save and the operator's Check report a `pre_mortem_unanswered` gap and the
+    document is not ready to approve. Only the document's author answers: a profile that saved
+    its content before its first approval.
+
+    Args:
+        path: The document, e.g. `spec/changes/<name>/spec.json`.
+        firing: The pre-mortem's id, as your briefing names it. Only the newest written one is
+            answerable: another is refused naming the newest.
+        note: What you did about it; required.
+        finding: The finding's number; omit it to answer every unanswered finding with one note.
+
+    Returns `{path, firing, answered: [numbers], unanswered: [numbers], total}`.
+    """
+    return _hub_request(
+        "POST",
+        "/spec/documents/pre-mortem/answer",
+        {
+            "path": path,
+            "firing": firing,
+            "note": note,
+            **({"finding": finding} if finding is not None else {}),
+        },
+    )
+
+
+@_tool()
 def amend_spec_document(
     path: str,
     op: str,

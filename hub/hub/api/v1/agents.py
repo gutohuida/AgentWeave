@@ -1611,6 +1611,23 @@ def _operations(*, can_admin_specs: bool = False) -> List[_Operation]:
             ),
         ),
         _Operation(
+            tool="answer_pre_mortem",
+            args="path, firing, note, finding=None",
+            method="POST",
+            path="/spec/documents/pre-mortem/answer",
+            fields=("path", "firing", "note", "finding"),
+            # The route takes a missing firing or note to its own refusal (naming the newest
+            # firing, or the missing note) rather than a schema error.
+            required=("path",),
+            text=(
+                "answer the newest written pre-mortem of a document you wrote, with a note of "
+                "what you did: `finding` is the finding's number, or omit it to answer every "
+                "unanswered one at once. `firing` is the pre-mortem's id as your briefing names "
+                "it; another firing is refused, naming the newest. Until every finding is "
+                "answered the document reports a `pre_mortem_unanswered` gap."
+            ),
+        ),
+        _Operation(
             tool="list_checkpoints",
             args="agent=None",
             method="GET",
@@ -3017,11 +3034,12 @@ async def _render_hub_agent_context(
                     "is not is authoring this document through anything but `submit_spec_document`."
                 )
             lines.append("")
-            # The latest written pre-mortem reaches the author in its next turn here (FR-11).
+            # The newest written pre-mortem's unanswered findings reach the author's turns here
+            # (FR-11; `the-spec-process-uses-what-the-hub-already-knows` FR-3).
             if row is not None and row.kind == "change-spec":
                 from ... import pre_mortem
 
-                lines.extend(await pre_mortem.briefing_lines(db, project_id, row.id))
+                lines.extend(await pre_mortem.briefing_lines(db, project_id, row.id, agent=agent))
 
     # A project with nobody else in it gets no Team section at all — not a Team section saying the
     # team is empty. `roster` includes the agent being addressed (that is what the `<- you` marker
