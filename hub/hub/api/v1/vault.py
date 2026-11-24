@@ -647,8 +647,9 @@ async def get_vault_warnings(
 ) -> dict:
     """A spec document's warnings from the vault: its cited facts' first, then the conflicts of
     its newest spec-vault-check firing. `checked` says whether that job ever fired on the
-    document, so an empty list is "nothing contradicts" or "never asked" (F946). 404 for an unknown
-    document."""
+    document, so an empty list is "nothing contradicts" or "never asked" (F946). Beside them, and
+    never among them, `possible_facts`: the facts that firing named as possibly backing a
+    requirement, which nobody has confirmed (FR-9, FR-10). 404 for an unknown document."""
     project_id = project[0]
     try:
         safe = validate_spec_path(path)
@@ -660,6 +661,9 @@ async def get_vault_warnings(
     return {
         "warnings": await vault_spec_check.warnings_for(session, workspace, project_id, safe),
         "checked": await vault_spec_check.newest_firing(session, project_id, safe) is not None,
+        "possible_facts": await vault_spec_check.possible_facts_for(
+            session, workspace, project_id, safe
+        ),
     }
 
 

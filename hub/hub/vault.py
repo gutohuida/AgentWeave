@@ -2169,6 +2169,15 @@ def _fact_named(fact_id: str, facts: Dict[str, _Fact], records: Dict[str, _Recor
     return f"{fact_id}: {said}, from {origin}"
 
 
+def source_names(project_root: Path, private_root: Path) -> Dict[str, str]:
+    """Each source's name by its id, archived ones left out."""
+    return {
+        source_id: record.meta["name"]
+        for source_id, record in _records(project_root, private_root).items()
+        if isinstance(record.meta.get("name"), str) and not record.archived
+    }
+
+
 def name_facts(project_root: Path, private_root: Path, fact_ids: List[str]) -> Dict[str, str]:
     """Each of *fact_ids* named as a warning names it."""
     facts, records = _facts(project_root, private_root), _records(project_root, private_root)
