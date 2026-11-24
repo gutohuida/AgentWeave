@@ -215,6 +215,7 @@ HUB_MCP_TOOLS = frozenset(
         "acknowledge_spec_gap",
         "advance_spec_step",
         "amend_spec_document",
+        "answer_pre_mortem",
         "approve_tool_call",
         "archive_job",
         "ask_user",

@@ -3156,6 +3156,55 @@ async def confirm_acceptance_criteria(
     return result
 
 
+class PreMortemAnswerBody(RequestModel):
+    """An answer to the newest written pre-mortem (`the-spec-process-uses-what-the-hub-already-knows`
+    FR-4). `note` may arrive empty so the refusal says `note_required` rather than a schema error.
+    """
+
+    path: str = Field(max_length=255)
+    firing: str = Field(default="", max_length=64)
+    note: str = Field(default="", max_length=8000)
+    finding: Optional[int] = None
+
+
+@router.post("/spec/documents/pre-mortem/answer", status_code=status.HTTP_201_CREATED)
+async def answer_pre_mortem(
+    body: PreMortemAnswerBody,
+    actor: AgentActor = Depends(get_agent_actor),
+    session: AsyncSession = Depends(get_session),
+):
+    """The author answers finding `finding` of the pre-mortem `firing`, or every unanswered one
+    without it, with a note. Answers `{path, firing, answered, unanswered, total}`. Refused,
+    recording nothing: 404 for an unknown document and `no_written_pre_mortem` when the document
+    has no written pre-mortem at all; 409 `firing_not_newest` for any other firing, an unknown or
+    missing one included, with `newest` naming the one to answer; 403 `not_author`; 422
+    `note_required`, `note_too_long` and `finding_unknown`; 409 `nothing_unanswered`."""
+    from ... import pre_mortem
+
+    _, document = await _amendable_document(session, actor, body.path)
+    try:
+        result = await pre_mortem.answer(
+            session,
+            document,
+            # Identity is the run's, never the request body's.
+            agent=actor.agent,
+            run_id=actor.run_id,
+            firing=body.firing,
+            note=body.note,
+            finding=body.finding,
+        )
+    except pre_mortem.AnswerRefusedError as exc:
+        raise HTTPException(status_code=exc.status, detail=exc.detail()) from exc
+    await session.commit()
+    from .spec import _READY_VERDICTS
+
+    _READY_VERDICTS.clear()
+    await sse_manager.broadcast(
+        actor.project_id, "spec_updated", {"path": document.path, "phase": document.phase}
+    )
+    return result
+
+
 @router.post("/spec/documents")
 async def submit_spec_document(
     body: SpecDocumentSubmission,
