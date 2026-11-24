@@ -25,6 +25,8 @@ import type { ScreenProps } from '../routes'
  *   uses-loading | uses-error   the facts' uses by specs not read yet, or failed
  *   search-slow | search-error  the search inside documents still running, or failed
  *   no-uses                     no spec names any fact, and nothing was opened by an agent
+ *   unusual                     the three newest standing facts: one citing no lines, one whose source
+ *                               changed, one whose source is not in the vault
  */
 
 const query = new URLSearchParams(window.location.hash.split('?')[1] ?? '')
@@ -39,10 +41,28 @@ const settings = settingsJson as unknown as VaultSettings
 const texts = textsJson as unknown as Record<string, string>
 const citations = citationsJson as unknown as Record<string, Pick<VaultEntryPage, 'claim' | 'citations'>>
 
+// mock state: the three newest standing facts, made unusual under ?state=unusual.
+const UNUSUAL = (projectMapJson as unknown as { entries: VaultEntry[] }).entries
+  .filter((e) => e.kind === 'fact' && !e.superseded_by && !e.superseded_at)
+  .sort((a, b) => b.created_at.localeCompare(a.created_at))
+  .slice(0, 3)
+  .map((e) => e.id)
+
 function projectEntries(): VaultEntry[] {
   const entries = (projectMapJson as unknown as { entries: VaultEntry[] }).entries
+  if (STATE === 'unusual') {
+    return entries.map((e) =>
+      e.id === UNUSUAL[1] ? { ...e, stale: true } : e.id === UNUSUAL[2] ? { ...e, sources: ['src-notinthemap'] } : e,
+    )
+  }
   if (STATE !== 'no-uses') return entries
   return entries.map((e) => (e.kind === 'fact' ? { ...e, fetches: 0, readers: [] } : e))
+}
+
+function citationsOf(id: string): Pick<VaultEntryPage, 'claim' | 'citations'> | undefined {
+  // mock state: the first unusual fact cites no lines.
+  if (STATE === 'unusual' && id === UNUSUAL[0]) return { ...citations[id], citations: [] }
+  return citations[id]
 }
 
 function projectUses(): FactUses {
@@ -103,10 +123,12 @@ function ProjectVault() {
 
   const selected = entries.find((e) => e.id === selectedId) ?? null
   const facts: VaultFact[] = selected
-    ? entries.filter((e) => e.kind === 'fact' && (e.sources ?? []).includes(selected.id)).map((f) => ({ ...f, ...(citations[f.id] ?? {}) }))
+    ? entries.filter((e) => e.kind === 'fact' && (e.sources ?? []).includes(selected.id)).map((f) => ({ ...f, ...(citationsOf(f.id) ?? {}) }))
     : []
   const page: VaultEntryPage | null = selected
-    ? { ...selected, content: texts[selected.id] ?? null, next_offset: null, note: texts[selected.id] ? null : 'This mock recorded no text for it.' }
+    ? selected.kind === 'fact'
+      ? { ...selected, ...(citationsOf(selected.id) ?? {}), content: null, next_offset: null, note: null }
+      : { ...selected, content: texts[selected.id] ?? null, next_offset: null, note: texts[selected.id] ? null : 'This mock recorded no text for it.' }
     : null
 
   return (
