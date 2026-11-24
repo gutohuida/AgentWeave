@@ -42167,3 +42167,13 @@ The cause is that `vault.dated_facts(..., current_only=True)` (`hub/hub/vault.py
 `vault_spec_check` uses that set in two places: as what it sends to the model (`prepare`, line ~295), and as the "fact still stands" filter on stored conflicts (`document_warnings`, line ~180). So a fact its own source no longer says keeps producing warnings until something else supersedes it. `distillation._check` also uses `current_only` and may compare new facts against such dead ones.
 
 **Expected:** a fact with `superseded_at` is not current: `current_only` leaves it out, and a stored conflict naming it is no longer shown. **Test seam:** `dated_facts(current_only=True)` after a `vault_replace_passage` re-distil that drops a claim. The test fails today.
+
+## F1213 — Two quick leaves of the acceptance step could fire the automatic pre-mortem twice
+
+**Status:** fixed 2026-11-24 (Tier 0)
+**Source:** found by CI, release 2.4.0 run 45343796197 attempt 2: `test_pre_mortem_answers.py::test_an_empty_firing_counts_as_the_automatic_one` listed two empty firings.
+**Theme:** Specifications
+**Ready:** yes
+**Tier:** 0
+
+`pre_mortem._fire_automatic` looked for a completed firing (`has_completed`) and only then took the document's claim (`_running`), with awaits between. A first firing that completed in that gap left both checks passing for the second leave, which fired again: a second paid model call, and a second "empty" row. The claim is now taken before anything awaits, and the completed-firing look happens under it. `test_pre_mortem.py::test_a_firing_that_completes_while_a_second_looks_for_one_is_not_fired_twice` forces the interleaving; it fails before the fix.
