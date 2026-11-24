@@ -537,6 +537,24 @@ async def get_vault_map(
     return await read_map(session, project[0])
 
 
+@router.get("/search")
+async def search_vault_text(
+    q: str = Query(...),
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """The sources whose text holds `q`, ignoring case (`a-vault-page-that-says-what-it-holds`
+    FR-9): per source its id, how many lines match and the first three as {line, text}. Archived
+    sources and private text held on another machine are not searched; 400 for a query of fewer
+    than two characters."""
+    root, private = await roots(session, project[0])
+    try:
+        hits = await asyncio.to_thread(vault.search_text, root, private, q)
+    except vault.VaultError as exc:
+        raise _refused(exc) from exc
+    return {"hits": hits}
+
+
 @router.get("/entries/{entry_id}")
 async def get_vault_entry(
     entry_id: str,
@@ -629,8 +647,9 @@ async def get_vault_warnings(
 ) -> dict:
     """A spec document's warnings from the vault: its cited facts' first, then the conflicts of
     its newest spec-vault-check firing. `checked` says whether that job ever fired on the
-    document, so an empty list is "nothing contradicts" or "never asked" (F946). 404 for an unknown
-    document."""
+    document, so an empty list is "nothing contradicts" or "never asked" (F946). Beside them, and
+    never among them, `possible_facts`: the facts that firing named as possibly backing a
+    requirement, which nobody has confirmed (FR-9, FR-10). 404 for an unknown document."""
     project_id = project[0]
     try:
         safe = validate_spec_path(path)
@@ -642,6 +661,9 @@ async def get_vault_warnings(
     return {
         "warnings": await vault_spec_check.warnings_for(session, workspace, project_id, safe),
         "checked": await vault_spec_check.newest_firing(session, project_id, safe) is not None,
+        "possible_facts": await vault_spec_check.possible_facts_for(
+            session, workspace, project_id, safe
+        ),
     }
 
 

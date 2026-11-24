@@ -2531,6 +2531,7 @@ async def create_spec_document(
                 steps,
                 size=document.size,
                 roster=await spec_journey.open_roster(session, actor.project_id),
+                pools=await spec_journey.open_pools(session, actor.project_id),
             ),
         )
     return answer
@@ -2721,6 +2722,7 @@ async def advance_spec_step(
             steps,
             size=document.size,
             roster=await spec_journey.open_roster(session, actor.project_id),
+            pools=await spec_journey.open_pools(session, actor.project_id),
             problem_written=bool((payload or {}).get("problem")),
         ),
         "message": f"moved from {left} to {target}"
@@ -3277,6 +3279,7 @@ async def _save_moved_step(
             steps,
             size=size,
             roster=await spec_journey.open_roster(session, project_id),
+            pools=await spec_journey.open_pools(session, project_id),
             problem_written=bool(payload.get("problem")) if isinstance(payload, dict) else False,
         ),
         "message": f"this save moved the document from {move.get('from')} to {target}, because "

@@ -766,6 +766,46 @@ def build_map(project_root: Path, private_root: Path) -> List[Dict[str, Any]]:
     return listed + orphans
 
 
+MIN_SEARCH_CHARS = 2
+SEARCH_LINES = 3
+
+
+def search_text(project_root: Path, private_root: Path, query: str) -> List[Dict[str, Any]]:
+    """Each source agents can read whose text holds *query*, ignoring case: how many lines match
+    and the first three as {line, text}, 1-based, newest source first. Archived sources and text
+    held on another machine are left out. Raises VaultError (400) for a query under two characters.
+    """
+    needle = query.strip().casefold()
+    if len(needle) < MIN_SEARCH_CHARS:
+        raise VaultError(f"A search needs at least {MIN_SEARCH_CHARS} characters.")
+    hits: List[Dict[str, Any]] = []
+    for record in _records(project_root, private_root).values():
+        if record.archived:
+            continue
+        text = record.text()
+        if text is None or needle not in text.casefold():
+            continue
+        found = [
+            (number, line.strip())
+            for number, line in enumerate(text.splitlines(), start=1)
+            if needle in line.casefold()
+        ]
+        if not found:
+            continue
+        hits.append(
+            {
+                "source": record.meta["id"],
+                "total": len(found),
+                "lines": [{"line": n, "text": t[:300]} for n, t in found[:SEARCH_LINES]],
+                "_created": (record.meta["created_at"], record.meta["id"]),
+            }
+        )
+    hits.sort(key=lambda hit: hit["_created"], reverse=True)
+    for hit in hits:
+        del hit["_created"]
+    return hits
+
+
 def private_text_is(holder: Optional[str]) -> str:
     """Where a private entry's missing text is, as a clause: held on its holder, or, when the
     holder is this machine, not at its private location (F617: "held on TITAN, not on this
@@ -2127,6 +2167,15 @@ def _fact_named(fact_id: str, facts: Dict[str, _Fact], records: Dict[str, _Recor
     said = f'"{fact.claim}"' if fact.claim else "(a private fact whose claim is held elsewhere)"
     origin = ", ".join(_source_named(s, records) for s in fact.meta["sources"]) or "no source"
     return f"{fact_id}: {said}, from {origin}"
+
+
+def source_names(project_root: Path, private_root: Path) -> Dict[str, str]:
+    """Each source's name by its id, archived ones left out."""
+    return {
+        source_id: record.meta["name"]
+        for source_id, record in _records(project_root, private_root).items()
+        if isinstance(record.meta.get("name"), str) and not record.archived
+    }
 
 
 def name_facts(project_root: Path, private_root: Path, fact_ids: List[str]) -> Dict[str, str]:
