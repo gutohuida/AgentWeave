@@ -59,3 +59,21 @@ async def test_search_over_a_vault_of_this_size_is_fast(app, auth_headers, tmp_p
     answered = await _search(app, auth_headers, "refund")
     assert answered.status_code == 200
     assert time.perf_counter() - started < 1.0
+
+
+@pytest.mark.asyncio
+async def test_a_match_past_the_first_300_characters_stays_in_the_line(app, auth_headers) -> None:
+    # VPTSW-7: the route cut each line to its first 300 characters, so on a long line whose match
+    # sat at character 516 the text the UI marks held no match at all.
+    line = (
+        ("After the same re-distil, the fact that stood " * 11)
+        + "the approved refund-limits change"
+        + " tail" * 40
+    )
+    assert line.index("refund") > 300
+    await _upload(app, auth_headers, content=f"first\n{line}\n")
+    hit = (await _search(app, auth_headers, "refund")).json()["hits"][0]
+    text = hit["lines"][0]["text"]
+    assert hit["lines"][0]["line"] == 2
+    assert "refund" in text
+    assert len(text) <= 300

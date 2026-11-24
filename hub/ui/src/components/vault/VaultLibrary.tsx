@@ -136,7 +136,10 @@ export function VaultLibrary(props: VaultLibraryProps) {
     },
     [onQueryChange],
   )
-  const [filter, setFilter] = React.useState<Filter>(overviewOn ? { kind: 'overview' } : { kind: 'all' })
+  const [chosen, setFilter] = React.useState<Filter>(overviewOn ? { kind: 'overview' } : { kind: 'all' })
+  // The Overview and Facts views need the facts' uses; a container that stops passing them (a Hub
+  // that turned out to predate them) gets the library as it was.
+  const filter: Filter = !overviewOn && (chosen.kind === 'overview' || chosen.kind === 'facts') ? { kind: 'all' } : chosen
   const sourceTotal = entries.filter((e) => e.kind !== 'fact').length
   const factTotal = entries.length - sourceTotal
   const searching = overviewOn && Boolean(query.trim())
@@ -163,19 +166,22 @@ export function VaultLibrary(props: VaultLibraryProps) {
     return () => window.removeEventListener('keydown', onKey)
   }, [selectedId, onSelect])
 
+  // With the Facts view, a fact whose source is not in the map is listed there and counted under
+  // Facts only, so the rail's kinds and folders agree with the Overview's.
+  const counted = React.useMemo(() => (overviewOn ? sources.filter((e) => e.kind !== 'fact') : sources), [sources, overviewOn])
   const counts = React.useMemo(() => {
     const c: Record<string, number> = {}
-    for (const e of sources) c[e.type] = (c[e.type] ?? 0) + 1
+    for (const e of counted) c[e.type] = (c[e.type] ?? 0) + 1
     return c
-  }, [sources])
+  }, [counted])
   const folders = React.useMemo(() => {
     const c = new Map<string, number>()
-    for (const e of sources) {
+    for (const e of counted) {
       const f = folderOf(e)
       if (f) c.set(f, (c.get(f) ?? 0) + 1)
     }
     return [...c.entries()].sort(([a], [b]) => a.localeCompare(b))
-  }, [sources])
+  }, [counted])
 
   const duplicates = React.useMemo(() => {
     const seen = new Map<string, number>()
