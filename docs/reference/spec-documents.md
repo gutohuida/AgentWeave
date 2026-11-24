@@ -66,6 +66,7 @@ links and evidence. Partial evidence (`covers: partial`) never verifies: `gate` 
 | `modal` | `MUST`, `SHALL`, `SHOULD` or `MAY`. |
 | `statement` | The requirement itself. |
 | `rationale`, `party` | Why, and who it serves. |
+| `facts` | Optional. The vault facts the requirement rests on, by id (`fct-` and 12 hex characters). Left out when nothing in the vault backs it. Raises no warning when empty. |
 
 **Acceptance criteria** are Given / When / Then scenarios that point at a requirement key. They can
 carry `how_to_check` and `checked_by` (`agent` or `operator`).
@@ -105,13 +106,38 @@ Each coverage entry also carries **integration**: `integrated`, `not_integrated`
 - `criterion_without_check`, a criterion with no `how_to_check` and no `checked_by`;
 - `no_acceptance_drive`, where the first task is not a failing end-to-end check;
 - a requirement no task serves and no accepted evidence verifies;
-- `steps_skipped`, empty non-goals, unresolved questions, unreviewed amendments.
+- `steps_skipped`, empty non-goals, unresolved questions, unreviewed amendments;
+- `pre_mortem_unanswered`: the newest written pre-mortem has findings nobody answered. A document with
+  no pre-mortem, or with every finding answered, does not report it, and the save's
+  `ready_to_approve` is false while it stands.
 
 A gap can be **acknowledged** with a reason (`acknowledge_spec_gap`, or from the approval
 refusal). The record holds `code`, `where`, `reason`, who and when, and lasts only while a gap with
 the same `code` and `where` is still reported. It is shown apart from the open gaps and counts as
 handled for readiness. `amendments_unreviewed` and `vault_warning` are the operator's to clear and
 are never acknowledged by an agent.
+
+## Pre-mortem
+
+A manager job (**Project settings → Manager → Pre-mortem**) that reads a change's drafted
+requirements and criteria and the code, assumes the change shipped and failed, and records how.
+Each firing ends *written*, *nothing to do*, or *failed*, and one per document runs at a time.
+
+- Automatic firing happens only for a document with no completed firing (written, or nothing to do),
+  when it leaves the acceptance step (`acceptance`, or `requirements-and-acceptance`). After that,
+  only **Run a pre-mortem** runs it.
+- The findings of the newest written firing are the ones to answer. The author answers one finding,
+  or all unanswered, with a required note (`answer_pre_mortem`); the answer names the firing, and an
+  answer for any other firing, or from a profile that did not write the document, is refused.
+- It is shown at the end of the **Document** tab and on the spec page, never in the Builds tab.
+
+## Possible backing facts
+
+The spec vault check names, in the same call that finds conflicts, the facts that possibly back each
+requirement. The newest firing for a document is its current list, and an entry is not shown once
+its requirement's statement differs from the one it was judged against. The full spec page shows
+them as possible and not confirmed; the conversation's side panel does not. They never raise a
+cited-fact warning and never count as a fact the requirement lists.
 
 ## Criterion confirmations
 

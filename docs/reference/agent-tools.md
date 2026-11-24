@@ -59,10 +59,10 @@ carry **outbound intent only**. There is no tool for reading an inbox.
 | Tool | Purpose |
 |---|---|
 | `create_spec_document(title?, kind?)` | Start a change or roadmap document. The Hub chooses its path. |
-| `submit_spec_document(path, …)` | Write the document's structure. The Hub validates it, mints requirement identifiers, and writes the file. At contract or gate rigor, changes become proposals for you. |
+| `submit_spec_document(path, …)` | Write the document's structure (a requirement may carry `facts`, the vault facts it rests on, by id). The Hub validates it, mints requirement identifiers, and writes the file. At contract or gate rigor, changes become proposals for you. |
 | `rename_spec_document(path, subject)` | Name the document once its subject is clear. Refused once it has been approved. |
 | `set_spec_size(path, size, reason)` | Record the change's size (fix, small, large) and why. |
-| `advance_spec_step(path, to?)` | Move to the next journey step, after you chose to continue. |
+| `advance_spec_step(path, to?)` | Move to the next journey step. The agent calls it itself once the step's output is written and it has no question for you, and says which step it moved to. |
 | `read_spec_document(path, include?, identifiers?)` | Read the document the run is implementing. Large reads are written to a file in its checkout. |
 | `record_evidence(identifier, summary?, kind?, locator?, document?, task_id?, command?, output?, covers?)` | Record what shows a requirement is satisfied: the command, its output, and whether it covers the requirement fully or partly. |
 | `list_evidence(identifier?, document?, review_state?)` | Read the project's evidence. |
@@ -71,6 +71,7 @@ carry **outbound intent only**. There is no tool for reading an inbox.
 | `report_cannot_satisfy(path, criterion, reason)` | Say a criterion cannot be met as written, and why. |
 | `record_reconcile(path, summary, gaps?)` | Record what comparing an approved change with its code found. Advisory. |
 | `acknowledge_spec_gap(path, code, where, reason)` | Leave one gap of a document the profile wrote open on purpose, with a reason. It shows as acknowledged and counts as handled for readiness, until the gap is fixed. Not for refusals, unreviewed amendments or vault warnings. |
+| `answer_pre_mortem(path, firing, note, finding?)` | Answer the pre-mortem of a document the profile wrote: one finding by number, or every unanswered one when `finding` is left out. The note, of what the profile did, is required. Only the document's author may answer, and only the newest written firing. |
 | `confirm_acceptance_criteria(path, confirmations)` | Record, for each acceptance criterion, that it was checked against the current code as `new` or `guard`. Approval is refused until every criterion has a current confirmation. Allowed only while the document is exploring; all entries or none. |
 | `tidy_spec_document(path, op, reason, …)` | **Needs the *Keep the specs true* switch on the profile.** Fold a built change into a capability, create or edit a capability, mark a document superseded, or fix roadmap links. Each act applies at once and is listed for you with its reason. Approving, archiving and deciding amendments or evidence stay yours. |
 

@@ -97,8 +97,9 @@ the capability plane.
 
 - **The scheduler** fires jobs, loops and flows, retries held queues, and runs checks.
 - **Manager jobs** are one-shot model calls the Hub makes for itself: conversation titles, vault
-  distillation and reports, the spec vault check. They never appear as agent runs, and their spend
-  is counted.
+  distillation and reports, the spec vault check, the pre-mortem and the Overview note. They never
+  appear as agent runs, and their spend is counted. Each run is announced as it starts and ends,
+  and logged under **Project settings → Manager**.
 - **Traces** of every run and every Hub operation are kept locally, and can be exported over OTLP.
 
 ## The CLI
