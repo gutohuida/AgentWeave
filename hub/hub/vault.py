@@ -768,6 +768,7 @@ def build_map(project_root: Path, private_root: Path) -> List[Dict[str, Any]]:
 
 MIN_SEARCH_CHARS = 2
 SEARCH_LINES = 3
+SEARCH_LINE_CHARS = 300
 
 
 def search_text(project_root: Path, private_root: Path, query: str) -> List[Dict[str, Any]]:
@@ -796,7 +797,7 @@ def search_text(project_root: Path, private_root: Path, query: str) -> List[Dict
             {
                 "source": record.meta["id"],
                 "total": len(found),
-                "lines": [{"line": n, "text": t[:300]} for n, t in found[:SEARCH_LINES]],
+                "lines": [{"line": n, "text": _around(t, needle)} for n, t in found[:SEARCH_LINES]],
                 "_created": (record.meta["created_at"], record.meta["id"]),
             }
         )
@@ -804,6 +805,16 @@ def search_text(project_root: Path, private_root: Path, query: str) -> List[Dict
     for hit in hits:
         del hit["_created"]
     return hits
+
+
+def _around(line: str, needle: str) -> str:
+    """*line* cut to SEARCH_LINE_CHARS around its first match of *needle*, a third of the room
+    before it, so a match deep in a long line is still in the text the UI marks."""
+    if len(line) <= SEARCH_LINE_CHARS:
+        return line
+    at = max(0, line.casefold().find(needle))
+    start = max(0, min(at - SEARCH_LINE_CHARS // 3, len(line) - SEARCH_LINE_CHARS))
+    return line[start : start + SEARCH_LINE_CHARS]
 
 
 def private_text_is(holder: Optional[str]) -> str:
