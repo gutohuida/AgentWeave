@@ -19,25 +19,26 @@ interface OutlineGroup {
   items: OutlineItem[]
 }
 
-function outlineOf(doc: SpecDocumentView, findings: CheckFinding[], builds: BuildView[]): OutlineGroup[] {
+/** `preMortemInDocument`: the container draws the pre-mortem at the document part's end, after the
+ *  requirements (spec the-spec-process-uses-what-the-hub-already-knows, FR-7), so its entry follows
+ *  Requirements; otherwise it stays among the builds' sections. */
+function outlineOf(doc: SpecDocumentView, findings: CheckFinding[], builds: BuildView[], preMortemInDocument: boolean): OutlineGroup[] {
   const marker = (kind: CheckFinding['target']['kind'], id: string): OutlineItem['marker'] => {
     const hits = findings.filter((f) => f.target.kind === kind && f.target.id === id)
     return hits.some((f) => f.severity === 'blocking') ? 'blocking' : hits.length ? 'warning' : undefined
   }
+  const preMortem: OutlineItem[] = doc.kind === 'change-spec' ? [{ anchor: anchors.section('pre-mortem'), label: 'Pre-mortem' }] : []
   const sections: OutlineItem[] = [
     { anchor: anchors.section('summary'), label: 'Summary', marker: marker('section', 'summary') },
     { anchor: anchors.section('problem'), label: 'Problem', marker: marker('section', 'problem') },
     { anchor: anchors.section('scope'), label: 'Scope', marker: marker('section', 'scope') },
     ...(doc.slices?.length ? [{ anchor: anchors.section('slices'), label: 'Slices', detail: String(doc.slices.length) }] : []),
     { anchor: anchors.section('requirements'), label: 'Requirements', detail: String(doc.requirements.length) },
+    ...(preMortemInDocument ? preMortem : []),
     { anchor: anchors.section('tasks'), label: 'Tasks', detail: String(doc.tasks.length) },
     { anchor: anchors.section('builds'), label: 'Builds', detail: builds.length ? String(builds.length) : undefined },
-    ...(doc.kind === 'change-spec'
-      ? [
-          { anchor: anchors.section('pre-mortem'), label: 'Pre-mortem' },
-          { anchor: anchors.section('retrospective'), label: 'Retrospective' },
-        ]
-      : []),
+    ...(preMortemInDocument ? [] : preMortem),
+    ...(doc.kind === 'change-spec' ? [{ anchor: anchors.section('retrospective'), label: 'Retrospective' }] : []),
     ...(doc.openQuestions.length ? [{ anchor: anchors.section('questions'), label: 'Open questions' }] : []),
   ]
   return [
@@ -74,14 +75,16 @@ export function SpecOutlineRail({
   builds,
   active,
   onJump,
+  preMortemInDocument = false,
 }: {
   doc: SpecDocumentView
   findings: CheckFinding[]
   builds: BuildView[]
   active: string | null
   onJump: (anchor: string) => void
+  preMortemInDocument?: boolean
 }) {
-  const groups = outlineOf(doc, findings, builds)
+  const groups = outlineOf(doc, findings, builds, preMortemInDocument)
   const activeRef = React.useRef<HTMLButtonElement>(null)
   // Keep the highlighted entry in the rail's own view. Not scrollIntoView: that also scrolls the
   // document the rail sits in, and cancels a jump in flight.
@@ -133,14 +136,16 @@ export function SpecOutlineMenu({
   builds,
   active,
   onJump,
+  preMortemInDocument = false,
 }: {
   doc: SpecDocumentView
   findings: CheckFinding[]
   builds: BuildView[]
   active: string | null
   onJump: (anchor: string) => void
+  preMortemInDocument?: boolean
 }) {
-  const groups = outlineOf(doc, findings, builds)
+  const groups = outlineOf(doc, findings, builds, preMortemInDocument)
   const marked = groups.some((g) => g.items.some((i) => i.marker))
   return (
     <DropdownMenu.Root>

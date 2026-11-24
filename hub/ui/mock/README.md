@@ -356,8 +356,9 @@ or Unanswered, and "n of m answered", once the Hub sends `answer` on its finding
 `PreMortemAnswer` type in `src/api/manager.ts`); a Hub that sends none shows the section as before.
 `SpecWorkspace`/`SpecSidePanel` draw a container's `preMortem` at the end of the Document tab (and
 send a jump to the pre-mortem there), and `requirementAside` under each requirement on the full page;
-`SpecPossibleFacts.tsx` is that aside, with the proposed `SpecPossibleFact` type. Until a container
-passes `preMortem` the app keeps the pre-mortem under Builds. The findings are the Vault page spec's
+`SpecPossibleFacts.tsx` is that aside, with the `SpecPossibleFact` type (`src/api/vault.ts`). Wired
+2026-11-24: `useSpecSurface` passes `preMortem` on every surface and nothing draws it under Builds;
+the full spec page passes `requirementAside` from `GET /vault/warnings`' `possible_facts`. The findings are the Vault page spec's
 real pre-mortem (event evt-b6d0d4e90a15), with the answers its author gave; the possible facts are
 simulated.
 
