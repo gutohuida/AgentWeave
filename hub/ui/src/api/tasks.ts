@@ -5,6 +5,7 @@ import { neutraliseFileMentions } from '@/lib/fileMentions'
 import type { BuildPullRequest, CiRead } from './pullRequests'
 import type { EvidencePiece } from './spec'
 import type { QuarantineExcuse } from './quarantine'
+import type { CheckState } from '@/lib/checkState'
 
 /**
  * One thing the Hub decided to tell the operator at approval rather than refuse (F169):
@@ -125,6 +126,9 @@ export interface Task {
   /** How many of the latest check run's checks failed, not counting ones on the known-failing list
    *  (`task-card-and-story-redesign` FR-5). Null where no check has run; absent from an older Hub. */
   failed_checks?: number | null
+  /** The task's latest check, its kind and state, as the Hub chose it (`task_stage.check_state`);
+   *  null where none ran, absent from an older Hub. */
+  check_state?: CheckState | null
   /** Approved, and its work is still in the landing queue on its way to main. */
   waiting_to_land?: boolean
   /** Why nobody is handed this task: the cap or window of the finished build whose flow holds it. */

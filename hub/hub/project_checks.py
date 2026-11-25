@@ -1790,6 +1790,22 @@ async def _announce_finished(session: AsyncSession, run: TaskCheckRun) -> None:
         logger.debug("checks-finished broadcast failed", exc_info=True)
 
 
+async def announce_started(project_id: str, task_id: str, run_id: str, *, slot: bool) -> None:
+    """Tell the operator's app a task's check run started (*slot* false) or got its check slot
+    (*slot* true), after its row is committed, so a read the event prompts sees the run
+    (`task-stages-in-the-build-view-and-dependency-map` FR-6). Never fails the run."""
+    from .sse import sse_manager
+
+    try:
+        await sse_manager.broadcast(
+            project_id,
+            "task_checks_started",
+            {"task_id": task_id, "run_id": run_id, "slot": slot},
+        )
+    except Exception:  # noqa: BLE001
+        logger.debug("checks-started broadcast failed", exc_info=True)
+
+
 # --- the queue -----------------------------------------------------------------------------------
 
 _inflight: Dict[str, "asyncio.Task[None]"] = {}
@@ -1983,6 +1999,8 @@ async def _took_slot(run_id: str) -> None:
             return
         run.slot_at = datetime.now(timezone.utc)
         await session.commit()
+        project_id, task_id = run.project_id, run.task_id
+    await announce_started(project_id, task_id, run_id, slot=True)
 
 
 def is_running(task_id: str) -> bool:
@@ -2075,11 +2093,13 @@ async def request_run(
                 run.ended_at = datetime.now(timezone.utc)
                 session.add(run)
                 await session.commit()
+                await announce_started(project_id, task_id, run.id, slot=False)
                 await _resolve_unjudged(project_id, task_id)
                 return run.id
             session.add(run)
             await session.commit()
             run_id = run.id
+        await announce_started(project_id, task_id, run_id, slot=False)
         _fast_waiters[run_id] = asyncio.Event()
         job = asyncio.get_running_loop().create_task(
             traces.within_work(

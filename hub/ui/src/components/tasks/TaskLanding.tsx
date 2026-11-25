@@ -112,7 +112,7 @@ function landingSentence(landing: Landing): string {
       const tasks = batch ? batch.task_ids.length : 1
       const previous = batch?.previous_seconds
       return (
-        `${landing.state === 'landing' ? 'Landing' : 'Checking'} with ${tasks} ${tasks === 1 ? 'task' : 'tasks'}` +
+        `${landing.state === 'landing' ? 'Landing' : 'Landing checks'} with ${tasks} ${tasks === 1 ? 'task' : 'tasks'}` +
         ` · running ${unit(ran)}` +
         (previous != null ? ` · the previous batch took ${unit(previous)}` : '')
       )

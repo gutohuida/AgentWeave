@@ -400,6 +400,10 @@ class TaskResponse(BaseModel):
     stage_since: Optional[datetime] = None
     stage_detail: Optional[str] = None
     stage_waits_on: Optional[str] = None
+    # The task's latest check run, by kind (`pre_review` or `landing`) and state (`waiting`,
+    # `running`, `passed`, `failed`, `could_not_run`), chosen by `task_stage.check_states`; null
+    # where it has none (`task-stages-in-the-build-view-and-dependency-map` FR-3).
+    check_state: Optional[Dict[str, str]] = None
     # Why nobody is handed this task: the cap or window of the finished build whose flow holds it.
     queue_held_reason: Optional[str] = None
     acceptance_criteria: Optional[Any] = None
