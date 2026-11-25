@@ -95,6 +95,9 @@ export function TaskCard({
   const askerIsBuilder = task.stage === 'waiting_for_answer' && Boolean(waitsOn) && waitsOn === builder
   const waitsText = waitsOn ? (askerIsBuilder ? 'by builder' : waitsWording(task.stage, waitsOn)) : null
   const failed = failedChecks ?? task.failed_checks ?? null
+  // The Hub's check state names the run's kind and state; the bare failed count is the fallback
+  // for a Hub that sends none.
+  const check = checkState ?? task.check_state ?? null
   const stageTitle = [
     visual.word,
     stalled ? stallNotice(stalled.reason, task.readable_id) : null,
@@ -161,8 +164,8 @@ export function TaskCard({
             </span>
           ) : null}
           <span className="aw-tcard-markers">
-            <CheckStateMarker check={checkState} stage={task.stage} />
-            {failed && failed > 0 ? (
+            <CheckStateMarker check={check} stage={task.stage} />
+            {!check && failed && failed > 0 ? (
               <span
                 className="aw-tcard-marker"
                 data-kind="checks"
