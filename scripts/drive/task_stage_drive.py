@@ -148,6 +148,10 @@ def self_test():
         (sequence_of(SEQUENCE), SEQUENCE),
         (sequence_of(["in progress", "completed"]), []),
         (int(utc_ms("2026-11-25T21:35:19+00:00") - utc_ms("2026-11-25 21:35:16")), 3000),
+        # one batched landing run, filed under the first task, holds both branch heads: both tasks get it
+        (tasks_of("a", "['aaa111', 'bbb222']", {"a": "aaa111", "b": "bbb222"}, ["a", "b"]), ["a", "b"]),
+        (tasks_of("a", "['aaa111']", {"a": "aaa111", "b": "bbb222"}, ["a", "b"]), ["a"]),
+        (tasks_of("b", None, {}, ["a", "b"]), ["b"]),
     ]
     bad = [(i, got, want) for i, (got, want) in enumerate(cases) if got != want]
     for i, got, want in bad:
@@ -426,14 +430,36 @@ def shot(page, name):
         pass
 
 
+HEADS: dict = {}  # task id -> branch head seen while its branch existed
+
+
+def note_heads():
+    root = SCRATCH / "project"
+    for t in S["tasks"]:
+        got = subprocess.run(["git", "for-each-ref", "--format=%(objectname)", f"refs/heads/*{t['id']}*"],
+                             cwd=root, capture_output=True, text=True).stdout.split()
+        if got:
+            HEADS[t["id"]] = got[0]
+
+
+def tasks_of(task_id, target_shas, heads, all_ids):
+    """The tasks a check run is about: its own task, and every task whose branch head its target_shas hold
+    (a landing run is batched: one row, the first task's id, both heads)."""
+    text = str(target_shas or "")
+    return sorted({task_id} | {t for t in all_ids if heads.get(t) and heads[t] in text})
+
+
 def check_runs():
     """Each check run of the project's tasks with its kind: a run started after its task's approval is a landing run."""
     out = []
-    for r in ro("select c.id, c.task_id, c.started_at, c.state, (select min(created_at) from task_transitions x "
+    note_heads()
+    all_ids = [t["id"] for t in S["tasks"]]
+    for r in ro("select c.id, c.task_id, c.started_at, c.state, c.target_shas, (select min(created_at) from task_transitions x "
                 "where x.task_id=c.task_id and x.to_status='approved') as approved_at "
                 "from task_check_runs c where c.project_id=? order by c.started_at", (S["pid"],)):
         landing = r["approved_at"] is not None and utc_ms(r["started_at"]) >= utc_ms(r["approved_at"])
-        out.append({"id": r["id"], "task": r["task_id"], "started_ms": utc_ms(r["started_at"]),
+        out.append({"id": r["id"], "tasks": tasks_of(r["task_id"], r["target_shas"], HEADS, all_ids),
+                    "started_ms": utc_ms(r["started_at"]),
                     "kind": "landing" if landing else "pre-review", "state": r["state"]})
     return out
 
@@ -445,7 +471,7 @@ def fire():
 
 
 def run_build(pages):
-    samples, shots, first_seen = [], set(), {}
+    samples, shots, first_seen, reads = [], set(), {}, []
     end = time.time() + BUILD_WAIT
     last_record = last_fire = 0.0
     done_since = None
@@ -459,10 +485,12 @@ def run_build(pages):
         cells = read_surfaces(pages)
         runs = check_runs()
         for run in runs:
-            for surface, (stage, marker) in cells[run["task"]].items():
-                kind, state = check_of(marker)
-                if kind == run["kind"] and state in ("waiting", "running"):
-                    first_seen.setdefault((run["id"], surface), now * 1000)
+            for task in run["tasks"]:
+                for surface, (stage, marker) in cells[task].items():
+                    kind, state = check_of(marker)
+                    if kind == run["kind"] and state in ("waiting", "running"):
+                        first_seen.setdefault((run["id"], task, surface), now * 1000)
+        reads.append(cells)
         if now - last_record >= RECORD_EVERY:
             last_record = now
             samples.append({"t": now, "cells": cells})
@@ -481,17 +509,17 @@ def run_build(pages):
         time.sleep(PROBE_EVERY)
     for surface, page in pages.items():
         shot(page, f"end-{surface.replace(' ', '-')}")
-    return samples, runs, first_seen, bool(done_since)
+    return samples, reads, runs, first_seen, bool(done_since)
 
 
-def judge(samples, runs, first_seen, finished):
+def judge(samples, reads, runs, first_seen, finished):
     problems, notes = [], []
     if not finished:
         problems.append(f"both tasks were not on main within {BUILD_WAIT // 60} minutes")
     # 1. the sequence, per task and surface
     for t in S["tasks"]:
         for surface in ("build view", "board", "map"):
-            words = [s["cells"][t["id"]][surface][0] for s in samples]
+            words = [cells[t["id"]][surface][0] for cells in reads]  # every read: a stage can last under 2 s
             got = sequence_of(words)
             if got != SEQUENCE:
                 seen = collapse([w or "(not drawn)" for w in words])
@@ -521,17 +549,19 @@ def judge(samples, runs, first_seen, finished):
                                 f"running {kind} check ({bare[0]} first)")
     # 4. each check start shows within 3 s of started_at, on each surface
     late = []
+    names = {t["id"]: t["readable_id"] for t in S["tasks"]}
     for run in runs:
-        for surface in ("build view", "board", "map"):
-            seen = first_seen.get((run["id"], surface))
-            if seen is None:
-                late.append(f"{run['kind']} run {run['id']} never showed on the {surface}")
-            elif (seen - run["started_ms"]) / 1000 > START_LIMIT:
-                late.append(f"{run['kind']} run {run['id']} showed on the {surface} "
-                            f"{(seen - run['started_ms']) / 1000:.1f}s after it started")
+        for task in run["tasks"]:
+            for surface in ("build view", "board", "map"):
+                seen = first_seen.get((run["id"], task, surface))
+                who = f"{run['kind']} run {run['id']} for {names.get(task, task)}"
+                if seen is None:
+                    late.append(f"{who} never showed on the {surface}")
+                elif (seen - run["started_ms"]) / 1000 > START_LIMIT:
+                    late.append(f"{who} showed on the {surface} {(seen - run['started_ms']) / 1000:.1f}s after it started")
     if not runs:
         problems.append("no check run was recorded (the checks did not run)")
-    problems += late[:6]
+    problems += late[:8]
     notes.append(f"{len(samples)} records of 2 tasks x 3 surfaces; {len(runs)} check runs "
                  f"({', '.join(sorted({r['kind'] for r in runs})) or 'none'})")
     return problems, notes
@@ -577,11 +607,11 @@ def main():
             try:
                 pages = open_pages(browser)
                 print(f"output {OUT}", flush=True)
-                samples, runs, first_seen, finished = run_build(pages)
+                samples, reads, runs, first_seen, finished = run_build(pages)
             finally:
                 browser.close()
         reached = True
-        problems, notes = judge(samples, runs, first_seen, finished)
+        problems, notes = judge(samples, reads, runs, first_seen, finished)
         failed = bool(problems)
         detail = f"build {build_id}: " + "; ".join(problems + notes) if problems else f"build {build_id}: " + "; ".join(notes)
         for p in problems:
