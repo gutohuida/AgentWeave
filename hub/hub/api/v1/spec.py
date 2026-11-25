@@ -5275,7 +5275,11 @@ async def build_tasks_of(
             payload = _read_payload(await _workspace(session, project_id), document.path)
         except Exception:  # an unreadable file loses the declared order, not the read
             payload = None
-    return await build_read.build_read(session, project_id, build, document, payload)
+    from .tasks import stage_reads
+
+    tasks = (await session.execute(select(Task).where(Task.build_id == build.id))).scalars().all()
+    stages = await stage_reads(session, project_id, list(tasks))
+    return await build_read.build_read(session, project_id, build, document, payload, stages=stages)
 
 
 @router.post("/builds/{build_id}/stop")
