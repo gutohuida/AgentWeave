@@ -29,12 +29,15 @@ const VISUALS: Record<string, StageVisual> = {
   preparing_checkout: { glyph: 'git_branch_plus', word: 'Preparing checkout', tone: 'live', knot: -1, moving: true },
   working: { glyph: 'circle_dot', word: 'Building', tone: 'live', knot: 0, moving: true },
   waiting_for_answer: { glyph: 'hand', word: 'Needs your answer', tone: 'needs-you', knot: 0 },
+  // Finished, and its review is held for its pre-review checks: running, queued, asked for, or
+  // unable to run (`review_wait`). The check marker beside it says which.
+  pre_review_checks: { glyph: 'clipboard_check', word: 'Pre-review checks', tone: 'info', knot: 1, moving: true },
   waiting_for_review: { glyph: 'hourglass', word: 'Ready for review', tone: 'idle', knot: 1 },
   under_review: { glyph: 'visibility', word: 'In review', tone: 'info', knot: 1, moving: true },
   sent_back: { glyph: 'restart_alt', word: 'Sent back', tone: 'needs-you', knot: 0 },
   // Approved is not done: the word names where its landing is, so it never reads as on main.
   approved_waiting: { glyph: 'stamp', word: 'Waiting to land', tone: 'info', knot: 2 },
-  checking: { glyph: 'fact_check', word: 'Checking', tone: 'info', knot: 3, moving: true },
+  checking: { glyph: 'fact_check', word: 'Landing checks', tone: 'info', knot: 3, moving: true },
   landing: { glyph: 'git_merge', word: 'Landing', tone: 'info', knot: 4, moving: true },
   on_main: { glyph: 'circle_check_big', word: 'On main', tone: 'done', knot: 4 },
   landing_held: { glyph: 'pause', word: 'Landing held', tone: 'needs-you', knot: 3 },

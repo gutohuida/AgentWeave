@@ -44,6 +44,9 @@ export type MockRoute =
   /** First run and the Overview read cleanly: six small polish items, each today next to proposed
    *  (operator, 2026-11-22). */
   | { kind: 'first-run-polish' }
+  /** Every task surface shows the Hub's stage and its latest check (spec
+   *  task-stages-in-the-build-view-and-dependency-map). */
+  | { kind: 'task-stages' }
   /** The traces view: a fourth view inside Activity (operator, 2026-11-02). */
   | { kind: 'traces' }
   /** A whole conversation's trace (spec a-trace-of-a-whole-conversation). */

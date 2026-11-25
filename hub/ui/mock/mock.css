@@ -107,3 +107,21 @@
 /* The profiles count as it was: the archived profile counted in. */
 .mock-frp-today-count .aw-pf-order { font-size: 0; }
 .mock-frp-today-count .aw-pf-order::after { content: "2 profiles · working first, then A to Z"; font-size: 12px; }
+
+/* The task-stages screen (spec task-stages-in-the-build-view-and-dependency-map). */
+.mock-ts { display: flex; flex-direction: column; gap: 28px; padding: 24px 28px 48px; overflow: auto; height: 100%; }
+.mock-ts-h { margin: 0 0 10px; font-size: 13px; font-weight: 600; color: var(--text); }
+.mock-ts-key { display: grid; grid-template-columns: minmax(220px, 300px) minmax(0, 1fr); gap: 32px; }
+.mock-ts-stages { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; font-size: 12.5px; color: var(--text); }
+.mock-ts-stages li { display: flex; align-items: center; gap: 7px; }
+.mock-ts-stages em { font-style: normal; font-size: 11px; color: var(--text-3); }
+.mock-ts-checks { border-collapse: collapse; font-size: 12px; color: var(--text); }
+.mock-ts-checks th, .mock-ts-checks td { padding: 5px 14px 5px 0; text-align: left; font-weight: 500; }
+.mock-ts-checks thead th { color: var(--text-2); font-size: 11.5px; }
+.mock-ts-checks tbody th { color: var(--text-2); }
+.mock-ts-note { margin: 10px 0 0; font-size: 12px; color: var(--text-2); }
+.mock-ts-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px; }
+.mock-ts-card { margin: 0; display: flex; flex-direction: column; gap: 5px; }
+.mock-ts-card figcaption { font-size: 11.5px; color: var(--text-3); }
+.mock-ts-frame { border: 1px solid var(--border); border-radius: 8px; background: var(--surface); container-type: inline-size; padding: 4px 0; }
+@media (max-width: 760px) { .mock-ts-key { grid-template-columns: minmax(0, 1fr); } }

@@ -1,3 +1,4 @@
+import type { CheckState } from '@/lib/checkState'
 import type { TaskStatus } from '@/components/spec/page/model'
 import { TASK_STATUS_LABEL } from '@/components/spec/page/model'
 import type { CostCell } from '@/lib/format'
@@ -52,6 +53,10 @@ export interface BuildTaskRead {
   ref: string | null
   title: string | null
   status: TaskStatus
+  /** The Hub's stage (`task_stage.py`) and latest check; when present the row words these in place
+   *  of the raw status. */
+  stage?: string | null
+  check_state?: CheckState | null
   /** False for a task added to the build later, not declared by its document. */
   declared: boolean
   builder: string | null

@@ -5,6 +5,8 @@ import { Button } from '@/components/ui/button'
 import { Segmented } from '@/components/ui/segmented'
 import { agentColorVars } from '@/lib/agentColors'
 import { hubDate } from '@/lib/hubTime'
+import { TONE_COLOR, stageVisual } from '@/lib/taskStageVisual'
+import { CheckStateMarker } from '@/components/tasks/CheckStateMarker'
 import {
   formatAgo,
   formatAgoLong,
@@ -221,7 +223,7 @@ function BuildViewLoaded({ read, now, address, onAddressChange, refreshError, on
             <div className="aw-bv-row aw-bv-head-row" aria-hidden="true">
               <span />
               <span>Task</span>
-              <span>Status</span>
+              <span>Stage</span>
               <span>Builder · checker</span>
               <span>Evidence</span>
               <span className="aw-bv-num">Runs</span>
@@ -617,10 +619,18 @@ function TaskRow({
             </span>
           ) : null}
         </span>
-        <span className="aw-bv-status" data-status={task.status}>
-          <Icon name={state.icon} size={13} />
-          {state.label}
-        </span>
+        {task.stage ? (
+          <span className="aw-bv-status aw-bv-stage" data-stage={task.stage} style={{ '--stage-tone': TONE_COLOR[stageVisual(task.stage).tone] } as React.CSSProperties}>
+            <Icon name={stageVisual(task.stage).glyph} size={13} />
+            <span className="aw-bv-stage-word">{stageVisual(task.stage).word}</span>
+            <CheckStateMarker check={task.check_state} stage={task.stage} size="xs" glyphOnly />
+          </span>
+        ) : (
+          <span className="aw-bv-status" data-status={task.status}>
+            <Icon name={state.icon} size={13} />
+            {state.label}
+          </span>
+        )}
         <span className="aw-bv-people">
           <AgentName name={task.builder} role="builder" colorIndexOf={colorIndexOf} />
           <span className="aw-bv-sep" aria-hidden="true">·</span>
