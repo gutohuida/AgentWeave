@@ -31,6 +31,7 @@ const SpecHome = React.lazy(() => import('./SpecHome'))
 const SpecThreadUi = React.lazy(() => import('./SpecThreadUi'))
 const PreMortem = React.lazy(() => import('./PreMortem'))
 const FirstRunPolish = React.lazy(() => import('./FirstRunPolish'))
+const TaskStages = React.lazy(() => import('./TaskStages'))
 const BuildView = React.lazy(() => import('./BuildView'))
 const BuildSummaries = React.lazy(() => import('./BuildSummaries'))
 const ProfilePools = React.lazy(() => import('./ProfilePools'))
@@ -56,6 +57,8 @@ export function screenFor(route: MockRoute): ScreenComponent {
       return SpecProcess
     case 'first-run-polish':
       return FirstRunPolish
+    case 'task-stages':
+      return TaskStages
     case 'overview-next':
       return OverviewNext
     case 'overview-briefing':
@@ -114,6 +117,7 @@ export const SCREENS: Array<{ id: string; label: string; route: MockRoute }> = [
   { id: 'spec-process-panel', label: 'Spec · Pre-mortem answered, at the end of the side panel’s Document tab', route: { kind: 'spec-process', view: 'panel' } },
   { id: 'spec-process-page', label: 'Spec · Pre-mortem at the document’s end, and possible backing facts', route: { kind: 'spec-process', view: 'page' } },
   { id: 'first-run-polish', label: 'First run and the Overview read cleanly', route: { kind: 'first-run-polish' } },
+  { id: 'task-stages', label: 'Tasks · Every stage and check, on the board, build view and map', route: { kind: 'task-stages' } },
   { id: 'roadmap', label: 'Spec · A roadmap’s own page', route: { kind: 'roadmap' } },
   { id: 'spec-home', label: 'Spec · Home, three ways to relate', route: { kind: 'spec-home' } },
   { id: 'profiles', label: 'Profiles · Every profile and its settings', route: { kind: 'tab', tab: 'profiles' } },

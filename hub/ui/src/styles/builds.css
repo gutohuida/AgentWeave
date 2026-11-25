@@ -98,7 +98,7 @@
 
 .aw-bv-row {
   display: grid;
-  grid-template-columns: 16px minmax(200px, 1fr) 100px minmax(190px, 240px) 120px 40px 64px 112px 52px;
+  grid-template-columns: 16px minmax(200px, 1fr) 156px minmax(190px, 240px) 120px 40px 64px 112px 52px;
   align-items: center;
   column-gap: 12px;
   min-height: 38px;
@@ -137,6 +137,10 @@
 .aw-bv-status[data-status="under_review"] svg { color: var(--amber); }
 .aw-bv-status[data-status="approved"] svg { color: var(--green); }
 .aw-bv-status[data-status="revision_needed"] svg, .aw-bv-status[data-status="rejected"] svg { color: var(--red); }
+/* Worded by the Hub's stage: glyph in the stage tone, the check marker's own svg keeps its tone. */
+.aw-bv-stage > svg { color: var(--stage-tone); }
+.aw-bv-stage-word { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.aw-bv-stage .aw-check-marker svg { color: inherit; }
 
 .aw-bv-people { display: flex; min-width: 0; align-items: center; gap: 6px; overflow: hidden; white-space: nowrap; }
 .aw-bv-sep { color: var(--text-2); }
@@ -273,7 +277,7 @@
 /* Narrower than the full table: builder and evidence move to a second line under the task. */
 @container (max-width: 920px) {
   .aw-bv-row {
-    grid-template-columns: 16px minmax(0, 1fr) 96px 34px 52px 124px 44px;
+    grid-template-columns: 16px minmax(0, 1fr) 150px 34px 52px 124px 44px;
     grid-template-areas:
       'chev task status runs sb cost changed'
       '.    people people evidence evidence evidence evidence';

@@ -1,6 +1,10 @@
 import * as React from 'react'
 import { TASK_STATUS_LABEL, type TaskStatus } from '../model'
-import { THREAD_STATES, threadState, useChain, type GraphNode } from './threadModel'
+import { THREAD_STATES, stageThreadState, threadState, useChain, type GraphNode, type ThreadState } from './threadModel'
+import { Icon } from '@/components/common/Icon'
+import { CheckStateMarker } from '@/components/tasks/CheckStateMarker'
+import type { CheckState } from '@/lib/checkState'
+import { TONE_COLOR, stageVisual } from '@/lib/taskStageVisual'
 import { ThreadLegend } from './shared'
 import { flowLayout } from './flowLayout'
 
@@ -18,6 +22,10 @@ export interface FlowNode extends GraphNode {
   outside?: string | null
   /** A word on the node beside the status: waiting on the operator, working now. */
   flag?: string | null
+  /** The Hub's stage: when present the node words it, and its edge colour follows it, in place
+   *  of the raw status. */
+  stage?: string | null
+  check?: CheckState | null
 }
 
 const STATUS_LABEL: Record<string, string> = { ...TASK_STATUS_LABEL, blocked: 'Waiting on you' }
@@ -62,7 +70,7 @@ export function FlowGraph({
     return { x: p.col * (nodeWidth + columnGap), y: p.slot * (NODE_H + ROW_GAP) }
   }
   const edges = nodes.flatMap((n) => n.dependsOn.filter((d) => pos.has(d)).map((d) => ({ from: d, to: n.key })))
-  const stateOf = (key: string) => threadState(nodes.find((n) => n.key === key)?.status)
+  const stateOf = (key: string) => nodeState(nodes.find((n) => n.key === key))
   const states = THREAD_STATES.filter((s) => edges.some((e) => stateOf(e.from) === s))
   // Several threads arriving at one node spread down its left edge rather than meeting at a point.
   const port = (e: { from: string; to: string }, end: 'from' | 'to') => {
@@ -105,7 +113,7 @@ export function FlowGraph({
                 type="button"
                 data-slot="flow-node"
                 className="aw-st-node"
-                data-state={threadState(n.status)}
+                data-state={nodeState(n)}
                 data-outside={n.outside ? 'true' : undefined}
                 data-picked={selected === n.key ? 'true' : undefined}
                 data-lit={lit(n.key)}
@@ -120,9 +128,13 @@ export function FlowGraph({
                   {n.title}
                 </span>
                 <span className="aw-st-node-meta">
-                  <span className="aw-sp-status" data-status={status}>
-                    {STATUS_LABEL[status] ?? status}
-                  </span>
+                  {n.stage ? (
+                    <StageWord stage={n.stage} check={n.check} />
+                  ) : (
+                    <span className="aw-sp-status" data-status={status}>
+                      {STATUS_LABEL[status] ?? status}
+                    </span>
+                  )}
                   {n.outside ? (
                     <span className="aw-sp-muted">in {n.outside}</span>
                   ) : n.flag ? (
@@ -137,5 +149,23 @@ export function FlowGraph({
         </div>
       </div>
     </div>
+  )
+}
+
+/** A node's thread colour: from its stage where the Hub sent one, else its status. */
+function nodeState(n: FlowNode | undefined): ThreadState {
+  if (n?.stage) return stageThreadState(n.stage)
+  return threadState(n?.status)
+}
+
+/** The stage as the board words it, a glyph and a word in its tone, then the check marker. */
+function StageWord({ stage, check }: { stage: string; check?: CheckState | null }) {
+  const visual = stageVisual(stage)
+  return (
+    <span className="aw-st-node-stage" style={{ '--stage-tone': TONE_COLOR[visual.tone] } as React.CSSProperties}>
+      <Icon name={visual.glyph} size={12} />
+      <span className="aw-st-node-stage-word">{visual.word}</span>
+      <CheckStateMarker check={check} stage={stage} size="xs" glyphOnly />
+    </span>
   )
 }

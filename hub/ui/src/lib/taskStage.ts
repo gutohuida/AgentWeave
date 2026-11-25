@@ -8,11 +8,12 @@ export const STAGE_LABELS: Record<string, string> = {
   preparing_checkout: 'Preparing its checkout',
   working: 'Being worked on',
   waiting_for_answer: 'Waiting for an answer',
+  pre_review_checks: 'In pre-review checks',
   waiting_for_review: 'Waiting for review',
   under_review: 'Under review',
   sent_back: 'Sent back',
   approved_waiting: 'Approved, waiting to land',
-  checking: 'Checking',
+  checking: 'In landing checks',
   landing: 'Landing',
   on_main: 'On main',
   landing_held: 'Landing held',
@@ -40,6 +41,7 @@ export function formatStageAge(since: string | number | Date, now: Date = new Da
 }
 
 const REVIEW_STAGES: ReadonlySet<string> = new Set([
+  'pre_review_checks',
   'waiting_for_review',
   'under_review',
   'sent_back',

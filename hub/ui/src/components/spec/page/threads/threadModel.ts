@@ -14,6 +14,15 @@ export function threadState(status: TaskStatus | string | null | undefined): Thr
   return 'waiting'
 }
 
+/** The thread colour of the Hub's stage (`task_stage.py`): on main is done, a send-back or a landing
+ *  that did not happen is cut, not started is waiting, and everything between is moving. */
+export function stageThreadState(stage: string): ThreadState {
+  if (stage === 'on_main') return 'done'
+  if (stage === 'sent_back' || stage === 'did_not_land' || stage === 'closed') return 'rejected'
+  if (stage === 'not_started') return 'waiting'
+  return 'active'
+}
+
 /** Anything drawn as a node with prerequisites: a spec's planned task, or a task on the board. */
 export interface GraphNode {
   key: string

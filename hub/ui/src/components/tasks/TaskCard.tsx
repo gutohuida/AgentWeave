@@ -10,6 +10,8 @@ import { builderAndReviewer, formatStageAge } from '@/lib/taskStage'
 import type { CardMoveProps } from './TaskCardCompact'
 import { TONE_COLOR, stageVisual, waitsWording } from '@/lib/taskStageVisual'
 import { StageThread } from './StageThread'
+import { CheckStateMarker } from './CheckStateMarker'
+import type { CheckState } from '@/lib/checkState'
 import type { Stall } from '@/api/stalls'
 import { StallRemedies } from '@/components/stalls/StallRemedies'
 import { STALLED, stallNotice } from '@/lib/stalls'
@@ -30,6 +32,7 @@ export function TaskCard({
   colorOf,
   specTag,
   failedChecks,
+  checkState,
   now,
   selected,
   working,
@@ -50,6 +53,8 @@ export function TaskCard({
   /** How many checks failed in the task's latest check run, before review; 0 or absent shows none.
    *  Defaults to the task's own `failed_checks` from the tasks route; the mock passes it directly. */
   failedChecks?: number
+  /** The task's latest check, kind and state, as the Hub chose it; absent shows none. */
+  checkState?: CheckState | null
   now?: Date
   selected?: boolean
   /** The assignee has a live run on this task. */
@@ -156,6 +161,7 @@ export function TaskCard({
             </span>
           ) : null}
           <span className="aw-tcard-markers">
+            <CheckStateMarker check={checkState} stage={task.stage} />
             {failed && failed > 0 ? (
               <span
                 className="aw-tcard-marker"

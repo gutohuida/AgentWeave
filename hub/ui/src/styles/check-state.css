@@ -1,0 +1,15 @@
+/* A task's latest check (CheckStateMarker): a pill in its tone, the word always present. */
+.aw-check-marker {
+  display: inline-flex; align-items: center; gap: 3px; flex: none; height: 18px; padding: 0 6px;
+  border-radius: 999px; font-size: 11px; font-weight: 600; white-space: nowrap;
+  color: var(--check-tone); background: color-mix(in oklab, var(--check-tone) 13%, transparent);
+}
+.aw-check-marker[data-size="xs"] { height: 16px; padding: 0 5px; font-size: 10.5px; }
+.aw-check-marker[data-glyph-only="true"] { padding: 0 4px; }
+/* Waiting is quiet on purpose: it is not news, it is a queue. */
+.aw-check-marker[data-check-state="waiting"] { color: var(--text-2); background: color-mix(in oklab, var(--text-3) 14%, transparent); }
+.aw-check-marker[data-moving="true"] svg { animation: aw-check-spin 1.4s linear infinite; }
+@keyframes aw-check-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .aw-check-marker[data-moving="true"] svg { animation: none; }
+}

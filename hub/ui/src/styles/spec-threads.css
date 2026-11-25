@@ -108,3 +108,8 @@
 .aw-st-node-ref { margin-right: 6px; font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 11px; font-weight: 500; color: var(--text-3); }
 .aw-st-node-flag { font-weight: 500; color: var(--amber); }
 .aw-st-node-meta .aw-sp-muted { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+
+/* A node worded by its stage (FlowNode.stage): glyph and word in the stage's tone, check marker after. */
+.aw-st-node-stage { display: inline-flex; flex: none; max-width: 100%; min-width: 0; align-items: center; gap: 4px; font-size: 11.5px; font-weight: 600; color: var(--text); }
+.aw-st-node-stage > svg { flex: none; color: var(--stage-tone); }
+.aw-st-node-stage-word { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
