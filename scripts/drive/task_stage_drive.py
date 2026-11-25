@@ -133,6 +133,19 @@ def utc_ms(value):
     return when.timestamp() * 1000
 
 
+def _pattern_finds_branch():
+    """head_pattern must match a real ref shaped like the Hub's task branches (in a throwaway repo)."""
+    import tempfile
+    with tempfile.TemporaryDirectory() as d:
+        def git(*a):
+            return subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@t", *a], cwd=d,
+                                  capture_output=True, text=True).stdout
+        git("init", "-q")
+        git("commit", "-q", "--allow-empty", "-m", "x")
+        git("branch", "agentweave/task/task-abc123")
+        return bool(git("for-each-ref", "--format=%(objectname)", head_pattern("task-abc123")).split())
+
+
 def self_test():
     cases = [
         (stage_of("Landing checks on Developer"), "Landing checks"),
@@ -152,6 +165,7 @@ def self_test():
         (tasks_of("a", "['aaa111', 'bbb222']", {"a": "aaa111", "b": "bbb222"}, ["a", "b"]), ["a", "b"]),
         (tasks_of("a", "['aaa111']", {"a": "aaa111", "b": "bbb222"}, ["a", "b"]), ["a"]),
         (tasks_of("b", None, {}, ["a", "b"]), ["b"]),
+        (_pattern_finds_branch(), True),
     ]
     bad = [(i, got, want) for i, (got, want) in enumerate(cases) if got != want]
     for i, got, want in bad:
@@ -433,10 +447,15 @@ def shot(page, name):
 HEADS: dict = {}  # task id -> branch head seen while its branch existed
 
 
+def head_pattern(task_id):
+    """A for-each-ref pattern for a task branch such as refs/heads/agentweave/task/<id>: `*` does not cross `/`."""
+    return f"refs/heads/**/*{task_id}*"
+
+
 def note_heads():
     root = SCRATCH / "project"
     for t in S["tasks"]:
-        got = subprocess.run(["git", "for-each-ref", "--format=%(objectname)", f"refs/heads/*{t['id']}*"],
+        got = subprocess.run(["git", "for-each-ref", "--format=%(objectname)", head_pattern(t["id"])],
                              cwd=root, capture_output=True, text=True).stdout.split()
         if got:
             HEADS[t["id"]] = got[0]
@@ -561,7 +580,7 @@ def judge(samples, reads, runs, first_seen, finished):
                     late.append(f"{who} showed on the {surface} {(seen - run['started_ms']) / 1000:.1f}s after it started")
     if not runs:
         problems.append("no check run was recorded (the checks did not run)")
-    problems += late[:8]
+    problems += late
     notes.append(f"{len(samples)} records of 2 tasks x 3 surfaces; {len(runs)} check runs "
                  f"({', '.join(sorted({r['kind'] for r in runs})) or 'none'})")
     return problems, notes
