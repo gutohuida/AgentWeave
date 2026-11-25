@@ -75,6 +75,8 @@ const SSE_EVENT_TYPES = [
   'loop_edit_staged',
   'loop_edit_applied',
   'task_checks_finished',
+  // A pre-review run started or got its check slot (`project_checks.announce_started`).
+  'task_checks_started',
   'task_landing_changed',
   'main_behind_github',
   'run_started',
@@ -696,6 +698,7 @@ function applyInvalidation(queryClient: QueryClient, event: SSEEvent): void {
         case 'main_behind_github':
           inv({ queryKey: ['project', pid, 'mainAgainstGitHub'] })
           break
+        case 'task_checks_started':
         case 'task_checks_finished':
         case 'task_landing_changed': {
           // The drawer's Land wait clears on this, without a reload, and the board's cards follow;
@@ -711,7 +714,8 @@ function applyInvalidation(queryClient: QueryClient, event: SSEEvent): void {
           inv({ queryKey: ['project', pid, 'tasks'] })
           // Running lists each approved task on its way to main with its landing's state, and a
           // build stays there until its last landing lands (`running-shows-landing`).
-          if (event.type === 'task_landing_changed') inv({ queryKey: ['project', pid, 'builds'] })
+          // The build view rows carry each task's check state, so every check event refreshes the read.
+          inv({ queryKey: ['project', pid, 'builds'] })
           break
         }
         case 'run_started':

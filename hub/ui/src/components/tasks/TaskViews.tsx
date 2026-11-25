@@ -213,8 +213,10 @@ function landingSentence(task: Task): string {
       return `Did not land: ${task.stage_detail ?? 'see the story'}.`
     case 'landing_held':
       return `Approved; lands after ${task.stage_waits_on ?? 'the work ahead of it'}.`
+    case 'pre_review_checks':
+      return 'Finished; the pre-review checks are running before it goes to review.'
     case 'checking':
-      return 'Approved; the checks are running on it together with main.'
+      return 'Approved; the landing checks are running on it together with main.'
     case 'landing':
       return 'Approved and checked; moving onto main now.'
     case 'approved_waiting':

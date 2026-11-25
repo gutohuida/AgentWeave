@@ -76,7 +76,7 @@ describe("the drawer shows approved work's landing beside Land", () => {
 
   it('shows a checking batch with how long it has run and how long the previous one took', () => {
     const line = show(landing('checking', { batch: batch() }))
-    expect(line).toHaveTextContent('Checking with 3 tasks')
+    expect(line).toHaveTextContent('Landing checks with 3 tasks')
     expect(line).toHaveTextContent('running 7 min')
     expect(line).toHaveTextContent('the previous batch took 13 min')
   })
