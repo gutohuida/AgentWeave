@@ -88,7 +88,12 @@ async def build_read(
     document: Optional[SpecDocument],
     payload: Optional[Dict[str, Any]],
     now: Optional[datetime] = None,
+    *,
+    stages: Optional[Dict[str, Dict[str, Any]]] = None,
 ) -> Dict[str, Any]:
+    """*stages*: each task's `stage` and `check_state` by id, as the task list derives them
+    (`api.v1.tasks.stage_reads`); a task missing from it reads both as null."""
+    stages = stages or {}
     now = now or datetime.now(timezone.utc)
     whole = await work_tally.tally(session, project_id, build_id=build.id, now=now)
     roles: Dict[str, str] = whole["run_roles"]
@@ -282,6 +287,8 @@ async def build_read(
                 "ref": task.readable_id,
                 "title": task.title,
                 "status": task.status,
+                "stage": stages.get(task.id, {}).get("stage"),
+                "check_state": stages.get(task.id, {}).get("check_state"),
                 "declared": declared,
                 "builder": task.builder or task.assignee,
                 "checker": _checker(build, task),

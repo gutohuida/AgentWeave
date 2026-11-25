@@ -2,7 +2,19 @@
 
 import asyncio
 from datetime import datetime, timezone
-from typing import Annotated, Any, Awaitable, Callable, Dict, List, Literal, Optional, Set, Tuple
+from typing import (
+    Annotated,
+    Any,
+    Awaitable,
+    Callable,
+    Dict,
+    List,
+    Literal,
+    Optional,
+    Sequence,
+    Set,
+    Tuple,
+)
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import Field
@@ -705,6 +717,20 @@ async def _attach_failed_checks(
     }
     for response in responses:
         response.failed_checks = failed.get(response.id)
+
+
+async def stage_reads(
+    session: AsyncSession, project_id: str, tasks: Sequence[Task]
+) -> Dict[str, Dict[str, Any]]:
+    """Each of *tasks*' stage and check state, by task id, derived exactly as the task list derives
+    them (`task_stage.attach_stages` over the same prerequisites and open questions), for a read
+    other than the task list -- the build view's -- so the two cannot disagree
+    (`task-stages-in-the-build-view-and-dependency-map` FR-3, FR-11)."""
+    responses = [_task_response(task) for task in tasks]
+    responses = await _attach_dependencies(session, responses, project_id=project_id)
+    responses = await _attach_awaiting_answer(session, responses, project_id=project_id)
+    await task_stage.attach_stages(session, responses, project_id=project_id)
+    return {r.id: {"stage": r.stage, "check_state": r.check_state} for r in responses}
 
 
 async def _tasks_with_open_divergence(
