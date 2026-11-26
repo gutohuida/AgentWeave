@@ -631,6 +631,7 @@ async def _attach_assignee_liveness(
     """
     await _attach_queue_state(session, responses, project_id)
     await task_stage.attach_stages(session, responses, project_id=project_id)
+    await _attach_dependency_stages(session, responses, project_id=project_id)
     await _attach_failed_checks(session, responses, project_id=project_id)
     assignees = {response.assignee for response in responses if response.assignee}
     if not assignees:
@@ -731,6 +732,49 @@ async def stage_reads(
     responses = await _attach_awaiting_answer(session, responses, project_id=project_id)
     await task_stage.attach_stages(session, responses, project_id=project_id)
     return {r.id: {"stage": r.stage, "check_state": r.check_state} for r in responses}
+
+
+async def _attach_dependency_stages(
+    session: AsyncSession, responses: List[TaskResponse], *, project_id: str
+) -> None:
+    """Fill each prerequisite's and dependent's `stage` and `check_state` (FR-9, FR-11).
+
+    A task on this page lends its own, already derived; one off the page is derived by
+    `stage_reads`, the same derivation, so a map node drawn from a prerequisite agrees with the
+    task's own row wherever that row is read. Runs after `attach_stages`."""
+    own = {r.id: {"stage": r.stage, "check_state": r.check_state} for r in responses}
+    refs = [ref for r in responses for ref in [*(r.prerequisites or []), *(r.dependents or [])]]
+    missing = {ref.id for ref in refs if ref.id not in own}
+    if missing:
+        others = list(
+            (await session.execute(select(Task).where(Task.id.in_(missing)))).scalars().all()
+        )
+        own.update(await stage_reads(session, project_id, others))
+    for ref in refs:
+        read = own.get(ref.id)
+        if read is not None:
+            ref.stage = read["stage"]
+            ref.check_state = read["check_state"]
+
+
+async def task_stage_reads(
+    session: AsyncSession, project_id: str, task_ids: Sequence[str]
+) -> Dict[str, Dict[str, Any]]:
+    """`stage_reads` of the tasks *task_ids* names, for a read that holds ids rather than rows:
+    the loop summaries, the builds listing, the Overview (FR-11)."""
+    wanted = list(dict.fromkeys(t for t in task_ids if t))
+    if not wanted:
+        return {}
+    tasks = list(
+        (
+            await session.execute(
+                select(Task).where(Task.project_id == project_id, Task.id.in_(wanted))
+            )
+        )
+        .scalars()
+        .all()
+    )
+    return await stage_reads(session, project_id, tasks)
 
 
 async def _tasks_with_open_divergence(

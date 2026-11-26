@@ -306,6 +306,11 @@ class TaskDependencyRef(BaseModel):
     title: str = Field(max_length=256)
     status: str = Field(max_length=32)
     spec_document_id: Optional[str] = Field(default=None, max_length=128)
+    #: The task's stage and check state, from the same derivation as `TaskResponse.stage` and
+    #: `check_state` (`task-stages-in-the-build-view-and-dependency-map` FR-9, FR-11), so a map
+    #: node drawn from a prerequisite words it exactly as the task's own row does.
+    stage: Optional[str] = None
+    check_state: Optional[Dict[str, str]] = None
 
     model_config = {"from_attributes": True}
 

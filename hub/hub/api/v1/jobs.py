@@ -35,7 +35,7 @@ from ...schemas.tasks import TaskCreate
 from ...sse import defer_broadcast, sse_manager
 from ...task_transitions import TERMINAL_STATUSES, operator, run_actor
 from ...utils import persist_event, short_id
-from .tasks import check_task_create, create_task_for_actor
+from .tasks import check_task_create, create_task_for_actor, task_stage_reads
 
 logger = logging.getLogger(__name__)
 
@@ -447,7 +447,7 @@ async def _batch_loop_summaries(
         if counts:
             queue_counts[loop.id] = counts
 
-    current_tasks_by_loop: Dict[str, List[Dict[str, str]]] = {}
+    current_tasks_by_loop: Dict[str, List[Dict[str, Any]]] = {}
     # The current-item candidates: each loop's tasks in `CURRENT_ITEM_TASK_STATUSES`, from the one
     # read of the project's open tasks the decisions' walks take their candidates from
     # (`FiringFacts.open_tasks`). In the firing's own `_loop_queue_order`, not restated: the board
@@ -552,7 +552,7 @@ async def _batch_loop_summaries(
         # **Every match, not the first** (group 9, design D15). The cap of one was task 1.4's, kept
         # while a firing could only ever claim one thing. Order still comes from the query's
         # `_loop_queue_order`, so the card lists them the way the firing considered them.
-        entry: Dict[str, str] = {"id": task.id, "title": task.title, "status": task.status}
+        entry: Dict[str, Any] = {"id": task.id, "title": task.title, "status": task.status}
         # Who, and what the name means — one answer from one owner. Omitted rather than blank when
         # nobody is on it, so a reader never sees an attribution with no meaning attached.
         attribution = task_attribution.attribute(task, staffing=staffing, live=live)
@@ -560,6 +560,23 @@ async def _batch_loop_summaries(
             entry["agent"] = attribution.agent
             entry["agent_capacity"] = attribution.capacity
         current_tasks_by_loop.setdefault(task.loop_id, []).append(entry)
+
+    # Each current task's stage and check state, from the task list's own derivation, so the Loop
+    # tab and the Running panel word it as the board does
+    # (`task-stages-in-the-build-view-and-dependency-map` FR-11).
+    project_of = {task.id: task.project_id for task in candidates}
+    current_ids: Dict[str, List[str]] = {}
+    for entries in current_tasks_by_loop.values():
+        for entry in entries:
+            current_ids.setdefault(project_of[entry["id"]], []).append(entry["id"])
+    stage_of: Dict[str, Dict[str, Any]] = {}
+    for stage_project_id, ids in current_ids.items():
+        stage_of.update(await task_stage_reads(session, stage_project_id, ids))
+    for entries in current_tasks_by_loop.values():
+        for entry in entries:
+            read = stage_of.get(entry["id"], {})
+            entry["stage"] = read.get("stage")
+            entry["check_state"] = read.get("check_state")
 
     # Distinct (job_id, conversation_id) pairs first, so a resume-mode job that fired more than
     # once on the same conversation does not join the same question row once per firing.

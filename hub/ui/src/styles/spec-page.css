@@ -469,6 +469,7 @@ button.aw-sp-check-pill:focus-visible { outline: none; box-shadow: 0 0 0 2px var
 .aw-sp-outline-item:not([data-kind="Requirements"]) .aw-sp-outline-label { flex: 1; }
 .aw-sp-outline-detail { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11.5px; color: var(--text-3); }
 .aw-sp-outline-dot { display: inline-block; width: 6px; height: 6px; flex: none; border-radius: 999px; }
+.aw-sp-outline-stage { display: inline-flex; align-items: center; flex: none; }
 .aw-sp-outline-count { flex: none; font-size: 11px; color: var(--text-3); font-variant-numeric: tabular-nums; }
 .aw-sp-outline-marker { width: 7px; height: 7px; flex: none; border-radius: 999px; background: var(--amber); }
 .aw-sp-outline-marker[data-severity="blocking"] { background: var(--red); }

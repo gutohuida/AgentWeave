@@ -43,6 +43,7 @@ import { useConfigStore } from '@/store/configStore'
 import { useDialogFocus } from '@/hooks/useDialogFocus'
 import { hubDate } from '@/lib/hubTime'
 import { builderAndReviewer } from '@/lib/taskStage'
+import { TaskStageWord } from '@/components/tasks/TaskStageWord'
 
 /**
  * What approving this task is about to write, said beside the control that does it (F9).
@@ -1004,7 +1005,11 @@ export function TaskDetailDrawer({ task, onClose, onOpenRequirement, initialView
                   <Icon name={prerequisite.status === 'approved' ? 'circle_check_big' : 'circle_dashed'} size={13} />
                   <code className="aw-tcard-id">{prerequisite.readable_id ?? prerequisite.id}</code>
                   <span className="flex-1 min-w-0 truncate">{prerequisite.title}</span>
-                  <span className="aw-tview-dep-status">{prerequisite.status.replace(/_/g, ' ')}</span>
+                  {prerequisite.stage ? (
+                    <TaskStageWord stage={prerequisite.stage} check={prerequisite.check_state} size="xs" glyphOnly />
+                  ) : (
+                    <span className="aw-tview-dep-status">{prerequisite.status.replace(/_/g, ' ')}</span>
+                  )}
                   <button
                     type="button"
                     aria-label={`Remove prerequisite ${prerequisite.title}`}
@@ -1104,7 +1109,11 @@ export function TaskDetailDrawer({ task, onClose, onOpenRequirement, initialView
                     <Icon name={dependent.status === 'approved' ? 'circle_check_big' : 'circle_dashed'} size={13} />
                     <code className="aw-tcard-id">{dependent.readable_id ?? dependent.id}</code>
                     <span className="flex-1 min-w-0 truncate">{dependent.title}</span>
-                    <span className="aw-tview-dep-status">{dependent.status.replace(/_/g, ' ')}</span>
+                    {dependent.stage ? (
+                      <TaskStageWord stage={dependent.stage} check={dependent.check_state} size="xs" glyphOnly />
+                    ) : (
+                      <span className="aw-tview-dep-status">{dependent.status.replace(/_/g, ' ')}</span>
+                    )}
                   </li>
                 ))}
               </ul>
@@ -1174,6 +1183,15 @@ export function TaskDetailDrawer({ task, onClose, onOpenRequirement, initialView
           className="aw-tview-facts-grid"
           style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))' }}
         >
+          {/* Where the task is, in the words every other surface uses (FR-11): the Hub's stage and
+              its latest check, beside the raw status the control below changes. */}
+          {task.stage ? (
+            <Field label="Stage">
+              <span data-testid={`task-stage-${task.id}`}>
+                <TaskStageWord stage={task.stage} check={task.check_state} />
+              </span>
+            </Field>
+          ) : null}
           <Field label="Status">
             <div className="flex items-center gap-2 flex-wrap">
               <StatusBadge status={task.status} />
