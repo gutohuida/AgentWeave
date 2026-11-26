@@ -20,6 +20,7 @@ from . import loose_close, workspace_preparation
 from .db.models import (
     EventLog,
     LandingBatch,
+    Project,
     Question,
     Run,
     Task,
@@ -270,15 +271,43 @@ async def review_waits(session: AsyncSession, task_ids: Sequence[str]) -> Dict[s
     """`project_checks.review_wait` of each of *task_ids* (all `completed`): what holds its review
     for its checks, by task, `None` where nothing does. The same function the review hold itself
     calls, so the `pre_review_checks` stage is that decision, not a second reading (FR-1). Never
-    raises: a task whose hold cannot be read reads as not held, as before this stage existed."""
+    raises: a task whose hold cannot be read reads as not held, as before this stage existed.
+
+    One wait comes before that hold: while a turn bound to the task is still running, its review is
+    not offered at all, because its work is not committed until the turn ends, and the turn's end
+    requests its checks (`review_on_completion._still_at_work`, `project_checks.after_run`). The
+    hold reads nothing of the task's own on its branch then, so in a project with review checks
+    that wait is a run not yet requested, `missing`, here; `review_wait` itself is unchanged."""
     from . import project_checks
 
     holds: Dict[str, Any] = {}
     if not task_ids:
         return holds
+    at_work = {
+        task_id
+        for (task_id,) in await session.execute(
+            select(Run.task_id)
+            .where(Run.task_id.in_(list(task_ids)), Run.status == "running")
+            .distinct()
+        )
+    }
     for task in (await session.execute(select(Task).where(Task.id.in_(list(task_ids))))).scalars():
         try:
-            holds[task.id] = await project_checks.review_wait(session, task)
+            hold = await project_checks.review_wait(session, task)
+            if hold is None and task.id in at_work:
+                project = await session.get(Project, task.project_id)
+                if (
+                    project is not None
+                    and project.main_branch
+                    and project_checks.configured_checks(project, project_checks.PHASE_REVIEW)
+                ):
+                    hold = project_checks.ReviewWait(
+                        "missing",
+                        None,
+                        "its checks run on this work once the turn completing it ends and its "
+                        "work is committed; its review is offered once they pass",
+                    )
+            holds[task.id] = hold
         except Exception:  # noqa: BLE001 -- a read never fails for a stage
             holds[task.id] = None
     return holds
