@@ -1312,11 +1312,14 @@ async def trigger_agent_directly(**kwargs: Any) -> TriggerAgentResponse:
 
     Takes `_trigger_agent_directly`'s keyword arguments. The wrapper exists for two things: a
     review checkout this call provisioned is released if the call does not end in a started run,
-    and a task checkout's D8 lock (F668) is held until the call ends.
+    and a task checkout's D8 lock (F668) is held until the call ends, and so is the task's
+    "Preparing checkout" (`workspace_preparation.holding_until_started`).
     """
     claim = _ReviewCheckoutClaim()
     try:
-        async with claim.locks:
+        # A task reads "Preparing checkout" from its checkout's start until its run's row exists,
+        # never "Not started" in between (TSBVD-10).
+        async with claim.locks, workspace_preparation.holding_until_started():
             return await _trigger_agent_directly(**kwargs, review_claim=claim)
     except BaseException:
         if claim.repo_root is not None and claim.reviewer is not None and not claim.handed_off:
