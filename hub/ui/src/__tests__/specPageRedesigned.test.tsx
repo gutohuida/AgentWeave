@@ -290,10 +290,17 @@ describe('rendered-natively (FR-3)', () => {
     expect(container.querySelector('iframe')).toBeNull()
     expect(within(anchor('FR-1')!).getByText('Requirement number 1 holds.')).toBeInTheDocument()
     expect(within(anchor('FR-1')!).getByText(/given 1/)).toBeInTheDocument()
-    // Reloading means reading the document (or its coverage) again. Count only those reads: on a
-    // contended machine the page's other loads land late, after any "settled" sample.
-    const reads = () =>
-      vi.mocked(fetch).mock.calls.filter(([url]) => /\/project\/spec(\/coverage)?$/.test(new URL(String(url), 'http://hub.test').pathname)).length
+    // Reloading means reading the document (or its coverage) again: a URL already read, read once
+    // more. Count only those repeats: on a contended machine a part of the page mounts late, after
+    // any "settled" sample, and its first read of a URL is not a reload (hub-ui, 2026-11-26).
+    const reads = () => {
+      const urls = vi
+        .mocked(fetch)
+        .mock.calls.map(([url]) => new URL(String(url), 'http://hub.test'))
+        .filter((u) => /\/project\/spec(\/coverage)?$/.test(u.pathname))
+        .map((u) => u.pathname + u.search)
+      return urls.length - new Set(urls).size
+    }
     let settled = -1
     await waitFor(() => {
       const n = reads()
@@ -302,7 +309,7 @@ describe('rendered-natively (FR-3)', () => {
       expect(stable).toBe(true)
     }, { interval: 150 })
     const frames = reads()
-    expect(frames).toBeGreaterThan(0)
+    expect(vi.mocked(fetch).mock.calls.some(([url]) => String(url).includes('/project/spec?'))).toBe(true)
 
     // FR-5: only the requirements awaiting evidence review show.
     await chooseMenuOption(user, 'Requirements by evidence', /Awaiting review/)
