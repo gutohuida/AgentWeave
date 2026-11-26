@@ -2079,6 +2079,9 @@ async def _land_batch(
             if rest is not None and rest.state in (CHECKING, HELD):
                 rest.state, rest.batch_id = QUEUED, None
         await session.commit()
+        # Landing checks -> Landing is a stage of its own: the board and the map refetch on this
+        # event, as the build view does, rather than waiting for the merge (`same-stage-everywhere`).
+        await _announce(session, [row.id for row in rows])
 
     def _fast_forward():
         moved = project_checks._git(root, "merge", "--ff-only", "-q", target)
