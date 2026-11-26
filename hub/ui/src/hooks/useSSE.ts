@@ -5,6 +5,7 @@ import type { AgentSummary, ContextUsage } from '@/api/agents'
 import type { AgentConversation, ProjectConversations } from '@/api/agentChat'
 import type { ProjectSummary } from '@/api/projects'
 import { managerRunsKey, type ManagerEndedRun, type ManagerRunningRun } from '@/api/manager'
+import { applyStageFrame, watchStageReads } from '@/api/taskStagePush'
 
 export interface SSEEvent {
   type: string
@@ -78,6 +79,8 @@ const SSE_EVENT_TYPES = [
   // A pre-review run started or got its check slot (`project_checks.announce_started`).
   'task_checks_started',
   'task_landing_changed',
+  // A task's stage, derived by the Hub once and pushed to every open page (`task_stage_push`).
+  'task_stage',
   'main_behind_github',
   // A turn's checkout being written, and done (`workspace_preparation`): a task's stage moves
   // into and out of "Preparing checkout".
@@ -119,7 +122,7 @@ const LIVE_ENDED_KEPT = 20
 
 /** Events that move something the one Overview read (`GET /overview`) shows (design D10): the same
  *  events that refresh its parts, plus the note's own three. */
-const OVERVIEW_EVENT = /^(task_|build_|stall_|question_|permission_|run_|overview_note_)|^(known_failing_changed|checks_flaky|main_moved|main_notice_seen|next_slice_offered|next_slice_answered|accounting_budget_updated|agent_created|agent_archived|agent_unarchived)$/
+const OVERVIEW_EVENT = /^(task_(?!stage$)|build_|stall_|question_|permission_|run_|overview_note_)|^(known_failing_changed|checks_flaky|main_moved|main_notice_seen|next_slice_offered|next_slice_answered|accounting_budget_updated|agent_created|agent_archived|agent_unarchived)$/
 
 const MAX_BUFFERED = 200
 
@@ -702,6 +705,12 @@ function applyInvalidation(queryClient: QueryClient, event: SSEEvent): void {
         case 'main_behind_github':
           inv({ queryKey: ['project', pid, 'mainAgainstGitHub'] })
           break
+        case 'task_stage':
+          // The stage itself, the same frame on every open page at once: the build view, the board
+          // and the map move together instead of each when its own read answers (TSBVD-11). The
+          // event that moved the stage still refetches those reads; this refetches nothing.
+          applyStageFrame(queryClient, pid, event.data)
+          break
         case 'task_checks_started':
         case 'task_checks_finished':
         case 'task_landing_changed': {
@@ -1043,6 +1052,8 @@ function acquireInvalidator(queryClient: QueryClient): () => void {
   if (!inv) {
     const listener: SSEListener = (event) => applyInvalidation(queryClient, event)
     listeners.add(listener)
+    // From the first read on, so a read sent before a stage frame is known to be older than it.
+    watchStageReads(queryClient)
     const unsubReconnect = onSseReconnect(() => invalidateCoalesced(queryClient))
     inv = { count: 0, listener, unsubReconnect }
     invalidators.set(queryClient, inv)

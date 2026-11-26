@@ -30,6 +30,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
 from sse_starlette.event import JSONServerSentEvent, ServerSentEvent
 
+from . import task_stage_push
 from .operator_notices import NOTICE_EVENT, notice_for
 
 logger = logging.getLogger(__name__)
@@ -90,6 +91,10 @@ class SSEManager:
         with contextlib.suppress(ValueError):
             self._operator_subscribers.remove(queue)
 
+    def has_listeners(self, project_id: str) -> bool:
+        """Whether any open stream would receive *project_id*'s events."""
+        return bool(self._subscribers.get(project_id) or self._operator_subscribers)
+
     async def broadcast(self, project_id: str, event_type: str, data: Any) -> None:
         """Push an SSE event now. See `publish`."""
         self.publish(project_id, event_type, data)
@@ -127,6 +132,13 @@ class SSEManager:
                     q.put_nowait(operator_event)
                 except asyncio.QueueFull:
                     q.dropped += 1
+
+        # An event naming a task (or its run) pushes that task's stage to the open pages
+        # (`task_stage_push`). Never raises into a writer.
+        try:
+            task_stage_push.note_event(project_id, event_type, data)
+        except Exception:
+            logger.exception("task stage push for %s failed", event_type)
 
         # The one seam every event passes: an event that calls the operator publishes its notice
         # here, once, after the event itself (`operator_notices`, D1). Never raises into a writer.

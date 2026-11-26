@@ -727,11 +727,26 @@ async def stage_reads(
     them (`task_stage.attach_stages` over the same prerequisites and open questions), for a read
     other than the task list -- the build view's -- so the two cannot disagree
     (`task-stages-in-the-build-view-and-dependency-map` FR-3, FR-11)."""
+    return {
+        row["id"]: {"stage": row["stage"], "check_state": row["check_state"]}
+        for row in await stage_rows(session, project_id, tasks)
+    }
+
+
+async def stage_rows(
+    session: AsyncSession, project_id: str, tasks: Sequence[Task]
+) -> List[Dict[str, Any]]:
+    """Each of *tasks*' `id` and stage fields (`task_stage_push.STAGE_FIELDS`), JSON-ready and
+    worded as the task list's rows word them: what a `task_stage` frame carries (FR-6, FR-11)."""
+    from ... import task_stage_push
+
     responses = [_task_response(task) for task in tasks]
     responses = await _attach_dependencies(session, responses, project_id=project_id)
     responses = await _attach_awaiting_answer(session, responses, project_id=project_id)
     await task_stage.attach_stages(session, responses, project_id=project_id)
-    return {r.id: {"stage": r.stage, "check_state": r.check_state} for r in responses}
+    return [
+        r.model_dump(mode="json", include={"id", *task_stage_push.STAGE_FIELDS}) for r in responses
+    ]
 
 
 async def _attach_dependency_stages(
