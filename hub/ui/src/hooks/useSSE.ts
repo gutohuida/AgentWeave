@@ -568,6 +568,10 @@ function applyManagerRun(queryClient: QueryClient, pid: string | undefined, even
  *  `acquireInvalidator`), however many components subscribe. */
 function applyInvalidation(queryClient: QueryClient, event: SSEEvent): void {
   const inv = (filters?: InvalidateFilters) => invalidateOncePerEvent(queryClient, event, filters)
+  // The reads that carry a task's stage (the task list, the build read) follow a stage-moving event
+  // with a fresh request, so every surface shows the new stage one read after the event, not two
+  // (`task-stages-in-the-build-view-and-dependency-map` FR-6, FR-11).
+  const invStage = (filters: InvalidateFilters) => invalidateOncePerEvent(queryClient, event, filters, { fresh: true })
   const pid = (event.data as { project_id?: string } | null)?.project_id
   if (OVERVIEW_EVENT.test(event.type)) inv({ queryKey: ['project', pid, 'overview'] })
   switch (event.type) {
@@ -598,7 +602,7 @@ function applyInvalidation(queryClient: QueryClient, event: SSEEvent): void {
           // collects 404s (F824). Everything else under `tasks` still refreshes.
           const data = event.data as { id?: string; deleted?: boolean } | null
           const goneId = data?.deleted === true ? data.id : undefined
-          inv({
+          ;(goneId ? inv : invStage)({
             queryKey: ['project', pid, 'tasks'],
             ...(goneId ? { predicate: (q) => q.queryKey[3] !== goneId } : {}),
           })
@@ -612,7 +616,7 @@ function applyInvalidation(queryClient: QueryClient, event: SSEEvent): void {
           // invalidates them.
           inv({ queryKey: ['project', pid, 'loops'] })
           // The Running tab's builds carry the same counts, and the worker line comes from the loops.
-          inv({ queryKey: ['project', pid, 'builds'] })
+          invStage({ queryKey: ['project', pid, 'builds'] })
           // Approving or rejecting a task releases its checkout (F250).
           inv({ queryKey: ['project', pid, 'worktrees'] })
           inv({ queryKey: ['project', pid, 'worktree-conflicts'] })
@@ -711,11 +715,11 @@ function applyInvalidation(queryClient: QueryClient, event: SSEEvent): void {
               ? ['project', pid, 'task', data.task_id, 'checks']
               : ['project', pid, 'task'],
           })
-          inv({ queryKey: ['project', pid, 'tasks'] })
+          invStage({ queryKey: ['project', pid, 'tasks'] })
           // Running lists each approved task on its way to main with its landing's state, and a
           // build stays there until its last landing lands (`running-shows-landing`).
           // The build view rows carry each task's check state, so every check event refreshes the read.
-          inv({ queryKey: ['project', pid, 'builds'] })
+          invStage({ queryKey: ['project', pid, 'builds'] })
           break
         }
         case 'run_started':
@@ -729,7 +733,7 @@ function applyInvalidation(queryClient: QueryClient, event: SSEEvent): void {
           if (event.type !== 'run_started') inv({ queryKey: ['project', pid, 'workspace'] })
           // A review run starting is what moves its task from Ready for review to In review, so the
           // build view refetches with the board and the map (`same-stage-everywhere`).
-          if (event.type === 'run_started') inv({ queryKey: ['project', pid, 'builds', 'read'] })
+          if (event.type === 'run_started') invStage({ queryKey: ['project', pid, 'builds', 'read'] })
           if (event.type !== 'run_started') {
             // A terminal run status is the moment a loop firing's own JobRun leaves
             // "in_progress" (design D13, task A4.3: `finalize_job_run_for_conversation` runs
@@ -979,6 +983,7 @@ export function invalidateOncePerEvent(
   queryClient: QueryClient,
   event: SSEEvent,
   filters?: InvalidateFilters,
+  { fresh = false }: { fresh?: boolean } = {},
 ): void {
   if (filters && !filters.predicate) {
     let seen = handledKeys.get(event)
@@ -986,6 +991,12 @@ export function invalidateOncePerEvent(
     const id = JSON.stringify([filters.queryKey ?? null, filters.exact ?? false])
     if (seen.has(id)) return
     seen.add(id)
+  }
+  if (fresh) {
+    // A read in flight was sent before the write this event announces committed, so its answer is
+    // already stale: it is cancelled and sent again now, rather than waited for and then followed up.
+    void queryClient.invalidateQueries(filters, { cancelRefetch: true })
+    return
   }
   invalidateCoalesced(queryClient, filters)
 }
