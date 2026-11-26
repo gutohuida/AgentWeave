@@ -36,13 +36,16 @@ export interface LoopDetail extends LoopSummary {
  *  firing always starts a fresh conversation, so a conversation-scoped view would be empty in
  *  every conversation the operator actually sits in. Archived loops are excluded unless asked
  *  for (task B5.4), mirroring `useJobs`'s own `include_archived` shape. */
-export function useLoops(includeArchived = false) {
+export function useLoops(includeArchived = false, options?: { stages?: boolean }) {
   const { isConfigured, selectedProjectId: projectId } = useConfigStore()
+  // `stages` asks the Hub for each current task's stage and check state (the Running panel's
+  // workers, FR-11); the board reads without them, within its statement budget.
+  const stages = options?.stages ?? false
   return useQuery<LoopSummary[]>({
-    queryKey: ['project', projectId, 'loops', { includeArchived }],
+    queryKey: ['project', projectId, 'loops', { includeArchived, ...(stages ? { stages } : {}) }],
     queryFn: () =>
       getJson<LoopSummary[]>(
-        `/api/v1/projects/${projectId}/loops?include_archived=${includeArchived}`,
+        `/api/v1/projects/${projectId}/loops?include_archived=${includeArchived}${stages ? '&stages=true' : ''}`,
       ),
     enabled: isConfigured && !!projectId,
   })

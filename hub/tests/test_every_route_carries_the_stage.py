@@ -146,7 +146,7 @@ async def _every_route(
     seen["loop (Loop tab, Running panel)"] = {
         t["id"]: _read(t) for t in loop.get("current_tasks") or []
     }
-    loops = await get(f"{BASE}/loops")
+    loops = await get(f"{BASE}/loops", stages="true")
     seen["loops list (Running panel)"] = {
         t["id"]: _read(t) for one in loops for t in one.get("current_tasks") or []
     }

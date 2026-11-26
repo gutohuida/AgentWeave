@@ -114,7 +114,7 @@ describe('each surface, from its own route, words each task as the task list doe
 
   it('the Running panel, its landing rows and its workers', () => {
     const builds = (routes['/project/builds'] as { builds: ProjectBuildRow[] }).builds
-    const loops = routes['/loops'] as LoopSummary[]
+    const loops = routes['/loops?stages=true'] as LoopSummary[]
     const items = runningItems({ builds, loops, jobs: [], now: new Date() })
     render(<RunningTab items={items} colorIndexOf={() => 0} onOpen={() => {}} onAttend={() => {}} />)
     expectWords(screen.getByTestId(`running-landing-${LANDING}`), LANDING)
