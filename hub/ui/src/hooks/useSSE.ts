@@ -816,6 +816,10 @@ function applyInvalidation(queryClient: QueryClient, event: SSEEvent): void {
           inv({ queryKey: ['project', pid, 'jobs'] })
           // A build's loop is a job: its creation and firings change the Running tab's builds.
           inv({ queryKey: ['project', pid, 'builds'] })
+          // A firing starts a task's run with no task event, and the build read shows it Building at
+          // once: the task list follows, so the board and the map do not lag the build view
+          // (`task-stages-in-the-build-view-and-dependency-map`, the three agree at every sample).
+          if (event.type === 'job_fired') inv({ queryKey: ['project', pid, 'tasks'] })
           const d = event.data as { id?: string }
           if (d?.id) {
             inv({ queryKey: ['project', pid, 'jobs', d.id] })
