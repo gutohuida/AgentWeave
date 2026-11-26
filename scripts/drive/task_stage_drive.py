@@ -292,6 +292,11 @@ def setup():
     (root / "README.md").write_text("A scratch project for the task stage drive.\n", encoding="utf-8")
     git("add", "README.md")
     git("commit", "-q", "-m", "seed")
+    # The Landing stage lasts only as long as the fast-forward; a post-merge hook runs inside it, so
+    # a short sleep holds the stage open long enough for a 2 s sample to see it.
+    hook = root / ".git" / "hooks" / "post-merge"
+    hook.write_text("#!/bin/sh\nsleep 4\n", encoding="utf-8", newline="\n")
+    hook.chmod(0o755)
     code, project = api("POST", "/projects/open", {"path": str(root), "name": f"taskstage-{STAMP}"})
     if code not in (200, 201):
         raise Setup(f"open the project: {code} {project}")

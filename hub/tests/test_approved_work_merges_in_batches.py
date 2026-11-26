@@ -488,7 +488,8 @@ async def test_every_landing_change_is_broadcast_and_the_checks_route_shows_it(
         sse_manager.unsubscribe("proj-test", queue_)
     states = [(entry["task_id"], entry["state"]) for entry in seen]
     for task_id in ids:
-        assert (task_id, "checking") in states and (task_id, "landed") in states, states
+        assert (task_id, "checking") in states and (task_id, "landing") in states, states
+        assert (task_id, "landed") in states, states
     read = await app.get(f"{TASKS}/{ids[1]}/checks", headers=auth_headers)
     landing = read.json()["landing"]
     assert landing["state"] == "landed"
