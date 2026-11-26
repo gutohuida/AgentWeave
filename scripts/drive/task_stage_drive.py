@@ -572,7 +572,7 @@ def run_build(pages):
         TRACE.append({"t": now, "cells": cells})
         if now - last_record >= RECORD_EVERY:
             last_record = now
-            samples.append({"t": now, "cells": cells})
+            samples.append({"t": now, "cells": cells, "read": len(reads) - 1})
             for tid, per in cells.items():
                 for surface, (stage, _) in per.items():
                     if stage in CHECK_STAGES and (stage, surface) not in shots:
@@ -604,15 +604,25 @@ def judge(samples, reads, runs, first_seen, finished):
                 seen = collapse([w or "(not drawn)" for w in words])
                 problems.append(f"{t['readable_id']} on the {surface} went {got or 'through none of the stages'}; it drew {seen}")
     # 2. the three agree at every record
-    split = []
+    split, skew = [], []
     for n, s in enumerate(samples):
         for t in S["tasks"]:
             per = {surface: s["cells"][t["id"]][surface][0] for surface in ("build view", "board", "map")}
             if len(set(per.values())) > 1:
+                # The three pages are read one after another, not at one instant, so a stage that moves
+                # between two of those reads shows as a split for one read. A real lag outlasts the
+                # next read (0.25 s); a split that neither neighbouring read repeats is that skew.
+                i = s.get("read")
+                near = [reads[j][t["id"]] for j in (i - 1, i + 1) if i is not None and 0 <= j < len(reads)]
+                if i is not None and not any(len({c[0] for c in cells.values()}) > 1 for cells in near):
+                    skew.append((n, t["readable_id"], per))
+                    continue
                 split.append((n, t["readable_id"], per))
     if split:
         n, ref, per = split[0]
         problems.append(f"the surfaces disagree in {len(split)} records, first at record {n} for {ref}: {per}")
+    if skew:
+        notes.append(f"{len(skew)} record(s) split for one read only (page-read skew, not counted): {skew}")
     # 3. a check of the matching kind during both check stages
     for stage, kind in CHECK_STAGES.items():
         for surface in ("build view", "board", "map"):
