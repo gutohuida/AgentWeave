@@ -246,7 +246,16 @@ data: {"project_id":"proj-1","id":"x","agent":"claude","run_id":"run-1"}
           <Probe />
         </QueryClientProvider>
       )
-      await waitFor(() => expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['project', 'proj-1', 'builds'] }), { timeout: 3000 })
+      // A stage-moving event (task_updated) resends a build read already in flight (`cancelRefetch`).
+      await waitFor(
+        () =>
+          expect(
+            invalidateSpy.mock.calls.some(
+              ([filters]) => JSON.stringify(filters?.queryKey) === JSON.stringify(['project', 'proj-1', 'builds']),
+            ),
+          ).toBe(true),
+        { timeout: 3000 },
+      )
       view.unmount()
     }
   })

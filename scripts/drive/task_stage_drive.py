@@ -489,6 +489,18 @@ def fire():
     return code
 
 
+TRACE: list = []  # every read, timed, written to records.json so a failure can be read back
+
+
+def write_records(samples, runs, first_seen):
+    """Every read and record, timed, beside the screenshots: the evidence behind each FAIL line."""
+    OUT.mkdir(parents=True, exist_ok=True)
+    (OUT / "records.json").write_text(json.dumps({
+        "reads": TRACE, "records": [s["t"] for s in samples], "runs": runs,
+        "first_seen": [{"run": r, "task": t, "surface": s, "ms": ms} for (r, t, s), ms in first_seen.items()],
+    }, indent=1, default=str), encoding="utf-8")
+
+
 def run_build(pages):
     samples, shots, first_seen, reads = [], set(), {}, []
     end = time.time() + BUILD_WAIT
@@ -510,6 +522,7 @@ def run_build(pages):
                     if kind == run["kind"] and state in ("waiting", "running"):
                         first_seen.setdefault((run["id"], task, surface), now * 1000)
         reads.append(cells)
+        TRACE.append({"t": now, "cells": cells})
         if now - last_record >= RECORD_EVERY:
             last_record = now
             samples.append({"t": now, "cells": cells})
@@ -630,6 +643,7 @@ def main():
             finally:
                 browser.close()
         reached = True
+        write_records(samples, runs, first_seen)
         problems, notes = judge(samples, reads, runs, first_seen, finished)
         failed = bool(problems)
         detail = f"build {build_id}: " + "; ".join(problems + notes) if problems else f"build {build_id}: " + "; ".join(notes)
