@@ -489,6 +489,10 @@ async def test_every_landing_change_is_broadcast_and_the_checks_route_shows_it(
     states = [(entry["task_id"], entry["state"]) for entry in seen]
     for task_id in ids:
         assert (task_id, "checking") in states and (task_id, "landed") in states, states
+        # Landing checks -> Landing is announced too, before the merge, so the board and the map
+        # move with the build view (`same-stage-everywhere`; drive run 132112).
+        order = [state for tid, state in states if tid == task_id]
+        assert order.index("checking") < order.index("landing") < order.index("landed"), order
     read = await app.get(f"{TASKS}/{ids[1]}/checks", headers=auth_headers)
     landing = read.json()["landing"]
     assert landing["state"] == "landed"
