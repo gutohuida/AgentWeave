@@ -697,7 +697,7 @@ function applyInvalidation(queryClient: QueryClient, event: SSEEvent): void {
         case 'agent_heartbeat':
           inv({ queryKey: ['project', pid, 'tasks'] })
           inv(agentListFilter(pid))
-          inv({ queryKey: ['projects'] })
+          refreshProjectsSoon(queryClient)
           break
         case 'main_behind_github':
           inv({ queryKey: ['project', pid, 'mainAgainstGitHub'] })
@@ -757,7 +757,9 @@ function applyInvalidation(queryClient: QueryClient, event: SSEEvent): void {
           inv({ queryKey: ['project', pid, 'accounting'] })
           // A run's spend and divergence are ledger lanes.
           refreshWorkSoon(queryClient, pid)
-          inv({ queryKey: ['projects'] })
+          // The rail's running marks follow a few seconds later, after the stage reads this same
+          // event asks for (`refreshProjectsSoon`).
+          refreshProjectsSoon(queryClient)
           // A run belongs to a task's story (its cost, its duration); an open drawer refetches it.
           invalidateTaskStories(queryClient, pid)
           // F250: a turn's checkout is provisioned before `run_started` is sent, and its snapshot
@@ -978,6 +980,32 @@ export function refreshWorkSoon(queryClient: QueryClient, projectId: string | un
       void queryClient.invalidateQueries({ queryKey: ['project', projectId, 'ledger'] })
       void queryClient.invalidateQueries({ queryKey: ['project', projectId, 'stats'] })
     }, WORK_REFRESH_MS),
+  )
+}
+
+/** How long the project collection waits, after a run or heartbeat event, before it is read again. */
+export const PROJECTS_REFRESH_MS = 3000
+const projectTimers = new WeakMap<QueryClient, ReturnType<typeof setTimeout>>()
+
+/** The project collection (`GET /projects`) is read over every registered project, seconds of Hub
+ *  work on a Hub with a couple of hundred, and every run event and agent heartbeat moves a project's
+ *  running marks. Refetched on each such event by every open page, one was in flight almost all the
+ *  time a build ran, and the task lists and build read the same events ask for answered seconds
+ *  apart on the three pages (drive run 174800, `same-stage-everywhere`). So a burst costs one read,
+ *  a few seconds after the stage reads, and none while one is still being answered. */
+export function refreshProjectsSoon(queryClient: QueryClient): void {
+  if (projectTimers.has(queryClient)) return
+  projectTimers.set(
+    queryClient,
+    setTimeout(function fire() {
+      const reading = queryClient.getQueryCache().find({ queryKey: ['projects'], exact: true })
+      if (reading?.state.fetchStatus === 'fetching') {
+        projectTimers.set(queryClient, setTimeout(fire, PROJECTS_REFRESH_MS))
+        return
+      }
+      projectTimers.delete(queryClient)
+      void queryClient.invalidateQueries({ queryKey: ['projects'] })
+    }, PROJECTS_REFRESH_MS),
   )
 }
 
