@@ -42175,6 +42175,7 @@ Driving `task-stages-in-the-build-view-and-dependency-map` on the trial Hub (239
 - The drive now waits until the pages' first reads are answered before it presses Build (`wait_settled`), so its splits measure how the surfaces follow a stage.
 - Still open: make the three cross-project listings cheap on a many-project Hub (each resolves every project's workspace and reads its folder), or stop them from holding the open page's reads.
 - Done in TSBVD-11: run events and agent heartbeats no longer refetch `/projects` on every page per event (`refreshProjectsSoon`, once per burst, 3 s later).
+- Drive run 184251 (after that fix): the three pages now send their stage reads within ~50 ms of the same event, and every check start showed on all three within 1.1 s. But `GET /projects` still took 12–26 s per read and, refetched ~3 s after each answer during a build, was in flight on all three pages almost continuously. Stage reads took a median of 1.1–1.7 s and up to 6 s, so their answers landed 0.4–4 s apart on the three pages. 4 of 112 records still disagreed, the worst at +70..+75 s, inside a `/projects` read. Until this listing is cheap, `drive-a-landing-build`'s "same stage at every record" fails by chance. Also, `wait_settled` never saw the pages quiet in 900 s; the drive now prints the reads still open when it gives up.
 
 **Status:** open
 **Source:** found by driving

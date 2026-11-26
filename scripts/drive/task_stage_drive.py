@@ -441,7 +441,10 @@ def wait_settled(quiet=3.0, limit=900.0):
                 print(f"  the pages settled after {time.time() - start:.0f}s", flush=True)
                 return
         time.sleep(0.25)
-    print(f"  the pages still had reads in flight after {limit:.0f}s; building anyway", flush=True)
+    open_reads = sorted({f"{name}: {r.url.split('/api/v1', 1)[-1][:100]}" for name, reqs in PENDING.items()
+                         for r in list(reqs)})
+    print(f"  the pages still had reads in flight after {limit:.0f}s; building anyway: {open_reads[:8]}",
+          flush=True)
 
 
 def show_build(pages):
