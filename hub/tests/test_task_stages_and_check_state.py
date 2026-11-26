@@ -28,9 +28,13 @@ from hub.task_transitions import operator, run_actor
 from .test_a_check_that_cannot_run import _lint, _passing
 from .test_a_failing_batch_is_narrowed import _approve, _project, _repo, _tasks
 from .test_checks_run_before_review import (
+    BUILDER_RUN,
     TASK,
+    _builder_task,
+    _complete,
     _completed_outside_a_flow,
     _configure,
+    _end_the_builders_turn,
     _runs,
     _script,
     _scripts,
@@ -332,6 +336,65 @@ async def test_a_task_no_check_ever_ran_on_carries_no_check_state(app, auth_head
     await _in_a_build(TASK)
     read = (await _reads(app, auth_headers, TASK))[TASK]
     assert (read["stage"], read["check"]) == ("waiting_for_review", None)
+
+
+@pytest.mark.usefixtures("no_agent_cli_spawn")
+async def test_completed_work_is_in_pre_review_checks_before_its_run_is_recorded(
+    app, auth_headers, tmp_path
+):
+    """The drive's gap (TSBVD-8): a builder completes with its work still uncommitted in its
+    checkout and no fast check configured, so no run is recorded until its turn ends and the Hub
+    commits that work. The review waits for the turn's end, which requests the checks
+    (`review_on_completion._still_at_work`, `project_checks.after_run`); the task is in Pre-review
+    checks from its move to completed, not Ready for review."""
+    await _builder_task(tmp_path, content="x = 1\n")
+    branch = worktrees.task_branch_name(TASK)
+    git(tmp_path, "branch", "-f", branch, "main")  # the work is not committed yet
+    await _configure([_slow(tmp_path)])
+    await _in_a_build(TASK)
+
+    completed = await _complete(app)
+    assert completed.status_code == 200, completed.text
+    assert await _runs(TASK) == []
+    read = (await _reads(app, auth_headers, TASK))[TASK]
+    assert (read["status"], read["stage"]) == ("completed", "pre_review_checks"), read
+    assert read["check"] == _check("pre_review", "waiting"), read
+    # The review hold itself is unchanged: nothing of the task's own is on its branch to check yet.
+    assert await _review_wait(TASK) is None
+
+    # The turn ends and its work is committed: the hold now holds, for the run its end requests.
+    commit_on_branch(tmp_path, branch, "ledger.py", "x = 1\n", create=False)
+    git(tmp_path, "checkout", "-q", "main")
+    await _end_the_builders_turn()
+    assert (await _review_wait(TASK)) is not None
+    await project_checks._after_run("proj-test", BUILDER_RUN)
+    read = (await _reads(app, auth_headers, TASK))[TASK]
+    assert read["stage"] == "pre_review_checks", read
+    assert read["check"]["kind"] == "pre_review", read
+    await project_checks.drain()
+    read = (await _reads(app, auth_headers, TASK))[TASK]
+    assert (read["stage"], read["check"]) == (
+        "waiting_for_review",
+        _check("pre_review", "passed"),
+    ), read
+
+
+@pytest.mark.usefixtures("no_agent_cli_spawn")
+async def test_completed_work_with_nothing_of_its_own_is_ready_once_its_turn_ends(
+    app, auth_headers, tmp_path
+):
+    """The other side of the same gap: a turn that ends with no work of its own on the branch
+    requests no run, the hold stays clear, and the stage is Ready for review again."""
+    await _builder_task(tmp_path, content="x = 1\n")
+    git(tmp_path, "branch", "-f", worktrees.task_branch_name(TASK), "main")
+    await _configure([_slow(tmp_path)])
+    await _in_a_build(TASK)
+    assert (await _complete(app)).status_code == 200
+    await _end_the_builders_turn()
+    await project_checks._after_run("proj-test", BUILDER_RUN)
+    assert await _runs(TASK) == []
+    read = (await _reads(app, auth_headers, TASK))[TASK]
+    assert (read["stage"], read["check"]) == ("waiting_for_review", None), read
 
 
 # ---------------------------------------------------------------------------------------------
