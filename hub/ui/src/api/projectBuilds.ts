@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { getJson, postJson } from './client'
 import { useConfigStore } from '@/store/configStore'
 import { coalescedReads } from '@/lib/coalescedReads'
+import type { CheckState } from '@/lib/checkState'
 import type { BuildDriver, BuildLevel } from './spec'
 import type { BuildNeedsRead } from '@/components/builds/buildViewModel'
 import { sidebarBuilds } from '@/components/layout/threadsAndBuildsModel'
@@ -72,6 +73,10 @@ export interface ProjectBuildLanding {
   landing_state: string
   /** Why the landing is where it is (a send-back's or a hold's reason); may be empty. */
   reason: string
+  /** The task's stage and check state, as the task list derives them (`task_stage.py`), so every
+   *  surface words one task alike (`task-stages-in-the-build-view-and-dependency-map` FR-11). */
+  stage?: string | null
+  check_state?: CheckState | null
 }
 
 const readProjectBuilds = async (projectId: string) =>

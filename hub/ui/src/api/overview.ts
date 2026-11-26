@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { ApiError, getJson, postJson, readableApiError } from './client'
 import { useConfigStore } from '@/store/configStore'
+import type { CheckState } from '@/lib/checkState'
 
 /** The one Overview read (`GET /api/v1/projects/{id}/overview`, design D1 and its contract): every
  *  figure both tabs show, assembled and ranked by the Hub, so the two tabs cannot drift. */
@@ -47,6 +48,9 @@ export interface OverviewRunning {
   what: string
   /** `Run.started_at`, never the thread's last event (design D7). */
   started_at: string
+  /** A turn on a task: that task's stage and check state, as the task list derives them (FR-11). */
+  stage?: string | null
+  check_state?: CheckState | null
 }
 
 export type OverviewOutcome = 'landed' | 'sent_back' | 'failed' | 'stopped'

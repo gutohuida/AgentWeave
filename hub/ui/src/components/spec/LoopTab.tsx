@@ -11,6 +11,7 @@ import { loopEventSentence } from '@/lib/loopHistory'
 import { endingBucket, loopPastStop } from './loopCounts'
 import { LoopSettings } from './LoopSettings'
 import { LoadingThread } from '@/components/common/LoadingThread'
+import { TaskStageWord } from '@/components/tasks/TaskStageWord'
 
 interface LoopTabProps {
   loopId: string
@@ -419,10 +420,21 @@ export function LoopTab({ loopId, onClose }: LoopTabProps) {
           loop.current_tasks.map((task) => (
             <p
               key={task.id}
+              className="flex flex-wrap items-center gap-1.5"
               style={{ fontSize: 11, color: 'var(--text)' }}
               data-testid="loop-tab-current-task"
             >
-              {task.title} ({task.status})
+              {/* The stage in the board's words where the Hub sent one (FR-11), else the status. */}
+              {task.stage ? (
+                <>
+                  <span>{task.title}</span>
+                  <TaskStageWord stage={task.stage} check={task.check_state} size="xs" />
+                </>
+              ) : (
+                <>
+                  {task.title} ({task.status})
+                </>
+              )}
               {task.agent ? (
                 <span style={{ color: 'var(--text-3)', opacity: 0.75 }}> — {task.agent}</span>
               ) : null}

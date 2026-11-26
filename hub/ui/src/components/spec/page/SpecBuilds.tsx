@@ -8,6 +8,7 @@ import { MenuSelect } from '@/components/ui/menu'
 import { Segmented } from '@/components/ui/segmented'
 import { Field } from '@/components/ui/settings'
 import { formatAgo, formatDuration, formatMoney } from '@/lib/format'
+import { TONE_COLOR, stageVisual } from '@/lib/taskStageVisual'
 import {
   anchors,
   DRIVER_ICON,
@@ -85,6 +86,21 @@ export function SpecBuildsSection({
   )
 }
 
+/** The order a build's stages are counted in: furthest along first, as the status meter is. */
+const STAGE_ORDER = ['on_main', 'landing', 'checking', 'approved_waiting', 'landing_held', 'under_review', 'waiting_for_review', 'pre_review_checks', 'working', 'preparing_checkout', 'waiting_for_answer', 'sent_back', 'did_not_land', 'not_started', 'closed']
+
+/** The tasks meter by the Hub's stage, in the board's words and tones (FR-11), where the build's
+ *  tasks carry one; null otherwise, and the status counts are shown. */
+function stageParts(b: BuildView) {
+  const counts = b.stages ?? {}
+  const stages = Object.keys(counts)
+  if (!stages.length) return null
+  const order = [...STAGE_ORDER, ...stages.filter((s) => !STAGE_ORDER.includes(s))]
+  return order
+    .filter((s) => counts[s])
+    .map((s) => ({ key: s, label: stageVisual(s).word, value: counts[s], tone: TONE_COLOR[stageVisual(s).tone], figure: String(counts[s]) }))
+}
+
 const STATUS_ORDER: TaskStatus[] = ['approved', 'under_review', 'completed', 'in_progress', 'revision_needed', 'assigned', 'pending', 'rejected']
 
 function BuildCard({ build: b, now, flash, onOpenRuns, onStop }: { build: BuildView; now: Date; flash: boolean; onOpenRuns: () => void; onStop: () => void }) {
@@ -159,7 +175,7 @@ function BuildCard({ build: b, now, flash, onOpenRuns, onStop }: { build: BuildV
         <Meter
           title="Tasks"
           figure={`${approved} of ${totalTasks} approved`}
-          parts={STATUS_ORDER.filter((s) => b.tasks[s]).map((s) => ({ key: s, label: TASK_STATUS_LABEL[s], value: b.tasks[s], tone: `var(--sp-status-${s})`, figure: String(b.tasks[s]) }))}
+          parts={stageParts(b) ?? STATUS_ORDER.filter((s) => b.tasks[s]).map((s) => ({ key: s, label: TASK_STATUS_LABEL[s], value: b.tasks[s], tone: `var(--sp-status-${s})`, figure: String(b.tasks[s]) }))}
           total={totalTasks}
           running={b.running}
         />

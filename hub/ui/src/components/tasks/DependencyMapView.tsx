@@ -2,7 +2,7 @@ import { Button } from '@/components/ui/button'
 import { Icon } from '@/components/common/Icon'
 import type { Task } from '@/api/tasks'
 import { FlowGraph, type FlowNode } from '@/components/spec/page/threads/FlowMap'
-import { THREAD_STATES, threadState } from '@/components/spec/page/threads/threadModel'
+import { THREAD_STATES, stageThreadState, threadState } from '@/components/spec/page/threads/threadModel'
 import { ThreadLegend } from '@/components/spec/page/threads/shared'
 import '@/styles/board.css'
 
@@ -13,7 +13,9 @@ export interface DependencyDocument {
 }
 
 /** Dependencies as a map, one per spec document: tasks in columns by when they can start, left to
- *  right, with each thread coloured by its prerequisite's state. Hovering a task lights its chain;
+ *  right, with each thread coloured by its prerequisite's state. Each node, a prerequisite from
+ *  another document included, words its Hub stage and check state and is coloured by the stage
+ *  (`task-stages-in-the-build-view-and-dependency-map` FR-9). Hovering a task lights its chain;
  *  clicking it opens the task, as a row of the list did. A prerequisite another document declares
  *  is drawn faint at the map's left edge, named with its document, so no thread starts nowhere. */
 export function DependencyMapView({
@@ -43,6 +45,8 @@ export function DependencyMapView({
             key: p.id,
             title: p.title,
             status: p.status,
+            stage: p.stage ?? null,
+            check: p.check_state ?? null,
             ref: p.readable_id,
             dependsOn: [],
             outside: (p.spec_document_id && titleOf.get(p.spec_document_id)) || 'another document',
@@ -53,6 +57,8 @@ export function DependencyMapView({
         key: t.id,
         title: t.title,
         status: t.status,
+        stage: t.stage ?? null,
+        check: t.check_state ?? null,
         agent: t.assignee ?? null,
         ref: t.readable_id,
         dependsOn: (t.prerequisites ?? []).map((p) => p.id),
@@ -62,7 +68,7 @@ export function DependencyMapView({
   }
 
   const present = new Set(
-    tasks.flatMap((t) => (t.prerequisites ?? []).map((p) => threadState(p.status))),
+    tasks.flatMap((t) => (t.prerequisites ?? []).map((p) => (p.stage ? stageThreadState(p.stage) : threadState(p.status)))),
   )
 
   return (

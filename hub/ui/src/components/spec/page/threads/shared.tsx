@@ -34,7 +34,7 @@ export function ThreadTaskCard({
     <>
       <div className="aw-sp-task-row">
         <span className="aw-sp-task-title">{task.title}</span>
-        <StatusChip status={task.status} />
+        <StatusChip status={task.status} stage={task.stage} check={task.check} />
       </div>
       <div className="aw-sp-task-meta">
         {task.agent ? (

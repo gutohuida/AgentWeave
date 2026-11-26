@@ -649,6 +649,13 @@ async def running(session: AsyncSession, project_id: str) -> List[Dict[str, Any]
             .order_by(Run.started_at, Run.id)
         )
     ).all()
+    # A turn on a task carries that task's stage and check state, from the task list's own
+    # derivation (`task-stages-in-the-build-view-and-dependency-map` FR-11); null otherwise.
+    from .api.v1.tasks import task_stage_reads
+
+    stage_of = await task_stage_reads(
+        session, project_id, [run.task_id for run, _, _ in rows if run.task_id]
+    )
     return [
         {
             "run_id": run.id,
@@ -657,6 +664,8 @@ async def running(session: AsyncSession, project_id: str) -> List[Dict[str, Any]
             "task_id": run.task_id,
             "what": task_title or conversation_title or "A conversation",
             "started_at": _iso(run.started_at),
+            "stage": stage_of.get(run.task_id or "", {}).get("stage"),
+            "check_state": stage_of.get(run.task_id or "", {}).get("check_state"),
         }
         for run, task_title, conversation_title in rows
     ]
