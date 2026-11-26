@@ -5,43 +5,6 @@
     "task-a7a400000003"
   ],
   "routes": {
-    "/loops": [
-      {
-        "agent": "builder",
-        "archived_at": null,
-        "control": null,
-        "current_tasks": [
-          {
-            "agent": "builder",
-            "agent_capacity": "working",
-            "check_state": null,
-            "id": "task-a7a400000003",
-            "stage": "under_review",
-            "status": "under_review",
-            "title": "Work 3"
-          }
-        ],
-        "ending_state": null,
-        "firing_active": false,
-        "id": "loop-narrow",
-        "label": "narrow",
-        "open_questions": 0,
-        "pending_edit": null,
-        "purpose": "work",
-        "queue": {
-          "approved": 1,
-          "completed": 1,
-          "under_review": 1
-        },
-        "spec_document_id": null,
-        "stall_reason": null,
-        "stop_at": null,
-        "stop_reason": null,
-        "stop_when_queue_empties": false,
-        "stopped_at": null,
-        "work_needs_evidence": false
-      }
-    ],
     "/loops/loop-narrow": {
       "agent": "builder",
       "archived_at": null,
@@ -80,6 +43,43 @@
       "stopped_at": null,
       "work_needs_evidence": false
     },
+    "/loops?stages=true": [
+      {
+        "agent": "builder",
+        "archived_at": null,
+        "control": null,
+        "current_tasks": [
+          {
+            "agent": "builder",
+            "agent_capacity": "working",
+            "check_state": null,
+            "id": "task-a7a400000003",
+            "stage": "under_review",
+            "status": "under_review",
+            "title": "Work 3"
+          }
+        ],
+        "ending_state": null,
+        "firing_active": false,
+        "id": "loop-narrow",
+        "label": "narrow",
+        "open_questions": 0,
+        "pending_edit": null,
+        "purpose": "work",
+        "queue": {
+          "approved": 1,
+          "completed": 1,
+          "under_review": 1
+        },
+        "spec_document_id": null,
+        "stall_reason": null,
+        "stop_at": null,
+        "stop_reason": null,
+        "stop_when_queue_empties": false,
+        "stopped_at": null,
+        "work_needs_evidence": false
+      }
+    ],
     "/overview": {
       "builds": [
         {
@@ -95,9 +95,9 @@
       "finished": [
         {
           "agent": "builder",
-          "at": "2026-11-26T00:05:00.149058+00:00",
+          "at": "2026-11-26T00:57:29.208224+00:00",
           "credits": null,
-          "id": "sent_back-ttr-1ee6d59add85",
+          "id": "sent_back-ttr-220b40e95831",
           "outcome": "sent_back",
           "run_id": null,
           "task_id": "task-a7a400000002",
@@ -106,7 +106,7 @@
           "usd": null
         }
       ],
-      "generated_at": "2026-11-26T00:05:05.140631+00:00",
+      "generated_at": "2026-11-26T00:57:32.180761+00:00",
       "main": {
         "branch": "main",
         "detail": "main is green",
@@ -129,7 +129,7 @@
           "conversation_id": null,
           "run_id": "run-everyroute-0",
           "stage": "checking",
-          "started_at": "2026-11-26T00:05:00.163685+00:00",
+          "started_at": "2026-11-26T00:57:29.216759+00:00",
           "task_id": "task-a7a400000001",
           "what": "Work 1"
         },
@@ -142,7 +142,7 @@
           "conversation_id": null,
           "run_id": "run-everyroute-1",
           "stage": "pre_review_checks",
-          "started_at": "2026-11-26T00:05:00.163685+00:00",
+          "started_at": "2026-11-26T00:57:29.216759+00:00",
           "task_id": "task-a7a400000002",
           "what": "Work 2"
         },
@@ -152,7 +152,7 @@
           "conversation_id": null,
           "run_id": "run-everyroute-2",
           "stage": "under_review",
-          "started_at": "2026-11-26T00:05:00.163685+00:00",
+          "started_at": "2026-11-26T00:57:29.216759+00:00",
           "task_id": "task-a7a400000003",
           "what": "Work 3"
         }
@@ -218,7 +218,7 @@
         {
           "attention_dismissed": false,
           "capabilities": [],
-          "created_at": "2026-11-26T00:05:00.124879+00:00",
+          "created_at": "2026-11-26T00:57:29.193550+00:00",
           "document_id": "spdoc-everyroute",
           "document_path": "",
           "document_title": "",
@@ -265,10 +265,10 @@
       ]
     },
     "/project/builds/build-everyroute1/tasks": {
-      "as_of": "2026-11-26T00:05:04.825581+00:00",
+      "as_of": "2026-11-26T00:57:32.064913+00:00",
       "build": {
         "attention_dismissed": false,
-        "created_at": "2026-11-26T00:05:00.124879+00:00",
+        "created_at": "2026-11-26T00:57:29.193550+00:00",
         "document_id": "spdoc-everyroute",
         "document_path": null,
         "document_title": "spdoc-everyroute",
@@ -290,7 +290,7 @@
           "checker": null,
           "declared": false,
           "id": "task-a7a400000001",
-          "last_change_at": "2026-11-26T00:05:00.974644+00:00",
+          "last_change_at": "2026-11-26T00:57:29.788298+00:00",
           "needs_operator": null,
           "ref": null,
           "requirements": [],
@@ -306,7 +306,7 @@
               "model": null,
               "moves": [],
               "role": "review",
-              "started_at": "2026-11-26T00:05:00.163685+00:00",
+              "started_at": "2026-11-26T00:57:29.216759+00:00",
               "status": "running",
               "tokens": null
             }
@@ -325,7 +325,7 @@
           "checker": null,
           "declared": false,
           "id": "task-a7a400000002",
-          "last_change_at": "2026-11-26T00:05:00.159661+00:00",
+          "last_change_at": "2026-11-26T00:57:29.214750+00:00",
           "needs_operator": null,
           "ref": null,
           "requirements": [],
@@ -341,14 +341,14 @@
               "model": null,
               "moves": [],
               "role": "review",
-              "started_at": "2026-11-26T00:05:00.163685+00:00",
+              "started_at": "2026-11-26T00:57:29.216759+00:00",
               "status": "running",
               "tokens": null
             }
           ],
           "send_backs": [
             {
-              "at": "2026-11-26T00:05:00.149058+00:00",
+              "at": "2026-11-26T00:57:29.208224+00:00",
               "by": {
                 "kind": "operator"
               },
@@ -370,7 +370,7 @@
           "checker": null,
           "declared": false,
           "id": "task-a7a400000003",
-          "last_change_at": "2026-11-26T00:05:00.133912+00:00",
+          "last_change_at": "2026-11-26T00:57:29.199094+00:00",
           "needs_operator": null,
           "ref": null,
           "requirements": [],
@@ -386,7 +386,7 @@
               "model": null,
               "moves": [],
               "role": "build",
-              "started_at": "2026-11-26T00:05:00.163685+00:00",
+              "started_at": "2026-11-26T00:57:29.216759+00:00",
               "status": "running",
               "tokens": null
             }
@@ -402,7 +402,7 @@
       "acceptance_criteria": null,
       "approval_report": [],
       "assignee": "builder",
-      "assignee_last_seen": "2026-11-26T00:05:00.163685Z",
+      "assignee_last_seen": "2026-11-26T00:57:29.216759Z",
       "assignee_status": "running",
       "assignee_status_msg": null,
       "assigner": null,
@@ -419,7 +419,7 @@
       "checker": null,
       "checker_by_default": false,
       "completion_warnings": [],
-      "created_at": "2026-11-26T00:04:59.469080Z",
+      "created_at": "2026-11-26T00:57:28.688310Z",
       "deliverables": null,
       "dependency_state": null,
       "dependents": [
@@ -458,12 +458,12 @@
       "spec_task_key": null,
       "stage": "checking",
       "stage_detail": null,
-      "stage_since": "2026-11-26T00:05:01.441611Z",
+      "stage_since": "2026-11-26T00:57:30.082760Z",
       "stage_waits_on": null,
       "status": "approved",
       "title": "Work 1",
       "unresolved_requirements": [],
-      "updated": "2026-11-26T00:05:00.998369Z",
+      "updated": "2026-11-26T00:57:29.800398Z",
       "waiting_on": null,
       "waiting_since": null,
       "waiting_to_land": true
@@ -472,7 +472,7 @@
       "acceptance_criteria": null,
       "approval_report": [],
       "assignee": "builder",
-      "assignee_last_seen": "2026-11-26T00:05:00.163685Z",
+      "assignee_last_seen": "2026-11-26T00:57:29.216759Z",
       "assignee_status": "running",
       "assignee_status_msg": null,
       "assigner": null,
@@ -489,7 +489,7 @@
       "checker": null,
       "checker_by_default": false,
       "completion_warnings": [],
-      "created_at": "2026-11-26T00:04:59.469080Z",
+      "created_at": "2026-11-26T00:57:28.688310Z",
       "deliverables": null,
       "dependency_state": null,
       "dependents": [],
@@ -518,12 +518,12 @@
       "spec_task_key": null,
       "stage": "pre_review_checks",
       "stage_detail": null,
-      "stage_since": "2026-11-26T00:05:00.159661Z",
+      "stage_since": "2026-11-26T00:57:29.214750Z",
       "stage_waits_on": null,
       "status": "completed",
       "title": "Work 2",
       "unresolved_requirements": [],
-      "updated": "2026-11-26T00:05:00.159161Z",
+      "updated": "2026-11-26T00:57:29.213747Z",
       "waiting_on": null,
       "waiting_since": null,
       "waiting_to_land": false
@@ -532,7 +532,7 @@
       "acceptance_criteria": null,
       "approval_report": [],
       "assignee": "builder",
-      "assignee_last_seen": "2026-11-26T00:05:00.163685Z",
+      "assignee_last_seen": "2026-11-26T00:57:29.216759Z",
       "assignee_status": "running",
       "assignee_status_msg": null,
       "assigner": null,
@@ -546,7 +546,7 @@
       "checker": null,
       "checker_by_default": false,
       "completion_warnings": [],
-      "created_at": "2026-11-26T00:04:59.469080Z",
+      "created_at": "2026-11-26T00:57:28.688310Z",
       "deliverables": null,
       "dependency_state": null,
       "dependents": [],
@@ -588,12 +588,12 @@
       "spec_task_key": null,
       "stage": "under_review",
       "stage_detail": null,
-      "stage_since": "2026-11-26T00:05:00.133912Z",
+      "stage_since": "2026-11-26T00:57:29.199094Z",
       "stage_waits_on": null,
       "status": "under_review",
       "title": "Work 3",
       "unresolved_requirements": [],
-      "updated": "2026-11-26T00:05:00.133912Z",
+      "updated": "2026-11-26T00:57:29.199094Z",
       "waiting_on": null,
       "waiting_since": null,
       "waiting_to_land": false
@@ -605,7 +605,7 @@
           "acceptance_criteria": null,
           "approval_report": [],
           "assignee": "builder",
-          "assignee_last_seen": "2026-11-26T00:05:00.163685Z",
+          "assignee_last_seen": "2026-11-26T00:57:29.216759Z",
           "assignee_status": "running",
           "assignee_status_msg": null,
           "assigner": null,
@@ -622,7 +622,7 @@
           "checker": null,
           "checker_by_default": false,
           "completion_warnings": [],
-          "created_at": "2026-11-26T00:04:59.469080Z",
+          "created_at": "2026-11-26T00:57:28.688310Z",
           "deliverables": null,
           "dependency_state": null,
           "dependents": [
@@ -661,12 +661,12 @@
           "spec_task_key": null,
           "stage": "checking",
           "stage_detail": null,
-          "stage_since": "2026-11-26T00:05:01.441611Z",
+          "stage_since": "2026-11-26T00:57:30.082760Z",
           "stage_waits_on": null,
           "status": "approved",
           "title": "Work 1",
           "unresolved_requirements": [],
-          "updated": "2026-11-26T00:05:00.998369Z",
+          "updated": "2026-11-26T00:57:29.800398Z",
           "waiting_on": null,
           "waiting_since": null,
           "waiting_to_land": true
@@ -675,7 +675,7 @@
           "acceptance_criteria": null,
           "approval_report": [],
           "assignee": "builder",
-          "assignee_last_seen": "2026-11-26T00:05:00.163685Z",
+          "assignee_last_seen": "2026-11-26T00:57:29.216759Z",
           "assignee_status": "running",
           "assignee_status_msg": null,
           "assigner": null,
@@ -692,7 +692,7 @@
           "checker": null,
           "checker_by_default": false,
           "completion_warnings": [],
-          "created_at": "2026-11-26T00:04:59.469080Z",
+          "created_at": "2026-11-26T00:57:28.688310Z",
           "deliverables": null,
           "dependency_state": null,
           "dependents": [],
@@ -721,12 +721,12 @@
           "spec_task_key": null,
           "stage": "pre_review_checks",
           "stage_detail": null,
-          "stage_since": "2026-11-26T00:05:00.159661Z",
+          "stage_since": "2026-11-26T00:57:29.214750Z",
           "stage_waits_on": null,
           "status": "completed",
           "title": "Work 2",
           "unresolved_requirements": [],
-          "updated": "2026-11-26T00:05:00.159161Z",
+          "updated": "2026-11-26T00:57:29.213747Z",
           "waiting_on": null,
           "waiting_since": null,
           "waiting_to_land": false
@@ -735,7 +735,7 @@
           "acceptance_criteria": null,
           "approval_report": [],
           "assignee": "builder",
-          "assignee_last_seen": "2026-11-26T00:05:00.163685Z",
+          "assignee_last_seen": "2026-11-26T00:57:29.216759Z",
           "assignee_status": "running",
           "assignee_status_msg": null,
           "assigner": null,
@@ -749,7 +749,7 @@
           "checker": null,
           "checker_by_default": false,
           "completion_warnings": [],
-          "created_at": "2026-11-26T00:04:59.469080Z",
+          "created_at": "2026-11-26T00:57:28.688310Z",
           "deliverables": null,
           "dependency_state": null,
           "dependents": [],
@@ -791,12 +791,12 @@
           "spec_task_key": null,
           "stage": "under_review",
           "stage_detail": null,
-          "stage_since": "2026-11-26T00:05:00.133912Z",
+          "stage_since": "2026-11-26T00:57:29.199094Z",
           "stage_waits_on": null,
           "status": "under_review",
           "title": "Work 3",
           "unresolved_requirements": [],
-          "updated": "2026-11-26T00:05:00.133912Z",
+          "updated": "2026-11-26T00:57:29.199094Z",
           "waiting_on": null,
           "waiting_since": null,
           "waiting_to_land": false
@@ -811,7 +811,7 @@
           "acceptance_criteria": null,
           "approval_report": [],
           "assignee": "builder",
-          "assignee_last_seen": "2026-11-26T00:05:00.163685Z",
+          "assignee_last_seen": "2026-11-26T00:57:29.216759Z",
           "assignee_status": "running",
           "assignee_status_msg": null,
           "assigner": null,
@@ -828,7 +828,7 @@
           "checker": null,
           "checker_by_default": false,
           "completion_warnings": [],
-          "created_at": "2026-11-26T00:04:59.469080Z",
+          "created_at": "2026-11-26T00:57:28.688310Z",
           "deliverables": null,
           "dependency_state": null,
           "dependents": [
@@ -867,12 +867,12 @@
           "spec_task_key": null,
           "stage": "checking",
           "stage_detail": null,
-          "stage_since": "2026-11-26T00:05:01.441611Z",
+          "stage_since": "2026-11-26T00:57:30.082760Z",
           "stage_waits_on": null,
           "status": "approved",
           "title": "Work 1",
           "unresolved_requirements": [],
-          "updated": "2026-11-26T00:05:00.998369Z",
+          "updated": "2026-11-26T00:57:29.800398Z",
           "waiting_on": null,
           "waiting_since": null,
           "waiting_to_land": true
@@ -881,7 +881,7 @@
           "acceptance_criteria": null,
           "approval_report": [],
           "assignee": "builder",
-          "assignee_last_seen": "2026-11-26T00:05:00.163685Z",
+          "assignee_last_seen": "2026-11-26T00:57:29.216759Z",
           "assignee_status": "running",
           "assignee_status_msg": null,
           "assigner": null,
@@ -898,7 +898,7 @@
           "checker": null,
           "checker_by_default": false,
           "completion_warnings": [],
-          "created_at": "2026-11-26T00:04:59.469080Z",
+          "created_at": "2026-11-26T00:57:28.688310Z",
           "deliverables": null,
           "dependency_state": null,
           "dependents": [],
@@ -927,12 +927,12 @@
           "spec_task_key": null,
           "stage": "pre_review_checks",
           "stage_detail": null,
-          "stage_since": "2026-11-26T00:05:00.159661Z",
+          "stage_since": "2026-11-26T00:57:29.214750Z",
           "stage_waits_on": null,
           "status": "completed",
           "title": "Work 2",
           "unresolved_requirements": [],
-          "updated": "2026-11-26T00:05:00.159161Z",
+          "updated": "2026-11-26T00:57:29.213747Z",
           "waiting_on": null,
           "waiting_since": null,
           "waiting_to_land": false
@@ -941,7 +941,7 @@
           "acceptance_criteria": null,
           "approval_report": [],
           "assignee": "builder",
-          "assignee_last_seen": "2026-11-26T00:05:00.163685Z",
+          "assignee_last_seen": "2026-11-26T00:57:29.216759Z",
           "assignee_status": "running",
           "assignee_status_msg": null,
           "assigner": null,
@@ -955,7 +955,7 @@
           "checker": null,
           "checker_by_default": false,
           "completion_warnings": [],
-          "created_at": "2026-11-26T00:04:59.469080Z",
+          "created_at": "2026-11-26T00:57:28.688310Z",
           "deliverables": null,
           "dependency_state": null,
           "dependents": [],
@@ -997,12 +997,12 @@
           "spec_task_key": null,
           "stage": "under_review",
           "stage_detail": null,
-          "stage_since": "2026-11-26T00:05:00.133912Z",
+          "stage_since": "2026-11-26T00:57:29.199094Z",
           "stage_waits_on": null,
           "status": "under_review",
           "title": "Work 3",
           "unresolved_requirements": [],
-          "updated": "2026-11-26T00:05:00.133912Z",
+          "updated": "2026-11-26T00:57:29.199094Z",
           "waiting_on": null,
           "waiting_since": null,
           "waiting_to_land": false
