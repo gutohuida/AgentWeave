@@ -191,8 +191,9 @@ async def test_every_route_a_surface_reads_carries_the_same_stage_and_check_stat
 
     truth = seen["task list (board, map, drawer)"]
     landing: Optional[tuple] = truth[ids[0]]
-    assert landing[0] == "checking", truth
-    assert landing[1] is not None and landing[1]["kind"] == "landing", truth
+    # At the verdict its batch's checks have passed, so it reads Landing with that passed check
+    # (TSBVD-11), not Landing checks: the landing row moves on a moment later.
+    assert landing == ("landing", {"kind": "landing", "state": "passed"}), truth
     pre_review = truth[ids[1]]
     assert pre_review == ("pre_review_checks", {"kind": "pre_review", "state": "waiting"}), truth
 
