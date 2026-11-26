@@ -1,6 +1,9 @@
 import * as React from 'react'
 import { Icon } from '@/components/common/Icon'
 import { agentColorVars } from '@/lib/agentColors'
+import { TaskStageWord } from '@/components/tasks/TaskStageWord'
+import type { CheckState } from '@/lib/checkState'
+import { stageVisual } from '@/lib/taskStageVisual'
 import { formatAgo, formatCost, formatDateTime, formatDay, formatMoney } from '@/lib/format'
 import '@/styles/overview-dashboard.css'
 import type { OverviewNeedKind } from '@/api/overview'
@@ -52,6 +55,9 @@ export interface DashActivity {
   usd?: number | null
   /** What the row says it cost when it is not dollars: credits, tokens, or "not priced". */
   costWords?: string | null
+  /** A turn on a task: the task's Hub stage and check state, in the board's words (FR-11). */
+  stage?: string | null
+  check?: CheckState | null
   onOpen: () => void
 }
 
@@ -447,7 +453,7 @@ export function OverviewDashboard({ projectName, needs, running, finished, finis
               ) : null}
               {shownTimeline.map((a) => (
                 <li key={a.id}>
-                  <button type="button" data-slot="overview-activity" className="aw-od-row aw-od-act" data-outcome={a.outcome} onClick={a.onOpen} title={`Opens \u201c${a.what}\u201d`} aria-label={`${a.agent}: ${a.what}, ${a.outcome === 'running' ? `running for ${formatAgo(a.at, now)}` : OUTCOME[a.outcome].word}. Opens it`}>
+                  <button type="button" data-slot="overview-activity" className="aw-od-row aw-od-act" data-outcome={a.outcome} onClick={a.onOpen} title={`Opens \u201c${a.what}\u201d`} aria-label={`${a.agent}: ${a.what}${a.stage ? ` (${stageVisual(a.stage).word})` : ''}, ${a.outcome === 'running' ? `running for ${formatAgo(a.at, now)}` : OUTCOME[a.outcome].word}. Opens it`}>
                     <span className="aw-od-node" aria-hidden>
                       <Icon name={OUTCOME[a.outcome].icon} size={12} />
                     </span>
@@ -456,6 +462,7 @@ export function OverviewDashboard({ projectName, needs, running, finished, finis
                       <span className="aw-od-row-sub">
                         <AgentMark name={a.agent} colorIndex={a.colorIndex} />
                         <span className="aw-od-outcome">{OUTCOME[a.outcome].word}</span>
+                        {a.stage ? <TaskStageWord stage={a.stage} check={a.check} size="xs" glyphOnly /> : null}
                         {a.usd != null ? <span className="tabular">{formatCost(a.usd)}</span> : a.costWords ? <span className="tabular">{a.costWords}</span> : null}
                       </span>
                     </span>

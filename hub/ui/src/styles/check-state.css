@@ -13,3 +13,11 @@
 @media (prefers-reduced-motion: reduce) {
   .aw-check-marker[data-moving="true"] svg { animation: none; }
 }
+
+/* A task's stage beside its check marker (TaskStageWord): the glyph and word in the stage's tone. */
+.aw-stage-word {
+  display: inline-flex; align-items: center; gap: 4px; min-width: 0; flex: none;
+  font-size: 12px; font-weight: 600; white-space: nowrap; color: var(--stage-tone);
+}
+.aw-stage-word[data-size="xs"] { font-size: 11px; gap: 3px; }
+.aw-stage-word-text { overflow: hidden; text-overflow: ellipsis; }

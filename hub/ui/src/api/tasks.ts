@@ -157,6 +157,10 @@ export interface TaskDependencyRef {
   title: string
   status: string
   spec_document_id?: string | null
+  /** The task's stage and check state, as the task list derives them (`task_stage.py`), so every
+   *  surface words one task alike (`task-stages-in-the-build-view-and-dependency-map` FR-11). */
+  stage?: string | null
+  check_state?: CheckState | null
 }
 
 /** One checked tie between a task and a requirement. `statement` is null where the document no

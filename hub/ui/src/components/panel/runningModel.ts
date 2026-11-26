@@ -1,6 +1,7 @@
 import type { Job, LoopSummary } from '@/api/jobs'
 import type { ProjectBuildLanding, ProjectBuildRow } from '@/api/projectBuilds'
 import { describeCron, formatAgo, formatIn } from '@/lib/format'
+import type { CheckState } from '@/lib/checkState'
 
 /** The side panel's Running tab (roadmap `a-side-panel-worth-keeping-open-…`, slice `activity-tab`):
  *  every build, loop and scheduled job in one list, what each is doing now, and what waits on the
@@ -30,6 +31,9 @@ export interface RunningWorker {
   /** "building", "checking", "holding", "next" — what the agent is to the task, in words. */
   doing: string
   task: string
+  /** The task's Hub stage and check state, as the task list derives them (FR-11). */
+  stage?: string | null
+  check?: CheckState | null
 }
 
 export interface RunningItem {
@@ -68,6 +72,10 @@ export interface RunningLanding {
   reason: string
   /** Sent back or did not land: something to look at, not just wait for. */
   failed: boolean
+  /** The task's Hub stage and check state: where present the row words these, as the board does,
+   *  in place of the landing word (FR-11). */
+  stage?: string | null
+  check?: CheckState | null
 }
 
 const LANDING_WORD: Record<string, string> = {
@@ -91,6 +99,8 @@ function landingOf(row: ProjectBuildLanding): RunningLanding {
     word: LANDING_WORD[row.landing_state] ?? row.landing_state.replace(/_/g, ' '),
     reason: row.reason,
     failed: LANDING_FAILED.has(row.landing_state),
+    stage: row.stage ?? null,
+    check: row.check_state ?? null,
   }
 }
 
@@ -125,7 +135,7 @@ function doingOf(status: string, capacity: string | undefined): string {
 function workersOf(loop: LoopSummary | null): RunningWorker[] {
   return (loop?.current_tasks ?? [])
     .filter((t) => t.agent)
-    .map((t) => ({ agent: t.agent!, doing: doingOf(t.status, t.agent_capacity), task: t.title }))
+    .map((t) => ({ agent: t.agent!, doing: doingOf(t.status, t.agent_capacity), task: t.title, stage: t.stage ?? null, check: t.check_state ?? null }))
 }
 
 function attentionOf(loop: LoopSummary | null, openQuestions = loop?.open_questions ?? 0): RunningItem['attention'] {

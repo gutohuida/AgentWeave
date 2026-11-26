@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { MenuSelect } from '@/components/ui/menu'
 import { Segmented } from '@/components/ui/segmented'
 import { agentColorVars } from '@/lib/agentColors'
+import { TaskStageWord } from '@/components/tasks/TaskStageWord'
 import { formatMoney } from '@/lib/format'
 import {
   groupItems,
@@ -167,6 +168,7 @@ function RunningRow({
                   <span className="aw-run-worker-agent">{w.agent}</span>
                   <span className="aw-run-worker-doing">{w.doing}</span>
                   <span className="aw-run-worker-task">{w.task}</span>
+                  {w.stage ? <TaskStageWord stage={w.stage} check={w.check} size="xs" glyphOnly /> : null}
                 </span>
               ))}
               {extra > 0 ? <span className="aw-run-more">and {extra} more</span> : null}
@@ -198,7 +200,13 @@ function RunningRow({
               <Icon name={landing.failed ? 'alert_triangle' : 'git_merge'} size={12} />
               <span className="aw-run-landing-id">{landing.displayId}</span>
               <span className="aw-run-landing-title">{landing.title}</span>
-              <span className="aw-run-landing-word">{landing.word}</span>
+              {landing.stage ? (
+                <span className="aw-run-landing-word">
+                  <TaskStageWord stage={landing.stage} check={landing.check} size="xs" glyphOnly />
+                </span>
+              ) : (
+                <span className="aw-run-landing-word">{landing.word}</span>
+              )}
               {landing.reason ? <span className="aw-run-landing-reason">{landing.reason}</span> : null}
             </li>
           ))}

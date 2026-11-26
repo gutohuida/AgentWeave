@@ -21,6 +21,8 @@ import {
   type TaskStatus,
 } from './model'
 import { useEnter } from './hooks'
+import { TaskStageWord } from '@/components/tasks/TaskStageWord'
+import type { CheckState } from '@/lib/checkState'
 import { ThreadRail } from './threads/ThreadRail'
 import { RoadmapSection } from './RoadmapSection'
 import '@/styles/spec-page.css'
@@ -341,8 +343,11 @@ export function EvidenceChip({ state }: { state: EvidenceState }) {
   )
 }
 
-/** A task's status; a task of a plan not yet approved has none, and reads as planned. */
-export function StatusChip({ status }: { status: TaskStatus | null | undefined }) {
+/** A task's status; a task of a plan not yet approved has none, and reads as planned. Where the
+ *  Hub sent the task's stage, the stage and its check are shown instead, in the board's words
+ *  (`task-stages-in-the-build-view-and-dependency-map` FR-11). */
+export function StatusChip({ status, stage, check }: { status: TaskStatus | null | undefined; stage?: string | null; check?: CheckState | null }) {
+  if (stage) return <TaskStageWord stage={stage} check={check} />
   return (
     <span className="aw-sp-status" data-status={status ?? 'planned'}>
       {status ? TASK_STATUS_LABEL[status] : 'Planned'}
@@ -471,7 +476,7 @@ export function TaskList({
           <button data-slot="disclosure" type="button" className="aw-sp-task-title" aria-expanded={open === t.key} onClick={() => setOpen((o) => (o === t.key ? null : t.key))}>
             {t.title}
           </button>
-          <StatusChip status={t.status} />
+          <StatusChip status={t.status} stage={t.stage} check={t.check} />
           <CopyLink onCopy={() => onCopyLink(anchor)} label={`Copy a link to ${t.title}`} />
         </div>
         <div className="aw-sp-task-meta">

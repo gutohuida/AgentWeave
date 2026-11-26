@@ -1,6 +1,7 @@
 import * as React from 'react'
 import { Icon } from '@/components/common/Icon'
 import { hubDate } from '@/lib/hubTime'
+import { TaskStageWord } from '@/components/tasks/TaskStageWord'
 import { formatAgo, formatAgoLong, formatCost, formatDateTime, formatDay, formatMoney } from '@/lib/format'
 import '@/styles/overview-briefing.css'
 import type { ActivityOutcome, DashActivity, DashBuild, DashNeed, OverviewTarget } from './OverviewDashboard'
@@ -217,6 +218,7 @@ export function OverviewBriefing({ projectName, lastSeenAt, needs, running, fini
                   </button>{' '}
                   for {formatAgo(r.at, now)}.
                 </span>
+                {r.stage ? <> <TaskStageWord stage={r.stage} check={r.check} size="xs" /></> : null}
               </li>
             ))}
           </ul>

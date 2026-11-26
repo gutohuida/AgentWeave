@@ -277,6 +277,12 @@ async def project_rows(
     on_the_way: Dict[str, List[Dict[str, Any]]] = {}
     states = await landing_queue.landing_states(session, Task.build_id.in_(build_ids))
     if states:
+        # Each landing task's stage and check state, from the task list's own derivation, so the
+        # Running panel words it as the board does (`task-stages-in-the-build-view-and-dependency-
+        # map` FR-11).
+        from .api.v1.tasks import task_stage_reads
+
+        stage_of = await task_stage_reads(session, project_id, list(states))
         for task in (
             (
                 await session.execute(
@@ -298,6 +304,8 @@ async def project_rows(
                     "status": task.status,
                     "landing_state": state,
                     "reason": reason[:500],
+                    "stage": stage_of.get(task.id, {}).get("stage"),
+                    "check_state": stage_of.get(task.id, {}).get("check_state"),
                 }
             )
 

@@ -7,6 +7,7 @@
 
 import type { BuildChecks, BuildLanding } from '@/api/buildFigures'
 import type { BuildCaught } from '@/api/spec'
+import type { CheckState as TaskCheckState } from '@/lib/checkState'
 import { stepKeyLabel } from '@/components/settings/stepLabels'
 import type { BuildSummaryModel } from '@/components/builds/buildViewModel'
 
@@ -58,6 +59,9 @@ export interface SpecTaskView {
   /** Set once the plan is laid out as tasks (approved); a writing document's tasks are a plan only. */
   taskId?: string | null
   status?: TaskStatus | null
+  /** The Hub's stage and check state for the task, as the task list derives them (FR-11). */
+  stage?: string | null
+  check?: TaskCheckState | null
   agent?: string | null
 }
 
@@ -223,6 +227,9 @@ export interface BuildView {
   fixHeldReason: string | null
   budget: number | null
   tasks: Record<TaskStatus, number>
+  /** The build's tasks counted by the Hub's stage, in the board's words (FR-11); empty when no
+   *  task carries one, and the status counts are shown. */
+  stages?: Record<string, number>
   time: BuildTime
   cost: BuildCost
   runs: number

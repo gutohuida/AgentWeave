@@ -191,6 +191,8 @@ function useOverviewItems(
     what: r.what,
     outcome: "running",
     at: r.started_at,
+    stage: r.stage ?? null,
+    check: r.check_state ?? null,
     onOpen: () => open.openConversation(r.agent, r.conversation_id),
   }));
   const toActivity = (f: OverviewBody["finished"][number]): DashActivity => ({
