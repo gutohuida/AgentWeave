@@ -335,6 +335,14 @@ def setup():
                      "content_version": read.get("content_version") if isinstance(read, dict) else None})
     if code != 200:
         raise Setup(f"approve: {code} {str(out)[:400]}")
+    document_id = ro("select id from spec_documents where project_id=? and path=?", (pid, doc))[0]["id"]
+    return {"pid": pid, "base": base, "doc": document_id, "path": doc}
+
+
+def press_build():
+    """Build the approved document: the flow's first firing starts at once."""
+    pid, base, doc = S["pid"], S["base"], S["path"]
+    quoted = urllib.parse.quote(doc)
     code, out = api("POST", f"{base}/project/documents/build?path={quoted}",
                     {"driver": "flow", "level": "reviewed", "builders": ["Builder"], "landing": "main"})
     if code != 200:
@@ -345,13 +353,11 @@ def setup():
     tasks = {r["spec_task_key"]: dict(r) for r in rows}
     loop = tasks["t1"]["loop_id"] if "t1" in tasks else None
     job = ro("select job_id from loops where id=?", (loop,))[0]["job_id"] if loop else None
-    document_id = ro("select id from spec_documents where project_id=? and path=?", (pid, doc))[0]["id"]
     if not (build_id and job and len(tasks) == 2):
         raise Setup(f"the build runs no flow over both tasks: build={build_id} job={job} tasks={list(tasks)}")
     print(f"project {pid}, build {build_id}, job {job}, tasks { {k: v['readable_id'] for k, v in tasks.items()} }",
           flush=True)
-    return {"pid": pid, "base": base, "build": build_id, "job": job, "doc": document_id,
-            "tasks": list(tasks.values())}
+    return {"build": build_id, "job": job, "tasks": list(tasks.values())}
 
 
 # --------------------------------------------------------------------------- the three surfaces
@@ -409,9 +415,41 @@ def open_pages(browser):
                 json.dumps(f"aw.boardShowFinished.{pid}")))
         trace_network(name, page)
         pages[name] = page
-    pages["build view"].goto(f"{HUB}/?project={pid}&tab=spec&view=build&focus={S['build']}", wait_until="domcontentloaded")
+    pages["build view"].goto(f"{HUB}/?project={pid}&tab=spec", wait_until="domcontentloaded")
     pages["board"].goto(f"{HUB}/?project={pid}&tab=tasks", wait_until="domcontentloaded")
     pages["map"].goto(f"{HUB}/?project={pid}&tab=tasks", wait_until="domcontentloaded")
+    return pages
+
+
+def wait_settled(quiet=3.0, limit=900.0):
+    """Wait until no page has an API read in flight for *quiet* seconds.
+
+    A page's first load reads the sidebar over every registered project: on the trial Hub's couple
+    of hundred, those reads took minutes when three pages sent them together, and every stage read
+    behind them waited too (drive runs 174800 and 180657). The build starts after they are answered,
+    so a split measures how the surfaces follow a stage, not how long the cold load is
+    (finding F1213)."""
+    start = time.time()
+    still = None
+    while time.time() - start < limit:
+        busy = sum(len(p) for p in PENDING.values())
+        if busy:
+            still = None
+        else:
+            still = still or time.time()
+            if time.time() - still >= quiet:
+                print(f"  the pages settled after {time.time() - start:.0f}s", flush=True)
+                return
+        time.sleep(0.25)
+    print(f"  the pages still had reads in flight after {limit:.0f}s; building anyway", flush=True)
+
+
+def show_build(pages):
+    """Point the build view at the build in place (the app follows popstate), and wait for the three."""
+    pid = S["pid"]
+    pages["build view"].evaluate(
+        "(url) => { history.pushState(null, '', url); window.dispatchEvent(new PopStateEvent('popstate')) }",
+        f"/?project={pid}&tab=spec&view=build&focus={S['build']}")
     for name, page in pages.items():
         try:
             page.get_by_test_id("build-view").first.wait_for(timeout=30000) if name == "build view" else \
@@ -427,7 +465,6 @@ def open_pages(browser):
         mapper.locator("[data-slot=flow-node]").first.wait_for(timeout=15000)
     except Exception as exc:  # noqa: BLE001
         raise Setup(f"the dependency map drew no node: {str(exc)[:160]}") from exc
-    return pages
 
 
 def read_surfaces(pages):
@@ -498,14 +535,26 @@ def fire():
 
 TRACE: list = []  # every read, timed, written to records.json so a failure can be read back
 NET: list = []  # every page's API GET (sent, answered) and every SSE event's arrival, timed
+PENDING: dict = {}  # page -> the API reads it has sent and not had answered
 
 
 def trace_network(name, page):
     """Time each page's API GETs, so a late stage is read back as a late event or a slow read."""
-    def done(request, outcome):
+    pending = PENDING.setdefault(name, set())
+
+    def is_read(request):
         url = request.url
-        if "/api/v1/" not in url or request.method != "GET" or url.endswith("/events"):
+        return "/api/v1/" in url and request.method == "GET" and not url.endswith("/events")
+
+    def sent(request):
+        if is_read(request):
+            pending.add(request)
+
+    def done(request, outcome):
+        pending.discard(request)
+        if not is_read(request):
             return
+        url = request.url
         timing = request.timing
         sent = timing.get("startTime", 0) / 1000
         # The browser's own end time: Playwright hands the drive this callback only between its
@@ -513,6 +562,7 @@ def trace_network(name, page):
         end = timing.get("responseEnd", -1)
         NET.append({"page": name, "path": url.split("/api/v1", 1)[1][:160], "sent": sent,
                     "answered": sent + end / 1000 if end >= 0 else time.time(), "outcome": outcome})
+    page.on("request", sent)
     page.on("requestfinished", lambda r: done(r, "ok"))
     page.on("requestfailed", lambda r: done(r, "failed"))
 
@@ -690,13 +740,17 @@ def main():
         from playwright.sync_api import sync_playwright
 
         S.update(setup())
-        build_id = S["build"]
+        build_id = None
         with sync_playwright() as pw:
             browser = pw.chromium.launch()
             try:
                 stop = threading.Event()
                 threading.Thread(target=trace_events, args=(stop,), daemon=True).start()
                 pages = open_pages(browser)
+                wait_settled()
+                S.update(press_build())
+                build_id = S["build"]
+                show_build(pages)
                 print(f"output {OUT}", flush=True)
                 samples, reads, runs, first_seen, finished = run_build(pages)
             finally:
