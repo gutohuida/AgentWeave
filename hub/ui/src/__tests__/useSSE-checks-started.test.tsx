@@ -4,7 +4,8 @@ import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-quer
 import { useConfigStore } from '@/store/configStore'
 import { useSSE, cancelReconnect, __resetSSEStateForTest } from '@/hooks/useSSE'
 
-// A pre-review run starting, getting its slot, or ending refetches the task list and the build read.
+// A pre-review run starting, getting its slot, or ending refetches the task list and the build read,
+// and so does a review run starting, which moves its task to In review.
 const enc = new TextEncoder()
 let push: (text: string) => void = () => {}
 
@@ -42,6 +43,7 @@ describe('check events refetch the task list and the build read', () => {
     ['task_checks_started', { task_id: 't1', run_id: 'r1', slot: true }],
     ['task_checks_finished', { task_id: 't1', state: 'failed' }],
     ['task_updated', { id: 't1', status: 'completed' }],
+    ['run_started', { run_id: 'r2', agent: 'QA', task_id: 't1' }],
   ])('%s refetches both', async (type, data) => {
     let tasks = 0
     let read = 0
