@@ -5,7 +5,8 @@ import { useConfigStore } from '@/store/configStore'
 import { useSSE, cancelReconnect, __resetSSEStateForTest } from '@/hooks/useSSE'
 
 // A pre-review run starting, getting its slot, or ending refetches the task list and the build read,
-// and so does a review run starting, which moves its task to In review.
+// and so does a review run starting, which moves its task to In review, and a firing, which starts a
+// task's run.
 const enc = new TextEncoder()
 let push: (text: string) => void = () => {}
 
@@ -44,6 +45,7 @@ describe('check events refetch the task list and the build read', () => {
     ['task_checks_finished', { task_id: 't1', state: 'failed' }],
     ['task_updated', { id: 't1', status: 'completed' }],
     ['run_started', { run_id: 'r2', agent: 'QA', task_id: 't1' }],
+    ['job_fired', { id: 'job-1', agent: 'Dev', job_run_id: 'jr-1' }],
   ])('%s refetches both', async (type, data) => {
     let tasks = 0
     let read = 0
@@ -69,10 +71,10 @@ describe('check events refetch the task list and the build read', () => {
   })
 })
 
-// A read in flight when the event arrives was sent before the write it announces committed. Waiting
-// for it and then reading again put the new stage two reads behind the event, which on the trial Hub
-// was 3.5 s for a check start and two records of 'Building' on the build view after the board moved.
-describe('a stage event resends a read already in flight', () => {
+// A stage event that lands on a read in flight does not cancel it and send a second copy: the Hub
+// still serves a cancelled request (`hub-responsiveness-under-agent-load`, no-duplicate-in-flight).
+// The one follow-up goes out the moment the first answers, so the new stage is one read behind.
+describe('a stage event on a read in flight gets one follow-up, after it answers', () => {
   beforeEach(() => {
     __resetSSEStateForTest()
     useConfigStore.setState({
@@ -104,9 +106,12 @@ describe('a stage event resends a read already in flight', () => {
     ['task_checks_started', { task_id: 't1', run_id: 'r1', slot: false }, ['project', 'p', 'tasks']],
     ['task_checks_finished', { task_id: 't1', state: 'passed' }, ['project', 'p', 'builds', 'read', 'b1']],
     ['run_started', { run_id: 'r2', agent: 'QA', task_id: 't1' }, ['project', 'p', 'builds', 'read', 'b1']],
-  ])('%s (%j) sends %j again before the stale read answers', async (type, data, key) => {
+    ['job_fired', { id: 'job-1', agent: 'Dev' }, ['project', 'p', 'tasks']],
+  ])('%s (%j) on %j', async (type, data, key) => {
     const answers: Array<(n: number) => void> = []
     let calls = 0
+    let open = 0
+    let mostOpen = 0
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
     function Probe() {
       useSSE()
@@ -114,7 +119,15 @@ describe('a stage event resends a read already in flight', () => {
         queryKey: key,
         queryFn: () => {
           calls += 1
-          return calls === 1 ? Promise.resolve(0) : new Promise<number>((resolve) => answers.push(resolve))
+          if (calls === 1) return Promise.resolve(0)
+          open += 1
+          mostOpen = Math.max(mostOpen, open)
+          return new Promise<number>((resolve) =>
+            answers.push((n) => {
+              open -= 1
+              resolve(n)
+            }),
+          )
         },
         staleTime: Infinity,
       })
@@ -128,21 +141,31 @@ describe('a stage event resends a read already in flight', () => {
     await waitFor(() => expect(calls).toBe(1))
     await act(async () => {
       await new Promise((r) => setTimeout(r, 30))
-      // A poll goes out and has not answered when the event arrives.
+      // A poll goes out and has not answered when the events arrive.
       void client.refetchQueries({ queryKey: key })
       await new Promise((r) => setTimeout(r, 10))
     })
     expect(calls).toBe(2)
     await act(async () => {
       push(frame(type, data))
+      push(frame(type, data))
+      push(frame(type, data))
       await new Promise((r) => setTimeout(r, 100))
     })
-    // The fresh request is out while the stale one is still unanswered.
-    expect(calls).toBe(3)
+    // Nothing more is sent while the first is unanswered.
+    expect(calls).toBe(2)
     await act(async () => {
-      answers.forEach((resolve, i) => resolve(i + 1))
+      answers[0](1)
       await new Promise((r) => setTimeout(r, 30))
     })
+    // Its answer sends exactly one follow-up, at once.
+    expect(calls).toBe(3)
+    await act(async () => {
+      answers[1](2)
+      await new Promise((r) => setTimeout(r, 30))
+    })
+    expect(calls).toBe(3)
+    expect(mostOpen).toBe(1)
     expect(client.getQueryData(key)).toBe(2)
   })
 })

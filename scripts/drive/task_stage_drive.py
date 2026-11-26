@@ -44,6 +44,7 @@ import sqlite3
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import urllib.error
 import urllib.parse
@@ -401,6 +402,7 @@ def open_pages(browser):
             page.add_init_script("try { localStorage.setItem(%s, %s); localStorage.setItem(%s, 'true'); } catch (e) {}" % (
                 json.dumps(f"aw.boardScope.{pid}"), json.dumps(json.dumps({"kind": "spec", "id": doc})),
                 json.dumps(f"aw.boardShowFinished.{pid}")))
+        trace_network(name, page)
         pages[name] = page
     pages["build view"].goto(f"{HUB}/?project={pid}&tab=spec&view=build&focus={S['build']}", wait_until="domcontentloaded")
     pages["board"].goto(f"{HUB}/?project={pid}&tab=tasks", wait_until="domcontentloaded")
@@ -490,13 +492,53 @@ def fire():
 
 
 TRACE: list = []  # every read, timed, written to records.json so a failure can be read back
+NET: list = []  # every page's API GET (sent, answered) and every SSE event's arrival, timed
+
+
+def trace_network(name, page):
+    """Time each page's API GETs, so a late stage is read back as a late event or a slow read."""
+    def done(request, outcome):
+        url = request.url
+        if "/api/v1/" not in url or request.method != "GET" or url.endswith("/events"):
+            return
+        timing = request.timing
+        sent = timing.get("startTime", 0) / 1000
+        # The browser's own end time: Playwright hands the drive this callback only between its
+        # reads, up to a probe interval after the answer came.
+        end = timing.get("responseEnd", -1)
+        NET.append({"page": name, "path": url.split("/api/v1", 1)[1][:160], "sent": sent,
+                    "answered": sent + end / 1000 if end >= 0 else time.time(), "outcome": outcome})
+    page.on("requestfinished", lambda r: done(r, "ok"))
+    page.on("requestfailed", lambda r: done(r, "failed"))
+
+
+def trace_events(stop):
+    """The Hub's event stream as the drive hears it, each event timed on arrival."""
+    req = urllib.request.Request(HUB + "/api/v1/events", headers={"Authorization": "Bearer " + KEY})
+    try:
+        with urllib.request.urlopen(req, timeout=BUILD_WAIT + 600) as stream:
+            kind = None
+            for raw in stream:
+                if stop.is_set():
+                    return
+                line = raw.decode(errors="replace").strip()
+                if line.startswith("event:"):
+                    kind = line[6:].strip()
+                elif line.startswith("data:") and kind in STAGE_EVENTS:
+                    NET.append({"event": kind, "at": time.time(), "data": line[5:].strip()[:300]})
+    except Exception as exc:  # noqa: BLE001 -- the trace is evidence, never the check
+        NET.append({"event": "trace-ended", "at": time.time(), "data": str(exc)[:200]})
+
+
+STAGE_EVENTS = {"task_updated", "task_checks_started", "task_checks_finished", "task_landing_changed",
+                "run_started", "run_completed"}
 
 
 def write_records(samples, runs, first_seen):
     """Every read and record, timed, beside the screenshots: the evidence behind each FAIL line."""
     OUT.mkdir(parents=True, exist_ok=True)
     (OUT / "records.json").write_text(json.dumps({
-        "reads": TRACE, "records": [s["t"] for s in samples], "runs": runs,
+        "reads": TRACE, "records": [s["t"] for s in samples], "runs": runs, "net": NET,
         "first_seen": [{"run": r, "task": t, "surface": s, "ms": ms} for (r, t, s), ms in first_seen.items()],
     }, indent=1, default=str), encoding="utf-8")
 
@@ -637,10 +679,13 @@ def main():
         with sync_playwright() as pw:
             browser = pw.chromium.launch()
             try:
+                stop = threading.Event()
+                threading.Thread(target=trace_events, args=(stop,), daemon=True).start()
                 pages = open_pages(browser)
                 print(f"output {OUT}", flush=True)
                 samples, reads, runs, first_seen, finished = run_build(pages)
             finally:
+                stop.set()
                 browser.close()
         reached = True
         write_records(samples, runs, first_seen)
