@@ -125,6 +125,21 @@ def sequence_of(words):
     return collapse([w for w in words if w in SEQUENCE])
 
 
+#: The forward order a task's stage moves in, for telling page-read skew from a lag. A stage outside
+#: it ("Sent back", "Landing held", ...) can follow any other, so a split naming one is never skew.
+FORWARD = ["Not started", "Preparing checkout", "Building", "Pre-review checks", "Ready for review", "In review",
+           "Waiting to land", "Landing checks", "Landing", "On main"]
+READ_ORDER = ("build view", "board", "map")  # the order read_surfaces reads the pages in
+
+
+def read_order_explains(per):
+    """Whether a split could be the pages being read one after another: each page read later shows
+    the same stage or a later one than every page read before it. A later page showing an older
+    stage was behind, whatever the next read says."""
+    ranks = [FORWARD.index(per[s]) if per[s] in FORWARD else None for s in READ_ORDER]
+    return None not in ranks and ranks == sorted(ranks)
+
+
 def utc_ms(value):
     if isinstance(value, (int, float)):
         return float(value) * 1000
@@ -167,6 +182,10 @@ def self_test():
         (tasks_of("a", "['aaa111']", {"a": "aaa111", "b": "bbb222"}, ["a", "b"]), ["a"]),
         (tasks_of("b", None, {}, ["a", "b"]), ["b"]),
         (_pattern_finds_branch(), True),
+        # the map, read last, already moved on: skew; the board, read after the build view, behind: a lag
+        (read_order_explains({"build view": "In review", "board": "In review", "map": "Waiting to land"}), True),
+        (read_order_explains({"build view": "Building", "board": "Preparing checkout", "map": "Building"}), False),
+        (read_order_explains({"build view": "Sent back", "board": "Sent back", "map": "Building"}), False),
     ]
     bad = [(i, got, want) for i, (got, want) in enumerate(cases) if got != want]
     for i, got, want in bad:
@@ -664,10 +683,12 @@ def judge(samples, reads, runs, first_seen, finished):
             if len(set(per.values())) > 1:
                 # The three pages are read one after another, not at one instant, so a stage that moves
                 # between two of those reads shows as a split for one read. A real lag outlasts the
-                # next read (0.25 s); a split that neither neighbouring read repeats is that skew.
+                # next read (0.25 s); a split that neither neighbouring read repeats, and that the read
+                # order explains (a page read later is never older), is that skew.
                 i = s.get("read")
                 near = [reads[j][t["id"]] for j in (i - 1, i + 1) if i is not None and 0 <= j < len(reads)]
-                if i is not None and not any(len({c[0] for c in cells.values()}) > 1 for cells in near):
+                if (i is not None and read_order_explains(per)
+                        and not any(len({c[0] for c in cells.values()}) > 1 for cells in near)):
                     skew.append((n, t["readable_id"], per))
                     continue
                 split.append((n, t["readable_id"], per))
