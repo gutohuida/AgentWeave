@@ -22,6 +22,7 @@ SWEEP_SET = REPO_ROOT / "scripts" / "checks" / "sweep_tests.txt"
 
 #: Test files the detector below matches that were read and found not to scan the tree.
 NOT_SWEEPS = {
+    "hub/tests/test_every_route_carries_the_stage.py": "writes a UI fixture only when asked to by env",
     "hub/tests/test_spec_adoption_corpus.py": "rglobs tmp_path; reads one module it imports",
     "hub/tests/test_timestamp_serialization.py": "reads models.py; names hub/ui/src in prose",
     "hub/tests/test_tool_server_pin.py": "globs tmp directories only",

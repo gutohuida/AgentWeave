@@ -1,6 +1,9 @@
 import * as React from 'react'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import { Icon } from '@/components/common/Icon'
+import { CheckStateMarker } from '@/components/tasks/CheckStateMarker'
+import type { CheckState } from '@/lib/checkState'
+import { TONE_COLOR, stageVisual } from '@/lib/taskStageVisual'
 import { anchors, EVIDENCE_LABEL, EVIDENCE_TONE, TASK_STATUS_LABEL, type BuildView, type CheckFinding, type SpecDocumentView } from './model'
 import '@/styles/spec-page.css'
 
@@ -11,7 +14,24 @@ interface OutlineItem {
   /** A coloured dot: evidence state, task status. */
   tone?: string
   toneLabel?: string
+  /** A task's Hub stage: drawn as its glyph in its tone, with its check marker, in place of the
+   *  dot, so it is told by more than colour (FR-12). */
+  stage?: string | null
+  check?: CheckState | null
   marker?: 'blocking' | 'warning'
+}
+
+/** A task's stage as the outline draws it: its glyph in the board's tone, named by its word. */
+function OutlineStage({ stage, check }: { stage: string; check?: CheckState | null }) {
+  const visual = stageVisual(stage)
+  return (
+    <>
+      <span className="aw-sp-outline-stage" role="img" aria-label={visual.word} data-stage={stage} style={{ color: TONE_COLOR[visual.tone] }}>
+        <Icon name={visual.glyph} size={11} />
+      </span>
+      <CheckStateMarker check={check} stage={stage} size="xs" glyphOnly />
+    </>
+  )
 }
 
 interface OutlineGroup {
@@ -60,7 +80,9 @@ function outlineOf(doc: SpecDocumentView, findings: CheckFinding[], builds: Buil
         anchor: anchors.task(t.key),
         label: t.title,
         tone: `var(--sp-status-${t.status ?? 'pending'})`,
-        toneLabel: TASK_STATUS_LABEL[t.status ?? 'pending'],
+        toneLabel: t.stage ? stageVisual(t.stage).word : TASK_STATUS_LABEL[t.status ?? 'pending'],
+        stage: t.stage ?? null,
+        check: t.check ?? null,
         marker: marker('task', t.key),
       })),
     },
@@ -114,7 +136,7 @@ export function SpecOutlineRail({
                   onClick={() => onJump(item.anchor)}
                   title={item.toneLabel ? `${item.label}: ${item.toneLabel}` : item.label}
                 >
-                  {item.tone ? <span className="aw-sp-outline-dot" style={{ background: item.tone }} /> : null}
+                  {item.stage ? <OutlineStage stage={item.stage} check={item.check} /> : item.tone ? <span className="aw-sp-outline-dot" style={{ background: item.tone }} /> : null}
                   <span className="aw-sp-outline-label">{item.label}</span>
                   {item.detail && g.title === 'Requirements' ? <span className="aw-sp-outline-detail">{item.detail}</span> : null}
                   {item.marker ? <span className="aw-sp-outline-marker" data-severity={item.marker} aria-label={item.marker === 'blocking' ? 'Blocks approval' : 'Warning'} /> : null}
@@ -163,7 +185,7 @@ export function SpecOutlineMenu({
               <DropdownMenu.Label className="aw-menu-label">{g.title}</DropdownMenu.Label>
               {g.items.map((item) => (
                 <DropdownMenu.Item key={item.anchor} className="aw-menu-item" data-current={item.anchor === active ? 'true' : undefined} onSelect={() => onJump(item.anchor)}>
-                  <span className="aw-menu-item-icon">{item.tone ? <span className="aw-sp-outline-dot" style={{ background: item.tone }} /> : null}</span>
+                  <span className="aw-menu-item-icon">{item.stage ? <OutlineStage stage={item.stage} check={item.check} /> : item.tone ? <span className="aw-sp-outline-dot" style={{ background: item.tone }} /> : null}</span>
                   <span className="min-w-0 flex-1 truncate">
                     {item.label}
                     {item.detail && g.title === 'Requirements' ? <span className="aw-sp-outline-detail"> {item.detail}</span> : null}

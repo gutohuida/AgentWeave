@@ -62,7 +62,7 @@ async def _get_loop_detail(session: AsyncSession, project_id: str, loop_id: str)
     if loop is None or loop.project_id != project_id:
         raise HTTPException(status_code=404, detail="Loop not found")
 
-    summaries = await _batch_loop_summaries(session, [loop.job_id])
+    summaries = await _batch_loop_summaries(session, [loop.job_id], with_stages=True)
     summary = summaries.get(loop.job_id)
     # A batch built for exactly this loop's own job always contains it — `loop` was just loaded
     # from the same table the batch queries.
@@ -129,13 +129,15 @@ async def _get_loop_detail(session: AsyncSession, project_id: str, loop_id: str)
 @router.get("", response_model=List[LoopSummary])
 async def list_loops(
     include_archived: bool = Query(False),
+    stages: bool = Query(False),
     project: Tuple[str, str] = Depends(get_project),
     session: AsyncSession = Depends(get_session),
 ) -> List[LoopSummary]:
     """Project-scoped list of loops (B4.3/B5.1) — label, purpose, ending state, queue counts,
     open questions, no conversation id required (D20). Archived loops are excluded by default
     (B5.4), mirroring `list_jobs`'s own `include_archived`; nothing is deleted (D16), so a caller
-    that wants them can always ask."""
+    that wants them can always ask. `stages` adds each current task's stage and check state, for the
+    Running panel; the board reads without them, within its statement budget."""
     project_id, _ = project
     q = select(Loop).where(Loop.project_id == project_id)
     if not include_archived:
@@ -145,7 +147,9 @@ async def list_loops(
     loops = result.scalars().all()
     if not loops:
         return []
-    summaries = await _batch_loop_summaries(session, [loop.job_id for loop in loops])
+    summaries = await _batch_loop_summaries(
+        session, [loop.job_id for loop in loops], with_stages=stages
+    )
     # Every row here came from `Loop` itself, so `_batch_loop_summaries` — keyed by job_id, one
     # entry per job that actually has a loop — is guaranteed to hold each one.
     return [summaries[loop.job_id] for loop in loops]

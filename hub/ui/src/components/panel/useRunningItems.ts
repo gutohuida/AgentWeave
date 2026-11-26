@@ -24,7 +24,7 @@ export function useRunningItems(): {
 } {
   const { data: builds = [], isLoading: buildsLoading, error: buildsError } = useProjectBuilds()
   // Archived loops and jobs included: they are what Finished lists for plain work.
-  const { data: loops = [], isLoading: loopsLoading, error: loopsError } = useLoops(true)
+  const { data: loops = [], isLoading: loopsLoading, error: loopsError } = useLoops(true, { stages: true })
   const { data: jobs = [], isLoading: jobsLoading, error: jobsError } = useJobs()
   const { data: archivedJobs = [], error: archivedError } = useArchivedJobs()
   const [now, setNow] = React.useState(() => new Date())

@@ -672,3 +672,25 @@ describe('builder and reviewer, separately labelled (where-each-task-stands, FR-
     expect(screen.queryByTestId('task-reviewing-task-1')).toBeNull()
   })
 })
+
+describe('the drawer words the stage as every other surface does (FR-11)', () => {
+  // `GET /tasks/{id}` as the Hub returned it with one task in Landing checks and one in Pre-review
+  // checks (`hub/tests/test_every_route_carries_the_stage.py`); its prerequisites and dependents
+  // carry their own stages from the same derivation.
+  it.each(['task-a7a400000001', 'task-a7a400000002', 'task-a7a400000003'])('from the recorded read of %s', async (id) => {
+    const { routes } = (await import('./fixtures/everyRouteStages.json')).default as unknown as { routes: Record<string, Task> }
+    const { stageVisual } = await import('@/lib/taskStageVisual')
+    const { checkMarker } = await import('@/lib/checkState')
+    const task = routes[`/tasks/${id}`]!
+    renderDrawer(task, vi.fn())
+    const stage = screen.getByTestId(`task-stage-${id}`)
+    expect(stage.querySelector('.aw-stage-word-text')?.textContent).toBe(stageVisual(task.stage).word)
+    const sentence = checkMarker(task.check_state, task.stage)?.title ?? null
+    expect(Array.from(stage.querySelectorAll('.aw-check-marker')).map((n) => n.getAttribute('aria-label'))).toEqual(sentence ? [sentence] : [])
+    for (const ref of [...(task.prerequisites ?? []), ...(task.dependents ?? [])]) {
+      const row = screen.getByText(ref.title).closest('li')!
+      expect(row.querySelector('.aw-stage-word-text')?.textContent).toBe(stageVisual(ref.stage).word)
+    }
+    expect(screen.getByRole('dialog').textContent).not.toMatch(/\bChecking\b/)
+  })
+})

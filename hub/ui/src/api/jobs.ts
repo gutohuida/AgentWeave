@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { getJson, postJson, patchJson } from './client'
 import { useConfigStore } from '@/store/configStore'
+import type { CheckState } from '@/lib/checkState'
 
 export interface JobRun {
   id: string
@@ -87,6 +88,9 @@ export interface LoopSummary {
     id: string
     title: string
     status: string
+    /** The task's stage and check state, as the task list derives them (FR-11). */
+    stage?: string | null
+    check_state?: CheckState | null
     agent?: string
     agent_capacity?: 'working' | 'held' | 'next' | 'assigned'
   }[]

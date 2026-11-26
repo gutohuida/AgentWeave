@@ -105,6 +105,34 @@ export function countTasks(tasks: Task[]): Record<TaskStatus, number> {
   return counts
 }
 
+/** One planned task as the page shows it, with the ledger row laid out from it where there is one:
+ *  its status, and the Hub's stage and check state as the task list derives them (FR-11). */
+export function specTaskOf(
+  t: NonNullable<SpecPayload['tasks']>[number],
+  row: Task | undefined,
+  identifierOf: (key: string) => string,
+): SpecTaskView {
+  return {
+    key: t.key,
+    title: t.title || t.key,
+    description: t.description ?? '',
+    dependsOn: t.depends_on ?? [],
+    requirementIds: (t.requirements ?? []).map(identifierOf),
+    taskId: row?.id ?? null,
+    status: row ? taskStatusOf(row.status) : null,
+    stage: row?.stage ?? null,
+    check: row?.check_state ?? null,
+    agent: row?.assignee ?? null,
+  }
+}
+
+/** Tasks counted by the Hub's stage; empty where none carries one. */
+export function countStages(tasks: Task[]): Record<string, number> {
+  const counts: Record<string, number> = {}
+  for (const task of tasks) if (task.stage) counts[task.stage] = (counts[task.stage] ?? 0) + 1
+  return counts
+}
+
 // ── The document ────────────────────────────────────────────────────────
 
 export function stateOf(phase: SpecDocumentRecord['phase'], building: boolean, checkedClean: boolean): DocState {
@@ -196,19 +224,7 @@ export function documentView(input: DocumentInputs): SpecDocumentView {
         taskKeys: planned.filter((t) => (t.requirements ?? []).includes(r.key)).map((t) => t.key),
       }
     }),
-    tasks: planned.map((t): SpecTaskView => {
-      const row = byTaskKey.get(t.key)
-      return {
-        key: t.key,
-        title: t.title || t.key,
-        description: t.description ?? '',
-        dependsOn: t.depends_on ?? [],
-        requirementIds: (t.requirements ?? []).map(identifierOf),
-        taskId: row?.id ?? null,
-        status: row ? taskStatusOf(row.status) : null,
-        agent: row?.assignee ?? null,
-      }
-    }),
+    tasks: planned.map((t) => specTaskOf(t, byTaskKey.get(t.key), identifierOf)),
     foldReady: input.foldReady === true,
     slices: (payload.slices ?? []).map((slice) => {
       const at = input.sliceDocuments?.[slice.key]
@@ -334,6 +350,7 @@ export function buildViews(builds: SpecBuild[], tasks: Task[], figures: Record<s
       fixHeldReason: build.fix_held_reason ?? null,
       budget: build.budget_cap_usd,
       tasks: countTasks(tasks.filter((t) => t.build_id === build.id)),
+      stages: countStages(tasks.filter((t) => t.build_id === build.id)),
       time: { ...mine.time },
       cost: mine.cost,
       runs: mine.runs,
