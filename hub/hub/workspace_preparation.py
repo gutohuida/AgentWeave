@@ -7,11 +7,17 @@ on an empty composer and a flow's task read "Not started" while git wrote six th
 Held in memory and never stored: a preparation lives inside one call of `trigger_agent_directly`,
 and a restart ends every one of them. The route reads the live set, so a reload shows what is still
 being prepared; the two events tell an open view when one starts and ends.
+
+A checkout written is not yet a turn started: the run's row is written some way further into the
+trigger, and until it is a task with neither reads "Not started", between "Preparing checkout" and
+"Building" (TSBVD-10). So inside `holding_until_started` -- the trigger's whole call -- a preparation
+that succeeds stays live until that call ends, when the run exists or the trigger was refused.
 """
 
 from __future__ import annotations
 
 import contextlib
+import contextvars
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import AsyncIterator, Dict, List, Optional
@@ -40,6 +46,10 @@ class Preparation:
 
 _live: Dict[str, Preparation] = {}
 _counter = 0
+#: The preparations the trigger call in progress holds until it ends (`holding_until_started`).
+_held: contextvars.ContextVar[Optional[List[Preparation]]] = contextvars.ContextVar(
+    "workspace_preparation_held", default=None
+)
 
 
 def current(project_id: str) -> List[Preparation]:
@@ -80,8 +90,29 @@ async def preparing(
         yield preparation
         ok = True
     finally:
-        _live.pop(preparation.id, None)
-        await _announce("workspace_prepared", preparation, ok=ok)
+        held = _held.get()
+        if ok and held is not None:
+            held.append(preparation)
+        else:
+            await _end(preparation, ok=ok)
+
+
+@contextlib.asynccontextmanager
+async def holding_until_started() -> AsyncIterator[None]:
+    """Keep each preparation that succeeds inside this block live until the block ends."""
+    held: List[Preparation] = []
+    token = _held.set(held)
+    try:
+        yield
+    finally:
+        _held.reset(token)
+        for preparation in held:
+            await _end(preparation, ok=True)
+
+
+async def _end(preparation: Preparation, *, ok: bool) -> None:
+    _live.pop(preparation.id, None)
+    await _announce("workspace_prepared", preparation, ok=ok)
 
 
 async def _announce(event: str, preparation: Preparation, **extra) -> None:

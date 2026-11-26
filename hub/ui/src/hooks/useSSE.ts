@@ -79,6 +79,10 @@ const SSE_EVENT_TYPES = [
   'task_checks_started',
   'task_landing_changed',
   'main_behind_github',
+  // A turn's checkout being written, and done (`workspace_preparation`): a task's stage moves
+  // into and out of "Preparing checkout".
+  'workspace_preparing',
+  'workspace_prepared',
   'run_started',
   'run_completed',
   'run_failed',
@@ -771,7 +775,9 @@ function applyInvalidation(queryClient: QueryClient, event: SSEEvent): void {
           // stage moves between "Preparing checkout" and its next one.
           inv({ queryKey: ['project', pid, 'preparing'] })
           if ((event.data as { task_id?: string | null })?.task_id) {
+            // The board, the map and the build view each read the stage from their own route.
             inv({ queryKey: ['project', pid, 'tasks'] })
+            inv({ queryKey: ['project', pid, 'builds', 'read'] })
           }
           break
         case 'queue_entry_queued':
