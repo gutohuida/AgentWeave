@@ -197,3 +197,32 @@ async def test_a_passed_batch_reads_landing_and_its_frame_moves_every_task_of_th
         ), reads
     assert {row["id"] for row in frame["tasks"]} == set(ids), "a batch's frame names all its tasks"
     assert {row["stage"] for row in frame["tasks"]} == {"landing"}
+
+
+async def test_a_checkout_being_prepared_pushes_preparing_checkout_and_its_end(app, auth_headers):
+    """Drive run 200412 (TSBVD-5): for ~1.5 s the build view showed Not started while the board and
+    map showed Preparing checkout. The stage lives in memory, not in a commit, so the
+    `workspace_preparing` event itself must push it -- and `workspace_prepared` the stage after."""
+    from hub import workspace_preparation
+    from hub.db.engine import async_session_factory
+    from hub.db.models import Task
+
+    async with async_session_factory() as db:
+        db.add(Task(id="task-push-prep", project_id="proj-test", title="p", status="assigned"))
+        await db.commit()
+    queue = sse_manager.subscribe("proj-test")
+    try:
+        async with workspace_preparation.preparing(
+            "proj-test", agent="D", task_id="task-push-prep", conversation_id="conv-push-prep"
+        ):
+            during = _of(await _frames(queue), "task-push-prep")
+            listed = await app.get(
+                "/api/v1/projects/proj-test/tasks/task-push-prep", headers=auth_headers
+            )
+        after = _of(await _frames(queue), "task-push-prep")
+    finally:
+        sse_manager.unsubscribe("proj-test", queue)
+
+    assert during, "the preparation's start pushes the task's stage"
+    assert during[-1]["stage"] == listed.json()["stage"] == "preparing_checkout"
+    assert after and after[-1]["stage"] == "not_started", "its end pushes the stage after it"
