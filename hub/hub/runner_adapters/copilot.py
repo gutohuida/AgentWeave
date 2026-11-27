@@ -38,7 +38,7 @@ from .base import (
     RunnerAdapter,
     StreamTransport,
 )
-from .one_shot import WorkerUsage
+from .one_shot import WorkerUsage, with_system
 
 #: A Copilot one-shot call, offered **no tool** (`a-copilot-agent-runs-over-acp` D14). Tools
 #: are removed by `--excluded-tools`, which always wins; `--available-tools=` is never used, because
@@ -303,7 +303,11 @@ class CopilotAdapter(RunnerAdapter):
         model: Optional[str],
         prompt: str,
         output_schema_path: Optional[str] = None,
+        system: Optional[str] = None,
+        schema: Optional[Dict[str, Any]] = None,
     ) -> List[str]:
+        # No system-prompt channel in a one-shot: the instructions go before the data.
+        prompt = with_system(system, prompt)
         # The titler keeps the project's custom instructions: it runs in the project's directory
         # so that its memory applies (slice 2 D14). The worker wants none.
         return copilot_one_shot_command(

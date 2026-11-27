@@ -33,6 +33,27 @@ def stdin_of(cmd: Any) -> Optional[str]:
     return getattr(cmd, "stdin", None)
 
 
+def with_system(system: Optional[str], prompt: str) -> str:
+    """*system* before *prompt*, for a CLI with no channel that keeps a worker's instructions
+    apart from its data. The data stays last, where a reader expects what it is to work on."""
+    return f"{system}\n\n{prompt}" if system else prompt
+
+
+@dataclass(frozen=True)
+class OneShotFailure:
+    """Why a one-shot failed, in the CLI's own words, and whether its prompt was too large.
+
+    *prompt_tokens* and *limit_tokens* are the provider's own count of the refused request and
+    the window it was refused against, when the CLI reported them: a caller dividing its input
+    sizes the next call by that measurement instead of guessing characters per token again.
+    """
+
+    reason: str
+    too_large: bool = False
+    prompt_tokens: Optional[int] = None
+    limit_tokens: Optional[int] = None
+
+
 @dataclass(frozen=True)
 class WorkerUsage:
     """What one invocation consumed, normalised across providers. All fields optional.

@@ -10,7 +10,9 @@ until task 3.5 re-points them at the adapter and deletes them (same precedent as
 
 from __future__ import annotations
 
+import json
 import os
+import re
 from typing import Any, Dict, List, Literal, Mapping, Optional, Sequence, Tuple
 
 from .. import claude_signin, runner_commands
@@ -26,12 +28,22 @@ from .base import (
     StreamTransport,
     probe_binary,
 )
-from .one_shot import OneShotCommand, WorkerUsage, _int_or_none, extract_json_object
+from .one_shot import (
+    OneShotCommand,
+    OneShotFailure,
+    WorkerUsage,
+    _int_or_none,
+    extract_json_object,
+    with_system,
+)
 
 
 def parse_claude_envelope(stdout: str) -> Tuple[Optional[str], WorkerUsage, Optional[str]]:
     """(answer text, usage, error) from `claude --output-format json` (copied from `worker.py`,
-    design D8: `worker.py:142-146`'s builder and `:297-327`'s parser)."""
+    design D8: `worker.py:142-146`'s builder and `:297-327`'s parser).
+
+    A call given `--json-schema` answers in `structured_output`, already validated against it by
+    the CLI; that object is the answer, re-serialised, and `result` is only read without one."""
     envelope = extract_json_object(stdout)
     if envelope is None:
         return None, WorkerUsage(), "claude produced no JSON envelope"
@@ -49,13 +61,100 @@ def parse_claude_envelope(stdout: str) -> Tuple[Optional[str], WorkerUsage, Opti
         )
 
     if envelope.get("is_error"):
-        subtype = envelope.get("subtype") or envelope.get("api_error_status")
-        return None, usage, f"claude reported an error: {subtype}"
+        return None, usage, f"claude reported an error: {_error_of(envelope)}"
+
+    structured = envelope.get("structured_output")
+    if isinstance(structured, dict):
+        return json.dumps(structured, ensure_ascii=False), usage, None
 
     result = envelope.get("result")
     if not isinstance(result, str) or not result.strip():
         return None, usage, "claude envelope carried no result text"
     return result, usage, None
+
+
+#: Claude's refusal of an oversized request: "Prompt is too long · the request is ~1006909 tokens
+#: (limit 1000000) but ..." (claude 2.1.301, captured 2026-11-27).
+_TOO_LONG = re.compile(r"~?([\d,]+) tokens \(limit ([\d,]+)\)")
+
+
+def _error_of(envelope: Dict[str, Any]) -> str:
+    """An error envelope's reason as the CLI wrote it: its `result` text, which names the cause
+    ("Prompt is too long ..."), or its terminal reason and status when it carried none."""
+    result = envelope.get("result")
+    if isinstance(result, str) and result.strip():
+        return result.strip()
+    reason = envelope.get("terminal_reason") or envelope.get("subtype")
+    status = envelope.get("api_error_status")
+    return f"{reason} (status {status})" if status else str(reason)
+
+
+def claude_one_shot_failure(stdout: str) -> Optional[OneShotFailure]:
+    """The failure an error envelope on stdout describes, or None when there is no such envelope."""
+    envelope = extract_json_object(stdout)
+    if envelope is None or not envelope.get("is_error"):
+        return None
+    reason = _error_of(envelope)
+    too_large = envelope.get("terminal_reason") == "prompt_too_long" or reason.startswith(
+        "Prompt is too long"
+    )
+    counts = _TOO_LONG.search(reason) if too_large else None
+    return OneShotFailure(
+        reason=reason,
+        too_large=too_large,
+        prompt_tokens=int(counts.group(1).replace(",", "")) if counts else None,
+        limit_tokens=int(counts.group(2).replace(",", "")) if counts else None,
+    )
+
+
+#: The system prompt of a worker call that brings none of its own. It replaces Claude Code's own,
+#: which describes a coding assistant in a repository: a worker is neither, and that prompt was
+#: most of a small call's input (3,584 tokens against 1,097 for the same call, 2026-11-27).
+WORKER_SYSTEM_PROMPT = (
+    "You do one task for AgentWeave, a local app that runs AI agents building software: the one "
+    "the message describes. Answer exactly as it asks."
+)
+#: A system prompt longer than this goes on stdin before the data instead: an argument is capped
+#: by the command line (F682), and the schema shares it.
+_SYSTEM_ARG_LIMIT = 16_000
+#: What a reader may use: read-only, and contained to its working directory by
+#: `--permission-mode default` (measured for Read 2026-10-12, Grep 2026-11-27).
+READER_TOOLS = "Read,Grep,Glob"
+
+
+def _worker_argv(
+    binary: str,
+    tools: str,
+    *,
+    model: Optional[str],
+    prompt: str,
+    system: Optional[str],
+    schema: Optional[Dict[str, Any]],
+    reading: bool,
+) -> OneShotCommand:
+    """A worker's argv: its own system prompt instead of Claude Code's, none of the operator's
+    settings, memory or `CLAUDE.md` (`--setting-sources ""`), no session file left behind, and the
+    answer validated against *schema* by the CLI itself (`--json-schema`).
+
+    A reader adds an explicit `--permission-mode default`: in -p mode a Read outside the working
+    directory is then denied, even when the operator's own settings default to bypassing
+    permissions (measured 2026-10-12, claude 2.1.291)."""
+    instructions = system or WORKER_SYSTEM_PROMPT
+    data = prompt
+    if len(instructions) > _SYSTEM_ARG_LIMIT:
+        instructions, data = WORKER_SYSTEM_PROMPT, with_system(instructions, prompt)
+    cmd = [binary, "--tools", tools, "--strict-mcp-config"]
+    if reading:
+        cmd += ["--permission-mode", "default"]
+    cmd += ["--setting-sources", "", "--no-session-persistence", "--disable-slash-commands"]
+    cmd += ["--system-prompt", instructions]
+    if schema is not None:
+        cmd += ["--json-schema", json.dumps(schema, separators=(",", ":"))]
+    cmd += ["--output-format", "json"]
+    if model:
+        cmd += ["--model", model]
+    # On stdin, not after `-p`: an argument is capped by the command line (F682).
+    return OneShotCommand(cmd + ["-p"], stdin=neutralise_file_mentions(data))
 
 
 class ClaudeStreamTransport(StreamTransport):
@@ -189,35 +288,50 @@ class ClaudeAdapter(RunnerAdapter):
         model: Optional[str],
         prompt: str,
         output_schema_path: Optional[str] = None,
+        system: Optional[str] = None,
+        schema: Optional[Dict[str, Any]] = None,
     ) -> List[str]:
         if purpose == "worker":
-            cmd = [self.binary, "--tools", "", "--strict-mcp-config", "--output-format", "json"]
-        else:
-            # JSON too, so the title call's usage is read and counted (F240).
-            cmd = [self.binary, "--tools", "", "--strict-mcp-config", "--output-format", "json"]
+            return _worker_argv(
+                self.binary,
+                "",
+                model=model,
+                prompt=prompt,
+                system=system,
+                schema=schema,
+                reading=False,
+            )
+        # The titler runs in the project's directory so that its `CLAUDE.md` applies
+        # (`conversation_titles.build_title_command`), so it keeps Claude Code's own setup.
+        # JSON too, so the title call's usage is read and counted (F240).
+        cmd = [self.binary, "--tools", "", "--strict-mcp-config", "--output-format", "json"]
         if model:
             cmd += ["--model", model]
         # On stdin, not after `-p`: an argument is capped by the command line (F682).
-        return OneShotCommand(cmd + ["-p"], stdin=neutralise_file_mentions(prompt))
+        stdin = neutralise_file_mentions(with_system(system, prompt))
+        return OneShotCommand(cmd + ["-p"], stdin=stdin)
 
-    def read_one_shot(self, *, model: Optional[str], prompt: str) -> Optional[List[str]]:
-        """The Read tool alone, no MCP server, and an explicit `--permission-mode default`: in -p
-        mode a Read outside the working directory is then denied, even when the operator's own
-        settings default to bypassing permissions (measured 2026-10-12, claude 2.1.291)."""
-        cmd = [
+    def read_one_shot(
+        self,
+        *,
+        model: Optional[str],
+        prompt: str,
+        system: Optional[str] = None,
+        schema: Optional[Dict[str, Any]] = None,
+    ) -> Optional[List[str]]:
+        """The read-only file tools, no MCP server, contained to the working directory."""
+        return _worker_argv(
             self.binary,
-            "--tools",
-            "Read",
-            "--strict-mcp-config",
-            "--permission-mode",
-            "default",
-            "--output-format",
-            "json",
-        ]
-        if model:
-            cmd += ["--model", model]
-        # On stdin, not after `-p`: an argument is capped by the command line (F682).
-        return OneShotCommand(cmd + ["-p"], stdin=neutralise_file_mentions(prompt))
+            READER_TOOLS,
+            model=model,
+            prompt=prompt,
+            system=system,
+            schema=schema,
+            reading=True,
+        )
+
+    def one_shot_failure(self, stdout: str) -> Optional[OneShotFailure]:
+        return claude_one_shot_failure(stdout)
 
     def parse_one_shot(self, stdout: str) -> Tuple[Optional[str], WorkerUsage, Optional[str]]:
         return parse_claude_envelope(stdout)

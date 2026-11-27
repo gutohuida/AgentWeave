@@ -41,7 +41,7 @@ from typing import (
 from .. import binaries
 from ..codex_appserver import TurnOutcome
 from ..runner_parsing import AccountingSample, ParsedLine
-from .one_shot import WorkerUsage
+from .one_shot import OneShotFailure, WorkerUsage
 
 
 class LaunchVerdict(TypedDict):
@@ -364,15 +364,35 @@ class RunnerAdapter(ABC):
         model: Optional[str],
         prompt: str,
         output_schema_path: Optional[str] = None,
+        system: Optional[str] = None,
+        schema: Optional[Dict[str, Any]] = None,
     ) -> List[str]:
         """A no-tools, one-prompt invocation's argv. Receives `prompt` **raw** and neutralises it
         itself with `file_mentions.neutralise_file_mentions`, as today's builders do. Raises only
-        `FileNotFoundError`, when the executable cannot be resolved — only Copilot's does."""
+        `FileNotFoundError`, when the executable cannot be resolved — only Copilot's does.
 
-    def read_one_shot(self, *, model: Optional[str], prompt: str) -> Optional[List[str]]:
+        *system* is the worker's instructions, kept apart from *prompt*, its data; a CLI with no
+        system-prompt channel puts them before the data (`with_system`). *schema* is the answer's
+        JSON Schema, for a CLI that takes one inline; one that reads it from a file is given
+        *output_schema_path* instead (`one_shot_takes_schema`)."""
+
+    def read_one_shot(
+        self,
+        *,
+        model: Optional[str],
+        prompt: str,
+        system: Optional[str] = None,
+        schema: Optional[Dict[str, Any]] = None,
+    ) -> Optional[List[str]]:
         """A worker one-shot that may read files in its working directory and nothing else, or
         None when this CLI cannot (`one_shot_reads_files`). It must carry no flag that skips or
         widens permissions (reader-contained)."""
+        return None
+
+    def one_shot_failure(self, stdout: str) -> Optional["OneShotFailure"]:
+        """Why a one-shot that exited non-zero failed, read from what it printed on stdout, or
+        None when it printed nothing this adapter understands. Claude writes the reason into its
+        JSON envelope and nothing to stderr, so stderr alone said "no stderr"."""
         return None
 
     def one_shot_env(

@@ -48,7 +48,7 @@ from .base import (
     StreamTransport,
     probe_binary,
 )
-from .one_shot import WorkerUsage, _int_or_none
+from .one_shot import WorkerUsage, _int_or_none, with_system
 
 
 def parse_codex_envelope(stdout: str) -> Tuple[Optional[str], WorkerUsage, Optional[str]]:
@@ -299,7 +299,11 @@ class CodexAdapter(RunnerAdapter):
         model: Optional[str],
         prompt: str,
         output_schema_path: Optional[str] = None,
+        system: Optional[str] = None,
+        schema: Optional[Dict[str, Any]] = None,
     ) -> List[str]:
+        # No system-prompt channel in a one-shot: the instructions go before the data.
+        prompt = with_system(system, prompt)
         if purpose == "worker":
             cmd = [self.binary, "exec", "--skip-git-repo-check", "--json"]
             cmd += ["--ephemeral", "--sandbox", "read-only"]

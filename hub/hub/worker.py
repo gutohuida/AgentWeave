@@ -60,10 +60,12 @@ from .runner_adapters.copilot import (  # noqa: F401
 )
 from .runner_adapters.one_shot import (  # noqa: F401
     OneShotCommand,
+    OneShotFailure,
     WorkerUsage,
     _int_or_none,
     extract_json_object,
     stdin_of,
+    with_system,
 )
 from .runner_provider import (
     DAMAGED_PROVIDER_REASON,
@@ -118,6 +120,9 @@ class WorkerResult:
     duration_ms: Optional[int] = None
     error: Optional[str] = None
     invocation_id: Optional[str] = None
+    #: The CLI's own account of a failed call, when it gave one: a caller dividing its input reads
+    #: `failure.too_large` and the measured `prompt_tokens` from here. Not stored; `error` is.
+    failure: Optional[OneShotFailure] = None
 
     @property
     def ok(self) -> bool:
@@ -153,6 +158,8 @@ def build_worker_command(
     prompt: str,
     output_schema_path: Optional[str] = None,
     reading: bool = False,
+    system: Optional[str] = None,
+    schema: Optional[Dict[str, Any]] = None,
 ) -> Optional[List[str]]:
     """The one-shot invocation in JSON mode, or None when this CLI has no supported one.
 
@@ -161,14 +168,21 @@ def build_worker_command(
     and because it puts the answer at a fixed address instead of at the end of a stream of prose.
 
     Every runner goes through its adapter's `one_shot` (design D8). *reading* asks for the
-    adapter's `read_one_shot` instead: None for a CLI that cannot read files.
+    adapter's `read_one_shot` instead: None for a CLI that cannot read files. *system* is the
+    worker's instructions and *prompt* its data; *schema* is the answer's, for a CLI that takes
+    one inline.
     """
     adapter = get_adapter(cli)
     if adapter is not None and reading:
-        return adapter.read_one_shot(model=model, prompt=prompt)
+        return adapter.read_one_shot(model=model, prompt=prompt, system=system, schema=schema)
     if adapter is not None:
         return adapter.one_shot(
-            "worker", model=model, prompt=prompt, output_schema_path=output_schema_path
+            "worker",
+            model=model,
+            prompt=prompt,
+            output_schema_path=output_schema_path,
+            system=system,
+            schema=schema,
         )
     return None
 
@@ -418,6 +432,7 @@ async def run_worker(
     cwd: Optional[str] = None,
     reading: bool = False,
     initiator: Initiator,
+    system: Optional[str] = None,
 ) -> WorkerResult:
     """Run one worker invocation and record it. Returns an outcome; never raises.
 
@@ -427,7 +442,12 @@ async def run_worker(
     place regardless of how early it failed.
 
     *reading* spawns the adapter's `read_one_shot`, which may Read files in *cwd* and nothing
-    else; the caller puts the one file to read there (`distillation.transcribe`).
+    else; the caller puts the files to read there (`distillation.transcribe`).
+
+    *system* is the worker's instructions, kept apart from *prompt*, its data: a CLI with a
+    system-prompt channel gets them there in place of its own coding-agent prompt, and one without
+    reads them before the data. The answer's schema goes with the call, inline or as a file,
+    whichever the CLI takes, so a CLI that validates it answers in its shape.
 
     *initiator* has no default, so that no caller inherits a choice it did not make: an
     `"autonomous"` call is not spawned while the project's token budget is spent (F240).
@@ -480,6 +500,8 @@ async def run_worker(
                 prompt=prompt,
                 output_schema_path=schema_path,
                 reading=reading,
+                system=system,
+                schema=strict_output_schema(output_model),
             )
             env = one_shot_env(cli, config)
         except FileNotFoundError as exc:
@@ -509,7 +531,7 @@ async def run_worker(
         model=model,
         conversation_id=conversation_id,
         result=result,
-        prompt=prompt,
+        prompt=with_system(system, prompt),
     )
     if not result.ok:
         logger.info("worker %s finished %s: %s", kind, result.outcome, result.error)
@@ -522,6 +544,7 @@ async def run_worker(
         duration_ms=result.duration_ms,
         error=result.error,
         invocation_id=invocation_id,
+        failure=result.failure,
     )
 
 
@@ -545,12 +568,20 @@ def _interpret(
     spawn: _Spawn, cli: str, output_model: Type[BaseModel], duration_ms: int
 ) -> WorkerResult:
     """Turn a finished process into an outcome: envelope, then answer, then schema."""
+    adapter = get_adapter(cli)
+    failure = adapter.one_shot_failure(spawn.stdout) if adapter is not None else None
     if spawn.outcome != "ok":
+        # A CLI that exits non-zero may say why on stdout and nothing on stderr (Claude does), so
+        # the reason is its own words rather than "no stderr".
+        error = spawn.error
+        if failure is not None:
+            error = f"exited {spawn.exit_code}: {failure.reason}"
         return WorkerResult(
             spawn.outcome,
             exit_code=spawn.exit_code,
             duration_ms=duration_ms,
-            error=spawn.error,
+            error=error,
+            failure=failure,
         )
 
     # The CLI succeeded, so usage is worth keeping even when the answer turns out unusable —
@@ -563,6 +594,7 @@ def _interpret(
             exit_code=spawn.exit_code,
             duration_ms=duration_ms,
             error=envelope_error,
+            failure=failure,
         )
 
     payload = extract_json_object(answer or "")

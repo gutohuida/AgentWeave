@@ -21,6 +21,7 @@ from sqlalchemy import select
 
 from hub.db.engine import async_session_factory
 from hub.db.models import WORKER_OUTCOMES, WorkerInvocation
+from hub.runner_adapters.claude import WORKER_SYSTEM_PROMPT
 from hub.worker import (
     OUTCOMES,
     _run_worker_process,
@@ -73,11 +74,19 @@ def test_the_claude_command_asks_for_json_and_is_not_an_agent_turn():
     # The whole argv, pinned (F420): `--tools ""` is what leaves a worker reading untrusted
     # transcript text with nothing to act with, and a regression that drops it must fail here.
     # `--strict-mcp-config` removes the account's connector tools, which `--tools ""` leaves (F447).
+    # `--setting-sources ""` and `--system-prompt` keep the operator's settings, memory and
+    # `CLAUDE.md`, and Claude Code's coding-agent prompt, out of a worker call (2026-11-27).
     assert cmd == [
         "claude",
         "--tools",
         "",
         "--strict-mcp-config",
+        "--setting-sources",
+        "",
+        "--no-session-persistence",
+        "--disable-slash-commands",
+        "--system-prompt",
+        WORKER_SYSTEM_PROMPT,
         "--output-format",
         "json",
         "--model",
@@ -90,6 +99,12 @@ def test_the_claude_command_asks_for_json_and_is_not_an_agent_turn():
         "--tools",
         "",
         "--strict-mcp-config",
+        "--setting-sources",
+        "",
+        "--no-session-persistence",
+        "--disable-slash-commands",
+        "--system-prompt",
+        WORKER_SYSTEM_PROMPT,
         "--output-format",
         "json",
         "-p",

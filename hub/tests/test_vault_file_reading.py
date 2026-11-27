@@ -18,7 +18,7 @@ from hub import manager, worker
 from hub.db.engine import async_session_factory
 from hub.db.models import EventLog
 from hub.runner_adapters import get_adapter
-from hub.runner_adapters.claude import ClaudeAdapter
+from hub.runner_adapters.claude import READER_TOOLS, ClaudeAdapter
 
 BASE = "/api/v1/projects/proj-test"
 JOB = "vault-distillation"
@@ -48,7 +48,7 @@ def _envelope(answer) -> str:
 
 
 def _reads(cmd) -> bool:
-    return "--tools" in cmd and cmd[cmd.index("--tools") + 1] == "Read"
+    return "--tools" in cmd and cmd[cmd.index("--tools") + 1] == READER_TOOLS
 
 
 class _Process:
@@ -145,7 +145,9 @@ def _facts(tmp_path: Path) -> list:
 @pytest.mark.parametrize("model", [None, HAIKU, "claude-sonnet-4-6"])
 def test_the_reading_command_holds_read_alone_and_no_widening_flag(model) -> None:
     cmd = ClaudeAdapter().read_one_shot(model=model, prompt="Read the file.")
-    assert cmd[cmd.index("--tools") + 1] == "Read"
+    # The read-only file tools and nothing else: Grep and Glob are as contained as Read.
+    assert READER_TOOLS == "Read,Grep,Glob"
+    assert cmd[cmd.index("--tools") + 1] == READER_TOOLS
     assert cmd.count("--tools") == 1
     assert "--strict-mcp-config" in cmd
     assert cmd[cmd.index("--permission-mode") + 1] == "default"

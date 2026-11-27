@@ -64,6 +64,9 @@ class _Recorder:
 @pytest.fixture
 def recorder(monkeypatch):
     monkeypatch.setattr(br, "input_limit", lambda model: LIMIT)
+    # Parts are how a runner that cannot read files is given a large build; one that can reads
+    # it from files instead (`test_a_large_build_is_read_from_files.py`).
+    monkeypatch.setattr(br, "reads_files", lambda cli: False)
 
     def install(**kwargs):
         fake = _Recorder(**kwargs)
@@ -286,6 +289,8 @@ async def test_records_of_no_task_and_send_backs_land_where_they_belong(
 
 
 def test_the_limit_follows_the_chosen_model():
-    assert br.input_limit("claude-haiku-4-5-20251001") == int(200_000 * 3 * 0.8)
-    assert br.input_limit("claude-sonnet-5-5") == int(1_000_000 * 3 * 0.8)
-    assert br.input_limit(None) == br.input_limit("not-a-model") == int(200_000 * 3 * 0.8)
+    # Two characters to a token: a real build's record ran at 2.26 (2026-11-27), and three said a
+    # part of it fit a window it did not.
+    assert br.input_limit("claude-haiku-4-5-20251001") == int(200_000 * 2 * 0.8)
+    assert br.input_limit("claude-sonnet-5-5") == int(1_000_000 * 2 * 0.8)
+    assert br.input_limit(None) == br.input_limit("not-a-model") == int(200_000 * 2 * 0.8)
