@@ -23,10 +23,16 @@ HUB = Path(__file__).resolve().parents[2] / "hub"
 TESTS = HUB / "tests"
 
 
+#: Opt-in suites CI never runs, left out of every shard. `browser/` needs a live Hub and Playwright;
+#: under `pytest tests/` its conftest skipped it, but a file of it named on the command line makes
+#: that conftest an initial one, and its module-level `importorskip` then aborts the whole run.
+OPT_IN_DIRS = ("browser",)
+
+
 def test_files(tests: Path = TESTS) -> List[Path]:
-    """Every file pytest collects under *tests* by its default `python_files`."""
+    """Every file pytest collects under *tests* by its default `python_files`, opt-in suites aside."""
     found = set(tests.rglob("test_*.py")) | set(tests.rglob("*_test.py"))
-    return sorted(found)
+    return sorted(p for p in found if p.relative_to(tests).parts[0] not in OPT_IN_DIRS)
 
 
 def shards(files: List[Path], count: int) -> List[List[Path]]:

@@ -58,3 +58,11 @@ def test_a_shard_outside_the_count_is_refused():
     assert ci_shard.main(["0", "4"]) == 2
     assert ci_shard.main(["5", "4"]) == 2
     assert ci_shard.main(["x", "4"]) == 2
+
+
+def test_no_shard_names_an_opt_in_suite():
+    # A browser file on pytest's command line loads tests/browser/conftest.py as an initial
+    # conftest; without Playwright (as on CI) its importorskip aborts the shard at startup.
+    files = ci_shard.test_files()
+    assert files
+    assert not [p for p in files if "browser" in p.relative_to(ci_shard.TESTS).parts]
