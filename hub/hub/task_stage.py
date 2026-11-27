@@ -215,6 +215,15 @@ async def attach_stages(session: AsyncSession, responses: list, *, project_id: s
             else:
                 stage = _LANDING_STAGE.get(landing.state, APPROVED_WAITING)
                 since = landing.updated_at
+                if stage == CHECKING and checks.get(r.id) == {
+                    "kind": KIND_LANDING,
+                    "state": "passed",
+                }:
+                    # Its batch's checks passed: it is no longer being checked but landing, though
+                    # the landing row moves on a moment later. Read as Landing checks with no
+                    # check showing, every page drew that moment once the stage was pushed (drive
+                    # run 203702, TSBVD-11; FR-2 words the stage "while its landing is checked").
+                    stage = LANDING
                 if stage == ON_MAIN:
                     detail = (landing.landed_sha or "")[:7] or None
                 elif stage == LANDING_HELD:

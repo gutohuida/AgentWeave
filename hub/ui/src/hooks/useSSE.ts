@@ -5,6 +5,7 @@ import type { AgentSummary, ContextUsage } from '@/api/agents'
 import type { AgentConversation, ProjectConversations } from '@/api/agentChat'
 import type { ProjectSummary } from '@/api/projects'
 import { managerRunsKey, type ManagerEndedRun, type ManagerRunningRun } from '@/api/manager'
+import { applyStageFrame, watchStageReads } from '@/api/taskStagePush'
 
 export interface SSEEvent {
   type: string
@@ -78,6 +79,8 @@ const SSE_EVENT_TYPES = [
   // A pre-review run started or got its check slot (`project_checks.announce_started`).
   'task_checks_started',
   'task_landing_changed',
+  // A task's stage, derived by the Hub once and pushed to every open page (`task_stage_push`).
+  'task_stage',
   'main_behind_github',
   // A turn's checkout being written, and done (`workspace_preparation`): a task's stage moves
   // into and out of "Preparing checkout".
@@ -119,7 +122,7 @@ const LIVE_ENDED_KEPT = 20
 
 /** Events that move something the one Overview read (`GET /overview`) shows (design D10): the same
  *  events that refresh its parts, plus the note's own three. */
-const OVERVIEW_EVENT = /^(task_|build_|stall_|question_|permission_|run_|overview_note_)|^(known_failing_changed|checks_flaky|main_moved|main_notice_seen|next_slice_offered|next_slice_answered|accounting_budget_updated|agent_created|agent_archived|agent_unarchived)$/
+const OVERVIEW_EVENT = /^(task_(?!stage$)|build_|stall_|question_|permission_|run_|overview_note_)|^(known_failing_changed|checks_flaky|main_moved|main_notice_seen|next_slice_offered|next_slice_answered|accounting_budget_updated|agent_created|agent_archived|agent_unarchived)$/
 
 const MAX_BUFFERED = 200
 
@@ -697,10 +700,16 @@ function applyInvalidation(queryClient: QueryClient, event: SSEEvent): void {
         case 'agent_heartbeat':
           inv({ queryKey: ['project', pid, 'tasks'] })
           inv(agentListFilter(pid))
-          inv({ queryKey: ['projects'] })
+          refreshProjectsSoon(queryClient)
           break
         case 'main_behind_github':
           inv({ queryKey: ['project', pid, 'mainAgainstGitHub'] })
+          break
+        case 'task_stage':
+          // The stage itself, the same frame on every open page at once: the build view, the board
+          // and the map move together instead of each when its own read answers (TSBVD-11). The
+          // event that moved the stage still refetches those reads; this refetches nothing.
+          applyStageFrame(queryClient, pid, event.data)
           break
         case 'task_checks_started':
         case 'task_checks_finished':
@@ -757,7 +766,9 @@ function applyInvalidation(queryClient: QueryClient, event: SSEEvent): void {
           inv({ queryKey: ['project', pid, 'accounting'] })
           // A run's spend and divergence are ledger lanes.
           refreshWorkSoon(queryClient, pid)
-          inv({ queryKey: ['projects'] })
+          // The rail's running marks follow a few seconds later, after the stage reads this same
+          // event asks for (`refreshProjectsSoon`).
+          refreshProjectsSoon(queryClient)
           // A run belongs to a task's story (its cost, its duration); an open drawer refetches it.
           invalidateTaskStories(queryClient, pid)
           // F250: a turn's checkout is provisioned before `run_started` is sent, and its snapshot
@@ -981,6 +992,32 @@ export function refreshWorkSoon(queryClient: QueryClient, projectId: string | un
   )
 }
 
+/** How long the project collection waits, after a run or heartbeat event, before it is read again. */
+export const PROJECTS_REFRESH_MS = 3000
+const projectTimers = new WeakMap<QueryClient, ReturnType<typeof setTimeout>>()
+
+/** The project collection (`GET /projects`) is read over every registered project, seconds of Hub
+ *  work on a Hub with a couple of hundred, and every run event and agent heartbeat moves a project's
+ *  running marks. Refetched on each such event by every open page, one was in flight almost all the
+ *  time a build ran, and the task lists and build read the same events ask for answered seconds
+ *  apart on the three pages (drive run 174800, `same-stage-everywhere`). So a burst costs one read,
+ *  a few seconds after the stage reads, and none while one is still being answered. */
+export function refreshProjectsSoon(queryClient: QueryClient): void {
+  if (projectTimers.has(queryClient)) return
+  projectTimers.set(
+    queryClient,
+    setTimeout(function fire() {
+      const reading = queryClient.getQueryCache().find({ queryKey: ['projects'], exact: true })
+      if (reading?.state.fetchStatus === 'fetching') {
+        projectTimers.set(queryClient, setTimeout(fire, PROJECTS_REFRESH_MS))
+        return
+      }
+      projectTimers.delete(queryClient)
+      void queryClient.invalidateQueries({ queryKey: ['projects'] })
+    }, PROJECTS_REFRESH_MS),
+  )
+}
+
 const handledKeys = new WeakMap<SSEEvent, Set<string>>()
 
 /** `invalidateCoalesced`, at most once per event per query key: hooks that react to an event
@@ -1015,6 +1052,8 @@ function acquireInvalidator(queryClient: QueryClient): () => void {
   if (!inv) {
     const listener: SSEListener = (event) => applyInvalidation(queryClient, event)
     listeners.add(listener)
+    // From the first read on, so a read sent before a stage frame is known to be older than it.
+    watchStageReads(queryClient)
     const unsubReconnect = onSseReconnect(() => invalidateCoalesced(queryClient))
     inv = { count: 0, listener, unsubReconnect }
     invalidators.set(queryClient, inv)
