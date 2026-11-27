@@ -103,8 +103,17 @@ jobs:
         fail_ci_if_error: false
         token: ${{ secrets.CODECOV_TOKEN }}
 
-  hub-test:
+  hub-test-shard:
+    # Split four ways (`scripts/checks/ci_shard.py`): as one job this was ~15 min, and with "the
+    # PR's CI is the full check" on it is the wait before a PR is ready. Each shard runs whole
+    # files with `-n auto`; `tests/test_ci_shard.py` fails if a file is in no shard or in two, or
+    # if the count below and the script's argument disagree. The `hub-test` job after this one is
+    # what the project's CI check names count -- keep that name.
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
     defaults:
       run:
         working-directory: hub
@@ -161,7 +170,22 @@ jobs:
       # SPREAD_ACROSS_WORKERS are left ungrouped, so their tests go to whichever worker is free.
       # A failure that appears only here is a test-isolation bug: fix the test, do not drop -n.
       run: |
-        pytest tests/ -v -n auto --dist loadgroup --timeout=300 --timeout-method=thread --durations=25
+        python ../scripts/checks/ci_shard.py ${{ matrix.shard }} 4 > "$RUNNER_TEMP/shard.txt"
+        echo "shard ${{ matrix.shard }} of 4: $(wc -l < "$RUNNER_TEMP/shard.txt") files"
+        pytest $(cat "$RUNNER_TEMP/shard.txt") -v -n auto --dist loadgroup --timeout=300 --timeout-method=thread --durations=25
+
+  hub-test:
+    # The one result the shards report under: the name a project's "CI check names" lists (and
+    # the name GitHub would mark required). `always()` so a failed or cancelled shard is reported
+    # here as a failure, not skipped -- a skipped job reads as neither passed nor failed.
+    runs-on: ubuntu-latest
+    needs: hub-test-shard
+    if: always()
+    steps:
+    - name: Every shard passed
+      run: |
+        echo "shards: ${{ needs.hub-test-shard.result }}"
+        test "${{ needs.hub-test-shard.result }}" = "success"
 
   hub-judge-windows:
     # D9: the shell judge's drive-letter branches (`_DRIVE_LETTERS`, the drive-piece rule, the
