@@ -69,7 +69,7 @@ reached elsewhere:
 | Run | Where to open it |
 |---|---|
 | A run that served a task of a build | The build's view: every task, every run on it, its trace and its thread, while the build runs and after it finishes or stops. |
-| A run a flow started | The flow's page on the **Jobs** tab, under **Runs**. See [Jobs, loops and flows](jobs-loops-flows.md#a-flows-runs). |
+| A run a flow started | The flow's page in **Project settings → Jobs**, under **Runs**. See [Jobs, loops and flows](jobs-loops-flows.md#a-flows-runs). |
 | Any run of a profile | The profile's settings, under **Runs**. See [Profiles](agents.md#a-profiles-runs). |
 
 Nothing leaves the record: every run stays reachable through its build, flow, task or profile.

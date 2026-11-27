@@ -14,13 +14,13 @@ from the last:
 | **Flow** | A loop bound to an **approved specification**. Each firing picks the tasks *and* the profiles, and has every finished task reviewed by a different profile. | When the specification's tasks are done. |
 
 <figure class="aw-shot" markdown>
-![The Jobs tab: an active and a paused job, with their schedules in plain English](../assets/screenshots/jobs-light.webp#only-light)
-![The Jobs tab: an active and a paused job, with their schedules in plain English](../assets/screenshots/jobs-dark.webp#only-dark)
+![Project settings → Jobs: an active and a paused job, with their schedules in plain English](../assets/screenshots/jobs-light.webp#only-light)
+![Project settings → Jobs: an active and a paused job, with their schedules in plain English](../assets/screenshots/jobs-dark.webp#only-dark)
 </figure>
 
 ## Jobs
 
-**New job** on the Jobs tab asks for a name, the profile, the message, and a cron schedule (presets
+**New job** in **Project settings → Jobs** asks for a name, the profile, the message, and a cron schedule (presets
 include *Weekdays at 9am* and *Every 6 hours*). **Session mode** chooses between a fresh session
 each run and resuming the last one. Times are UTC.
 
@@ -83,7 +83,7 @@ Reviews can run in **tester** mode, where the reviewer drives the built product 
 
 ### A flow's runs
 
-A flow's page on the **Jobs** tab has a **Runs** section: every run the flow started, newest
+A flow's page in **Project settings → Jobs** has a **Runs** section: every run the flow started, newest
 first, with its profile, its task, when it started and how it ended. Each opens its trace and its
 thread. The list is read from the runs themselves, so it stays after the flow has stopped or been
 archived. A flow started as part of a build has its runs in the build's view as well; a flow an

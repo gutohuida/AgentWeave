@@ -55,12 +55,12 @@ Open it from the **trace** button on a turn, a run in a task story, or **Trace o
 in a conversation's menu.
 
 The Hub's own work, such as API requests and background jobs, is traced too, with content
-redacted. Under **Project settings → General → Traces** you can download traces as OTLP JSON, or
+redacted. Under **Project settings → Traces** you can download traces as OTLP JSON, or
 send them to your own OpenTelemetry collector. Export is off by default.
 
 ## What the project did: the ledger
 
-**Activity → Ledger** is the project's account book, built only from what the Hub recorded:
+**Project settings → Budgets** shows the project's ledger, its account book, built only from what the Hub recorded:
 
 - **Spent**: dollars (an API-equivalent estimate, where the runner reports one) and tokens;
 - **Merged into main**, and anything approved but skipped;
@@ -73,8 +73,10 @@ send them to your own OpenTelemetry collector. Export is off by default.
 ![The ledger: spent, merged into main, divergences and tasks, with spend by day, agent and task](../assets/screenshots/ledger-dark.webp#only-dark)
 </figure>
 
-**Activity → Activity** turns the same record into one readable sentence per event, grouped by
-day. **Activity → Logs** has the raw logs, filterable by severity and category.
+**Project settings → Logs** has the project's raw event stream, which you can filter and pause.
+**Project settings → Traces** holds the project-wide traces view; a request to see a task's or a
+spec's runs' traces opens it showing those runs. In a thread, **Trace of this thread** and **Trace
+of the latest run** open a Trace tab in its side panel.
 
 ## Usage, honestly
 

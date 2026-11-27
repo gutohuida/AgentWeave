@@ -6,6 +6,8 @@ model would answer, so what is checked is what the Hub does with it. The real sp
 acceptance drive's (`scripts/drive/spec_journey_attention_drive.py`, phases 1 and 2).
 """
 
+import asyncio
+
 import pytest
 from sqlalchemy import select
 
@@ -248,6 +250,46 @@ async def test_automatic_fires_on_leaving_the_criteria_steps_and_not_for_a_fix(
     assert all(f["outcome"] == "written" for f in firings)
     assert len(fake.calls) == 2 and {c["initiator"] for c in fake.calls} == {"autonomous"}
     assert await _listed(app, auth_headers, path=fix) == []
+
+
+@pytest.mark.asyncio
+async def test_a_firing_that_completes_while_a_second_looks_for_one_is_not_fired_twice(
+    app, auth_headers, run_headers, tmp_path, worker, monkeypatch  # noqa: F811
+):
+    """Two leaves in quick succession: the second must not fire once the first has completed, even
+    when the first completes between the second's look for a completed firing and its claim (CI,
+    2026-11-24: an empty firing was listed twice)."""
+    fake = worker(pre_mortem.PreMortemAnswer(findings=[]))
+    looked_once = asyncio.Event()
+
+    async def answers_after_the_second_look(**kwargs):
+        await looked_once.wait()
+        return await fake(**kwargs)
+
+    monkeypatch.setattr(pre_mortem, "run_worker", answers_after_the_second_look)
+    await _configure(app, auth_headers, mode="automatic")
+    await _drafted(app, auth_headers, run_headers)
+    document_id = await _document_id()
+    first = asyncio.get_running_loop().create_task(pre_mortem._fire_automatic(P, document_id))
+    while (P, document_id) not in pre_mortem._running:
+        await asyncio.sleep(0.01)
+
+    looked = pre_mortem.has_completed
+
+    async def looks_then_lets_the_first_finish(db, project_id, doc_id):
+        found = await looked(db, project_id, doc_id)
+        if asyncio.current_task() is not first and not first.done():
+            looked_once.set()
+            await first
+        return found
+
+    monkeypatch.setattr(pre_mortem, "has_completed", looks_then_lets_the_first_finish)
+    await asyncio.wait_for(pre_mortem._fire_automatic(P, document_id), timeout=20)
+    looked_once.set()  # a second leave that never looked must still let the first finish
+    await asyncio.wait_for(first, timeout=20)
+
+    assert [f["outcome"] for f in await _firings()] == ["empty"]
+    assert len(fake.calls) == 1
 
 
 @pytest.mark.asyncio

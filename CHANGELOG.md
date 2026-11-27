@@ -9,6 +9,85 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ---
+## [2.4.0] - 2026-11-24
+
+The project UI gets leaner and says more. The top bar drops to six tabs, the Overview opens on a
+Dashboard and a Briefing, background manager work shows while it runs, and the Vault page says what
+it holds. Spec authoring asks the operator only what only they can decide, and a pre-mortem reads
+each draft before it is approved.
+
+### Added
+
+- **The Overview has Dashboard and Briefing tabs.** The Dashboard opens with a health band
+  (Healthy, Needs you or Trouble) and the cause behind it. Below it are what needs you, a main tile,
+  a spend tile, what is running, what finished today and the builds in progress. The Briefing gives
+  the same picture in sentences, counts what finished since your last visit, and shows a short
+  manager note. Drag a tab to choose which one the Overview opens on. Every item opens its detail
+  (`0191`).
+- **An Overview note manager job.** It writes the Briefing's note on what changed since your last
+  visit and anything that looks wrong. It fires when a new visit starts and something changed, or
+  when you press **Refresh note**. It never runs on a timer.
+- **Manager work is visible while it runs.** Every manager job and the mender announce when a run
+  starts and ends. A manager icon sits on the item a run works on: a spec's vault warnings, the
+  Vault, a build retrospective. The top bar shows a live count with a popover. **Settings → Manager**
+  has a run log grouped by job, with trigger, duration, outcome, cost and the reason for a failure.
+  A failed run stays marked until you have seen it.
+- **The Vault page opens on an Overview** of what the vault holds. It shows the important facts
+  (those contradicted by a spec, cited by a spec or opened by agents), the sources agents open most,
+  and what was added last. Facts get a view of their own. One search finds the text in facts, in
+  source names and in the text inside documents, with matching lines and their line numbers.
+- **A Pre-mortem manager job.** You switch it on per project. It assumes a drafted change shipped
+  and failed, and writes down how. It fires when a document's acceptance criteria are written, or
+  when you press **Run a pre-mortem**. The author answers each finding, or all of them at once, with
+  a note (`answer_pre_mortem`). Until every finding is answered, the Check shows a
+  `pre_mortem_unanswered` gap. The pre-mortem shows at the end of the Document tab and on the spec
+  page.
+- **Requirements name the vault facts they rest on.** A requirement may list in `facts` the facts
+  its author used. The spec-vault check also names facts that may back each requirement. The full
+  spec page shows these beside the requirement, marked as possible and not confirmed. They raise no
+  warning.
+- **A thread's side panel has a toggle button**, and Ctrl+Alt+B (Cmd+Option+B on macOS) shows or
+  hides it, even from the composer.
+
+### Changed
+
+- **The top bar shows Overview, Tasks, Profiles, Spec, Vault and Dashboards.** The Activity, Jobs,
+  Checkpoints and Chapters tabs are gone, and their contents moved:
+  - A thread's traces and checkpoints open as tabs in its side panel. A profile's page lists that
+    profile's checkpoints.
+  - Logs, the project-wide Traces view and Jobs are now sections of Project settings.
+  - The ledger is now in Budgets.
+  - Chapters is a link on the Overview.
+
+  Old links and command-palette entries still open the new home.
+- **The spec journey spends your attention only on your decisions.** At intake, the agent first
+  repeats back in plain words what you are trying to achieve, and waits for you to confirm. Then it
+  shows how the system works today and how the idea fits. It asks at most three questions per reply,
+  each naming why it matters, and offers ideas separately from its questions. It records the size
+  and tells you rather than asking. It advances steps itself once there is nothing to ask. It shows
+  only the requirements and criteria it is unsure of.
+- **At the tasks step the spec author sees every profile's whole pool,** so it can name a
+  non-default builder or checker entry.
+- **A continued thread keeps its document.** A checkpoint cutover or a continued conversation stays
+  bound to the same spec document, and its pre-mortem findings carry over.
+- **Threads started by flows, builds and the mender keep their creation-time names**, such as
+  `<profile> · work turn 2: <task>`. No model call is spent on titling them.
+
+### Fixed
+
+- The Overview's *finished today* counts from the start of your local day, not from UTC midnight.
+- A build retrospective's manager run is matched to its build and labelled by id or path.
+
+### Upgrade notes
+
+- **Migration `0191` runs at the next Hub start.** It adds two tables, `overview_visits` and
+  `overview_notes`. No existing row is read or rewritten.
+- **The Pre-mortem and Overview note jobs are off until you switch them on** in Settings → Manager.
+  Each needs a runner.
+- **Bookmarks to the removed tabs** (`activity`, `logs`, `traces`, `jobs`, `checkpoints`, `thread`)
+  still work. They redirect to the new home.
+
+---
 ## [2.3.0] - 2026-11-22
 
 Profiles become what you manage. A profile owns a pool of runners and models, a chat can use any

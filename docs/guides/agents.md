@@ -150,8 +150,8 @@ to its conversation. **Show older runs** reads further back.
 
 This is where a profile's past work is found. The sidebar lists only your own threads and the
 builds that are running or need you ([Threads](conversations.md#the-sidebar)); a run that served a
-task is also reached from its build's view, and a run a flow started from the flow's page on the
-**Jobs** tab ([Jobs, loops and flows](jobs-loops-flows.md#a-flows-runs)).
+task is also reached from its build's view, and a run a flow started from the flow's page in
+**Project settings → Jobs** ([Jobs, loops and flows](jobs-loops-flows.md#a-flows-runs)).
 
 ## Folding one profile into another
 

@@ -57,8 +57,48 @@ You never fill in a form. You describe the change in a conversation:
 2. The agent creates the document and works through it with you. In this kind of turn the agent
    gets **no file-edit tools**: it writes the document through the Hub, which validates it, gives
    each requirement an identifier, and writes the file.
-3. Where something is genuinely undecided, the agent asks you with a question card, one question at
-   a time, instead of guessing.
+3. Where something is genuinely undecided, the agent asks you with a question card instead of
+   guessing, and asks only what only you can decide.
+
+### How the interview goes
+
+The agent is curious first, then relentless. At **intake**:
+
+1. **Playback.** Its first reply says, in plainer words than yours, what it understood you are
+   trying to achieve and why, without saying how it would be built, and asks whether it got that
+   right. It stops there. Once you confirm, it writes that as the document's problem.
+2. **How it works today.** On every size, before any requirement exists, it writes how the part of
+   the system your request touches works now (citing files and lines), how the change fits on top
+   as a before and after sketch, and what existing behaviour it would change.
+3. **A few deep questions.** Each names the finding that makes it matter, the code it read, behaviour
+   it observed or an earlier answer, and the ones others depend on come first. At most three per
+   reply. Where the question is about what you want, you are asked to describe it in your own words
+   before any options are offered; options with a recommendation appear only for a fork between
+   alternatives it has named. The agent challenges the request's premise at least once, and asks
+   about failure modes, boundary cases and conflicts the code shows.
+4. **Ideas as nudges.** Ideas beyond your request are listed apart from the questions, and nothing
+   goes into the requirements or scope until you pick it up.
+
+Every intake reply after the playback says which of the coverage items are still open (what you want
+and why, who it affects, scope boundaries, failure and boundary cases, conflicts with existing
+behaviour, what success looks like) and lists each assumption the agent is making in place of an
+answer.
+
+You are not asked to press continue. When a step's output is written and the agent has no question,
+it calls `advance_spec_step` itself and says which step it moved to. It records the **size** with its
+reason and tells you, rather than asking you to confirm it. It asks whether the work is already built
+only when it found candidate commits, and it picks the task builders and checkers from its own
+knowledge of the project. At the requirements and acceptance steps it shows you only what it is
+unsure of or what contradicts something, the assumptions behind them, and the acceptance drive, not
+the full list.
+
+At the tasks step the author is told every profile's whole pool (each runner, its model, its effort
+when set, and which entry is the default), so a task that needs a non-default entry names it with
+`builder_entry` or `checker_entry`, and the reason for the pick is stated in terms of that entry's
+model.
+
+A requirement may list, in `facts`, the vault facts the author used for it, by id. A requirement
+nothing in the vault backs lists none, and nothing warns about that.
 
 A change moves through a short **journey** of steps. Its length follows its size:
 
@@ -69,6 +109,30 @@ A change moves through a short **journey** of steps. Its length follows its size
 | **Large** | intake → requirements → acceptance → approach → tasks → delivery |
 
 A project can add its own steps under **Project settings → General → Spec steps**.
+
+### The pre-mortem
+
+The **Pre-mortem** is a manager job, switched on or off per project under **Project settings →
+Manager**, with its own runner and model. When it runs, a fresh reader takes the drafted
+requirements and criteria and the code, assumes the change shipped and failed, and records how.
+You choose when it fires: **Automatic** (when the document leaves the step that writes its
+acceptance criteria) or **Button only**.
+
+- It fires on its own only for a document with no completed pre-mortem. A firing that failed does
+  not count, so the next leave of the step fires again. Once one has completed, it runs again only
+  when you press **Run a pre-mortem** on the document's page.
+- The document's author is shown the unanswered findings at the start of every turn on that
+  document, each with its number, the requirement it names and its story. It fixes what it can, or
+  brings the rest to you as questions, then answers each finding, or all at once, with a note of
+  what it did. Only the author answers: a profile that saved the document's content before its
+  first approval, from whichever conversation it is in. The findings follow the document when a
+  conversation is continued from a checkpoint.
+- Until every finding is answered, the **Check** and the author's save report a **pre-mortem gap**
+  naming how many are unanswered, and the document is not ready to approve. You can still approve
+  over it.
+- The pre-mortem shows at the end of the **Document** tab in a conversation's side panel, and on the
+  spec page: whether one has run, is running or has findings, how many are answered, and each
+  finding with its requirement, story, and its answer's note, author and time.
 
 ### Confirming acceptance criteria
 
@@ -89,6 +153,10 @@ A requirement is one statement with a modal (MUST, SHALL, SHOULD or MAY), for ex
 computed as the invoice subtotal multiplied by the region's rate and rounded to the cent with
 ROUND_HALF_UP."* The Hub mints its identifier (`FR-2`) and keeps it for life. Removed requirements
 are retired, never reused.
+
+A requirement can also list the vault `facts` it rests on. The spec vault check separately names
+facts that *possibly* back each requirement; the full spec page shows them beside it, marked as
+possible and not confirmed. See [Knowledge vault](knowledge-vault.md#checking-specifications-against-the-vault).
 
 Each requirement has one or more **scenarios**, written as Given / When / Then. A scenario can also
 say **how to check** it and **who checks** it (an agent or you).

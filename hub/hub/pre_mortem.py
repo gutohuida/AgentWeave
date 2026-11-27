@@ -394,8 +394,20 @@ async def request(db: AsyncSession, project_id: str, path: str) -> None:
 
 async def _fire_automatic(project_id: str, document_id: str) -> None:
     """The automatic entry: a document not reviewed now is simply not reviewed, and nothing here
-    raises into the event loop."""
+    raises into the event loop. The claim is taken before anything awaits, and only then is a
+    completed firing looked for: checked the other way round, a firing that completed between the
+    look and the claim left both free, and a second leave fired twice."""
     subject = {"document": document_id}
+    if (project_id, document_id) in _running:
+        return
+    _running.add((project_id, document_id))
+    try:
+        await _fire_claimed(project_id, document_id, subject)
+    finally:
+        _running.discard((project_id, document_id))
+
+
+async def _fire_claimed(project_id: str, document_id: str, subject: Dict[str, Any]) -> None:
     try:
         async with async_session_factory() as db:
             job, runner = await gate(db, project_id, CRITERIA_WRITTEN)
@@ -422,9 +434,6 @@ async def _fire_automatic(project_id: str, document_id: str) -> None:
     except Exception:  # noqa: BLE001 -- a background task must not raise
         logger.warning("pre-mortem could not start for %s", document_id, exc_info=True)
         return
-    if (project_id, document_id) in _running:
-        return
-    _running.add((project_id, document_id))
     await _run_claimed(plan, CRITERIA_WRITTEN)
 
 

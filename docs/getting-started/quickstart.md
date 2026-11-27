@@ -19,7 +19,7 @@ agentweave
 
 The app opens on the project's **Overview**. Your projects are listed in the sidebar on the left, and
 each one lists its running builds and your own threads. Across the top are the project's tabs:
-**Overview, Tasks, Spec, Vault, Jobs, Activity**. The gear on the right opens the project settings.
+**Overview, Tasks, Profiles, Spec, Vault, Dashboards**. The gear on the right opens the project settings.
 
 !!! tip "Set the main branch"
     Open **Project settings → General → Integration** and check that **Main branch** names the
