@@ -4255,6 +4255,14 @@ def _briefing_completion_lines(task: Task, *, is_flow: bool) -> list[str]:
         " Nothing else moves it, and a turn that ends with the task unmoved leaves the next "
         "firing to claim the same task and ask somebody to do the same work again."
     )
+    if task.status == "revision_needed":
+        sentence += (
+            " It was sent back, so completing it with no change of its own is refused. If it "
+            "cannot proceed without other work, do not complete it unchanged: hand it to its "
+            f'checker naming the blocker with `update_task("{task.display_id}", '
+            'status="completed", blocker="<what blocks it>")` -- no check runs, and the checker '
+            "files that work as a prerequisite or sends it back."
+        )
     if is_flow:
         sentence += (
             " Record what whoever checks this work will need before you move it, with "

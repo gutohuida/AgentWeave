@@ -216,13 +216,17 @@ async def changed_since_note(db: AsyncSession, project_id: str, workspace: Any =
     assert since is not None
     if await overview_module.finished(db, project_id, since=since):
         return True
+    from . import project_checks
     from .db.models import Project
 
     project = await db.get(Project, project_id)
+    notices = await project_checks.could_not_run_notices(db, project_id)
     main = await overview_module.main_state(
-        db, project_id, branch=project.main_branch if project else None
+        db, project_id, branch=project.main_branch if project else None, notices=notices
     )
-    needs = await overview_module.gather_needs(db, project_id, workspace=workspace, main=main)
+    needs = await overview_module.gather_needs(
+        db, project_id, workspace=workspace, main=main, notices=notices
+    )
     if any((_aware(n["waiting_since"]) or since) > since for n in needs):
         return True
     if note is None:

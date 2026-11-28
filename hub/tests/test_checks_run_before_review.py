@@ -717,10 +717,10 @@ async def test_completing_unchanged_work_again_after_its_run_failed_is_refused(a
     await project_checks.drain()
 
     assert again.status_code == 409, again.text
-    assert "assert 2 == 3" in again.json()["detail"]["message"]
+    assert "unchanged" in again.json()["detail"]
     assert (await _task()).status == "in_progress"
     [run] = await _runs()
-    assert run.state == "failed", "nothing ran again: the recorded verdict answered"
+    assert run.state == "failed", "nothing ran again: the send-back's baseline answered"
 
 
 async def test_the_return_does_not_overwrite_a_move_made_while_it_ran(app, tmp_path, monkeypatch):
@@ -855,7 +855,7 @@ async def test_re_completing_unchanged_work_says_the_work_is_unchanged_and_where
     again = await _complete(app)
 
     assert again.status_code == 409, again.text
-    message = again.json()["detail"]["message"]
-    [run] = await _runs()
-    assert "unchanged" in message and run.target_shas[0][:12] in message, message
-    assert f".agentweave/tasks/{TASK}" in message and "commit" in message, message
+    message = again.json()["detail"]
+    assert await _runs() and "unchanged" in message, message
+    assert "commit" in message and "blocker" in message and "ask_user" in message, message
+    assert f".agentweave/tasks/{TASK}" in message, message

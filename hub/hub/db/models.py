@@ -954,6 +954,22 @@ class Task(Base):
     # in_progress column rather than moving to one of its own (R3), this text is most of what tells
     # the operator the card is waiting on *them*.
     blocked_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    # A second, typed reason a `blocked` task waits for: prerequisites added after it started
+    # (`a-task-that-cannot-move-waits-instead-of-being-rebuilt-and-re-reviewed`, D1). Set when the
+    # task stops, cleared when it leaves `blocked`; while set, the task is released only once every
+    # prerequisite is approved and no question parks it, and goes back to its builder (`assigned`).
+    waits_on_prerequisites: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="0", nullable=False
+    )
+    # A digest of the task's own changes against the main branch as of its last send-back, written
+    # by every send-back whoever made it; a completion whose own changes are still this is refused
+    # (`a-task-that-cannot-move-waits-instead-of-being-rebuilt-and-re-reviewed`, FR-4, D4). Null:
+    # never sent back, or no repository to measure -- never refused.
+    send_back_changes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    # The blocker a builder named when it handed unchanged work to its checker (FR-7): the work
+    # reaches review with no check run while this is set. Cleared by any move but into
+    # `completed` or `under_review`.
+    handover_blocker: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     # Which workspace scheme this task's writing turns execute in: `task` (its own worktree on
     # `agentweave/task/<id>`, the scheme this product now uses) or `agent` (the shared per-agent
     # checkout, kept for tasks that already had work on one when per-task worktrees shipped).
@@ -1362,6 +1378,46 @@ class EventLog(Base):
             text("json_extract(data, '$.session_id')"),
             "timestamp",
             sqlite_where=text("event_type = 'context_warning'"),
+        ),
+        # Migration 0194 (`screens-stop-repeating-work-on-every-read`, FR-5): the data fields the
+        # retrospective, pre-mortem and task-stage reads filter by, each partial on its event type.
+        # Queries name them through `event_log_lookups`, whose expressions are these literally.
+        Index(
+            "ix_event_logs_data_fired_job_document",
+            "project_id",
+            text("json_extract(data, '$.job')"),
+            text("json_extract(data, '$.subject.document')"),
+            "timestamp",
+            sqlite_where=text("event_type = 'manager_job_fired'"),
+        ),
+        # A job's firings newest first (`manager.list_firings`), in the index's own order.
+        Index(
+            "ix_event_logs_data_fired_job_ts",
+            "project_id",
+            text("json_extract(data, '$.job')"),
+            "timestamp",
+            sqlite_where=text("event_type = 'manager_job_fired'"),
+        ),
+        Index(
+            "ix_event_logs_data_pre_mortem_answer_document",
+            "project_id",
+            text("json_extract(data, '$.document')"),
+            "timestamp",
+            sqlite_where=text("event_type = 'pre_mortem_answered'"),
+        ),
+        Index(
+            "ix_event_logs_data_unstaffed_task",
+            "project_id",
+            text("json_extract(data, '$.task_id')"),
+            "timestamp",
+            sqlite_where=text("event_type = 'review_unstaffed'"),
+        ),
+        Index(
+            "ix_event_logs_data_send_back_held_task",
+            "project_id",
+            text("json_extract(data, '$.task_id')"),
+            "timestamp",
+            sqlite_where=text("event_type = 'send_back_held'"),
         ),
     )
 

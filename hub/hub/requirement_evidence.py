@@ -1787,15 +1787,21 @@ async def decide(
         # accepted. The operator's acceptance is unchanged (a non-goal of that change).
         from . import drive_baseline
 
-        if drive_baseline.is_baseline(evidence):
+        # Only the acceptance drive's baseline is a pre-build run: another task's run of the drive
+        # is after the build, where its checks pass, and is not held to failing (TTCMW-5).
+        owner = (
+            await session.get(Task, evidence.task_id)
+            if evidence.task_id and drive_baseline.is_baseline(evidence)
+            else None
+        )
+        if owner is not None and await drive_baseline.is_acceptance_drive(session, owner):
             # Checks named for the document's guard criteria are exempt (operator, 2026-11-17).
-            owner = await session.get(Task, evidence.task_id) if evidence.task_id else None
             bad = drive_baseline.bad_checks(
                 evidence, await drive_baseline.guard_keys(session, owner)
             )
             if bad:
                 raise EvidenceRefusedError(
-                    drive_baseline.not_failing_sentence(evidence.task_id or "its task", bad),
+                    drive_baseline.not_failing_sentence(owner.id, bad),
                     code=drive_baseline.NOT_FAILING,
                     http_status=409,
                 )

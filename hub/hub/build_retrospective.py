@@ -76,6 +76,7 @@ from .db.models import (
     TaskTransition,
     TurnUsage,
 )
+from .event_log_lookups import fired_document, fired_job, is_event
 from .runner_adapters import get_adapter
 from .runner_events import redact_text_secrets
 from .task_transitions import SEND_BACK_EVIDENCE_ONLY
@@ -1826,10 +1827,10 @@ async def _reviewed_automatically(db: AsyncSession, project_id: str, document_id
         select(EventLog)
         .where(
             EventLog.project_id == project_id,
-            EventLog.event_type == manager.FIRED_EVENT,
-            EventLog.data["job"].as_string() == JOB,
+            is_event(manager.FIRED_EVENT),
+            fired_job == JOB,
             EventLog.data["trigger"].as_string() == LAST_TASK_APPROVED,
-            EventLog.data["subject"]["document"].as_string() == document_id,
+            fired_document == document_id,
         )
         .order_by(EventLog.timestamp.desc(), EventLog.id.desc()),
     )
@@ -2025,30 +2026,32 @@ def _drop_pending(session: Session, transaction) -> None:
         session.info.pop(_PENDING_KEY, None)
 
 
-async def list_for_document(
-    db: AsyncSession, project_id: str, document_id: str
-) -> List[Dict[str, Any]]:
-    """The document's firings, written or not, newest first, each with its time, trigger, model,
-    cost, outcome and report. A part's own event is not a firing here, and a firing in parts costs
-    what all its calls did."""
+async def list_for_documents(
+    db: AsyncSession, project_id: str, document_ids: List[str]
+) -> Dict[str, List[Dict[str, Any]]]:
+    """`{document id: its firings}`, written or not, newest first, each with its time, trigger,
+    model, cost, outcome and report. A part's own event is not a firing here, and a firing in parts
+    costs what all its calls did. One read for all the documents."""
+    listed: Dict[str, List[Dict[str, Any]]] = {i: [] for i in document_ids}
+    if not document_ids:
+        return listed
     rows = await _rows(
         db,
         select(EventLog)
         .where(
             EventLog.project_id == project_id,
-            EventLog.event_type == manager.FIRED_EVENT,
-            EventLog.data["job"].as_string() == JOB,
-            EventLog.data["subject"]["document"].as_string() == document_id,
+            is_event(manager.FIRED_EVENT),
+            fired_job == JOB,
+            fired_document.in_(document_ids),
         )
         .order_by(EventLog.timestamp.desc(), EventLog.id.desc()),
     )
-    listed = []
     for row in rows:
         data = row.data or {}
         if data.get("part") is not None:
             continue
         own_cost = (data.get("usage") or {}).get("cost_usd_micros")
-        listed.append(
+        listed[str(data["subject"]["document"])].append(
             {
                 "id": row.id,
                 "at": row.timestamp.isoformat(),
@@ -2065,3 +2068,10 @@ async def list_for_document(
             }
         )
     return listed
+
+
+async def list_for_document(
+    db: AsyncSession, project_id: str, document_id: str
+) -> List[Dict[str, Any]]:
+    """The document's firings, newest first (`list_for_documents` for one)."""
+    return (await list_for_documents(db, project_id, [document_id]))[document_id]

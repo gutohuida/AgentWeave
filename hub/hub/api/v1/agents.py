@@ -1116,7 +1116,7 @@ def _operations(*, can_admin_specs: bool = False) -> List[_Operation]:
             args=(
                 "title, description, assignee, priority=medium, requirements, acceptance_criteria, "
                 "requirement_ids=None, spec_document=None, loop_id=None, depends_on=None, "
-                "builder=None, checker=None"
+                "builder=None, checker=None, precedes=None"
             ),
             method="POST",
             path="/tasks",
@@ -1133,6 +1133,7 @@ def _operations(*, can_admin_specs: bool = False) -> List[_Operation]:
                 "depends_on",
                 "builder",
                 "checker",
+                "precedes",
             ),
             required=("title",),
             text=(
@@ -1140,7 +1141,11 @@ def _operations(*, can_admin_specs: bool = False) -> List[_Operation]:
                 "one waits on; an id the project does not have is refused, naming it. A task against "
                 "a spec joins its build and goes to the build's builder and checker unless it names "
                 "its own; `build_note` in the answer says if it reopened a finished build, or why "
-                "it joined none. A task whose builder would also be its checker is refused."
+                "it joined none. A task whose builder would also be its checker is refused. precedes "
+                "is a list of existing task ids that must wait for this one: only the checker of "
+                "each, in its current review, may name it; the task then stops in `blocked` "
+                "naming this one and goes back to its builder once this one is approved, and "
+                "filing ends your review without a verdict."
             ),
         ),
         _Operation(
@@ -1184,7 +1189,7 @@ def _operations(*, can_admin_specs: bool = False) -> List[_Operation]:
             tool="update_task",
             args=(
                 "task_id, status=None, notes=None, requirement_ids=None, spec_document=None, "
-                "failing_pieces=None, reason_class=None"
+                "failing_pieces=None, reason_class=None, blocker=None"
             ),
             method="PATCH",
             path="/tasks/{task_id}",
@@ -1195,6 +1200,7 @@ def _operations(*, can_admin_specs: bool = False) -> List[_Operation]:
                 "spec_document",
                 "failing_pieces",
                 "reason_class",
+                "blocker",
             ),
             required=(),
             text=(
@@ -1206,7 +1212,10 @@ def _operations(*, can_admin_specs: bool = False) -> List[_Operation]:
                 "rest are held for their author to record again. A move to revision_needed "
                 f"needs reason_class (one of {values(SendBackClass)}) and a sentence in notes "
                 "saying why; it is refused without one. Omit a field to leave it alone. "
-                "Who holds a task, its priority and its description are the operator's."
+                "Who holds a task, its priority and its description are the operator's. A builder "
+                "whose sent-back task cannot proceed without other work completes it with "
+                "blocker naming that work instead of completing it unchanged (refused); it "
+                "reaches its checker with no check run."
             ),
         ),
         _Operation(

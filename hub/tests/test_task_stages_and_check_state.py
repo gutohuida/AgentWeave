@@ -350,7 +350,10 @@ async def test_completed_work_is_in_pre_review_checks_before_its_run_is_recorded
     await _builder_task(tmp_path, content="x = 1\n")
     branch = worktrees.task_branch_name(TASK)
     git(tmp_path, "branch", "-f", branch, "main")  # the work is not committed yet
-    await _configure([_slow(tmp_path)])
+    # Held running until released: otherwise it can finish between the task list's read and the
+    # build's, and the two reads see different moments.
+    release = _scripts(tmp_path) / "release-running"
+    await _configure([_slow(tmp_path, release=release)])
     await _in_a_build(TASK)
 
     completed = await _complete(app)
@@ -371,6 +374,7 @@ async def test_completed_work_is_in_pre_review_checks_before_its_run_is_recorded
     read = (await _reads(app, auth_headers, TASK))[TASK]
     assert read["stage"] == "pre_review_checks", read
     assert read["check"]["kind"] == "pre_review", read
+    release.write_text("go", encoding="utf-8")
     await project_checks.drain()
     read = (await _reads(app, auth_headers, TASK))[TASK]
     assert (read["stage"], read["check"]) == (

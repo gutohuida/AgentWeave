@@ -216,6 +216,33 @@ async def test_a_task_that_is_not_the_drive_is_not_gated(app, auth_headers, auth
 
 
 @pytest.mark.asyncio
+async def test_a_passing_drive_run_on_another_task_is_accepted(app, auth_headers, author, tmp_path):
+    """TTCMW-5: a task that runs the drive after the build records it as `drive_baseline`, and
+    its checks pass, as they should. It is not the acceptance drive, so its reviewer's acceptance
+    is not refused as a pre-build baseline that did not fail, and its approval goes through."""
+    passing = (
+        "check c-one: reached=yes failed_at_assertion=no -- passed on the built feature\n"
+        "check c-two: reached=yes failed_at_assertion=no -- passed on the built feature"
+    )
+    task, evidence = await staged_drive(
+        app, auth_headers, author, tmp_path, kind="drive_baseline", output=passing, key="build"
+    )
+    reviewer = await reviewing_run(task)
+    at = await verifies.footprint_commit(evidence)
+    accepted = await app.post(
+        AGENT_DECIDE.format(evidence),
+        json=verifies.reproduce(commit=at, command="python drive_check.py", output=passing),
+        headers=reviewer,
+    )
+    assert accepted.status_code == 200, accepted.text
+    assert await state_of(evidence) == "accepted"
+    approved = await app.patch(
+        f"{AGENT_TASKS}/{task}", json={"status": "approved"}, headers=reviewer
+    )
+    assert approved.status_code == 200, approved.text
+
+
+@pytest.mark.asyncio
 async def test_a_bad_baseline_sends_the_drive_back_naming_both_checks(
     app, auth_headers, author, tmp_path
 ):

@@ -232,7 +232,8 @@ async def test_the_spec_page_the_project_view_and_the_ledger_call_the_same_funct
 
     async def patched(*args, **kwargs):
         whole = await real(*args, **kwargs)
-        whole["builds"]["b-a"]["cost_micros"]["building"] = sentinel
+        if "b-a" in whole["builds"]:  # the ledger asks for spend only
+            whole["builds"]["b-a"]["cost_micros"]["building"] = sentinel
         whole["project"]["cost_micros"]["total"] = sentinel
         for group in whole["groups"]["agent"]:
             if group["key"] == "dev":

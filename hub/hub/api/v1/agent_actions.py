@@ -155,6 +155,10 @@ class AgentTaskCreate(RequestModel):
     loop_id: Optional[str] = Field(default=None, max_length=64)
     # The tasks this one waits on, by id. Checked in `check_task_create`, same as `TaskCreate`.
     depends_on: Optional[List[str]] = None
+    # The existing tasks that must wait for this one (`a-task-that-cannot-move-waits-...`, FR-1).
+    # Only the current review round's checker of each may name it, so the operator's schema has no
+    # such field: their route for a dependency on an existing task is the dependencies route.
+    precedes: Optional[List[str]] = Field(default=None, max_length=10)
 
     @field_validator("status")
     @classmethod
@@ -284,7 +288,7 @@ async def create_shared_task(
     actor: AgentActor = Depends(get_agent_actor),
     session: AsyncSession = Depends(get_session),
 ):
-    task = TaskCreate(**body.model_dump(), assigner=actor.agent)
+    task = TaskCreate(**body.model_dump(exclude={"precedes"}), assigner=actor.agent)
     return await create_task_for_actor(
         task,
         project_id=actor.project_id,
@@ -292,6 +296,7 @@ async def create_shared_task(
         created_by_run_id=actor.run_id,
         actor=run_actor(actor.run_id, actor.agent),
         session=session,
+        precedes=body.precedes or (),
     )
 
 

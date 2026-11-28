@@ -802,11 +802,23 @@ def could_not_run_view(results: Optional[Sequence[Any]]) -> List[Dict[str, Any]]
     ]
 
 
+#: How many runs' results `could_not_run_notices` decodes at a time, newest first.
+_NOTICE_SCAN_BATCH = 25
+
+
 async def could_not_run_notices(session: AsyncSession, project_id: str) -> List[Dict[str, Any]]:
     """The project's notices for checks whose latest run ended 'could not run' (FR-9): one per
     check, from the newest finished run of that check on any task, landing batch or main-branch
     run. Computed from the runs themselves, so the next run of the check, passing or failing,
-    clears it with nobody dismissing anything."""
+    clears it with nobody dismissing anything.
+
+    A run's results carry each check's output, megabytes over a project's history, so they are
+    not all decoded (`screens-stop-repeating-work-on-every-read`, FR-3): only a check that some
+    run recorded as 'could not run' can have a notice, and the text of such a run's results holds
+    that word, so those runs name the candidates. The runs are then read newest first only until
+    each candidate's newest result is found."""
+    from sqlalchemy import String, cast
+
     from .db.models import LandingBatch, MainCheckRun
 
     def stamp(moment: Optional[datetime]) -> datetime:
@@ -814,36 +826,65 @@ async def could_not_run_notices(session: AsyncSession, project_id: str) -> List[
             return datetime.min.replace(tzinfo=timezone.utc)
         return moment if moment.tzinfo is not None else moment.replace(tzinfo=timezone.utc)
 
-    runs: List[Tuple[datetime, str, Sequence[Any]]] = []
-    for model, source in ((TaskCheckRun, "task"), (MainCheckRun, "main")):
+    def named(results: Any) -> List[Dict[str, Any]]:
+        """A run's results that speak for their check: named and not skipped."""
+        return [
+            r
+            for r in (results or [])
+            if isinstance(r, dict) and r.get("name") and not r.get("skipped")
+        ]
+
+    sources: List[Tuple[Any, str, Any, Any]] = [
+        (TaskCheckRun, "task", TaskCheckRun.state != "running", TaskCheckRun.started_at),
+        (MainCheckRun, "main", MainCheckRun.state != "running", MainCheckRun.started_at),
+        (LandingBatch, "landing", LandingBatch.ended_at.is_not(None), None),
+    ]
+    # Every finished run by its time, without its results; `order` keeps the tie-break of a
+    # stable sort over task, main, then landing runs, each in the order the database gives them.
+    runs: List[Tuple[datetime, int, int, str]] = []
+    mentions: Dict[int, List[str]] = {}
+    for index, (model, _source, finished, started) in enumerate(sources):
+        columns = [model.id, model.ended_at] + ([started] if started is not None else [])
+        mentioned = cast(model.results, String).like(f"%{COULD_NOT_RUN}%")
         rows = (
-            (
-                await session.execute(
-                    select(model).where(model.project_id == project_id, model.state != "running")
-                )
-            )
-            .scalars()
-            .all()
-        )
-        runs += [(stamp(r.ended_at or r.started_at), source, r.results or []) for r in rows]
-    batches = (
-        (
             await session.execute(
-                select(LandingBatch).where(
-                    LandingBatch.project_id == project_id, LandingBatch.ended_at.is_not(None)
-                )
+                select(*columns, mentioned).where(model.project_id == project_id, finished)
             )
-        )
-        .scalars()
-        .all()
-    )
-    runs += [(stamp(b.ended_at), "landing", b.results or []) for b in batches]
-    runs.sort(key=lambda run: run[0])
+        ).all()
+        for row in rows:
+            at = stamp(row[1] or (row[2] if started is not None else None))
+            runs.append((at, len(runs), index, row[0]))
+            if row[-1]:
+                mentions.setdefault(index, []).append(row[0])
+
+    async def results_of(index: int, ids: Sequence[str]) -> Dict[str, Any]:
+        model = sources[index][0]
+        rows = await session.execute(select(model.id, model.results).where(model.id.in_(ids)))
+        return dict(rows.tuples().all())
+
+    candidates: Set[str] = set()
+    for index, ids in mentions.items():
+        for results in (await results_of(index, ids)).values():
+            candidates.update(str(r["name"]) for r in named(results) if could_not_run(r))
+    if not candidates:
+        return []
+
+    runs.sort(reverse=True)
     latest: Dict[str, Tuple[datetime, str, Dict[str, Any]]] = {}
-    for at, source, results in runs:
-        for result in results:
-            if isinstance(result, dict) and result.get("name") and not result.get("skipped"):
-                latest[str(result["name"])] = (at, source, result)
+    for offset in range(0, len(runs), _NOTICE_SCAN_BATCH):
+        batch = runs[offset : offset + _NOTICE_SCAN_BATCH]
+        loaded: Dict[Tuple[int, str], Any] = {}
+        for index in {run[2] for run in batch}:
+            ids = [run[3] for run in batch if run[2] == index]
+            for run_id, results in (await results_of(index, ids)).items():
+                loaded[(index, run_id)] = results
+        for at, _, index, run_id in batch:
+            for result in reversed(named(loaded.get((index, run_id)))):
+                name = str(result["name"])
+                if name in candidates and name not in latest:
+                    latest[name] = (at, sources[index][1], result)
+        if len(latest) == len(candidates):
+            break
     return [
         {
             "check": name,
@@ -3094,6 +3135,8 @@ async def review_wait(session: AsyncSession, task: Task) -> Optional[ReviewWait]
     """
     from .project_workspace import ProjectWorkspaceError, resolve_project_workspace
 
+    if task.handover_blocker:
+        return None  # a builder's named-blocker handover (FR-7): its checker reads it, no check run
     project = await session.get(Project, task.project_id)
     if project is None or not project.main_branch or not configured_checks(project, PHASE_REVIEW):
         return None

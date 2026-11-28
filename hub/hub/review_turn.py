@@ -261,6 +261,16 @@ def findings_lines(task: Optional[Task]) -> List[str]:
         "Only a problem that was there before this task, in code it did not touch, is a side "
         f"finding: put it in a task with `create_task`{where}. Say in your verdict notes which "
         "side findings you filed.",
+        # FR-10 of `a-task-that-cannot-move-waits-instead-of-being-rebuilt-and-re-reviewed`: work
+        # that cannot be reviewed or fixed until other work exists waits for it instead of going
+        # round again. Without this line the feature passes every Hub test and never fires.
+        "**When the task cannot be right until other work exists, file that work as its "
+        "prerequisite instead of sending it back:** `create_task(title, description, ..., "
+        'precedes=["<task id>"])`. The task then stops in `blocked` naming it and returns '
+        "to its builder once the new task is approved; that ends your review without a verdict, so "
+        "do not then approve or send it back. The new task goes to this task's builder unless you "
+        "name a `builder`. A builder that handed the task over naming a blocker (its notes say "
+        "so) is asking exactly this of you.",
         # FR-9 of `a-task-s-checks-and-merges-use-its-own-work-and-a-live-run-is-never-reset`: a
         # send-back without a class is refused, so the reviewer is told before it tries.
         "Every `revision_needed` says why: pass `reason_class`, one of "

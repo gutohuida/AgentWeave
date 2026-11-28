@@ -367,6 +367,7 @@ def create_task(
     depends_on: Optional[List[str]] = None,
     builder: Optional[str] = None,
     checker: Optional[str] = None,
+    precedes: Optional[List[str]] = None,
 ) -> Dict[str, Any]:
     """Create a task attributed to the bound profile.
 
@@ -394,6 +395,11 @@ def create_task(
             task in this project; an unknown id is refused, naming it, and no task is created.
         builder: The open profile that builds it, where it differs from its build's default.
         checker: The open profile that checks it, where it differs from its build's default.
+        precedes: Ids of existing tasks that must wait for this one. Only the checker of each, in
+            its current review, may name it: it then gains this task as a prerequisite, stops in
+            `blocked` naming it, and goes back to its builder once this task is approved. Filing
+            ends your review of it without a verdict, so do not then approve or send it back. This
+            task goes to that task's builder unless you name a builder.
     """
     return _hub_request(
         "POST",
@@ -411,6 +417,7 @@ def create_task(
             "acceptance_criteria": acceptance_criteria or [],
             "loop_id": loop_id,
             "depends_on": depends_on or [],
+            "precedes": precedes or [],
         },
     )
 
@@ -470,6 +477,7 @@ def update_task(
     spec_document: Optional[str] = None,
     failing_pieces: Optional[List[Dict[str, str]]] = None,
     reason_class: Optional[SendBackClass] = None,
+    blocker: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Update a task's lifecycle status, notes, or the requirements it serves.
 
@@ -502,6 +510,12 @@ def update_task(
         reason_class: Required with "revision_needed": why the work goes back, one of "defect",
             "regression", "broken-check", "merge-needed", "evidence-only" or "flaky", with the
             sentence of reason in notes. A send-back without it is refused, naming the classes.
+        blocker: With "completed", by the builder of a task that was sent back: what stops it
+            from proceeding without other work. A task sent back whose own changes are unchanged
+            cannot be completed again (refused: commit a change, or name a blocker, or ask the
+            operator); naming a blocker hands it to its checker with no check run, and the checker
+            then files that work as a prerequisite of it (`create_task` with `precedes`) or sends
+            it back.
     """
     body: Dict[str, Any] = {}
     if status is not None:
@@ -516,6 +530,8 @@ def update_task(
         body["failing_pieces"] = failing_pieces
     if reason_class is not None:
         body["reason_class"] = reason_class
+    if blocker is not None:
+        body["blocker"] = blocker
     if status == "completed":
         # The Hub waits for the project's fast checks before it records a completion.
         return _hub_request(

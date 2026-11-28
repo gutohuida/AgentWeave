@@ -38,6 +38,7 @@ from sqlalchemy.orm import Session
 from . import manager, project_workspace, spec_documents
 from .db.engine import async_session_factory
 from .db.models import EventLog, Runner, SpecDocument, SpecRequirement
+from .event_log_lookups import answer_document, fired_document, fired_job, is_event
 from .runner_adapters import get_adapter
 from .worker import WorkerResult, run_worker
 
@@ -492,9 +493,9 @@ async def _events(db: AsyncSession, project_id: str, document_id: str) -> List[E
                 select(EventLog)
                 .where(
                     EventLog.project_id == project_id,
-                    EventLog.event_type == manager.FIRED_EVENT,
-                    EventLog.data["job"].as_string() == JOB,
-                    EventLog.data["subject"]["document"].as_string() == document_id,
+                    is_event(manager.FIRED_EVENT),
+                    fired_job == JOB,
+                    fired_document == document_id,
                 )
                 .order_by(EventLog.timestamp.desc(), EventLog.id.desc())
             )
@@ -536,8 +537,8 @@ async def answers_by_firing(
                 select(EventLog)
                 .where(
                     EventLog.project_id == project_id,
-                    EventLog.event_type == ANSWER_EVENT,
-                    EventLog.data["document"].as_string() == document_id,
+                    is_event(ANSWER_EVENT),
+                    answer_document == document_id,
                 )
                 .order_by(EventLog.timestamp, EventLog.id)
             )
