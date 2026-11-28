@@ -71,6 +71,9 @@ SWEEP_SECONDS = 300
 #: How long a new run may be recorded `running` before this Hub registers it as executing: the
 #: row is written before the process starts (worktree, briefing, spawn).
 DEAD_RUN_GRACE = timedelta(minutes=5)
+#: The first words of an operator-ended stall's `outcome_detail`: how `view` tells who ended it
+#: (`ended_by`), and what keeps `record` from raising its cause again while the task is unchanged.
+OPERATOR_ENDED = "Ended by the operator."
 STALL_RECORDED = "stall_recorded"
 STALL_ENDED = "stall_ended"
 
@@ -207,6 +210,10 @@ async def record(
     A stall the mender gave up on is the operator's while its reason holds, so the same reason is
     counted on it rather than opening a new stall that wakes the mender to give up again (F1048:
     30 turns and 27 copies of one question in a night). A changed reason is a new situation.
+
+    A stall the operator ended stays ended (`every-overview-control-lands-where-you-can-act-on-it`,
+    FR-2): on a task, until that task changes (`_task_changed_since`); with no task, while its
+    reason holds, as a given-up one does.
     """
     key = stall_key(cause, subject)
     now = datetime.now(timezone.utc)
@@ -220,7 +227,13 @@ async def record(
                 .limit(1)
             )
         ).scalar_one_or_none()
-        if latest is not None and latest.outcome == "gave_up" and latest.reason == text[:4000]:
+        if latest is not None and ended_by_operator(latest):
+            if latest.task_id:
+                if not await _task_changed_since(db, latest.task_id, latest.ended_at):
+                    stall = latest
+            elif latest.reason == text[:4000]:
+                stall = latest
+        elif latest is not None and latest.outcome == "gave_up" and latest.reason == text[:4000]:
             stall = latest
     if stall is not None:
         stall.last_seen_at = now
@@ -243,6 +256,32 @@ async def record(
     await persist_event(db, project_id, STALL_RECORDED, view(stall))
     await _broadcast(project_id, STALL_RECORDED, view(stall))
     return stall, True
+
+
+def ended_by_operator(stall: Stall) -> bool:
+    return stall.ended_at is not None and (stall.outcome_detail or "").startswith(OPERATOR_ENDED)
+
+
+async def _task_changed_since(db: AsyncSession, task_id: str, since: Optional[datetime]) -> bool:
+    """Whether *task_id* moved, or had a run start, after *since*: the change that lets a stall the
+    operator ended on it be raised again."""
+    if since is None:
+        return True
+    moved = (
+        await db.execute(
+            select(TaskTransition.id)
+            .where(TaskTransition.task_id == task_id, TaskTransition.created_at > since)
+            .limit(1)
+        )
+    ).first()
+    if moved is not None:
+        return True
+    ran = (
+        await db.execute(
+            select(Run.id).where(Run.task_id == task_id, Run.started_at > since).limit(1)
+        )
+    ).first()
+    return ran is not None
 
 
 async def end(
@@ -453,8 +492,18 @@ def view(stall: Stall) -> Dict[str, Any]:
         "outcome": stall.outcome,
         "outcome_detail": stall.outcome_detail,
         "ended_at": at(stall.ended_at),
+        "ended_by": _ended_by(stall),
         "remedies": remedies_of(stall),
     }
+
+
+def _ended_by(stall: Stall) -> Optional[str]:
+    """`operator`, `mender` (it fixed or gave up), `hub` (its cause went away), or None while open."""
+    if stall.ended_at is None:
+        return None
+    if ended_by_operator(stall):
+        return "operator"
+    return MENDER if stall.outcome in ("fixed", "gave_up") else "hub"
 
 
 async def list_stalls(

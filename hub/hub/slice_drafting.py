@@ -176,20 +176,112 @@ async def _document_at(session: AsyncSession, project_id: str, path: Optional[st
     )
 
 
-async def _offer(
-    session: AsyncSession, roadmap: SpecDocument, row: Dict[str, Any], view: Dict[str, Any]
+async def _authors_and_conversations(
+    session: AsyncSession, documents: List[SpecDocument]
+) -> Dict[str, tuple[Optional[str], Optional[str]]]:
+    """`{document id: (the agent a drafting turn goes to by default, the conversation it wrote the
+    document in)}` for a document with no pre-change request: the first agent that wrote its
+    content before approval, else the agent that created it. One read for all the documents."""
+    from datetime import timezone
+
+    if not documents:
+        return {}
+    rows = (
+        (
+            await session.execute(
+                select(SpecDocumentEvent)
+                .where(
+                    SpecDocumentEvent.document_id.in_([d.id for d in documents]),
+                    SpecDocumentEvent.kind.in_(("created", "content")),
+                    SpecDocumentEvent.actor_kind == "agent",
+                )
+                .order_by(SpecDocumentEvent.created_at, SpecDocumentEvent.id)
+            )
+        )
+        .scalars()
+        .all()
+    )
+
+    def aware(value):
+        if value is not None and value.tzinfo is None:
+            return value.replace(tzinfo=timezone.utc)
+        return value
+
+    by_document: Dict[str, List[SpecDocumentEvent]] = {d.id: [] for d in documents}
+    for row in rows:
+        by_document[row.document_id].append(row)
+    chosen: Dict[str, Optional[str]] = {}
+    for document in documents:
+        mine = by_document[document.id]
+        approved_at = aware(document.first_approved_at)
+        authors = [
+            e.actor
+            for e in mine
+            if e.kind == "content"
+            and e.actor
+            and not (
+                approved_at is not None
+                and e.created_at is not None
+                and aware(e.created_at) > approved_at
+            )
+        ]
+        chosen[document.id] = (
+            authors[0]
+            if authors
+            else next((e.actor for e in mine if e.kind == "created" and e.actor), None)
+        )
+    run_ids = list(
+        {
+            e.run_id
+            for d in documents
+            for e in by_document[d.id]
+            if e.actor == chosen[d.id] and e.run_id
+        }
+    )
+    conversations: Dict[str, Optional[str]] = {}
+    if run_ids:
+        conversations = dict(
+            (
+                await session.execute(
+                    select(Run.id, Run.conversation_id).where(Run.id.in_(run_ids))
+                )
+            ).all()
+        )
+    found: Dict[str, tuple[Optional[str], Optional[str]]] = {}
+    for document in documents:
+        agent = chosen[document.id]
+        conversation = None
+        if agent:
+            conversation = next(
+                (
+                    conversations[e.run_id]
+                    for e in by_document[document.id]
+                    if e.actor == agent and e.run_id and conversations.get(e.run_id)
+                ),
+                None,
+            )
+        found[document.id] = (agent, conversation)
+    return found
+
+
+def _offer(
+    roadmap: SpecDocument,
+    row: Dict[str, Any],
+    view: Dict[str, Any],
+    claimed: Dict[str, SpecDocument],
+    facts: Dict[str, Dict[str, Any]],
+    author: tuple[Optional[str], Optional[str]],
 ) -> Dict[str, Any]:
     """The offer for the slice *row* of *roadmap*: what the operator is asked, and who is asked."""
     by_key = {s["key"]: s for s in view["slices"]}
     prior = [by_key[k] for k in row["builds_after"] if k in by_key]
     last = prior[-1] if prior else None
-    last_doc = await _document_at(session, roadmap.project_id, last["document"] if last else None)
-    agent, conversation_id = await _author_and_conversation(session, roadmap, [])
+    last_doc = claimed.get(last["key"]) if last else None
+    agent, conversation_id = author
     task_ids: List[str] = []
     for item in prior:
-        doc = await _document_at(session, roadmap.project_id, item["document"])
-        if doc is not None:
-            task_ids.extend(t.id for t in await _tasks(session, doc.id))
+        if item["key"] in facts:
+            task_ids.extend(t.id for t in facts[item["key"]]["tasks"])
     return {
         "document": last["document"] if last else None,
         "document_id": last_doc.id if last_doc is not None else None,
@@ -219,12 +311,35 @@ async def _offer(
     }
 
 
+async def offers_for(
+    session: AsyncSession, workspace, roadmaps: List[SpecDocument], shared=None
+) -> List[Dict[str, Any]]:
+    """Every slice of each of *roadmaps* offered for drafting now (`slice_progress`: the one rule).
+    What the offers read is read once for all the roadmaps, so the statement count is flat."""
+    ready = await slice_progress.ahead(session, workspace, roadmaps, shared)
+    views = {}
+    for roadmap in roadmaps:
+        views[roadmap.id] = await slice_progress.view_with_documents(
+            session, workspace, roadmap, shared, ready
+        )
+    offering = [
+        r for r in roadmaps if any(row["offers_drafting"] for row in views[r.id][0]["slices"])
+    ]
+    authors = await _authors_and_conversations(session, offering)
+    offers: List[Dict[str, Any]] = []
+    for roadmap in offering:
+        view, claimed, facts = views[roadmap.id]
+        for row in view["slices"]:
+            if row["offers_drafting"]:
+                offers.append(_offer(roadmap, row, view, claimed, facts, authors[roadmap.id]))
+    return offers
+
+
 async def offers_of(
-    session: AsyncSession, workspace, roadmap: SpecDocument
+    session: AsyncSession, workspace, roadmap: SpecDocument, shared=None
 ) -> List[Dict[str, Any]]:
     """Every slice of *roadmap* offered for drafting now (`slice_progress`: the one rule)."""
-    view = await slice_progress.roadmap_view(session, workspace, roadmap)
-    return [await _offer(session, roadmap, r, view) for r in view["slices"] if r["offers_drafting"]]
+    return await offers_for(session, workspace, [roadmap], shared)
 
 
 async def offer_for_slice(
@@ -277,10 +392,8 @@ async def list_offers(session: AsyncSession, workspace, project_id: str) -> List
         .scalars()
         .all()
     )
-    offers: List[Dict[str, Any]] = []
-    for roadmap in roadmaps:
-        offers.extend(await offers_of(session, workspace, roadmap))
-    return offers
+    shared = await slice_progress.change_specs(session, workspace, project_id) if roadmaps else None
+    return await offers_for(session, workspace, roadmaps, shared)
 
 
 async def _notify(session: AsyncSession, roadmap: SpecDocument, workspace) -> None:

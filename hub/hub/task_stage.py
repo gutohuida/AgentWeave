@@ -28,6 +28,7 @@ from .db.models import (
     TaskLanding,
     TaskTransition,
 )
+from .event_log_lookups import event_task, is_event
 
 NOT_STARTED = "not_started"
 #: Its turn is starting: the Hub is preparing the task's checkout (`workspace_preparation`).
@@ -153,8 +154,8 @@ async def attach_stages(session: AsyncSession, responses: list, *, project_id: s
         select(EventLog.data, EventLog.timestamp)
         .where(
             EventLog.project_id == project_id,
-            EventLog.event_type == "review_unstaffed",
-            EventLog.data["task_id"].as_string().in_(ids),
+            is_event("review_unstaffed"),
+            event_task.in_(ids),
         )
         .order_by(EventLog.timestamp)
     ):
@@ -167,8 +168,8 @@ async def attach_stages(session: AsyncSession, responses: list, *, project_id: s
         select(EventLog.data, EventLog.timestamp)
         .where(
             EventLog.project_id == project_id,
-            EventLog.event_type == "send_back_held",
-            EventLog.data["task_id"].as_string().in_(ids),
+            is_event("send_back_held"),
+            event_task.in_(ids),
         )
         .order_by(EventLog.timestamp)
     ):

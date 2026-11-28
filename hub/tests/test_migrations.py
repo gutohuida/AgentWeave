@@ -37,7 +37,7 @@ ALEMBIC_INI = Path(__file__).parent.parent / "hub" / "alembic.ini"
 # The revision `alembic upgrade head` must land on. Named once so the assertion and its failure
 # message cannot disagree — they did, for two head bumps, telling anyone debugging a failure to go
 # read the wrong migration.
-HEAD_REVISION = "0191"
+HEAD_REVISION = "0194"
 
 
 # ---------------------------------------------------------------------------
@@ -6230,3 +6230,50 @@ def test_migration_0185_adds_and_drops_only_the_confirmations_table(tmp_path) ->
             "run_id",
             "created_at",
         } <= columns
+
+
+_EVENT_LOG_DATA_INDEXES = (
+    "ix_event_logs_data_fired_job_document",
+    "ix_event_logs_data_fired_job_ts",
+    "ix_event_logs_data_pre_mortem_answer_document",
+    "ix_event_logs_data_unstaffed_task",
+    "ix_event_logs_data_send_back_held_task",
+)
+
+
+def _event_log_index_sql(db_file) -> dict:
+    with sqlite3.connect(db_file) as conn:
+        return {
+            name: " ".join(sql.split()).lower()
+            for name, sql in conn.execute(
+                "SELECT name, sql FROM sqlite_master WHERE type = 'index' AND tbl_name = 'event_logs'"
+            )
+            if sql
+        }
+
+
+def test_migration_0194_indexes_the_event_log_fields_as_the_models_declare(tmp_path) -> None:
+    """`screens-stop-repeating-work-on-every-read` FR-5: 0194 builds the five partial expression
+    indexes exactly as `create_all` does (SQLite matches an expression index only against the
+    identical expression), the downgrade drops only those five, and upgrading again restores
+    them."""
+    migrated = tmp_path / "migrated.db"
+    _run_alembic_with(f"sqlite+aiosqlite:///{migrated}")
+    built = tmp_path / "built.db"
+    _run(_create_all_at(f"sqlite+aiosqlite:///{built}"))
+
+    from_migration = _event_log_index_sql(migrated)
+    from_models = _event_log_index_sql(built)
+    for name in _EVENT_LOG_DATA_INDEXES:
+        assert name in from_migration, name
+        assert from_migration[name] == from_models[name], name
+        assert "where event_type = '" in from_migration[name], name
+
+    db_url = f"sqlite+aiosqlite:///{migrated}"
+    _downgrade_to(db_url, "0193")
+    after_downgrade = _event_log_index_sql(migrated)
+    assert not set(_EVENT_LOG_DATA_INDEXES) & set(after_downgrade)
+    assert set(after_downgrade) == set(from_migration) - set(_EVENT_LOG_DATA_INDEXES)
+
+    _upgrade_to(db_url, "0194")
+    assert _event_log_index_sql(migrated) == from_migration

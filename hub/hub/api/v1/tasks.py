@@ -86,15 +86,20 @@ from ...spec_lifecycle import Actor as SpecActor
 from ...sse import defer_broadcast, sse_manager
 from ...task_transition_service import (
     GateUnsatisfiedError,
+    HandedOver,
     TransitionRefusedError,
     apply_transition,
     ask_approval_git_first,
+    builder_profile,
     guard_entry_status,
     history_for,
     hub_written_documents,
     is_free_mover,
+    prerequisite_filer_refusal,
+    prerequisite_wait_refusal,
     retry_integration,
     run_fast_checks_before_completion,
+    stop_for_prerequisites,
 )
 from ...task_transitions import (
     ACTOR_OPERATOR,
@@ -1070,6 +1075,36 @@ async def check_task_create(
     return named
 
 
+async def _tasks_to_wait(
+    session: AsyncSession,
+    project_id: str,
+    precedes: Sequence[str],
+    actor: Actor,
+    body: TaskCreate,
+) -> List[Task]:
+    """The existing tasks *precedes* names, each one *actor* may make wait for a new task (FR-1).
+
+    Refused before anything is written: an unknown task (422), or an actor who is not the current
+    review round's checker of it (403). The new task's builder defaults to the first one's builder
+    (FR-5)."""
+    found: List[Task] = []
+    for name in dict.fromkeys(precedes):
+        task_id = await readable_ids.resolve(session, project_id, name)
+        waiter = await session.get(Task, task_id)
+        if waiter is None or waiter.project_id != project_id:
+            raise HTTPException(
+                status_code=422, detail=f"precedes names no task in this project: {name}."
+            )
+        refusal = await prerequisite_filer_refusal(session, waiter, actor)
+        if refusal is not None:
+            raise HTTPException(status_code=403, detail=refusal)
+        found.append(waiter)
+    if found and not body.builder:
+        waiter = found[0]
+        body.builder = (waiter.builder or "").strip() or await builder_profile(session, waiter)
+    return found
+
+
 async def create_task_for_actor(
     body: TaskCreate,
     *,
@@ -1080,11 +1115,18 @@ async def create_task_for_actor(
     session: AsyncSession,
     record_addition: bool = True,
     before_commit: Optional[Callable[[Task], Awaitable[None]]] = None,
+    precedes: Sequence[str] = (),
 ) -> TaskResponse:
     """Create a task as *actor*. *before_commit*, a Hub-internal caller's own staging (never a
     request's), runs on the new task before the task's commit, so what it writes lands in the same
     commit: the Hub's fix task records `merges_branch_tip` and its dedup event this way
-    (`a-red-main-does-not-hold-the-night`)."""
+    (`a-red-main-does-not-hold-the-night`).
+
+    *precedes* names existing tasks that must wait for the new one
+    (`a-task-that-cannot-move-waits-instead-of-being-rebuilt-and-re-reviewed`, FR-1): each gains it
+    as a prerequisite, in the new task's own commit, and a started one stops (FR-2). Only the
+    current review round's checker of each may name it, refused before anything is written; the
+    new task is built by the waiting task's builder unless the request names one (FR-5)."""
     # Honor a client-supplied id when present so the MCP `create_task` tool
     # can return the same id the Hub stored. Falls back to a fresh short id
     # for clients that don't supply one (e.g. direct API users).
@@ -1098,6 +1140,7 @@ async def create_task_for_actor(
         await _authorize_loop_task_creation(session, project_id, body.loop_id, actor, body)
 
     named = await check_task_create(session, project_id, body)
+    waiting = await _tasks_to_wait(session, project_id, precedes, actor, body)
 
     # Which document this work is against, so an agent given the task can reach it. `spec_document`
     # only ever disambiguated `requirement_ids` before, and the column was written solely by
@@ -1177,6 +1220,26 @@ async def create_task_for_actor(
             await task_dependency_writer.add_dependency(
                 session, project_id, task_id, prerequisite, known_edges=known_edges
             )
+    stopped: List[Task] = []
+    if waiting:
+        await session.flush()
+        for waiter in waiting:
+            outcome = await task_dependency_writer.add_dependency(
+                session, project_id, waiter.id, task_id
+            )
+            if outcome == task_dependency_writer.CYCLE:
+                who = waiter.readable_id or waiter.id
+                await session.rollback()
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=(
+                        f"{who} cannot wait for the new task: the new task already waits on {who} "
+                        f"(through depends_on {', '.join(body.depends_on or [])}), so the cycle "
+                        f"{who} -> new task -> {who} would hold both forever. Nothing was created."
+                    ),
+                )
+            if await stop_for_prerequisites(session, waiter, actor) is not None:
+                stopped.append(waiter)
     if body.loop_id is not None and record_addition:
         # The entry rides the task's own commit (`a-loops-history-records-its-creation-and-queue-
         # additions` D4). `initial_tasks` passes `record_addition=False` and writes one entry for
@@ -1224,6 +1287,10 @@ async def create_task_for_actor(
 
         await _hand_job_to_scheduler(session, reopened_job.id, reopened_job)
     await sse_manager.broadcast(project_id, "task_created", {"id": task.id, "title": body.title})
+    for waiter in stopped:
+        await sse_manager.broadcast(
+            project_id, "task_updated", {"id": waiter.id, "status": waiter.status}
+        )
     if task.status == "assigned" and task.loop_id is None:
         # Created `assigned` outside any flow: started for its assignee now
         # (`a-red-main-does-not-hold-the-night`, FR-9). The rule decides; this only asks.
@@ -2265,6 +2332,7 @@ async def update_task_for_actor(
     # What an agent's completion found when it waited for the fast checks, or `None`.
     completion_checks: Any = None
     completion_note: Optional[str] = None
+    handed_over_blocker: Optional[str] = None
     # **Before the transition, not after it** (finding F70). `_guard_reviewer_is_not_the_author`
     # refuses `-> under_review` while the task still names the agent that completed it, and
     # reassigning to a different reviewer in the same PATCH is the most natural way past it.
@@ -2302,6 +2370,15 @@ async def update_task_for_actor(
             )
         task.assignee = body.assignee
     if body.status is not None:
+        # Waiting on prerequisites, no run moves it (FR-1, FR-8); refused here, before a completion's
+        # fast checks spend minutes on a move that cannot be made.
+        waiting = (
+            await prerequisite_wait_refusal(session, task, actor)
+            if body.status != task.status
+            else None
+        )
+        if waiting is not None:
+            raise waiting
         if body.status == STATUS_BLOCKED and not actor.is_operator:
             # A block is observed, never asserted (design D3). An agent that could declare itself
             # waiting on a person could claim to be waiting on one it never asked — the one claim a
@@ -2364,10 +2441,16 @@ async def update_task_for_actor(
             # staged for a run actor (the operator-only fields are refused above, notes are written
             # below), so a wait of up to two minutes never holds the database's write lock. Raises
             # `ChecksFailedError` (409, with the checks' output) when one fails.
-            completion_checks = await run_fast_checks_before_completion(session, task, actor)
+            completion_checks = await run_fast_checks_before_completion(
+                session, task, actor, blocker=body.blocker
+            )
             from ...project_checks import ChecksSkipped
 
-            if isinstance(completion_checks, ChecksSkipped):
+            if isinstance(completion_checks, HandedOver):
+                # FR-7: unchanged work handed to its checker naming a blocker; no check ran.
+                handed_over_blocker = completion_checks.blocker
+                completion_note, completion_checks = completion_checks.note, None
+            elif isinstance(completion_checks, ChecksSkipped):
                 # FR-2: a completion that records no check run says why on its history row.
                 completion_note, completion_checks = completion_checks.note, None
         # Raises TransitionRefusedError — an illegal move, or one this actor may not make — which the
@@ -2432,6 +2515,14 @@ async def update_task_for_actor(
         task.title = body.title
     if body.notes is not None:
         task.notes = body.notes
+    if handed_over_blocker is not None and task.status == "completed":
+        task.handover_blocker = handed_over_blocker
+        said = body.notes if isinstance(body.notes, str) and body.notes.strip() else ""
+        task.notes = (
+            f"BLOCKER handed over by {actor.agent or 'the builder'}, its own changes unchanged "
+            f"since it was sent back: {handed_over_blocker}"
+            + (f" Its notes: {said}" if said else "")
+        )
     if body.divergence_policy is not None or "escalation_agent" in body.model_fields_set:
         # The operator's, not the agent's. An agent able to set its own task's policy to `surface`
         # could disarm the check that exists to catch it dropping the work — the same reason no

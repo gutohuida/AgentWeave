@@ -172,22 +172,24 @@ async def _links_of(
             )
         ).all()
     }
-    slices: Dict[str, Dict[str, str]] = {}
+    road_paths = {str(r["document"]) for r, _ in named.values() if r} & set(by_path)
+    stored = await spec_reading.payloads_for_documents(
+        session, workspace, [by_path[p][0] for p in road_paths]
+    )
+    slices: Dict[str, Dict[str, str]] = {
+        p: {
+            str(s.get("key")): str(s.get("title") or "")
+            for s in ((stored.get(by_path[p][0]) or {}).get("slices") or [])
+            if isinstance(s, dict)
+        }
+        for p in road_paths
+    }
     found: Dict[str, Dict[str, Any]] = {}
     for document_id, (roadmap, paths) in named.items():
         entry: Dict[str, Any] = {"roadmap": None, "capabilities": []}
         if roadmap:
             road_path, key = str(roadmap["document"]), str(roadmap["slice"])
             if road_path in by_path:
-                if road_path not in slices:
-                    stored = await spec_reading.payloads_for_documents(
-                        session, workspace, [by_path[road_path][0]]
-                    )
-                    slices[road_path] = {
-                        str(s.get("key")): str(s.get("title") or "")
-                        for s in ((stored.get(by_path[road_path][0]) or {}).get("slices") or [])
-                        if isinstance(s, dict)
-                    }
                 entry["roadmap"] = {
                     "path": road_path,
                     "title": by_path[road_path][1],
@@ -361,11 +363,12 @@ async def project_rows(
     moving = await _tasks_in_motion(
         session, project_id, [b.id for b in builds if b.state == RUNNING], states
     )
+    spent_by = await spends(session, builds)
     rows: List[Dict[str, Any]] = []
     for build in builds:
         pair = loops.get(build.loop_id or "")
         asked = questions.get(build.id, [])
-        spent, unpriced = await spend(session, build)
+        spent, unpriced = spent_by[build.id]
         progress = counts.get(build.id, {"total": 0, "done": 0, "landing": 0})
         rows.append(
             {
@@ -546,23 +549,52 @@ async def spend(session: AsyncSession, build: Build) -> Tuple[int, int]:
     """`(micros, unpriced)`: the API-equivalent cost of the build's runs, and how many of its turns
     carry no figure (counted as zero, design D7). Runs bound to the build's tasks, and runs in the
     lead's build conversation."""
-    task_ids = select(Task.id).where(Task.build_id == build.id)
-    bound = Run.task_id.in_(task_ids)
-    where = bound
-    if build.lead_conversation_id:
-        where = bound | (Run.conversation_id == build.lead_conversation_id)
-    row = (
+    return (await spends(session, [build]))[build.id]
+
+
+async def spends(session: AsyncSession, builds: List[Build]) -> Dict[str, Tuple[int, int]]:
+    """`{build id: (micros, unpriced)}` for every build in *builds*, from two grouped reads however
+    many builds there are (`spend`'s figures, batched)."""
+    result: Dict[str, Tuple[int, int]] = {b.id: (0, 0) for b in builds}
+    if not builds:
+        return result
+    task_owner = dict(
+        (
+            await session.execute(
+                select(Task.id, Task.build_id).where(Task.build_id.in_([b.id for b in builds]))
+            )
+        ).all()
+    )
+    lead_owner = {b.lead_conversation_id: b.id for b in builds if b.lead_conversation_id}
+    where = []
+    if task_owner:
+        where.append(Run.task_id.in_(list(task_owner)))
+    if lead_owner:
+        where.append(Run.conversation_id.in_(list(lead_owner)))
+    if not where:
+        return result
+    from sqlalchemy import or_
+
+    totals: Dict[str, List[int]] = {b.id: [0, 0] for b in builds}
+    for task_id, conversation_id, micros, unpriced in (
         await session.execute(
             select(
+                Run.task_id,
+                Run.conversation_id,
                 func.coalesce(func.sum(TurnUsage.api_equivalent_usd_micros), 0),
                 func.count(TurnUsage.id) - func.count(TurnUsage.api_equivalent_usd_micros),
             )
             .select_from(TurnUsage)
             .join(Run, Run.id == TurnUsage.run_id)
-            .where(Run.project_id == build.project_id, where)
+            .where(Run.project_id.in_({b.project_id for b in builds}), or_(*where))
+            .group_by(Run.task_id, Run.conversation_id)
         )
-    ).one()
-    return int(row[0] or 0), int(row[1] or 0)
+    ).all():
+        owners = {task_owner.get(task_id), lead_owner.get(conversation_id)} - {None}
+        for owner in owners:
+            totals[owner][0] += int(micros or 0)
+            totals[owner][1] += int(unpriced or 0)
+    return {build_id: (pair[0], pair[1]) for build_id, pair in totals.items()}
 
 
 def _iso(value: Optional[datetime]) -> Optional[str]:

@@ -21,6 +21,7 @@ import contextlib
 import hashlib
 import json
 import os
+import stat
 import tempfile
 import threading
 from collections import OrderedDict
@@ -176,13 +177,32 @@ def discover(workspace: ProjectWorkspace) -> Tuple[List[str], List[Dict[str, Any
     return sorted(found), diagnostics
 
 
+#: `{resolved file: ((mtime_ns, size), content)}`. A file whose stamp is unchanged is not read again,
+#: so a request that names one document from many places pays for one read (D1128).
+_CONTENT_CACHE: Dict[str, Tuple[Tuple[int, int], str]] = {}
+_CONTENT_CACHE_LIMIT = 512
+
+
 def read_document(workspace: ProjectWorkspace, path: str) -> Optional[str]:
     """A document's content, or ``None`` when there is no such file."""
     validate_spec_path(path)
     resolved = workspace.resolve_relative(path)
-    if not resolved.is_file():
+    try:
+        info = resolved.stat()
+    except OSError:
         return None
-    return resolved.read_text(encoding="utf-8")
+    if not stat.S_ISREG(info.st_mode):
+        return None
+    key = str(resolved)
+    signature = (info.st_mtime_ns, info.st_size)
+    held = _CONTENT_CACHE.get(key)
+    if held is not None and held[0] == signature:
+        return held[1]
+    content = resolved.read_text(encoding="utf-8")
+    if len(_CONTENT_CACHE) >= _CONTENT_CACHE_LIMIT:
+        _CONTENT_CACHE.clear()
+    _CONTENT_CACHE[key] = (signature, content)
+    return content
 
 
 def _load_stored(content: Optional[str]) -> Optional[Dict[str, Any]]:

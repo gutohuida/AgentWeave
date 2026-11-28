@@ -85,6 +85,7 @@
     "depends_on",
     "description",
     "loop_id",
+    "precedes",
     "priority",
     "requirement_ids",
     "requirements",
@@ -295,6 +296,7 @@
     "dashboard_id"
   ],
   "update_task": [
+    "blocker",
     "failing_pieces",
     "notes",
     "reason_class",

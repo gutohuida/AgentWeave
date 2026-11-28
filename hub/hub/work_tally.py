@@ -47,6 +47,9 @@ from .usage_accounting import _worker_lines
 
 MICROS = 1_000_000
 
+#: The first column of each read a `spend_only` tally still makes (runs and their turn usage).
+_SPEND_COLUMNS = (Run.id, TurnUsage.run_id)
+
 #: What a run was for, first match wins (`_role`).
 ROLES = ("building", "reviewing", "leading", "mending", "other")
 #: Where a build's wall time went, in the order an instant is given to the first that applies.
@@ -82,8 +85,14 @@ class _Acc:
             self.v[key] = self.v.get(key, 0) + value
 
     def add_all(self, values: Dict[str, Any]) -> None:
+        mine = self.v
         for key, value in values.items():
-            self.add(key, value)
+            if value is None:
+                continue
+            if key[:4] == "max.":
+                mine[key] = max(mine.get(key, 0), value)
+            else:
+                mine[key] = mine.get(key, 0) + value
 
     def merge(self, other: "_Acc") -> "_Acc":
         self.add_all(other.v)
@@ -135,7 +144,7 @@ class _Acc:
 class _Book:
     """Where a fact is booked: the total, its spec entry and its agent, model and level entries."""
 
-    def __init__(self, builds: Iterable[Build]) -> None:
+    def __init__(self, builds: Iterable[Any]) -> None:
         self.total = _Acc()
         self.builds: Dict[str, _Acc] = {b.id: _Acc() for b in builds}
         self.before: Dict[str, _Acc] = {}
@@ -210,6 +219,7 @@ async def tally(
     since: Optional[datetime] = None,
     now: Optional[datetime] = None,
     build_id: Optional[str] = None,
+    spend_only: bool = False,
 ) -> Dict[str, Any]:
     """Every figure about where the project's work went, at every level, from `since` on.
 
@@ -217,12 +227,22 @@ async def tally(
     transitions, check runs and evidence), the runs bound to them, and the conversations of the
     stalls and the lead that name it. `builds[build_id]` is then identical to the whole-project
     tally's; the groupings and the worker line are not computed (they would be partial).
+
+    With `spend_only` only the records that carry spend are read (runs, their usage and the worker
+    calls): the totals, the agent grouping and `spend` are those of the whole tally, while the build,
+    spec, model and level figures, which need tasks and history, are left empty. The ledger asks
+    for this and reads nothing else.
     """
     now = _aware(now) or datetime.now(timezone.utc)
     since = _aware(since)
 
-    async def load(*columns: Any, where: Any) -> List[Any]:
-        return list((await session.execute(select(*columns).where(where))).all())
+    async def load(*columns: Any, where: Any, order: Any = None) -> List[Any]:
+        if spend_only and not any(columns[0] is c for c in _SPEND_COLUMNS):
+            return []
+        query = select(*columns).where(where)
+        if order is not None:
+            query = query.order_by(*(order if isinstance(order, tuple) else (order,)))
+        return list((await session.execute(query)).all())
 
     focus = await session.get(Build, build_id) if build_id else None
     if build_id and (focus is None or focus.project_id != project_id):
@@ -231,17 +251,28 @@ async def tally(
     build_where = Build.project_id == project_id
     if focus is not None:
         build_where = build_where & (Build.document_id == focus.document_id)
-    builds = (
-        (await session.execute(select(Build).where(build_where).order_by(Build.created_at)))
-        .scalars()
-        .all()
+    builds = await load(
+        Build.id,
+        Build.document_id,
+        Build.level,
+        Build.driver,
+        Build.state,
+        Build.created_at,
+        Build.stopped_at,
+        Build.loop_id,
+        Build.lead_conversation_id,
+        where=build_where,
+        order=Build.created_at,
     )
     builds_by_id = {b.id: b for b in builds}
     task_where = Task.project_id == project_id
     if focus is not None:
         task_where = task_where & (Task.build_id == focus.id)
     tasks = {
-        t.id: t for t in (await session.execute(select(Task).where(task_where))).scalars().all()
+        t.id: t
+        for t in await load(
+            Task.id, Task.build_id, Task.spec_document_id, Task.level, Task.status, where=task_where
+        )
     }
     scoped_ids = list(tasks) if focus is not None else None
     doc_where = SpecDocument.project_id == project_id
@@ -249,13 +280,11 @@ async def tally(
         doc_where = doc_where & (SpecDocument.id == focus.document_id)
     docs = {
         d.id: d
-        for d in (await session.execute(select(SpecDocument).where(doc_where))).scalars().all()
+        for d in await load(SpecDocument.id, SpecDocument.title, SpecDocument.path, where=doc_where)
     }
     menders = {
         a.name
-        for a in (await session.execute(select(Agent).where(Agent.project_id == project_id)))
-        .scalars()
-        .all()
+        for a in await load(Agent.name, Agent.config, where=Agent.project_id == project_id)
         if (a.config or {}).get("hub_role") == _MENDER_ROLE
     }
     loop_where = Loop.project_id == project_id
@@ -271,14 +300,12 @@ async def tally(
             Stall.task_id.in_(scoped_ids)
             | (Stall.task_id.is_(None) & Stall.loop_id.in_(list(loops)))
         )
-    stalls = (
-        (
-            await session.execute(
-                select(Stall).where(stall_where).order_by(Stall.first_seen_at, Stall.id)
-            )
-        )
-        .scalars()
-        .all()
+    stalls = await load(
+        Stall.conversation_id,
+        Stall.task_id,
+        Stall.loop_id,
+        where=stall_where,
+        order=(Stall.first_seen_at, Stall.id),
     )
     stall_of: Dict[str, Stall] = {}
     for stall in stalls:
@@ -300,29 +327,34 @@ async def tally(
     if focus is not None:
         transition_where = transition_where & TaskTransition.task_id.in_(scoped_ids)
         check_where = check_where & TaskCheckRun.task_id.in_(scoped_ids)
-    transitions = (
-        (
-            await session.execute(
-                select(TaskTransition).where(transition_where).order_by(TaskTransition.sequence)
-            )
-        )
-        .scalars()
-        .all()
+    transitions = await load(
+        TaskTransition.task_id,
+        TaskTransition.from_status,
+        TaskTransition.to_status,
+        TaskTransition.created_at,
+        TaskTransition.sequence,
+        TaskTransition.actor_agent,
+        TaskTransition.run_id,
+        TaskTransition.level,
+        where=transition_where,
+        order=TaskTransition.sequence,
     )
     by_task_rows: Dict[str, List[Any]] = {}
     for tr in transitions:
         by_task_rows.setdefault(tr.task_id, []).append(tr)
     history = {tid: _History(rows) for tid, rows in by_task_rows.items()}
-    checks = (
-        (
-            await session.execute(
-                select(TaskCheckRun).where(check_where).order_by(TaskCheckRun.started_at)
-            )
-        )
-        .scalars()
-        .all()
+    checks = await load(
+        TaskCheckRun.task_id,
+        TaskCheckRun.state,
+        TaskCheckRun.results,
+        TaskCheckRun.ended_by,
+        TaskCheckRun.started_at,
+        TaskCheckRun.slot_at,
+        TaskCheckRun.ended_at,
+        where=check_where,
+        order=TaskCheckRun.started_at,
     )
-    checks_by_task: Dict[str, List[TaskCheckRun]] = {}
+    checks_by_task: Dict[str, List[Any]] = {}
     for check in checks:
         checks_by_task.setdefault(check.task_id, []).append(check)
 
@@ -352,7 +384,18 @@ async def tally(
         usage_where = usage_where & TurnUsage.run_id.in_(list(runs))
     usages = {
         u.run_id: u
-        for u in (await session.execute(select(TurnUsage).where(usage_where))).scalars().all()
+        for u in await load(
+            TurnUsage.run_id,
+            TurnUsage.agent,
+            TurnUsage.model,
+            TurnUsage.api_equivalent_usd_micros,
+            TurnUsage.status,
+            TurnUsage.total_tokens,
+            TurnUsage.ai_nano_aiu,
+            TurnUsage.premium_requests,
+            TurnUsage.observed_at,
+            where=usage_where,
+        )
     }
 
     # ------------------------------------------------------------------------------------------
@@ -531,14 +574,12 @@ async def tally(
     if focus is not None:
         landing_where = landing_where & TaskLanding.task_id.in_(scoped_ids)
     landings_by_task: Dict[str, List[Any]] = {}
-    for landing in (
-        (
-            await session.execute(
-                select(TaskLanding).where(landing_where).order_by(TaskLanding.created_at)
-            )
-        )
-        .scalars()
-        .all()
+    for landing in await load(
+        TaskLanding.task_id,
+        TaskLanding.state,
+        TaskLanding.ended_at,
+        where=landing_where,
+        order=TaskLanding.created_at,
     ):
         landings_by_task.setdefault(landing.task_id, []).append(landing)
     for tid, rows in by_task_rows.items():
@@ -802,7 +843,7 @@ async def tally(
 class _Orphan:
     """A usage row whose run row is gone: counted as an unbound run of its agent."""
 
-    def __init__(self, run_id: str, usage: TurnUsage) -> None:
+    def __init__(self, run_id: str, usage: Any) -> None:
         self.id = run_id
         self.agent = usage.agent
         self.conversation_id = None
@@ -829,10 +870,10 @@ def _spend(
 
 
 def _partition(
-    build: Build,
-    build_tasks: List[Task],
+    build: Any,
+    build_tasks: List[Any],
     history: Dict[str, _History],
-    checks_by_task: Dict[str, List[TaskCheckRun]],
+    checks_by_task: Dict[str, List[Any]],
     runs: List[Tuple[datetime, Optional[datetime], str]],
     now: datetime,
     since: Optional[datetime],
@@ -897,19 +938,30 @@ def _partition(
         points.update(clip(stop) for stop, _ in stamps)
     ordered = sorted(points)
 
-    def running(intervals: List[Tuple[datetime, Optional[datetime]]], at: datetime) -> bool:
-        return any(s <= at and (e is None or at < e) for s, e in intervals)
+    class _Running:
+        """Whether any interval is open at an instant: starts passed less ends passed."""
+
+        def __init__(self, intervals: List[Tuple[datetime, Optional[datetime]]]) -> None:
+            self.starts = sorted(s for s, _ in intervals)
+            self.ends = sorted(max(e, s) for s, e in intervals if e is not None)
+
+        def __call__(self, at: datetime) -> bool:
+            return bisect.bisect_right(self.starts, at) > bisect.bisect_right(self.ends, at)
+
+    is_building = _Running(building)
+    is_reviewing = _Running(reviewing)
+    is_checking = _Running(checking)
 
     seconds = dict.fromkeys(WALL_PARTS, 0.0)
     for a, b in zip(ordered, ordered[1:], strict=False):
         if b <= a:
             continue
         part = "waiting"
-        if running(building, a):
+        if is_building(a):
             part = "building"
-        elif running(reviewing, a):
+        elif is_reviewing(a):
             part = "reviewing"
-        elif running(checking, a):
+        elif is_checking(a):
             part = "checks"
         else:
             awaiting = [

@@ -22,6 +22,7 @@ from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from . import builds as builds_module
+from . import stalls as stalls_module
 from .db.models import (
     Conversation,
     KnownFailingTest,
@@ -54,6 +55,10 @@ CHECK = "check"
 OFFER = "offer"
 REOPENING = "reopening"
 MAIN_MOVED = "main_moved"
+
+#: The kinds the operator may close without doing the work (FR-7 of
+#: `every-overview-control-lands-where-you-can-act-on-it`); the rest leave only when fixed.
+DISMISSABLE = frozenset({QUESTION, PERMISSION, STALL, MAIN_MOVED, OFFER, REOPENING})
 
 RANK = {
     MAIN: 1,
@@ -140,6 +145,7 @@ def _need(
         "id": need_id,
         "kind": kind,
         "rank": RANK[kind],
+        "dismissable": kind in DISMISSABLE,
         "agent": agent or None,
         "title": title,
         "waiting_since": _aware(waiting_since),
@@ -182,7 +188,7 @@ async def overview(
     ending with today. Finished work is listed from the earlier of *day_start* and
     *previous_visit_at* (the visit before the current one), read from the visit record unless the
     caller passes it."""
-    from . import overview_note_job
+    from . import overview_note_job, project_checks
 
     moment = _aware(now) or datetime.now(timezone.utc)
     day_start = _aware(day_start) or moment
@@ -194,9 +200,13 @@ async def overview(
     since = min(day_start, previous) if previous is not None else day_start
 
     project = await session.get(Project, project_id)
-    main = await main_state(session, project_id, branch=project.main_branch if project else None)
+    # Read once: the main tile and the needs both name them, and they decode check results.
+    notices = await project_checks.could_not_run_notices(session, project_id)
+    main = await main_state(
+        session, project_id, branch=project.main_branch if project else None, notices=notices
+    )
     rows = await builds_module.project_rows(session, project_id, workspace)
-    needs = await gather_needs(session, project_id, workspace=workspace, main=main)
+    needs = await gather_needs(session, project_id, workspace=workspace, main=main, notices=notices)
     out: Dict[str, Any] = {
         "generated_at": moment.isoformat(),
         "visit": visit,
@@ -252,9 +262,15 @@ async def _entered(session: AsyncSession, tasks: Sequence[Task]) -> Dict[str, da
 
 
 async def gather_needs(
-    session: AsyncSession, project_id: str, *, workspace: Any, main: Dict[str, Any]
+    session: AsyncSession,
+    project_id: str,
+    *,
+    workspace: Any,
+    main: Dict[str, Any],
+    notices: Optional[List[Dict[str, Any]]] = None,
 ) -> List[Dict[str, Any]]:
-    """Every item waiting on the operator in the project, unranked (FR-3)."""
+    """Every item waiting on the operator in the project, unranked (FR-3). *notices* are the
+    project's could-not-run notices where the caller already read them."""
     from . import landing_queue, main_watch, project_checks, slice_drafting
 
     needs: List[Dict[str, Any]] = []
@@ -287,13 +303,26 @@ async def gather_needs(
 
     # Stalls: approved work that did not land is a merge (rank 2), the rest stalls (rank 3).
     merged_tasks: set = set()
-    for stall in (
-        await session.execute(
-            select(Stall)
-            .where(Stall.project_id == project_id, Stall.ended_at.is_(None))
-            .order_by(Stall.first_seen_at, Stall.id)
-        )
-    ).scalars():
+    open_stalls = list(
+        (
+            await session.execute(
+                select(Stall)
+                .where(Stall.project_id == project_id, Stall.ended_at.is_(None))
+                .order_by(Stall.first_seen_at, Stall.id)
+            )
+        ).scalars()
+    )
+    not_landed = await landing_queue.unlanded(session, Task.project_id == project_id)
+    # The tasks the two loops below name, in one read rather than one each.
+    wanted = {s.task_id for s in open_stalls if s.task_id} | set(not_landed)
+    if wanted:
+        for row in (
+            await session.execute(
+                select(Task).where(Task.project_id == project_id, Task.id.in_(wanted))
+            )
+        ).scalars():
+            tasks[row.id] = row
+    for stall in open_stalls:
         task = await task_of(stall.task_id)
         if stall.cause.startswith(_INTEGRATION_CAUSE) and task is not None:
             merged_tasks.add(task.id)
@@ -309,17 +338,20 @@ async def gather_needs(
                 )
             )
             continue
+        # A stall with no task opens the mender's thread on it; with neither, nothing (FR-4).
+        agent = task.assignee if task is not None else None
         if task is not None:
             target = _target("task", task.id)
         elif stall.conversation_id:
+            agent = stalls_module.MENDER
             target = _target("thread", stall.id, conversation_id=stall.conversation_id)
         else:
-            target = _target("setting", "stalls")
+            target = _target("none", None)
         needs.append(
             _need(
                 f"stall-{stall.id}",
                 STALL,
-                agent=(task.assignee if task is not None else None),
+                agent=agent,
                 title=_one_line(stall.reason) or stall.cause.replace("_", " "),
                 waiting_since=stall.first_seen_at,
                 action="Open",
@@ -327,9 +359,7 @@ async def gather_needs(
             )
         )
     # A landing that ended without landing, with no stall raised for it (rank 2).
-    for task_id, (state, _reason) in (
-        await landing_queue.unlanded(session, Task.project_id == project_id)
-    ).items():
+    for task_id, (state, _reason) in not_landed.items():
         if state != landing_queue.NOT_LANDED or task_id in merged_tasks:
             continue
         task = await task_of(task_id)
@@ -431,7 +461,9 @@ async def gather_needs(
         )
 
     # Checks that could not run (rank 6).
-    for notice in await project_checks.could_not_run_notices(session, project_id):
+    if notices is None:
+        notices = await project_checks.could_not_run_notices(session, project_id)
+    for notice in notices:
         needs.append(
             _need(
                 f"check-{notice['check']}",
@@ -520,6 +552,7 @@ async def _unstaffed(
 ) -> Dict[str, datetime]:
     """When the Hub last could not staff each task's review (`review_unstaffed`)."""
     from .db.models import EventLog
+    from .event_log_lookups import event_task, is_event
     from .review_on_completion import REVIEW_UNSTAFFED
 
     if not task_ids:
@@ -529,8 +562,8 @@ async def _unstaffed(
         select(EventLog.data, EventLog.timestamp)
         .where(
             EventLog.project_id == project_id,
-            EventLog.event_type == REVIEW_UNSTAFFED,
-            EventLog.data["task_id"].as_string().in_(list(task_ids)),
+            is_event(REVIEW_UNSTAFFED),
+            event_task.in_(list(task_ids)),
         )
         .order_by(EventLog.timestamp)
     ):
@@ -566,10 +599,15 @@ async def _list_checked(session: AsyncSession, project_id: str) -> bool:
 
 
 async def main_state(
-    session: AsyncSession, project_id: str, *, branch: Optional[str]
+    session: AsyncSession,
+    project_id: str,
+    *,
+    branch: Optional[str],
+    notices: Optional[List[Dict[str, Any]]] = None,
 ) -> Dict[str, Any]:
     """The main tile (FR-4, algorithm 'main-state'). Carries `_since`, the oldest cause's time,
-    for the main need; `gather_needs` removes it."""
+    for the main need; `gather_needs` removes it. *notices* are the project's could-not-run
+    notices where the caller already read them."""
     from . import known_failing, landing_queue, project_checks
 
     name = branch or "main"
@@ -593,7 +631,8 @@ async def main_state(
     entries = await known_failing.entries(session, project_id)
     failing = [e for e in entries if e.kind == known_failing.FAILS_ON_MAIN]
     flaky = [e for e in entries if e.kind == known_failing.FLAKY]
-    notices = await project_checks.could_not_run_notices(session, project_id)
+    if notices is None:
+        notices = await project_checks.could_not_run_notices(session, project_id)
     since: List[datetime] = [m for m in (_aware(e.first_seen) for e in failing) if m is not None]
     since += [datetime.fromisoformat(n["at"]) for n in notices]
     if failing or notices:

@@ -92,7 +92,7 @@ async def ledger(session: AsyncSession, project_id: str) -> Dict[str, Any]:
     ]
 
     # Spend: every figure comes from the work tally (`work_tally.py`), the one place that sums them.
-    whole = await work_tally.tally(session, project_id)
+    whole = await work_tally.tally(session, project_id, spend_only=True)
     project_row = whole["project"]
     spend = {
         "total_usd": _usd(project_row["cost_micros"]["total"]),
@@ -193,32 +193,30 @@ async def ledger(session: AsyncSession, project_id: str) -> Dict[str, Any]:
 
     notices = []
     for kind in FOLDED_NOTICES:
-        count, first, last = (
+        # One grouped read: the counts, and the first and last time, add up from its rows.
+        by_agent = (
             await session.execute(
                 select(
+                    EventLog.agent,
                     func.count(EventLog.id),
                     func.min(EventLog.timestamp),
                     func.max(EventLog.timestamp),
-                ).where(EventLog.project_id == project_id, EventLog.event_type == kind)
-            )
-        ).one()
-        if not count:
-            continue
-        agents = (
-            await session.execute(
-                select(EventLog.agent, func.count(EventLog.id))
+                )
                 .where(EventLog.project_id == project_id, EventLog.event_type == kind)
                 .group_by(EventLog.agent)
                 .order_by(func.count(EventLog.id).desc())
             )
         ).all()
+        count = sum(n for _, n, _, _ in by_agent)
+        if not count:
+            continue
         notices.append(
             {
                 "kind": kind,
                 "count": count,
-                "first_at": _iso(first),
-                "last_at": _iso(last),
-                "by_agent": [{"agent": agent or None, "count": n} for agent, n in agents],
+                "first_at": _iso(min(first for _, _, first, _ in by_agent if first is not None)),
+                "last_at": _iso(max(last for _, _, _, last in by_agent if last is not None)),
+                "by_agent": [{"agent": agent or None, "count": n} for agent, n, _, _ in by_agent],
             }
         )
 

@@ -472,11 +472,14 @@ async def list_firings(
     db: AsyncSession, project_id: str, *, job: Optional[str] = None, limit: int = 50
 ) -> List[Dict[str, Any]]:
     """Newest first. Each firing is its event's payload plus its `id` and `at`."""
-    query = select(EventLog).where(
-        EventLog.project_id == project_id, EventLog.event_type == FIRED_EVENT
-    )
+    query = select(EventLog).where(EventLog.project_id == project_id)
     if job is not None:
-        query = query.where(EventLog.data["job"].as_string() == job)
+        # Literal, so this read uses `ix_event_logs_data_fired_job_document` (migration 0194).
+        from .event_log_lookups import fired_job, is_event
+
+        query = query.where(is_event(FIRED_EVENT), fired_job == job)
+    else:
+        query = query.where(EventLog.event_type == FIRED_EVENT)
     rows = (
         (
             await db.execute(

@@ -48,6 +48,7 @@ from .task_transition_service import (
     agent_that_completed,
     agents_that_recorded_evidence_for,
     apply_transition,
+    refresh_prerequisite_wait,
 )
 from .task_transitions import (
     STATUS_BLOCKED,
@@ -1115,6 +1116,10 @@ async def release_block_for_question(
     task = await session.get(Task, question.blocked_task_id)
     if task is None or task.status != STATUS_BLOCKED:
         return None
+    if task.waits_on_prerequisites:
+        # Also waiting on prerequisites: released only once those are approved too, and then to
+        # its builder (`a-task-that-cannot-move-waits-...`, FR-3).
+        return task if await refresh_prerequisite_wait(session, task, operator()) else None
 
     try:
         await apply_transition(session, task, "in_progress", operator())
@@ -1214,6 +1219,10 @@ async def release_block_for_expired_wait(
     task = await session.get(Task, question.blocked_task_id)
     if task is None or task.status != STATUS_BLOCKED:
         return None
+    if task.waits_on_prerequisites:
+        # As for an answer: the prerequisites still hold it, or it goes back to its builder.
+        released = await refresh_prerequisite_wait(session, task, run_actor(run.id, run.agent))
+        return task if released else None
 
     try:
         await apply_transition(

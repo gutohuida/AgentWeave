@@ -46,6 +46,7 @@ from . import (
 )
 from .db.engine import async_session_factory
 from .db.models import EventLog, Runner
+from .event_log_lookups import fired_document, fired_job, is_event
 from .project_workspace import ProjectWorkspace
 from .spec_manifest import SpecPathError, validate_spec_path
 from .worker import run_worker
@@ -256,9 +257,9 @@ async def newest_firing(
         select(EventLog)
         .where(
             EventLog.project_id == project_id,
-            EventLog.event_type == manager.FIRED_EVENT,
-            EventLog.data["job"].as_string() == JOB,
-            EventLog.data[("subject", "document")].as_string() == path,
+            is_event(manager.FIRED_EVENT),
+            fired_job == JOB,
+            fired_document == path,
         )
         .order_by(EventLog.timestamp.desc(), EventLog.id.desc())
         .limit(1)
@@ -292,8 +293,8 @@ async def newest_firings(session: AsyncSession, project_id: str) -> Dict[str, Di
         select(EventLog)
         .where(
             EventLog.project_id == project_id,
-            EventLog.event_type == manager.FIRED_EVENT,
-            EventLog.data["job"].as_string() == JOB,
+            is_event(manager.FIRED_EVENT),
+            fired_job == JOB,
         )
         .order_by(EventLog.timestamp.desc(), EventLog.id.desc())
     )

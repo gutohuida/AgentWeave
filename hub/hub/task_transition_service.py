@@ -158,6 +158,48 @@ class DependencyUnmetError(TransitionRefusedError):
         self.refusal = refusal
 
 
+class PrerequisitesPendingError(TransitionRefusedError):
+    """A run asked to move a task that is `blocked` waiting on prerequisites added after it started
+    (`a-task-that-cannot-move-waits-instead-of-being-rebuilt-and-re-reviewed`, FR-1, FR-8).
+
+    409: the move is well-formed and the asker may ordinarily make it; the prerequisites' state is
+    what forbids it. Names each prerequisite, so the run's only feedback says what it waits for.
+    """
+
+    http_status = 409
+
+    def __init__(self, task: Task, refusal) -> None:
+        super().__init__(
+            f"Task {task.readable_id or task.id} is blocked, waiting on work added as its "
+            f"prerequisite: {prerequisite_names(refusal)}. No move is taken from it until each is "
+            "approved; it then goes back to its builder on its own. End your turn here."
+        )
+        self.refusal = refusal
+
+
+class UnchangedCompletionError(TransitionRefusedError):
+    """A builder completing a sent-back task whose own changes against the main branch are what
+    they were at the send-back, naming no blocker (`a-task-that-cannot-move-waits-instead-of-being-
+    rebuilt-and-re-reviewed`, FR-4). 409: the work's state forbids it, not the asker."""
+
+    http_status = 409
+
+    def __init__(self, task: Task) -> None:
+        super().__init__(
+            f"Task {task.readable_id or task.id} was sent back and its own changes against the main "
+            "branch are unchanged since: completing it again would only send it round the same "
+            "loop, and no check run was started. Do one of these: (1) commit a change that "
+            "addresses why it was sent back, then complete it again -- the work is judged in the "
+            f"task's checkout at .agentweave/tasks/{task.id} (relative to the project root), not "
+            "in your own agent worktree, so make and commit the change there; (2) if something else must be "
+            "done first, hand it to its checker naming the blocker -- "
+            f'`update_task("{task.display_id}", status="completed", blocker="<what blocks it>")` '
+            "-- and the checker can file that work as its prerequisite; (3) if you need a "
+            "decision, ask the operator with `ask_user`. Merging the main branch or an empty "
+            "commit does not change them."
+        )
+
+
 #: Reaching `approved`, `rejected` or `revision_needed` is a judgement on work someone else did.
 #: These are the moves author/reviewer separation guards.
 _REVIEW_OUTCOMES = frozenset({"approved", "rejected", "revision_needed"})
@@ -1213,6 +1255,8 @@ class ChecksFailedError(TransitionRefusedError):
             f"Task {task.id} was not completed. {report}\n\nFix what the check reports and move "
             f"the task to completed again; the fast checks run again on the new work."
         )
+        # Stays for a task whose recorded verdict predates a send-back baseline (no baseline, so
+        # UnchangedCompletionError cannot fire); a sent-back task reaches that refusal first.
         if getattr(outcome, "unchanged_checkout", None):
             message = (
                 f"Task {task.id} was not completed. Its work is unchanged since check run "
@@ -1279,7 +1323,21 @@ async def completion_refusal(
     return None
 
 
-async def run_fast_checks_before_completion(session: AsyncSession, task: Task, actor: Actor):
+class HandedOver:
+    """A builder's completion naming a blocker over unchanged work (FR-7): taken to its checker with
+    no check run. Duck-types `ChecksSkipped` so its note is what the history row carries."""
+
+    def __init__(self, blocker: str) -> None:
+        self.blocker = blocker
+        self.note = (
+            "Handed over to the checker naming a blocker, with its own changes unchanged since "
+            "the send-back: no check ran."
+        )
+
+
+async def run_fast_checks_before_completion(
+    session: AsyncSession, task: Task, actor: Actor, blocker: Optional[str] = None
+):
     """An agent's move to `completed` waits for the project's fast checks on the work its review
     would be given, and is refused with their output when one fails (FR-2..FR-4, D4).
 
@@ -1293,6 +1351,18 @@ async def run_fast_checks_before_completion(session: AsyncSession, task: Task, a
         return None
     if await completion_refusal(session, task, actor) is not None:
         return None
+    if task.send_back_changes is not None:
+        # FR-4: the task's own changes, not its tip, against what they were when it was sent back.
+        # Before any check run starts, so a refused completion starts nothing.
+        from . import own_changes
+
+        now = await own_changes.current(
+            session, task, snapshot_agent=actor.agent or task.assignee or "agent"
+        )
+        if now is not None and now == task.send_back_changes:
+            if (blocker or "").strip():
+                return HandedOver(blocker.strip())
+            raise UnchangedCompletionError(task)
     from . import project_checks
 
     outcome = await project_checks.fast_checks_at_completion(session, task, actor.agent)
@@ -1385,6 +1455,14 @@ async def apply_transition(
     # start returning the retrying run.
     if to_status == from_status:
         return None
+
+    # A task waiting on its prerequisites takes no run's move (FR-1, FR-8): the checker that filed
+    # one has ended its round, and a builder's turn still in flight finishes without moving it.
+    # Ahead of the map, whose refusal would not say what the task waits for. The operator's own
+    # exits from `blocked` (reassign, reject, resume) stay theirs.
+    refusal = await prerequisite_wait_refusal(session, task, actor)
+    if refusal is not None:
+        raise refusal
 
     verdict = await decide_move(session, task, to_status, actor)
     if verdict.refusal is not None:
@@ -1572,6 +1650,13 @@ async def apply_transition(
     # reviewer's fix. Read before the status write, so the lookup's autoflush cannot matter. An
     # operator completion names no agent; `_holder_of_sent_back_work` then asks the other records
     # of authorship before it leaves the assignee alone (F708).
+    if to_status == "revision_needed":
+        # Whoever sends it back, the baseline a later completion must differ from (FR-4, D4).
+        from . import own_changes
+
+        task.send_back_changes = await own_changes.current(session, task)
+    if to_status not in ("completed", "under_review"):
+        task.handover_blocker = None
     if to_status == "revision_needed" and not (holder_named and actor.is_operator):
         task.assignee = await _holder_of_sent_back_work(session, task, actor)
     if to_status in ("revision_needed", "rejected"):
@@ -1595,6 +1680,9 @@ async def apply_transition(
     # Completed again after a send-back, it becomes whoever holds it then.
     if to_status == "completed" and task.assignee:
         task.builder = task.assignee
+    if from_status == STATUS_BLOCKED:
+        # Any exit from `blocked` ends the wait on prerequisites with it (the operator's hand here).
+        task.waits_on_prerequisites = False
     task.status = to_status
     transition = TaskTransition(
         id=f"ttr-{short_id()}",
@@ -1711,6 +1799,9 @@ async def apply_transition(
 
         # After the approving run ends, where a run approved it, so its cost is in the record.
         await build_retrospective.fire_if_document_done(session, task, actor.run_id)
+        # A prerequisite is met at approval (FR-6): each task waiting on this one is asked again,
+        # and released to its builder once nothing else holds it (FR-3).
+        await release_waiting_dependents(session, task, actor)
 
     # Work that leaves `approved` before it landed (the operator sends it back) leaves the queue, in
     # this same transaction: no batch lands it.
@@ -2170,6 +2261,257 @@ async def _redrain(project_id: str) -> None:
         await turn_scheduler.redrain_queued_agents(project_id)
     except Exception:  # noqa: BLE001 -- entries are durable; the next drain delivers them
         logger.warning("could not re-drain %s after a merge", project_id, exc_info=True)
+
+
+# --------------------------------------------------------------------------------------
+# Waiting on prerequisites (`a-task-that-cannot-move-waits-instead-of-being-rebuilt-and-re-reviewed`)
+# --------------------------------------------------------------------------------------
+
+#: The statuses of started work that an added, unmet prerequisite stops (FR-2). `pending` and
+#: `assigned` need no stop: the dependency gate already holds them at the start edge.
+STOPPABLE_STATUSES = frozenset({"in_progress", "completed", "under_review", "revision_needed"})
+
+
+def prerequisite_names(refusal, *, with_status: bool = True) -> str:
+    """Each prerequisite a `dependency_gate` refusal holds, as `'title' (id, status)`, or as
+    `'title' (id)` without *with_status*."""
+    entries = list(refusal.unmet) + list(refusal.rejected)
+    if not with_status:
+        return ", ".join(f"{e['title']!r} ({e['id']})" for e in entries)
+    return ", ".join(f"{e['title']!r} ({e['id']}, {e['status']})" for e in entries)
+
+
+def prerequisite_reason(refusal, *, with_status: bool = False) -> str:
+    """The sentence a card shows for a task waiting on *refusal*'s prerequisites (FR-3).
+
+    No status by default: this is stored as `blocked_reason`, written when the wait begins and
+    rewritten only when a reason clears, so a prerequisite's status in it would go stale as that
+    prerequisite moves (TTCMW-6). The task's `prerequisites` carry each one's status live.
+    """
+    return f"Waiting on prerequisites: {prerequisite_names(refusal, with_status=with_status)}."
+
+
+async def open_question_parking(session: AsyncSession, task: Task):
+    """The operator question *task* is parked on and still waiting for, if any: the other reason a
+    task can be `blocked` for (D1). Unanswered, undeclined, and its wait not ended."""
+    from .db.models import Question
+
+    return await session.scalar(
+        select(Question)
+        .where(Question.blocked_task_id == task.id)
+        .where(Question.answered.is_(False))
+        .where(Question.declined.is_(False))
+        .where(Question.wait_ended_at.is_(None))
+        .order_by(Question.created_at, Question.batch_index)
+        .limit(1)
+    )
+
+
+async def _wait_reason(session: AsyncSession, task: Task, refusal) -> Optional[str]:
+    """`blocked_reason` for a task waiting on prerequisites: each reason still open, named."""
+    from .run_task_binding import reason_from_question
+
+    parts = []
+    question = await open_question_parking(session, task)
+    if question is not None:
+        parts.append(reason_from_question(question))
+    if refusal.refuses:
+        parts.append(prerequisite_reason(refusal))
+    return " ".join(parts) or None
+
+
+async def prerequisite_wait_refusal(
+    session: AsyncSession, task: Task, actor: Actor
+) -> Optional[PrerequisitesPendingError]:
+    """The refusal of any run's move of a task waiting on prerequisites, or None (FR-1, FR-8)."""
+    if actor.is_operator or task.status != STATUS_BLOCKED or not task.waits_on_prerequisites:
+        return None
+    from .dependency_gate import evaluate as evaluate_dependencies
+
+    return PrerequisitesPendingError(task, await evaluate_dependencies(session, task))
+
+
+async def stop_for_prerequisites(
+    session: AsyncSession, task: Task, actor: Actor
+) -> Optional[TaskTransition]:
+    """Stop started *task* because a prerequisite it now has is unmet (FR-2). Returns the move.
+
+    Into `blocked` from any status in `STOPPABLE_STATUSES`, whatever the map offers an actor: the
+    Hub stops the work because a prerequisite was added, not because anybody asked for `blocked`,
+    so the move is recorded as the runtime's on behalf of whoever added it. A task already parked
+    on a question gains the second reason and stays put. A run still going on it is not ended
+    (FR-8, D5): it finishes its turn and its moves are refused by `prerequisite_wait_refusal`.
+
+    The builder is fixed before the stop, because `builder_profile` reads a holder as the builder
+    only while the task is being built: one stopped in review is held by its reviewer.
+    """
+    from .dependency_gate import evaluate as evaluate_dependencies
+
+    refusal = await evaluate_dependencies(session, task)
+    if not refusal.refuses:
+        return None
+    if task.status == STATUS_BLOCKED:
+        task.waits_on_prerequisites = True
+        task.blocked_reason = await _wait_reason(session, task, refusal)
+        return None
+    if task.status not in STOPPABLE_STATUSES:
+        return None
+    if not (task.builder or "").strip():
+        task.builder = await builder_profile(session, task)
+    from_status = task.status
+    task.status = STATUS_BLOCKED
+    task.waits_on_prerequisites = True
+    task.blocked_reason = await _wait_reason(session, task, refusal)
+    transition = TaskTransition(
+        id=f"ttr-{short_id()}",
+        project_id=task.project_id,
+        task_id=task.id,
+        from_status=from_status,
+        to_status=STATUS_BLOCKED,
+        actor_kind=actor.kind,
+        run_id=actor.run_id,
+        actor_agent=actor.agent,
+        origin=ORIGIN_RUNTIME,
+        # History is a record of this moment, so its note keeps the status each had then.
+        note=f"Stopped: {prerequisite_reason(refusal, with_status=True)}",
+        level=task.level if task.build_id else None,
+    )
+    session.add(transition)
+    # No review is offered while it waits: one already queued for it is withdrawn.
+    from .run_task_binding import withdraw_review_entries_for
+
+    # Checks still running on completed work find it no longer `completed` and leave it.
+    await withdraw_review_entries_for(session, task)
+    return transition
+
+
+async def refresh_prerequisite_wait(session: AsyncSession, task: Task, actor: Actor) -> bool:
+    """Ask again every reason *task*, waiting on prerequisites, is blocked for; release it to its
+    builder (`assigned`) when none remains (FR-3, D7). Returns whether it was released.
+
+    Called when a prerequisite is approved and when a question parking it settles: clearing either
+    reason alone leaves it blocked, naming what is still open. The release is the runtime's, on
+    behalf of whoever cleared the last reason. In a flow, its next firing hands the task out
+    (FR-9), and is asked for now; outside one, the task is started for its builder.
+    """
+    if task.status != STATUS_BLOCKED or not task.waits_on_prerequisites:
+        return False
+    from .dependency_gate import evaluate as evaluate_dependencies
+
+    refusal = await evaluate_dependencies(session, task)
+    if refusal.refuses or await open_question_parking(session, task) is not None:
+        task.blocked_reason = await _wait_reason(session, task, refusal)
+        return False
+    builder = (task.builder or "").strip() or task.assignee
+    task.status = "assigned"
+    task.assignee = builder
+    task.waits_on_prerequisites = False
+    task.blocked_reason = None
+    session.add(
+        TaskTransition(
+            id=f"ttr-{short_id()}",
+            project_id=task.project_id,
+            task_id=task.id,
+            from_status=STATUS_BLOCKED,
+            to_status="assigned",
+            actor_kind=actor.kind,
+            run_id=actor.run_id,
+            actor_agent=actor.agent,
+            origin=ORIGIN_RUNTIME,
+            note="Released: every prerequisite is approved; back to its builder.",
+            level=task.level if task.build_id else None,
+        )
+    )
+    if task.loop_id:
+        flow_advance.advance_after_commit(session, task.loop_id)
+    else:
+        from . import assigned_task_start
+
+        assigned_task_start.start_after_commit(session, task.id, actor.run_id)
+    return True
+
+
+async def release_waiting_dependents(session: AsyncSession, task: Task, actor: Actor) -> None:
+    """Ask again each task waiting on *task*, just approved (FR-3, FR-6)."""
+    from .db.models import TaskDependency
+
+    waiting = (
+        (
+            await session.execute(
+                select(Task)
+                .join(TaskDependency, TaskDependency.task_id == Task.id)
+                .where(TaskDependency.depends_on_task_id == task.id)
+                .where(Task.status == STATUS_BLOCKED)
+                .where(Task.waits_on_prerequisites.is_(True))
+                .order_by(Task.id)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    for dependent in waiting:
+        await refresh_prerequisite_wait(session, dependent, actor)
+
+
+async def checker_of_task(session: AsyncSession, task: Task) -> Optional[str]:
+    """Who checks *task*: its own checker, else its build's, else whoever took it into review."""
+    if (task.checker or "").strip():
+        return task.checker.strip()
+    if task.build_id:
+        from .builds import checker_of
+        from .db.models import Build
+
+        named = checker_of(await session.get(Build, task.build_id), task)
+        if named is not None and named[0]:
+            return named[0]
+    return await session.scalar(
+        select(TaskTransition.actor_agent)
+        .where(TaskTransition.task_id == task.id)
+        .where(TaskTransition.to_status == "under_review")
+        .where(TaskTransition.actor_agent.isnot(None))
+        .order_by(TaskTransition.sequence.desc())
+        .limit(1)
+    )
+
+
+async def prerequisite_filer_refusal(
+    session: AsyncSession, task: Task, actor: Actor
+) -> Optional[str]:
+    """Why *actor* may not make a new task one *task* waits for, or None when it may (FR-1, D2).
+
+    Only the run of *task*'s current review round, as its checker: a run of the checker's agent
+    bound to *task*, and the latest such run. A builder cannot escape its own task by declaring it
+    blocked; an earlier round's run no longer reviews it; a run bound elsewhere never did. The
+    operator's own route for a dependency is unchanged and does not come through here. Identity is
+    the run binding, never the request.
+    """
+    who = task.readable_id or task.id
+    refused = (
+        f"Only the current review round's checker of {who} can file a task {who} waits for; "
+        f"{who}'s prerequisites are unchanged. "
+    )
+    if actor.is_operator or actor.run_id is None:
+        return refused + "Add a dependency to an existing task from the task's Dependencies tab."
+    run = await session.get(Run, actor.run_id)
+    checker = await checker_of_task(session, task)
+    if run is None or run.task_id != task.id or not checker or run.agent != checker:
+        return refused + (
+            "This run is not that checker's run on it. File the task without naming it, or tell "
+            "its checker what it needs."
+        )
+    latest = await session.scalar(
+        select(Run.id)
+        .where(Run.project_id == task.project_id)
+        .where(Run.task_id == task.id)
+        .where(Run.agent == checker)
+        .order_by(Run.started_at.desc(), Run.id.desc())
+        .limit(1)
+    )
+    if latest != run.id:
+        return refused + (
+            f"This run is an earlier round's; {checker}'s run {latest} is the current one."
+        )
+    return None
 
 
 async def history_for(session: AsyncSession, task_id: str) -> list[TaskTransition]:

@@ -117,10 +117,10 @@ async def test_a_conflict_goes_back_to_its_builder_and_is_not_run_again_until_th
     )
     assert resumed.status_code == 200, resumed.text
     again = await _complete(app)
-    assert again.status_code == 200, again.text
+    assert again.status_code == 409, again.text
     await _settle()
     assert [r.id for r in await _runs()] == [run.id], "no run on the same conflicting work"
-    assert (await _task()).status == "revision_needed", "sent back again"
+    assert (await _task()).status == "in_progress", "refused: its own changes are unchanged"
 
     # The builder merges main and resolves the conflict: a commit on its branch is checked.
     branch = worktrees.task_branch_name(TASK)
@@ -156,6 +156,13 @@ async def test_a_conflicts_send_back_waits_for_the_completion_to_commit(app, tmp
         AGENT_TASKS.format(TASK), json={"status": "in_progress"}, headers=BUILDER_HEADERS
     )
     assert resumed.status_code == 200, resumed.text
+    # A commit that changes the task's own changes, so the completion is not refused as unchanged
+    # (FR-4) and still conflicts with main.
+    branch = worktrees.task_branch_name(TASK)
+    git(tmp_path, "checkout", "-q", branch)
+    (tmp_path / "ledger.py").write_text("x = 2\n")
+    git(tmp_path, "commit", "-qam", "change own work")
+    git(tmp_path, "checkout", "-q", "main")
 
     from hub.api.v1 import tasks as task_routes
 

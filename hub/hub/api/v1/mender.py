@@ -65,7 +65,10 @@ async def end_project_stall(
     stall = await session.get(Stall, stall_id)
     if stall is None or stall.project_id != project[0]:
         raise HTTPException(status_code=404, detail=f"No stall '{stall_id}' in this project")
-    await stalls.end(session, stall, body.outcome, body.detail or "Ended by the operator.")
+    """End a stall by hand (the Needs you page's Dismiss). Recorded as the operator's, which keeps
+    its cause on its task from being raised again until the task changes (`stalls.record`)."""
+    detail = f"{stalls.OPERATOR_ENDED} {body.detail}".strip()
+    await stalls.end(session, stall, body.outcome, detail)
     return stalls.view(stall)
 
 
